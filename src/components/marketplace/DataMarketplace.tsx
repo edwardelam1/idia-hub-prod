@@ -18,7 +18,10 @@ import {
   Zap,
   Globe,
   Target,
-  X
+  X,
+  Heart,
+  Share2,
+  BookOpen
 } from 'lucide-react';
 import FilterModal from './FilterModal';
 import DownloadModal from './DownloadModal';
@@ -32,9 +35,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showPersonalization, setShowPersonalization] = useState(true);
   const [appliedFilters, setAppliedFilters] = useState<any>({});
-  const [userCredits, setUserCredits] = useState(12500); // Mock user credits
+  const [userCredits, setUserCredits] = useState(12500);
   const [selectedBundle, setSelectedBundle] = useState<any>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [savedSearches, setSavedSearches] = useState<any[]>([]);
+  const [myLists, setMyLists] = useState<any[]>([]);
 
   const industries = [
     'Technology', 'Healthcare', 'Financial Services', 'Manufacturing',
@@ -105,6 +110,28 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const handleConfirmDownload = (bundleId: number, cost: number) => {
     setUserCredits(prev => prev - cost);
     console.log(`Downloaded bundle ${bundleId} for ${cost} credits`);
+  };
+
+  const handleSaveSearch = () => {
+    const searchData = {
+      id: Date.now(),
+      name: `Search: ${searchQuery || 'Current filters'}`,
+      query: searchQuery,
+      filters: appliedFilters,
+      timestamp: new Date().toISOString()
+    };
+    setSavedSearches(prev => [...prev, searchData]);
+  };
+
+  const handleCreateList = (bundleData: any) => {
+    const listData = {
+      id: Date.now(),
+      name: `List from ${bundleData.name}`,
+      contacts: bundleData.contacts,
+      source: bundleData.name,
+      timestamp: new Date().toISOString()
+    };
+    setMyLists(prev => [...prev, listData]);
   };
 
   const getTierColor = (tier: string) => {
@@ -252,6 +279,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 onApplyFilters={handleApplyFilters}
                 currentFilters={appliedFilters}
               />
+
+              <Button variant="outline" onClick={handleSaveSearch}>
+                <Heart className="mr-2 h-4 w-4" />
+                Save Search
+              </Button>
             </div>
           </div>
 
@@ -262,7 +294,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 if (!value) return null;
                 return (
                   <Badge key={key} variant="secondary" className="flex items-center">
-                    {key}: {Array.isArray(value) ? value.join(', ') : value}
+                    {key}: {Array.isArray(value) ? value.join(', ') : String(value)}
                     <X 
                       className="ml-1 h-3 w-3 cursor-pointer" 
                       onClick={() => setAppliedFilters({...appliedFilters, [key]: null})}
@@ -296,6 +328,58 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           </div>
         </div>
       </div>
+
+      {/* Collaboration Tools */}
+      {(savedSearches.length > 0 || myLists.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {savedSearches.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center">
+                  <BookOpen className="mr-2 h-5 w-5" />
+                  Saved Searches
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {savedSearches.slice(0, 3).map((search) => (
+                  <div key={search.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <span className="text-sm">{search.name}</span>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm">
+                        <Share2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {myLists.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center">
+                  <Users className="mr-2 h-5 w-5" />
+                  My Lists
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {myLists.slice(0, 3).map((list) => (
+                  <div key={list.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <div>
+                      <span className="text-sm font-medium">{list.name}</span>
+                      <p className="text-xs text-gray-500">{list.contacts} contacts</p>
+                    </div>
+                    <Button variant="ghost" size="sm">
+                      <Share2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* AI-Curated Bundles */}
       <div>
@@ -365,14 +449,23 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                   </div>
                 </div>
 
-                <Button 
-                  className="w-full mt-4"
-                  onClick={() => handleDownloadBundle(bundle)}
-                  disabled={userCredits < bundle.price}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  {userCredits < bundle.price ? 'Insufficient Credits' : 'Download Bundle'}
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button 
+                    className="flex-1"
+                    onClick={() => handleDownloadBundle(bundle)}
+                    disabled={userCredits < bundle.price}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {userCredits < bundle.price ? 'Insufficient Credits' : 'Download'}
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCreateList(bundle)}
+                  >
+                    <Heart className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

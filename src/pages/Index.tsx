@@ -9,6 +9,9 @@ import OrganizationAdminDashboard from '@/components/dashboards/OrganizationAdmi
 import TeamLeadDashboard from '@/components/dashboards/TeamLeadDashboard';
 import TeamMemberDashboard from '@/components/dashboards/TeamMemberDashboard';
 import DataMarketplace from '@/components/marketplace/DataMarketplace';
+import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard';
+import OrganizationManagement from '@/components/management/OrganizationManagement';
+import AIManagement from '@/components/ai/AIManagement';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -57,9 +60,9 @@ const Index = () => {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={renderDashboard()} />
         <Route path="/marketplace" element={<DataMarketplace userRole={userRole} />} />
-        <Route path="/system-health" element={<div>System Health (Coming Soon)</div>} />
-        <Route path="/organizations" element={<div>Organizations (Coming Soon)</div>} />
-        <Route path="/ai-management" element={<div>AI Management (Coming Soon)</div>} />
+        <Route path="/system-health" element={<SystemHealthDashboard />} />
+        <Route path="/organizations" element={<OrganizationManagement />} />
+        <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<div>Security (Coming Soon)</div>} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<div>Team Management (Coming Soon)</div>} />
