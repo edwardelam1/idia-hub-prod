@@ -1,11 +1,31 @@
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const SynapseVisualizer = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<any>(null);
   const rendererRef = useRef<any>(null);
   const animationRef = useRef<number>(0);
+  const [showLabel, setShowLabel] = useState(true);
+
+  useEffect(() => {
+    // Label animation cycle: show for 10s, hide for 50s (1min total cycle)
+    const labelCycle = () => {
+      setShowLabel(true);
+      
+      // Hide after 10 seconds
+      setTimeout(() => {
+        setShowLabel(false);
+      }, 10000);
+      
+      // Show again after 60 seconds (total cycle)
+      setTimeout(() => {
+        labelCycle();
+      }, 60000);
+    };
+
+    labelCycle();
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -122,7 +142,13 @@ const SynapseVisualizer = () => {
         ref={containerRef} 
         className="w-full h-full cursor-grab active:cursor-grabbing"
       />
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 backdrop-blur-sm px-4 py-2 rounded-lg">
+      
+      {/* Animated Label */}
+      <div 
+        className={`absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 backdrop-blur-sm px-4 py-2 rounded-lg transition-opacity duration-1000 ${
+          showLabel ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
         <div className="text-white text-center">
           <div className="font-semibold">IDIA Synapse™</div>
           <div className="text-xs text-gray-300">Live Data Flow Network</div>

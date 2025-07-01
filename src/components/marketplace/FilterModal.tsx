@@ -50,25 +50,29 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
         return {
           fundingStages: ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Growth', 'Late Stage'],
           fundingAmounts: ['Under $1M', '$1M-5M', '$5M-15M', '$15M-50M', '$50M+'],
-          investorTypes: ['Angel', 'VC', 'Corporate VC', 'PE', 'Family Office', 'Government']
+          investorTypes: ['Angel', 'VC', 'Corporate VC', 'PE', 'Family Office', 'Government'],
+          companyStages: ['Startup', 'Growth', 'Established', 'Unicorn']
         };
       case 'Commercial Real Estate':
         return {
           propertyTypes: ['Office', 'Retail', 'Industrial', 'Mixed Use', 'Hospitality', 'Healthcare'],
           transactionTypes: ['Sale', 'Lease', 'Investment', 'Development', 'Refinancing'],
-          priceRanges: ['Under $1M', '$1M-5M', '$5M-20M', '$20M-100M', '$100M+']
+          priceRanges: ['Under $1M', '$1M-5M', '$5M-20M', '$20M-100M', '$100M+'],
+          corridors: ['Downtown', 'Suburban', 'Mixed District', 'Commercial Hub']
         };
       case 'Consumer Packaged Goods':
         return {
           categories: ['Food & Beverage', 'Personal Care', 'Household', 'Health & Wellness'],
           channels: ['Grocery', 'Convenience', 'Online', 'Specialty', 'Mass Market'],
-          demographics: ['Gen Z', 'Millennial', 'Gen X', 'Baby Boomer', 'All Ages']
+          demographics: ['Gen Z', 'Millennial', 'Gen X', 'Baby Boomer', 'All Ages'],
+          seasonality: ['Winter Peak', 'Spring Growth', 'Summer High', 'Fall Decline']
         };
       case 'SaaS & Technology':
         return {
           platforms: ['Salesforce', 'HubSpot', 'Microsoft', 'Oracle', 'SAP', 'Workday'],
           migrationReasons: ['Cost', 'Features', 'Integration', 'Support', 'Scalability'],
-          companyStages: ['Startup', 'Growth', 'Enterprise', 'Public']
+          companyStages: ['Startup', 'Growth', 'Enterprise', 'Public'],
+          budgetRanges: ['Under $25K', '$25K-$100K', '$100K-$500K', '$500K+']
         };
       default:
         return {
@@ -114,7 +118,7 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
               <div>
                 <p className="font-medium text-blue-900">Your Filter Access</p>
                 <p className="text-sm text-blue-700">
-                  Available: {filterAccess.join(', ')} filters
+                  Available: {filterAccess.join(', ')} tier filters
                 </p>
               </div>
             </div>
@@ -198,7 +202,7 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
               <Badge variant="outline" className="bg-blue-100 text-blue-800">Professional</Badge>
-              <h3 className="text-lg font-semibold">Professional Filters</h3>
+              <h3 className="text-lg font-semibold">Professional Data Filters</h3>
               {!hasProfessional && <Lock className="h-4 w-4 text-gray-400" />}
             </div>
 
@@ -275,6 +279,42 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <Label htmlFor="dateRange">Date Range</Label>
+                <div className="flex space-x-2">
+                  <Input 
+                    type="date" 
+                    placeholder="Start date"
+                    value={filters.startDate || ''}
+                    onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                  />
+                  <Input 
+                    type="date" 
+                    placeholder="End date"
+                    value={filters.endDate || ''}
+                    onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="methodology">Data Methodology</Label>
+                <Select 
+                  value={filters.methodology || ''} 
+                  onValueChange={(value) => setFilters({...filters, methodology: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select methodology" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="survey">Survey-based</SelectItem>
+                    <SelectItem value="transactional">Transactional Data</SelectItem>
+                    <SelectItem value="behavioral">Behavioral Tracking</SelectItem>
+                    <SelectItem value="mixed">Mixed Methods</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -283,12 +323,12 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
               <Badge variant="outline" className="bg-purple-100 text-purple-800">Enterprise</Badge>
-              <h3 className="text-lg font-semibold">Enterprise Filters</h3>
+              <h3 className="text-lg font-semibold">Enterprise Analytics</h3>
               {!hasEnterprise && <Lock className="h-4 w-4 text-gray-400" />}
               {hasEnterprise && (
                 <div className="flex items-center text-purple-600 text-sm">
                   <Coins className="mr-1 h-4 w-4" />
-                  50 credits per search
+                  Advanced filtering - 50 credits per search
                 </div>
               )}
             </div>
@@ -301,14 +341,14 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
                     <Input 
                       type="date" 
                       placeholder="Start date"
-                      value={filters.startDate || ''}
-                      onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                      value={filters.customStartDate || ''}
+                      onChange={(e) => setFilters({...filters, customStartDate: e.target.value})}
                     />
                     <Input 
                       type="date" 
                       placeholder="End date"
-                      value={filters.endDate || ''}
-                      onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                      value={filters.customEndDate || ''}
+                      onChange={(e) => setFilters({...filters, customEndDate: e.target.value})}
                     />
                   </div>
                 </div>
@@ -327,6 +367,8 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
                       <SelectItem value="excel">Excel</SelectItem>
                       <SelectItem value="json">JSON</SelectItem>
                       <SelectItem value="api">API Access</SelectItem>
+                      <SelectItem value="tableau">Tableau Extract</SelectItem>
+                      <SelectItem value="powerbi">Power BI</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -345,35 +387,55 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
                       <SelectItem value="state">State/Province</SelectItem>
                       <SelectItem value="city">City Level</SelectItem>
                       <SelectItem value="zip">ZIP/Postal Code</SelectItem>
+                      <SelectItem value="coordinates">GPS Coordinates</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label>Data Processing</Label>
-                  <div className="space-y-2 mt-2">
-                    {['Real-time Processing', 'Advanced Analytics', 'Custom Segmentation', 'Trend Analysis'].map((option) => (
-                      <div key={option} className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={option}
-                          checked={filters.processing?.includes(option) || false}
-                          onCheckedChange={(checked) => {
-                            const current = filters.processing || [];
-                            if (checked) {
-                              setFilters({...filters, processing: [...current, option]});
-                            } else {
-                              setFilters({...filters, processing: current.filter((p: string) => p !== option)});
-                            }
-                          }}
-                        />
-                        <Label htmlFor={option} className="text-sm">{option}</Label>
-                      </div>
-                    ))}
-                  </div>
+                  <Label htmlFor="dataProcessing">Real-time Processing</Label>
+                  <Select 
+                    value={filters.dataProcessing || ''} 
+                    onValueChange={(value) => setFilters({...filters, dataProcessing: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select processing type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Real-time</SelectItem>
+                      <SelectItem value="neartime">Near real-time (15min)</SelectItem>
+                      <SelectItem value="hourly">Hourly refresh</SelectItem>
+                      <SelectItem value="daily">Daily batch</SelectItem>
+                      <SelectItem value="historical">Historical only</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* Contextual Filters */}
+              <div>
+                <Label>Advanced Analytics Options</Label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {['Predictive Analytics', 'Trend Analysis', 'Anomaly Detection', 'Custom Segmentation', 'Cohort Analysis', 'Statistical Modeling'].map((option) => (
+                    <div key={option} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={option}
+                        checked={filters.analytics?.includes(option) || false}
+                        onCheckedChange={(checked) => {
+                          const current = filters.analytics || [];
+                          if (checked) {
+                            setFilters({...filters, analytics: [...current, option]});
+                          } else {
+                            setFilters({...filters, analytics: current.filter((p: string) => p !== option)});
+                          }
+                        }}
+                      />
+                      <Label htmlFor={option} className="text-sm">{option}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Contextual Filters for Enterprise */}
               {Object.keys(contextualFilters).map((filterKey) => (
                 <div key={filterKey}>
                   <Label>{filterKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</Label>
