@@ -109,6 +109,29 @@ export const marketplaceBundles = [
       'Geographic correlation analysis',
       'Social impact measurements'
     ]
+  },
+  {
+    id: 6,
+    name: 'Urban Wellness Dynamics: Aggregated Activity & Health Trends',
+    description: 'Premier data bundle providing comprehensive, anonymized view of urban population activity and wellness trends, derived from consensually shared and aggregated data from leading wearable and fitness applications. Leveraging the proprietary IDIA Synapse Engine™, this bundle offers actionable insights into community-level physical activity patterns, sleep metrics, and generalized physiological responses.',
+    price: 750,
+    contacts: 5670,
+    tier: 'Enterprise',
+    category: 'Health & Fitness',
+    features: ['IDIA Synapse Engine™', 'Anonymized Health Data', 'Urban Zone Analysis', 'Activity Pattern Recognition'],
+    match: 96,
+    keyInsights: [
+      '2.3M+ aggregated activity sessions',
+      '78% correlation between urban design & activity',
+      'Peak activity: 6-8AM & 5-7PM corridors'
+    ],
+    dataPoints: [
+      'Aggregated daily activity metrics by urban zone',
+      'Anonymized geospatial movement patterns',
+      'Generalized physiological response data',
+      'Aggregated sleep pattern analysis',
+      'Workout type distribution & seasonal trends'
+    ]
   }
 ];
 
@@ -117,5 +140,6 @@ export const industries = [
   'SaaS & Technology', 
   'Commercial Real Estate', 
   'Consumer Packaged Goods', 
-  'Academic & Research'
+  'Academic & Research',
+  'Health & Fitness'
 ];

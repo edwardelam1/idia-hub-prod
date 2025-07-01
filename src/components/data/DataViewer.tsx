@@ -102,6 +102,15 @@ const DataViewer = () => {
         features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
         category: 'Academic & Research',
         description: 'Community engagement correlation with local business spending'
+      },
+      '6': {
+        id: 6,
+        name: 'Urban Wellness Dynamics: Aggregated Activity & Health Trends',
+        tier: 'Enterprise',
+        contacts: 5670,
+        features: ['IDIA Synapse Engine™', 'Anonymized Health Data', 'Urban Zone Analysis', 'Activity Pattern Recognition'],
+        category: 'Health & Fitness',
+        description: 'Comprehensive anonymized view of urban population activity and wellness trends'
       }
     };
 
@@ -148,6 +157,7 @@ const DataViewer = () => {
         const migrationReasons = ['Cost Reduction', 'Feature Limitations', 'Integration Issues', 'User Experience', 'Scalability', 'Support Issues'];
         const timelines = ['1-3 months', '3-6 months', '6-12 months', 'Immediate'];
         const budgets = ['$10K-25K', '$25K-50K', '$50K-100K', '$100K+'];
+        const crmIndustries = ['Technology', 'SaaS', 'Professional Services', 'Manufacturing', 'Healthcare', 'Financial Services'];
         
         for (let i = 0; i < 200; i++) {
           const quarter = Math.floor(Math.random() * 4) + 1;
@@ -158,7 +168,7 @@ const DataViewer = () => {
             previousCrm: crmPlatforms[i % crmPlatforms.length],
             migrationDate: `Q${quarter} ${year}`,
             companySize: companySizes[i % companySizes.length],
-            industry: ['Technology', 'SaaS', 'Professional Services', 'Manufacturing', 'Healthcare', 'Financial Services'][i % 6],
+            industry: crmIndustries[i % crmIndustries.length],
             migrationReason: migrationReasons[i % migrationReasons.length],
             decisionTimeline: timelines[i % timelines.length],
             budgetRange: budgets[i % budgets.length]
@@ -248,8 +258,41 @@ const DataViewer = () => {
         }
         break;
 
+      case 6: // Urban Wellness Bundle - Health & Fitness Data
+        headers = ['Urban Zone', 'Avg Daily Steps', 'Active Calories', 'Popular Activity', 'Peak Activity Time', 'Sleep Duration', 'Heart Rate Zone', 'Workout Frequency'];
+        const urbanZones = ['Downtown Core', 'Midtown District', 'Riverside Park Area', 'University Quarter', 'Suburban North', 'Industrial South', 'Historic District', 'Waterfront'];
+        const activities = ['Running', 'Walking', 'Cycling', 'Strength Training', 'Yoga', 'Swimming', 'Group Fitness', 'Outdoor Sports'];
+        const peakTimes = ['6:00-8:00 AM', '12:00-1:00 PM', '5:00-7:00 PM', '7:00-9:00 PM', '8:00-10:00 AM', '6:00-8:00 PM'];
+        const heartRateZones = ['Fat Burn (50-60%)', 'Cardio (60-70%)', 'Peak (70-85%)', 'Anaerobic (85-95%)', 'Resting (40-50%)'];
+        
+        for (let i = 0; i < 200; i++) {
+          const dailySteps = Math.floor(Math.random() * 6000 + 4000); // 4k-10k steps
+          const activeCalories = Math.floor(Math.random() * 400 + 200); // 200-600 calories
+          const sleepHours = (Math.random() * 3 + 6).toFixed(1); // 6-9 hours
+          const workoutFreq = Math.floor(Math.random() * 7) + 1; // 1-7 times per week
+          
+          mockData.push({
+            id: `wellness-${i}`,
+            urbanZone: urbanZones[i % urbanZones.length],
+            avgDailySteps: dailySteps.toLocaleString(),
+            activeCalories: `${activeCalories} kcal`,
+            popularActivity: activities[i % activities.length],
+            peakActivityTime: peakTimes[i % peakTimes.length],
+            sleepDuration: `${sleepHours} hours`,
+            heartRateZone: heartRateZones[i % heartRateZones.length],
+            workoutFrequency: `${workoutFreq}x/week`
+          });
+        }
+        break;
+
       default:
         headers = ['Data Point', 'Value', 'Category'];
+        mockData.push({
+          id: 'default-1',
+          dataPoint: 'Sample Data',
+          value: 'Sample Value',
+          category: 'Sample Category'
+        });
         break;
     }
 
@@ -354,10 +397,10 @@ const DataViewer = () => {
             {tableHeaders.map((header) => {
               const key = header.toLowerCase().replace(/\s+/g, '');
               const camelCaseKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
-              const value = record[camelCaseKey] || record[key];
+              const value = record[camelCaseKey] || record[key] || record[header.toLowerCase().replace(/\s+/g, '')];
               return (
                 <TableCell key={header}>
-                  {String(value)}
+                  {String(value || 'N/A')}
                 </TableCell>
               );
             })}

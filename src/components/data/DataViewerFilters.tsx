@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -94,6 +93,13 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
           migrationReasons: ['Cost', 'Features', 'Integration', 'Support', 'Scalability'],
           budgetRanges: ['$10K-25K', '$25K-50K', '$50K-100K', '$100K+']
         };
+      case 'Health & Fitness':
+        return {
+          activityTypes: ['Running', 'Walking', 'Cycling', 'Strength Training', 'Yoga', 'Swimming'],
+          urbanZones: ['Downtown', 'Suburban', 'Parks', 'Commercial', 'Residential'],
+          demographics: ['18-25', '26-35', '36-45', '46-55', '55+'],
+          timeOfDay: ['Morning (6-10AM)', 'Midday (10AM-2PM)', 'Evening (5-8PM)', 'Night (8-11PM)']
+        };
       default:
         return {};
     }
@@ -172,7 +178,7 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
         </Button>
       </div>
 
-      {/* Analyst Filters */}
+      {/* Analyst Filters - Basic Data Filters */}
       <FilterSection
         title="Basic Data Filters"
         tier="Analyst"
@@ -248,7 +254,7 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
         </div>
       </FilterSection>
 
-      {/* Professional Filters */}
+      {/* Professional Filters - Data Quality & Methodology */}
       <FilterSection
         title="Data Quality & Methodology"
         tier="Professional"
@@ -358,7 +364,7 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
         </div>
       </FilterSection>
 
-      {/* Enterprise Filters */}
+      {/* Enterprise Filters - Advanced Analytics & Export */}
       <FilterSection
         title="Advanced Analytics & Export"
         tier="Enterprise"
