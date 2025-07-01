@@ -258,31 +258,57 @@ const DataViewer = () => {
         }
         break;
 
-      case 6: // Urban Wellness Bundle - Health & Fitness Data
+      case 6: // Urban Wellness Bundle - Health & Fitness Data (REAL DATA PROVIDED)
         headers = ['Urban Zone', 'Avg Daily Steps', 'Active Calories', 'Popular Activity', 'Peak Activity Time', 'Sleep Duration', 'Heart Rate Zone', 'Workout Frequency'];
-        const urbanZones = ['Downtown Core', 'Midtown District', 'Riverside Park Area', 'University Quarter', 'Suburban North', 'Industrial South', 'Historic District', 'Waterfront'];
-        const activities = ['Running', 'Walking', 'Cycling', 'Strength Training', 'Yoga', 'Swimming', 'Group Fitness', 'Outdoor Sports'];
-        const peakTimes = ['6:00-8:00 AM', '12:00-1:00 PM', '5:00-7:00 PM', '7:00-9:00 PM', '8:00-10:00 AM', '6:00-8:00 PM'];
-        const heartRateZones = ['Fat Burn (50-60%)', 'Cardio (60-70%)', 'Peak (70-85%)', 'Anaerobic (85-95%)', 'Resting (40-50%)'];
         
-        for (let i = 0; i < 200; i++) {
-          const dailySteps = Math.floor(Math.random() * 6000 + 4000); // 4k-10k steps
-          const activeCalories = Math.floor(Math.random() * 400 + 200); // 200-600 calories
-          const sleepHours = (Math.random() * 3 + 6).toFixed(1); // 6-9 hours
-          const workoutFreq = Math.floor(Math.random() * 7) + 1; // 1-7 times per week
-          
+        // Using the REAL data provided by the user
+        const realWellnessData = [
+          { urbanZone: 'UrbanZone9', avgDailySteps: '7,957', activeCalories: '857 kcal', popularActivity: 'Yoga', peakActivityTime: '8:00-10:00 PM', sleepDuration: '6.7 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone1', avgDailySteps: '6,134', activeCalories: '710 kcal', popularActivity: 'Walking', peakActivityTime: '12:00-1:00 PM', sleepDuration: '7.9 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone10', avgDailySteps: '11,709', activeCalories: '233 kcal', popularActivity: 'Yoga', peakActivityTime: '12:00-1:00 PM', sleepDuration: '8.5 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone1', avgDailySteps: '5,818', activeCalories: '202 kcal', popularActivity: 'Cycling', peakActivityTime: '12:00-1:00 PM', sleepDuration: '7.9 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone5', avgDailySteps: '11,942', activeCalories: '462 kcal', popularActivity: 'Swimming', peakActivityTime: '12:00-1:00 PM', sleepDuration: '5.9 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone3', avgDailySteps: '9,954', activeCalories: '886 kcal', popularActivity: 'Cycling', peakActivityTime: '6:00-8:00 AM', sleepDuration: '9.0 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone1', avgDailySteps: '14,389', activeCalories: '492 kcal', popularActivity: 'Strength Training', peakActivityTime: '12:00-1:00 PM', sleepDuration: '7.0 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone8', avgDailySteps: '11,090', activeCalories: '803 kcal', popularActivity: 'Swimming', peakActivityTime: '8:00-10:00 PM', sleepDuration: '7.3 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone3', avgDailySteps: '14,519', activeCalories: '533 kcal', popularActivity: 'Yoga', peakActivityTime: '5:00-7:00 PM', sleepDuration: '7.8 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone7', avgDailySteps: '5,071', activeCalories: '689 kcal', popularActivity: 'Running', peakActivityTime: '6:00-8:00 AM', sleepDuration: '6.4 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone10', avgDailySteps: '6,725', activeCalories: '808 kcal', popularActivity: 'Yoga', peakActivityTime: '8:00-10:00 PM', sleepDuration: '7.4 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone1', avgDailySteps: '5,101', activeCalories: '642 kcal', popularActivity: 'Running', peakActivityTime: '6:00-8:00 AM', sleepDuration: '7.1 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone9', avgDailySteps: '4,270', activeCalories: '513 kcal', popularActivity: 'Cycling', peakActivityTime: '5:00-7:00 PM', sleepDuration: '7.8 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone9', avgDailySteps: '6,316', activeCalories: '756 kcal', popularActivity: 'Walking', peakActivityTime: '8:00-10:00 PM', sleepDuration: '6.0 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone2', avgDailySteps: '6,582', activeCalories: '698 kcal', popularActivity: 'Yoga', peakActivityTime: '6:00-8:00 AM', sleepDuration: '7.7 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone1', avgDailySteps: '4,638', activeCalories: '759 kcal', popularActivity: 'Running', peakActivityTime: '8:00-10:00 PM', sleepDuration: '9.0 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone3', avgDailySteps: '12,409', activeCalories: '797 kcal', popularActivity: 'Yoga', peakActivityTime: '8:00-10:00 PM', sleepDuration: '7.5 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone3', avgDailySteps: '4,585', activeCalories: '896 kcal', popularActivity: 'Yoga', peakActivityTime: '12:00-1:00 PM', sleepDuration: '6.6 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone4', avgDailySteps: '5,687', activeCalories: '911 kcal', popularActivity: 'Cycling', peakActivityTime: '6:00-8:00 AM', sleepDuration: '7.4 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone5', avgDailySteps: '10,962', activeCalories: '270 kcal', popularActivity: 'Yoga', peakActivityTime: '12:00-1:00 PM', sleepDuration: '6.8 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone9', avgDailySteps: '7,184', activeCalories: '719 kcal', popularActivity: 'Walking', peakActivityTime: '12:00-1:00 PM', sleepDuration: '8.1 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone6', avgDailySteps: '3,968', activeCalories: '457 kcal', popularActivity: 'Walking', peakActivityTime: '6:00-8:00 AM', sleepDuration: '7.2 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone10', avgDailySteps: '11,732', activeCalories: '597 kcal', popularActivity: 'Swimming', peakActivityTime: '12:00-1:00 PM', sleepDuration: '5.5 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone5', avgDailySteps: '10,461', activeCalories: '306 kcal', popularActivity: 'Cycling', peakActivityTime: '5:00-7:00 PM', sleepDuration: '5.8 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone7', avgDailySteps: '10,635', activeCalories: '877 kcal', popularActivity: 'Cycling', peakActivityTime: '12:00-1:00 PM', sleepDuration: '8.5 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone7', avgDailySteps: '9,281', activeCalories: '708 kcal', popularActivity: 'Swimming', peakActivityTime: '12:00-1:00 PM', sleepDuration: '8.8 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: 'Daily' },
+          { urbanZone: 'UrbanZone3', avgDailySteps: '14,597', activeCalories: '347 kcal', popularActivity: 'Strength Training', peakActivityTime: '5:00-7:00 PM', sleepDuration: '8.0 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: '1-2 times/week' },
+          { urbanZone: 'UrbanZone6', avgDailySteps: '13,697', activeCalories: '767 kcal', popularActivity: 'Cycling', peakActivityTime: '5:00-7:00 PM', sleepDuration: '6.6 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone4', avgDailySteps: '3,632', activeCalories: '467 kcal', popularActivity: 'Walking', peakActivityTime: '6:00-8:00 AM', sleepDuration: '5.9 hours', heartRateZone: 'Peak (70-85%)', workoutFrequency: 'Rarely' },
+          { urbanZone: 'UrbanZone2', avgDailySteps: '13,374', activeCalories: '282 kcal', popularActivity: 'Running', peakActivityTime: '6:00-8:00 AM', sleepDuration: '6.8 hours', heartRateZone: 'Fat Burn (50-60%)', workoutFrequency: '3-4 times/week' },
+          { urbanZone: 'UrbanZone7', avgDailySteps: '5,168', activeCalories: '749 kcal', popularActivity: 'Walking', peakActivityTime: '8:00-10:00 PM', sleepDuration: '5.9 hours', heartRateZone: 'Cardio (60-70%)', workoutFrequency: '3-4 times/week' }
+        ];
+
+        realWellnessData.forEach((record, index) => {
           mockData.push({
-            id: `wellness-${i}`,
-            urbanZone: urbanZones[i % urbanZones.length],
-            avgDailySteps: dailySteps.toLocaleString(),
-            activeCalories: `${activeCalories} kcal`,
-            popularActivity: activities[i % activities.length],
-            peakActivityTime: peakTimes[i % peakTimes.length],
-            sleepDuration: `${sleepHours} hours`,
-            heartRateZone: heartRateZones[i % heartRateZones.length],
-            workoutFrequency: `${workoutFreq}x/week`
+            id: `wellness-${index}`,
+            urbanZone: record.urbanZone,
+            avgDailySteps: record.avgDailySteps,
+            activeCalories: record.activeCalories,
+            popularActivity: record.popularActivity,
+            peakActivityTime: record.peakActivityTime,
+            sleepDuration: record.sleepDuration,
+            heartRateZone: record.heartRateZone,
+            workoutFrequency: record.workoutFrequency
           });
-        }
+        });
         break;
 
       default:
@@ -400,7 +426,7 @@ const DataViewer = () => {
               const value = record[camelCaseKey] || record[key] || record[header.toLowerCase().replace(/\s+/g, '')];
               return (
                 <TableCell key={header}>
-                  {String(value || 'N/A')}
+                  {String(value || '')}
                 </TableCell>
               );
             })}
