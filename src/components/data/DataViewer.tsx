@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +35,8 @@ interface Bundle {
   tier: string;
   contacts: number;
   features: string[];
+  category: string;
+  description: string;
 }
 
 const DataViewer = () => {
@@ -65,22 +66,93 @@ const DataViewer = () => {
   }, [contacts, filters, searchTerm]);
 
   const loadBundleData = () => {
-    // Updated tier names per section 8.0
-    const mockBundle: Bundle = {
-      id: parseInt(bundleId || '1'),
-      name: 'Anonymous Technology Contacts - Bay Area',
-      tier: 'Professional', // Using correct tier names
-      contacts: 2500,
-      features: ['Company Info', 'Contact Details', 'Technographics', 'Org Charts']
+    // Enterprise bundles matching the marketplace
+    const bundleMap: { [key: string]: Bundle } = {
+      '1': {
+        id: 1,
+        name: 'Q2 2025 Emerging Growth Index: Kentucky',
+        tier: 'Enterprise',
+        contacts: 1847,
+        features: ['Intent Signals', 'Advanced Hiring Trends', 'Geographic Targeting', 'Funding Status'],
+        category: 'Venture Capital & Private Equity',
+        description: 'Premier dataset of private companies in Kentucky with new capital and hiring velocity'
+      },
+      '2': {
+        id: 2,
+        name: 'CRM Competitive Displacement Opportunity Report',
+        tier: 'Professional',
+        contacts: 892,
+        features: ['Technographics', 'Intent Signals', 'Company Size Filtering', 'Platform Migration Data'],
+        category: 'SaaS & Technology',
+        description: 'Companies that recently removed competing CRM platforms'
+      },
+      '3': {
+        id: 3,
+        name: 'Louisville Commercial Corridor Velocity Analysis',
+        tier: 'Enterprise',
+        contacts: 2456,
+        features: ['Advanced Time-Series Analysis', 'Geographic Targeting', 'Merchant Categories', 'Transaction Velocity'],
+        category: 'Commercial Real Estate',
+        description: 'Transaction growth analysis across Louisville commercial corridors'
+      },
+      '4': {
+        id: 4,
+        name: 'Consumer Beverage Trends: Cafe vs. Grocery Spend',
+        tier: 'Professional',
+        contacts: 1234,
+        features: ['Anonymized Merchant IDs', 'Category Comparison', 'Trend Analysis', 'Channel Strategy'],
+        category: 'Consumer Packaged Goods',
+        description: 'Consumer spending velocity for beverage products across channels'
+      },
+      '5': {
+        id: 5,
+        name: 'Pro-Social Behavior and Local Economic Impact Study',
+        tier: 'Foundational',
+        contacts: 3421,
+        features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
+        category: 'Academic & Research',
+        description: 'Community engagement correlation with local business spending'
+      }
     };
-    setBundle(mockBundle);
+
+    const currentBundle = bundleMap[bundleId || '1'];
+    setBundle(currentBundle);
   };
 
   const generateMockContacts = () => {
+    const bundleId = parseInt(bundleId || '1');
     const mockContacts: Contact[] = [];
-    const titles = ['CEO', 'CTO', 'VP Sales', 'Marketing Director', 'Product Manager', 'Engineering Manager'];
-    const industries = ['Technology', 'Software', 'SaaS', 'AI/ML', 'Cybersecurity', 'Cloud Services'];
-    const locations = ['San Francisco, CA', 'Palo Alto, CA', 'Mountain View, CA', 'San Jose, CA', 'Oakland, CA'];
+    
+    // Generate different data based on bundle type
+    const bundleSpecificData = {
+      1: { // VC Bundle
+        titles: ['CEO', 'Founder', 'CFO', 'VP Finance', 'Head of Growth', 'CTO'],
+        industries: ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech'],
+        locations: ['Louisville, KY', 'Lexington, KY', 'Bowling Green, KY', 'Covington, KY']
+      },
+      2: { // CRM Bundle
+        titles: ['VP Sales', 'Sales Director', 'Revenue Operations', 'CRM Administrator', 'Sales Manager'],
+        industries: ['Technology', 'Software', 'SaaS', 'Professional Services', 'Manufacturing'],
+        locations: ['San Francisco, CA', 'Austin, TX', 'Boston, MA', 'Seattle, WA', 'Denver, CO']
+      },
+      3: { // Real Estate Bundle
+        titles: ['Property Manager', 'Leasing Director', 'Development Manager', 'Investment Analyst'],
+        industries: ['Commercial Real Estate', 'Property Management', 'Real Estate Investment'],
+        locations: ['Louisville, KY Metro Area', 'Jefferson County, KY', 'Oldham County, KY']
+      },
+      4: { // CPG Bundle
+        titles: ['Brand Manager', 'Category Manager', 'Market Research Analyst', 'Procurement Manager'],
+        industries: ['Consumer Goods', 'Retail', 'Food & Beverage', 'Distribution'],
+        locations: ['Chicago, IL', 'Atlanta, GA', 'Dallas, TX', 'Minneapolis, MN']
+      },
+      5: { // Academic Bundle
+        titles: ['Research Director', 'Policy Analyst', 'Community Outreach Manager', 'Program Coordinator'],
+        industries: ['Non-Profit', 'Government', 'Academic Research', 'Community Development'],
+        locations: ['Various Metro Areas', 'Community-Based Organizations', 'Research Institutions']
+      }
+    };
+
+    const currentBundleData = bundleSpecificData[bundleId as keyof typeof bundleSpecificData] || bundleSpecificData[1];
     const revenues = ['$1M-$10M', '$10M-$50M', '$50M-$100M', '$100M+'];
     const employeeCounts = ['1-50', '51-200', '201-1000', '1000+'];
 
@@ -88,12 +160,12 @@ const DataViewer = () => {
       const rawContact = {
         id: `contact-${i}`,
         name: `Contact ${i}`,
-        title: titles[i % titles.length],
+        title: currentBundleData.titles[i % currentBundleData.titles.length],
         company: `Company ${Math.floor(i / 5)}`,
-        industry: industries[i % industries.length],
+        industry: currentBundleData.industries[i % currentBundleData.industries.length],
         email: `contact${i}@example.com`,
         phone: `+1 555 ${String(Math.floor(Math.random() * 900) + 100)}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-        location: locations[i % locations.length],
+        location: currentBundleData.locations[i % currentBundleData.locations.length],
         revenue: revenues[i % revenues.length],
         employees: employeeCounts[i % employeeCounts.length],
       };
@@ -273,8 +345,11 @@ const DataViewer = () => {
                       <Badge variant="outline" className="bg-blue-100 text-blue-800">
                         {bundle.tier}
                       </Badge>
+                      <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                        {bundle.category}
+                      </Badge>
                       <span className="text-sm text-gray-600">
-                        {filteredContacts.length} of {contacts.length} contacts
+                        {filteredContacts.length} of {contacts.length} records
                       </span>
                     </div>
                   </div>
@@ -312,7 +387,7 @@ const DataViewer = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search anonymized contacts..."
+                  placeholder="Search anonymized records..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className={`pl-10 ${isMobile ? 'text-sm' : ''}`}

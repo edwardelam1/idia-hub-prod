@@ -34,55 +34,66 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [userCredits, setUserCredits] = useState(12500);
 
   const industries = [
-    'Technology', 'Healthcare', 'Financial Services', 'Manufacturing',
-    'Retail & E-commerce', 'Real Estate', 'Education', 'Professional Services'
+    'Venture Capital & Private Equity', 'SaaS & Technology', 'Commercial Real Estate', 
+    'Consumer Packaged Goods', 'Academic & Research', 'Financial Services'
   ];
 
-  // Updated with correct tier names per section 8.0 and anonymized data
+  // Enterprise-grade bundles based on realistic IDIA use cases
   const aiCuratedBundles = [
     {
       id: 1,
-      name: 'Anonymous Tech Leadership Dataset',
-      description: 'Senior executives at high-growth technology companies with 100-500 employees',
-      price: 150,
-      contacts: 2450,
-      tier: 'Enterprise', // Correct tier name
-      category: 'Technology',
-      features: ['Intent Signals', 'Technographics', 'Recent Funding Data'],
-      match: 95
+      name: 'Q2 2025 Emerging Growth Index: Kentucky',
+      description: 'Premier dataset of private companies in Kentucky that have secured new capital and are exhibiting significant hiring velocity in the last 90 days. Provides actionable triggers for investment sourcing and private banking outreach.',
+      price: 350,
+      contacts: 1847,
+      tier: 'Enterprise',
+      category: 'Venture Capital & Private Equity',
+      features: ['Intent Signals', 'Advanced Hiring Trends', 'Geographic Targeting', 'Funding Status'],
+      match: 97
     },
     {
       id: 2,
-      name: 'Healthcare Decision Makers Dataset',
-      description: 'Anonymous senior professionals at hospitals and healthcare systems',
-      price: 85,
-      contacts: 1200,
-      tier: 'Professional', // Correct tier name
-      category: 'Healthcare',
-      features: ['Geographic Targeting', 'Org Charts', 'Recent Job Changes'],
-      match: 88
+      name: 'CRM Competitive Displacement Opportunity Report',
+      description: 'High-intent list of mid-market companies that have recently removed competing CRM platforms from their tech stack. Identifies prospects at the exact moment of need.',
+      price: 125,
+      contacts: 892,
+      tier: 'Professional',
+      category: 'SaaS & Technology',
+      features: ['Technographics', 'Intent Signals', 'Company Size Filtering', 'Platform Migration Data'],
+      match: 94
     },
     {
       id: 3,
-      name: 'SaaS Growth Companies Dataset',
-      description: 'Anonymous marketing and sales professionals at B2B SaaS companies',
-      price: 45,
-      contacts: 890,
-      tier: 'Foundational', // Correct tier name
-      category: 'Technology',
-      features: ['Industry Classification', 'Company Size', 'Location Data'],
-      match: 92
+      name: 'Louisville Commercial Corridor Velocity Analysis',
+      description: 'Time-series analysis of anonymized transaction growth across Louisville\'s key commercial corridors, segmented by merchant category. Provides data-driven edge for site selection and investment.',
+      price: 225,
+      contacts: 2456,
+      tier: 'Enterprise',
+      category: 'Commercial Real Estate',
+      features: ['Advanced Time-Series Analysis', 'Geographic Targeting', 'Merchant Categories', 'Transaction Velocity'],
+      match: 91
     },
     {
       id: 4,
-      name: 'Financial Services Dataset',
-      description: 'Anonymous senior leadership at banks, credit unions, and fintech companies',
-      price: 200,
-      contacts: 3200,
-      tier: 'Enterprise',
-      category: 'Financial Services',
-      features: ['Intent Signals', 'Technographics', 'Compliance Data'],
-      match: 90
+      name: 'Consumer Beverage Trends: Cafe vs. Grocery Spend',
+      description: 'Aggregated, anonymized report tracking consumer spending velocity for beverage products. Compares basket share and growth trends between retail and food service channels.',
+      price: 150,
+      contacts: 1234,
+      tier: 'Professional',
+      category: 'Consumer Packaged Goods',
+      features: ['Anonymized Merchant IDs', 'Category Comparison', 'Trend Analysis', 'Channel Strategy'],
+      match: 89
+    },
+    {
+      id: 5,
+      name: 'Pro-Social Behavior and Local Economic Impact Study',
+      description: 'Anonymized dataset correlating hyperlocal economic activity with community engagement metrics. Helps researchers explore the relationship between pro-social behavior and local business spending.',
+      price: 50,
+      contacts: 3421,
+      tier: 'Foundational',
+      category: 'Academic & Research',
+      features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
+      match: 86
     }
   ].map(bundle => anonymizeBundleData(bundle));
 
@@ -125,10 +136,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       <div className={`flex ${isMobile ? 'flex-col space-y-3' : 'items-center justify-between'}`}>
         <div>
           <h1 className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}>
-            Data Marketplace
+            IDIA Data Marketplace
           </h1>
           <p className={`text-gray-600 ${isMobile ? 'text-sm' : ''}`}>
-            AI-curated anonymous datasets
+            Enterprise-grade AI-curated datasets
           </p>
         </div>
         
@@ -148,7 +159,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search datasets..."
+                placeholder="Search enterprise datasets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`pl-10 border-gray-200 ${isMobile ? 'text-sm' : ''}`}
@@ -164,7 +175,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                   <SelectValue placeholder="Industry" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="all">All Industries</SelectItem>
                   {industries.map((industry) => (
                     <SelectItem key={industry} value={industry}>
                       {industry}
@@ -218,7 +229,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       </div>
 
       {/* Minimalistic Bundle Grid */}
-      <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+      <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2'}`}>
         {filteredBundles.map((bundle) => (
           <Card key={bundle.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className={isMobile ? 'p-4' : 'p-5'}>
@@ -250,11 +261,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <div className="flex items-center">
                     <Users className="mr-1 h-3 w-3" />
-                    {bundle.contacts.toLocaleString()}
+                    {bundle.contacts.toLocaleString()} records
                   </div>
                   <div className="flex items-center text-green-600">
                     <TrendingUp className="mr-1 h-3 w-3" />
-                    {bundle.match}% match
+                    {bundle.match}% relevance
                   </div>
                 </div>
 
@@ -265,6 +276,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                       {feature}
                     </Badge>
                   ))}
+                  {bundle.features.length > (isMobile ? 2 : 3) && (
+                    <Badge variant="secondary" className="text-xs px-2 py-0">
+                      +{bundle.features.length - (isMobile ? 2 : 3)}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Action */}
@@ -301,7 +317,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       <Card className="border-purple-200 bg-purple-50">
         <CardContent className={isMobile ? 'p-3' : 'p-4'}>
           <p className={`text-purple-700 ${isMobile ? 'text-xs' : 'text-sm'} text-center`}>
-            🔒 All datasets are fully anonymized to protect individual privacy. No personal identifiable information is included.
+            🔒 All datasets are fully anonymized and aggregated to protect individual privacy. Enterprise-grade data with zero personal identifiable information.
           </p>
         </CardContent>
       </Card>
