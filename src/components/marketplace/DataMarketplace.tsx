@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Search, 
-  Filter, 
   Download, 
   Coins, 
   Star, 
@@ -18,8 +17,11 @@ import {
   Building2,
   Zap,
   Globe,
-  Target
+  Target,
+  X
 } from 'lucide-react';
+import FilterModal from './FilterModal';
+import DownloadModal from './DownloadModal';
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -29,6 +31,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPersonalization, setShowPersonalization] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<any>({});
+  const [userCredits, setUserCredits] = useState(12500); // Mock user credits
+  const [selectedBundle, setSelectedBundle] = useState<any>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const industries = [
     'Technology', 'Healthcare', 'Financial Services', 'Manufacturing',
@@ -68,12 +74,37 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       category: 'Technology',
       features: ['Industry Classification', 'Company Size', 'Location Data'],
       match: 92
+    },
+    {
+      id: 4,
+      name: 'Financial Services Executives',
+      description: 'Senior leadership at banks, credit unions, and fintech companies',
+      price: 200,
+      contacts: 3200,
+      tier: 'Premier',
+      category: 'Financial Services',
+      features: ['Intent Signals', 'Technographics', 'Compliance Data'],
+      match: 90
     }
   ];
 
   const handlePersonalizationComplete = (industry: string, subcategories: string[]) => {
     setSelectedIndustry(industry);
     setShowPersonalization(false);
+  };
+
+  const handleApplyFilters = (filters: any) => {
+    setAppliedFilters(filters);
+  };
+
+  const handleDownloadBundle = (bundle: any) => {
+    setSelectedBundle(bundle);
+    setShowDownloadModal(true);
+  };
+
+  const handleConfirmDownload = (bundleId: number, cost: number) => {
+    setUserCredits(prev => prev - cost);
+    console.log(`Downloaded bundle ${bundleId} for ${cost} credits`);
   };
 
   const getTierColor = (tier: string) => {
@@ -96,6 +127,20 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   };
 
   const filterAccess = getFilterAccess();
+
+  // Filter bundles based on search and applied filters
+  const filteredBundles = aiCuratedBundles.filter(bundle => {
+    const matchesSearch = !searchQuery || 
+      bundle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bundle.description.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesIndustry = !appliedFilters.industry || bundle.category === appliedFilters.industry;
+    
+    return matchesSearch && matchesIndustry;
+  });
+
+  // Get active filter count
+  const activeFilterCount = Object.keys(appliedFilters).filter(key => appliedFilters[key]).length;
 
   if (showPersonalization) {
     return (
@@ -154,9 +199,22 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Data Marketplace</h1>
-        <p className="text-gray-600 mt-2">Discover AI-curated data bundles tailored to your industry and needs</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Data Marketplace</h1>
+          <p className="text-gray-600 mt-2">Discover AI-curated data bundles tailored to your industry and needs</p>
+        </div>
+        
+        {/* Credit Balance */}
+        <div className="bg-white border rounded-lg p-4 shadow-sm">
+          <div className="flex items-center">
+            <Coins className="h-5 w-5 text-purple-600 mr-2" />
+            <div>
+              <p className="text-sm text-gray-600">Credit Balance</p>
+              <p className="text-xl font-bold text-purple-600">{userCredits.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -175,11 +233,12 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Select>
+              <Select value={appliedFilters.industry || ''} onValueChange={(value) => setAppliedFilters({...appliedFilters, industry: value})}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Industry" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">All Industries</SelectItem>
                   {industries.map((industry) => (
                     <SelectItem key={industry} value={industry}>
                       {industry}
@@ -187,12 +246,40 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline">
-                <Filter className="mr-2 h-4 w-4" />
-                Advanced Filters
-              </Button>
+              
+              <FilterModal 
+                userRole={userRole}
+                onApplyFilters={handleApplyFilters}
+                currentFilters={appliedFilters}
+              />
             </div>
           </div>
+
+          {/* Active Filters */}
+          {activeFilterCount > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {Object.entries(appliedFilters).map(([key, value]) => {
+                if (!value) return null;
+                return (
+                  <Badge key={key} variant="secondary" className="flex items-center">
+                    {key}: {Array.isArray(value) ? value.join(', ') : value}
+                    <X 
+                      className="ml-1 h-3 w-3 cursor-pointer" 
+                      onClick={() => setAppliedFilters({...appliedFilters, [key]: null})}
+                    />
+                  </Badge>
+                );
+              })}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setAppliedFilters({})}
+                className="text-xs"
+              >
+                Clear All
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -215,7 +302,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">AI-Curated for You</h2>
-            <p className="text-gray-600">Data bundles specifically selected based on your profile and industry</p>
+            <p className="text-gray-600">
+              {filteredBundles.length} data bundles found
+              {searchQuery && ` matching "${searchQuery}"`}
+            </p>
           </div>
           <Badge className="bg-purple-100 text-purple-800">
             <Star className="mr-1 h-3 w-3" />
@@ -224,7 +314,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {aiCuratedBundles.map((bundle) => (
+          {filteredBundles.map((bundle) => (
             <Card key={bundle.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -275,14 +365,34 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                   </div>
                 </div>
 
-                <Button className="w-full mt-4">
+                <Button 
+                  className="w-full mt-4"
+                  onClick={() => handleDownloadBundle(bundle)}
+                  disabled={userCredits < bundle.price}
+                >
                   <Download className="mr-2 h-4 w-4" />
-                  Download Bundle
+                  {userCredits < bundle.price ? 'Insufficient Credits' : 'Download Bundle'}
                 </Button>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        {filteredBundles.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No bundles found matching your criteria.</p>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => {
+                setSearchQuery('');
+                setAppliedFilters({});
+              }}
+            >
+              Clear Filters
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Browse All Categories */}
@@ -358,6 +468,15 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Download Modal */}
+      <DownloadModal
+        isOpen={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+        bundle={selectedBundle}
+        userCredits={userCredits}
+        onConfirmDownload={handleConfirmDownload}
+      />
     </div>
   );
 };

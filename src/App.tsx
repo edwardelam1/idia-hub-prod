@@ -17,7 +17,6 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/*" element={<Index />} />
-          {/* Catch-all route for 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

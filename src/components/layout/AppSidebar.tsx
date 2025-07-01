@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Globe
 } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -34,8 +34,9 @@ interface AppSidebarProps {
 }
 
 const AppSidebar = ({ userRole }: AppSidebarProps) => {
-  const { collapsed } = useSidebar();
+  const { state } = useSidebar();
   const location = useLocation();
+  const isCollapsed = state === 'collapsed';
 
   const getMenuItems = () => {
     const baseItems = [
@@ -83,7 +84,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <Sidebar className={collapsed ? 'w-14' : 'w-64'} collapsible>
+    <Sidebar className={isCollapsed ? 'w-14' : 'w-64'} collapsible="icon">
       <SidebarContent className="bg-white border-r">
         <div className="p-4 border-b">
           <div className="flex items-center space-x-3">
@@ -92,7 +93,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
               alt="IDIA Hub" 
               className="w-8 h-8"
             />
-            {!collapsed && (
+            {!isCollapsed && (
               <div>
                 <h2 className="font-bold text-lg text-gray-900">IDIA Hub</h2>
                 <p className="text-xs text-gray-500 capitalize">{userRole.replace('-', ' ')}</p>
@@ -111,10 +112,10 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                     asChild
                     className={isActive(item.url) ? 'bg-purple-50 text-purple-700 border-r-2 border-purple-700' : 'hover:bg-gray-50'}
                   >
-                    <a href={item.url} className="flex items-center">
+                    <NavLink to={item.url} className="flex items-center">
                       <item.icon className="mr-3 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </a>
+                      {!isCollapsed && <span>{item.title}</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -129,18 +130,18 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <a href="/trading" className="flex items-center">
+                    <NavLink to="/trading" className="flex items-center">
                       <TrendingUp className="mr-3 h-4 w-4" />
-                      {!collapsed && <span>Trading Interface</span>}
-                    </a>
+                      {!isCollapsed && <span>Trading Interface</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <a href="/liquidity" className="flex items-center">
+                    <NavLink to="/liquidity" className="flex items-center">
                       <Coins className="mr-3 h-4 w-4" />
-                      {!collapsed && <span>Liquidity Pools</span>}
-                    </a>
+                      {!isCollapsed && <span>Liquidity Pools</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
