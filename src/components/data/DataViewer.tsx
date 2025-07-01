@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,86 +117,133 @@ const DataViewer = () => {
 
     switch (bundleIdNumber) {
       case 1: // VC Bundle - Kentucky Emerging Growth
-        headers = ['Company', 'Funding Round', 'Amount Raised', 'Hiring Velocity', 'Industry', 'Location', 'Employee Growth'];
-        const industries = ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech'];
-        const locations = ['Louisville', 'Lexington', 'Bowling Green', 'Covington', 'Frankfort'];
-        for (let i = 0; i < 100; i++) {
+        headers = ['Company', 'Funding Round', 'Amount Raised', 'Hiring Velocity', 'Industry', 'Location', 'Employee Growth', 'Founded', 'Revenue Stage'];
+        const industries = ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech', 'AgTech', 'EdTech'];
+        const locations = ['Louisville', 'Lexington', 'Bowling Green', 'Covington', 'Frankfort', 'Henderson', 'Owensboro', 'Paducah'];
+        const fundingRounds = ['Series A', 'Series B', 'Seed', 'Pre-Series A', 'Series C', 'Bridge Round'];
+        const revenueStages = ['Pre-Revenue', 'Early Revenue', 'Growth Stage', 'Scale-Up'];
+        
+        for (let i = 0; i < 200; i++) {
+          const founded = 2015 + (i % 9);
+          const employeeGrowth = 50 + Math.floor(Math.random() * 300);
           mockData.push({
             id: `vc-${i}`,
-            company: `Kentucky Co ${i + 1}`,
-            fundingRound: ['Series A', 'Series B', 'Seed', 'Pre-Series A'][i % 4],
-            amountRaised: `$${(Math.random() * 5 + 0.5).toFixed(1)}M`,
-            hiringVelocity: `+${Math.floor(Math.random() * 50 + 10)} employees`,
+            company: `Kentucky Growth Co ${String(i + 1).padStart(3, '0')}`,
+            fundingRound: fundingRounds[i % fundingRounds.length],
+            amountRaised: `$${(Math.random() * 8 + 0.5).toFixed(1)}M`,
+            hiringVelocity: `+${Math.floor(Math.random() * 75 + 15)} employees`,
             industry: industries[i % industries.length],
             location: `${locations[i % locations.length]}, KY`,
-            employeeGrowth: `${Math.floor(Math.random() * 200 + 50)}%`
+            employeeGrowth: `${employeeGrowth}%`,
+            founded: founded.toString(),
+            revenueStage: revenueStages[i % revenueStages.length]
           });
         }
         break;
 
       case 2: // CRM Bundle - Platform Migration
-        headers = ['Company', 'Previous CRM', 'Migration Date', 'Company Size', 'Industry', 'Migration Reason'];
-        const crmPlatforms = ['Salesforce', 'HubSpot', 'Pipedrive', 'Zoho', 'Microsoft Dynamics'];
-        const companySizes = ['51-200', '201-500', '501-1000', '1000+'];
-        for (let i = 0; i < 100; i++) {
+        headers = ['Company', 'Previous CRM', 'Migration Date', 'Company Size', 'Industry', 'Migration Reason', 'Decision Timeline', 'Budget Range'];
+        const crmPlatforms = ['Salesforce', 'HubSpot', 'Pipedrive', 'Zoho CRM', 'Microsoft Dynamics', 'Freshworks', 'Monday.com'];
+        const companySizes = ['51-200', '201-500', '501-1000', '1000-2500', '2500+'];
+        const migrationReasons = ['Cost Reduction', 'Feature Limitations', 'Integration Issues', 'User Experience', 'Scalability', 'Support Issues'];
+        const timelines = ['1-3 months', '3-6 months', '6-12 months', 'Immediate'];
+        const budgets = ['$10K-25K', '$25K-50K', '$50K-100K', '$100K+'];
+        
+        for (let i = 0; i < 200; i++) {
+          const quarter = Math.floor(Math.random() * 4) + 1;
+          const year = Math.random() > 0.7 ? 2025 : 2024;
           mockData.push({
             id: `crm-${i}`,
-            company: `Tech Company ${i + 1}`,
+            company: `TechCorp ${String(i + 1).padStart(3, '0')}`,
             previousCrm: crmPlatforms[i % crmPlatforms.length],
-            migrationDate: `Q${Math.floor(Math.random() * 4) + 1} 2024`,
+            migrationDate: `Q${quarter} ${year}`,
             companySize: companySizes[i % companySizes.length],
-            industry: ['Technology', 'SaaS', 'Professional Services', 'Manufacturing'][i % 4],
-            migrationReason: ['Cost Reduction', 'Feature Limitations', 'Integration Issues', 'User Experience'][i % 4]
+            industry: ['Technology', 'SaaS', 'Professional Services', 'Manufacturing', 'Healthcare', 'Financial Services'][i % 6],
+            migrationReason: migrationReasons[i % migrationReasons.length],
+            decisionTimeline: timelines[i % timelines.length],
+            budgetRange: budgets[i % budgets.length]
           });
         }
         break;
 
       case 3: // Real Estate Bundle - Louisville Corridors
-        headers = ['Corridor', 'Transaction Volume', 'Growth Rate', 'Merchant Category', 'Avg Transaction', 'Peak Hours'];
-        const corridors = ['Downtown', 'Highlands', 'Bardstown Road', 'Frankfort Avenue', 'Shelbyville Road'];
-        const categories = ['Restaurant', 'Retail', 'Professional Services', 'Entertainment', 'Healthcare'];
-        for (let i = 0; i < 100; i++) {
+        headers = ['Corridor', 'Transaction Volume', 'Growth Rate', 'Merchant Category', 'Avg Transaction', 'Peak Hours', 'Foot Traffic', 'Lease Rates'];
+        const corridors = ['Downtown Core', 'Highlands District', 'Bardstown Road', 'Frankfort Avenue', 'Shelbyville Road', 'Preston Highway', 'Dixie Highway'];
+        const categories = ['Restaurant', 'Retail', 'Professional Services', 'Entertainment', 'Healthcare', 'Fitness', 'Beauty/Wellness'];
+        const peakHours = ['11am-2pm', '5pm-8pm', '7pm-10pm', '12pm-3pm', '6pm-9pm'];
+        
+        for (let i = 0; i < 200; i++) {
+          const volume = Math.floor(Math.random() * 800 + 200);
+          const growth = Math.floor(Math.random() * 45 + 5);
+          const avgTransaction = Math.floor(Math.random() * 150 + 25);
+          const footTraffic = Math.floor(Math.random() * 5000 + 1000);
+          const leaseRate = Math.floor(Math.random() * 25 + 12);
+          
           mockData.push({
             id: `re-${i}`,
             corridor: corridors[i % corridors.length],
-            transactionVolume: `${Math.floor(Math.random() * 500 + 200)}k`,
-            growthRate: `+${Math.floor(Math.random() * 30 + 5)}%`,
+            transactionVolume: `${volume}k`,
+            growthRate: `+${growth}%`,
             merchantCategory: categories[i % categories.length],
-            avgTransaction: `$${Math.floor(Math.random() * 100 + 25)}`,
-            peakHours: ['11am-2pm', '5pm-8pm', '7pm-10pm'][i % 3]
+            avgTransaction: `$${avgTransaction}`,
+            peakHours: peakHours[i % peakHours.length],
+            footTraffic: `${footTraffic.toLocaleString()}/month`,
+            leaseRates: `$${leaseRate}/sq ft`
           });
         }
         break;
 
       case 4: // CPG Bundle - Beverage Trends
-        headers = ['Product Category', 'Cafe Sales', 'Grocery Sales', 'Growth Trend', 'Price Point', 'Regional Preference'];
-        const categories4 = ['Coffee', 'Tea', 'Energy Drinks', 'Smoothies', 'Kombucha', 'Specialty Beverages'];
-        for (let i = 0; i < 100; i++) {
+        headers = ['Product Category', 'Cafe Sales', 'Grocery Sales', 'Growth Trend', 'Price Point', 'Regional Preference', 'Market Share', 'Seasonal Factor'];
+        const beverageCategories = ['Specialty Coffee', 'Premium Tea', 'Energy Drinks', 'Smoothies', 'Kombucha', 'Cold Brew', 'Functional Beverages', 'Plant-Based Drinks'];
+        const pricePoints = ['Premium ($4-6)', 'Mid-tier ($2-4)', 'Value ($1-2)', 'Ultra-Premium ($6+)'];
+        const regionalPrefs = ['Urban Heavy', 'Suburban Focused', 'Mixed Demographics', 'College Towns'];
+        
+        for (let i = 0; i < 200; i++) {
+          const cafeSales = Math.floor(Math.random() * 300 + 50);
+          const grocerySales = Math.floor(Math.random() * 200 + 30);
+          const growthTrend = Math.random() > 0.3 ? '+' : '-';
+          const growthPercent = Math.floor(Math.random() * 35 + 5);
+          const marketShare = (Math.random() * 15 + 1).toFixed(1);
+          const seasonalFactor = (Math.random() * 2 + 0.5).toFixed(1);
+          
           mockData.push({
             id: `cpg-${i}`,
-            productCategory: categories4[i % categories4.length],
-            cafeSales: `$${Math.floor(Math.random() * 200 + 50)}k`,
-            grocerySales: `$${Math.floor(Math.random() * 150 + 30)}k`,
-            growthTrend: `${Math.random() > 0.5 ? '+' : '-'}${Math.floor(Math.random() * 20 + 5)}%`,
-            pricePoint: ['Premium', 'Mid-tier', 'Value'][i % 3],
-            regionalPreference: ['Urban', 'Suburban', 'Mixed'][i % 3]
+            productCategory: beverageCategories[i % beverageCategories.length],
+            cafeSales: `$${cafeSales}k`,
+            grocerySales: `$${grocerySales}k`,
+            growthTrend: `${growthTrend}${growthPercent}%`,
+            pricePoint: pricePoints[i % pricePoints.length],
+            regionalPreference: regionalPrefs[i % regionalPrefs.length],
+            marketShare: `${marketShare}%`,
+            seasonalFactor: `${seasonalFactor}x`
           });
         }
         break;
 
       case 5: // Academic Bundle - Pro-Social Behavior
-        headers = ['Metro Area', 'Community Actions', 'Local Spend Impact', 'Correlation Score', 'Population', 'Engagement Type'];
-        const metroAreas = ['Louisville', 'Lexington', 'Bowling Green', 'Owensboro', 'Covington'];
-        const engagementTypes = ['Volunteering', 'Local Events', 'Community Projects', 'Environmental Initiatives'];
-        for (let i = 0; i < 100; i++) {
+        headers = ['Metro Area', 'Community Actions', 'Local Spend Impact', 'Correlation Score', 'Population', 'Engagement Type', 'Economic Multiplier', 'Study Period'];
+        const metroAreas = ['Louisville Metro', 'Lexington-Fayette', 'Bowling Green', 'Owensboro', 'Covington-Newport', 'Paducah', 'Henderson', 'Frankfort'];
+        const engagementTypes = ['Volunteer Events', 'Community Clean-up', 'Local Fundraising', 'Neighborhood Watch', 'Youth Mentoring', 'Senior Support'];
+        const studyPeriods = ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q4 2024', 'Q1 2025'];
+        
+        for (let i = 0; i < 200; i++) {
+          const actions = Math.floor(Math.random() * 800 + 100);
+          const impact = Math.floor(Math.random() * 80 + 10);
+          const correlation = (0.4 + Math.random() * 0.5).toFixed(2);
+          const population = Math.floor(Math.random() * 300 + 50);
+          const multiplier = (1.2 + Math.random() * 2.0).toFixed(1);
+          
           mockData.push({
             id: `academic-${i}`,
             metroArea: metroAreas[i % metroAreas.length],
-            communityActions: Math.floor(Math.random() * 500 + 100),
-            localSpendImpact: `+$${Math.floor(Math.random() * 50 + 10)}k`,
-            correlationScore: `0.${Math.floor(Math.random() * 40 + 60)}`,
-            population: `${Math.floor(Math.random() * 200 + 50)}k`,
-            engagementType: engagementTypes[i % engagementTypes.length]
+            communityActions: actions.toLocaleString(),
+            localSpendImpact: `+$${impact}k`,
+            correlationScore: correlation,
+            population: `${population}k`,
+            engagementType: engagementTypes[i % engagementTypes.length],
+            economicMultiplier: `${multiplier}x`,
+            studyPeriod: studyPeriods[i % studyPeriods.length]
           });
         }
         break;
@@ -308,9 +354,10 @@ const DataViewer = () => {
             {tableHeaders.map((header) => {
               const key = header.toLowerCase().replace(/\s+/g, '');
               const camelCaseKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
+              const value = record[camelCaseKey] || record[key];
               return (
                 <TableCell key={header}>
-                  {String(record[camelCaseKey] || record[key] || '-')}
+                  {String(value)}
                 </TableCell>
               );
             })}
