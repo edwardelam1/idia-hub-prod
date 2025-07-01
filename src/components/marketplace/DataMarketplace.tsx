@@ -34,8 +34,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [userCredits, setUserCredits] = useState(12500);
 
   const industries = [
-    'Venture Capital & Private Equity', 'SaaS & Technology', 'Commercial Real Estate', 
-    'Consumer Packaged Goods', 'Academic & Research', 'Financial Services'
+    'Venture Capital & Private Equity', 
+    'SaaS & Technology', 
+    'Commercial Real Estate', 
+    'Consumer Packaged Goods', 
+    'Academic & Research'
   ];
 
   // Enterprise-grade bundles based on realistic IDIA use cases
@@ -49,7 +52,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       tier: 'Enterprise',
       category: 'Venture Capital & Private Equity',
       features: ['Intent Signals', 'Advanced Hiring Trends', 'Geographic Targeting', 'Funding Status'],
-      match: 97
+      match: 97,
+      keyInsights: [
+        '127 companies closed Series A+ rounds',
+        '89% increased engineering headcount',
+        'Avg funding: $2.3M per company'
+      ],
+      dataPoints: [
+        'Company funding rounds & amounts',
+        'Hiring velocity by department',
+        'Geographic distribution analysis',
+        'Revenue growth indicators'
+      ]
     },
     {
       id: 2,
@@ -60,7 +74,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       tier: 'Professional',
       category: 'SaaS & Technology',
       features: ['Technographics', 'Intent Signals', 'Company Size Filtering', 'Platform Migration Data'],
-      match: 94
+      match: 94,
+      keyInsights: [
+        '312 companies dropped Salesforce',
+        '178 migrated from HubSpot',
+        'Peak migration period: Q1 2025'
+      ],
+      dataPoints: [
+        'Previous CRM platform used',
+        'Migration timeline & triggers',
+        'Company size & industry vertical',
+        'Decision maker contact info'
+      ]
     },
     {
       id: 3,
@@ -71,7 +96,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       tier: 'Enterprise',
       category: 'Commercial Real Estate',
       features: ['Advanced Time-Series Analysis', 'Geographic Targeting', 'Merchant Categories', 'Transaction Velocity'],
-      match: 91
+      match: 91,
+      keyInsights: [
+        'Downtown corridor: +23% growth',
+        'Highlands district: +18% velocity',
+        'Restaurant category leading growth'
+      ],
+      dataPoints: [
+        'Transaction volume by corridor',
+        'Merchant category performance',
+        'Seasonal trend analysis',
+        'Commercial lease opportunities'
+      ]
     },
     {
       id: 4,
@@ -82,7 +118,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       tier: 'Professional',
       category: 'Consumer Packaged Goods',
       features: ['Anonymized Merchant IDs', 'Category Comparison', 'Trend Analysis', 'Channel Strategy'],
-      match: 89
+      match: 89,
+      keyInsights: [
+        'Cafe spend up 34% vs grocery',
+        'Premium beverages driving growth',
+        'Regional preferences identified'
+      ],
+      dataPoints: [
+        'Channel performance comparison',
+        'Product category breakdowns',
+        'Consumer preference shifts',
+        'Price sensitivity analysis'
+      ]
     },
     {
       id: 5,
@@ -93,7 +140,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       tier: 'Analyst',
       category: 'Academic & Research',
       features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
-      match: 86
+      match: 86,
+      keyInsights: [
+        '15,000+ community good deeds tracked',
+        '67% correlation with local spending',
+        '12 metro areas analyzed'
+      ],
+      dataPoints: [
+        'Community engagement metrics',
+        'Local business transaction data',
+        'Geographic correlation analysis',
+        'Social impact measurements'
+      ]
     }
   ].map(bundle => anonymizeBundleData(bundle));
 
@@ -228,21 +286,26 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         </span>
       </div>
 
-      {/* Minimalistic Bundle Grid */}
-      <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2'}`}>
+      {/* Enhanced Bundle Grid with Unique Information */}
+      <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2'}`}>
         {filteredBundles.map((bundle) => (
           <Card key={bundle.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className={isMobile ? 'p-4' : 'p-5'}>
-              <div className="space-y-3">
+            <CardContent className={isMobile ? 'p-4' : 'p-6'}>
+              <div className="space-y-4">
                 {/* Header */}
                 <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-1">
+                  <div className="flex-1 space-y-2">
                     <h3 className={`font-medium text-gray-900 ${isMobile ? 'text-sm' : 'text-base'}`}>
                       {bundle.name}
                     </h3>
-                    <Badge className={`${getTierColor(bundle.tier)} text-xs`} variant="outline">
-                      {bundle.tier}
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={`${getTierColor(bundle.tier)} text-xs`} variant="outline">
+                        {bundle.tier}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {bundle.category}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className={`flex items-center text-purple-600 font-semibold ${isMobile ? 'text-sm' : ''}`}>
@@ -256,6 +319,36 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 <p className={`text-gray-600 ${isMobile ? 'text-xs' : 'text-sm'}`}>
                   {bundle.description}
                 </p>
+
+                {/* Key Insights */}
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-blue-900 text-xs mb-2">Key Insights</h4>
+                  <ul className="space-y-1">
+                    {bundle.keyInsights?.map((insight, index) => (
+                      <li key={index} className="text-blue-700 text-xs flex items-center">
+                        <div className="w-1 h-1 bg-blue-400 rounded-full mr-2"></div>
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Data Points */}
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-gray-900 text-xs mb-2">Data Points Included</h4>
+                  <div className="flex flex-wrap gap-1">
+                    {bundle.dataPoints?.slice(0, isMobile ? 2 : 4).map((point, index) => (
+                      <Badge key={index} variant="outline" className="text-xs px-2 py-0">
+                        {point}
+                      </Badge>
+                    ))}
+                    {bundle.dataPoints && bundle.dataPoints.length > (isMobile ? 2 : 4) && (
+                      <Badge variant="outline" className="text-xs px-2 py-0">
+                        +{bundle.dataPoints.length - (isMobile ? 2 : 4)} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
 
                 {/* Stats */}
                 <div className="flex items-center justify-between text-xs text-gray-500">
