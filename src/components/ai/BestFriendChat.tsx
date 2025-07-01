@@ -1,23 +1,24 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Brain, Send, Shield, User, Bot } from 'lucide-react';
+import { Send, User, Bot, Brain } from 'lucide-react';
 import { toast } from 'sonner';
+import BestFriendAvatar from './BestFriendAvatar';
 
 const BestFriendChat = () => {
   const [open, setOpen] = useState(false);
   const [conversation, setConversation] = useState<Array<{role: string, content: string}>>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [emotion, setEmotion] = useState<'excited' | 'calm' | 'sad' | 'neutral'>('neutral');
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
 
     setIsLoading(true);
+    setEmotion('excited');
     const userMessage = currentMessage;
     setCurrentMessage('');
     
@@ -25,10 +26,11 @@ const BestFriendChat = () => {
     setConversation(prev => [...prev, { role: 'user', content: userMessage }]);
 
     try {
-      const response = await fetch('/functions/v1/best-friend-ai', {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/best-friend-ai`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
         },
         body: JSON.stringify({
           message: userMessage,
@@ -50,16 +52,31 @@ const BestFriendChat = () => {
         role: 'assistant', 
         content: data.response 
       }]);
+      
+      setEmotion('calm');
 
     } catch (error) {
       console.error('Best Friend AI Error:', error);
       toast.error('Failed to connect to Best Friend AI');
+      setEmotion('sad');
       setConversation(prev => [...prev, { 
         role: 'error', 
         content: 'Sorry, I encountered an issue. Please try again.' 
       }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVoiceToggle = (isActive: boolean) => {
+    setIsVoiceActive(isActive);
+    if (isActive) {
+      setEmotion('excited');
+      toast.success('Voice mode activated! Start speaking...');
+      // TODO: Implement actual voice recognition
+    } else {
+      setEmotion('neutral');
+      toast.info('Voice mode deactivated');
     }
   };
 
@@ -71,29 +88,16 @@ const BestFriendChat = () => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Brain className="h-5 w-5 text-purple-600" />
-                <CardTitle className="text-lg">Best Friend AI</CardTitle>
-              </div>
-              <Badge variant="default">Active</Badge>
-            </div>
-            <CardDescription>
-              Advanced AI system powered by Gemini for Super Admin operations
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Shield className="h-4 w-4" />
-              <span>Agent Army Protocol: 7 specialized agents ready</span>
-            </div>
-          </CardContent>
-        </Card>
-      </DialogTrigger>
+    <div className="flex flex-col items-center space-y-4">
+      <BestFriendAvatar 
+        onChatClick={() => setOpen(true)}
+        onVoiceToggle={handleVoiceToggle}
+        isListening={isVoiceActive}
+        isSpeaking={isLoading}
+        emotion={emotion}
+      />
+      
+      <Dialog open={open} onOpenChange={setOpen}>
       
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
@@ -179,17 +183,18 @@ const BestFriendChat = () => {
               disabled={isLoading}
               className="flex-1"
             />
-            <Button 
+            <button 
               onClick={handleSendMessage} 
               disabled={isLoading || !currentMessage.trim()}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-md disabled:opacity-50 transition-all duration-200"
             >
               <Send className="h-4 w-4" />
-            </Button>
+            </button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+    </div>
   );
 };
 
