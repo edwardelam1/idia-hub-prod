@@ -44,6 +44,7 @@ const DataViewer = () => {
   const [dataRecords, setDataRecords] = useState<DataRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<DataRecord[]>([]);
   const [tableHeaders, setTableHeaders] = useState<string[]>([]);
+  const [headerToKeyMapping, setHeaderToKeyMapping] = useState<{ [key: string]: string }>({});
 
   const itemsPerPage = isMobile ? 20 : 50;
 
@@ -123,10 +124,22 @@ const DataViewer = () => {
     const bundleIdNumber = parseInt(currentBundleId);
     const mockData: DataRecord[] = [];
     let headers: string[] = [];
+    let headerMapping: { [key: string]: string } = {};
 
     switch (bundleIdNumber) {
       case 1: // VC Bundle - Kentucky Emerging Growth
         headers = ['Company', 'Funding Round', 'Amount Raised', 'Hiring Velocity', 'Industry', 'Location', 'Employee Growth', 'Founded', 'Revenue Stage'];
+        headerMapping = {
+          'Company': 'company',
+          'Funding Round': 'fundingRound',
+          'Amount Raised': 'amountRaised',
+          'Hiring Velocity': 'hiringVelocity',
+          'Industry': 'industry',
+          'Location': 'location',
+          'Employee Growth': 'employeeGrowth',
+          'Founded': 'founded',
+          'Revenue Stage': 'revenueStage'
+        };
         const industries = ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech', 'AgTech', 'EdTech'];
         const locations = ['Louisville', 'Lexington', 'Bowling Green', 'Covington', 'Frankfort', 'Henderson', 'Owensboro', 'Paducah'];
         const fundingRounds = ['Series A', 'Series B', 'Seed', 'Pre-Series A', 'Series C', 'Bridge Round'];
@@ -152,6 +165,16 @@ const DataViewer = () => {
 
       case 2: // CRM Bundle - Platform Migration
         headers = ['Company', 'Previous CRM', 'Migration Date', 'Company Size', 'Industry', 'Migration Reason', 'Decision Timeline', 'Budget Range'];
+        headerMapping = {
+          'Company': 'company',
+          'Previous CRM': 'previousCrm',
+          'Migration Date': 'migrationDate',
+          'Company Size': 'companySize',
+          'Industry': 'industry',
+          'Migration Reason': 'migrationReason',
+          'Decision Timeline': 'decisionTimeline',
+          'Budget Range': 'budgetRange'
+        };
         const crmPlatforms = ['Salesforce', 'HubSpot', 'Pipedrive', 'Zoho CRM', 'Microsoft Dynamics', 'Freshworks', 'Monday.com'];
         const companySizes = ['51-200', '201-500', '501-1000', '1000-2500', '2500+'];
         const migrationReasons = ['Cost Reduction', 'Feature Limitations', 'Integration Issues', 'User Experience', 'Scalability', 'Support Issues'];
@@ -178,6 +201,16 @@ const DataViewer = () => {
 
       case 3: // Real Estate Bundle - Louisville Corridors
         headers = ['Corridor', 'Transaction Volume', 'Growth Rate', 'Merchant Category', 'Avg Transaction', 'Peak Hours', 'Foot Traffic', 'Lease Rates'];
+        headerMapping = {
+          'Corridor': 'corridor',
+          'Transaction Volume': 'transactionVolume',
+          'Growth Rate': 'growthRate',
+          'Merchant Category': 'merchantCategory',
+          'Avg Transaction': 'avgTransaction',
+          'Peak Hours': 'peakHours',
+          'Foot Traffic': 'footTraffic',
+          'Lease Rates': 'leaseRates'
+        };
         const corridors = ['Downtown Core', 'Highlands District', 'Bardstown Road', 'Frankfort Avenue', 'Shelbyville Road', 'Preston Highway', 'Dixie Highway'];
         const categories = ['Restaurant', 'Retail', 'Professional Services', 'Entertainment', 'Healthcare', 'Fitness', 'Beauty/Wellness'];
         const peakHours = ['11am-2pm', '5pm-8pm', '7pm-10pm', '12pm-3pm', '6pm-9pm'];
@@ -205,6 +238,16 @@ const DataViewer = () => {
 
       case 4: // CPG Bundle - Beverage Trends
         headers = ['Product Category', 'Cafe Sales', 'Grocery Sales', 'Growth Trend', 'Price Point', 'Regional Preference', 'Market Share', 'Seasonal Factor'];
+        headerMapping = {
+          'Product Category': 'productCategory',
+          'Cafe Sales': 'cafeSales',
+          'Grocery Sales': 'grocerySales',
+          'Growth Trend': 'growthTrend',
+          'Price Point': 'pricePoint',
+          'Regional Preference': 'regionalPreference',
+          'Market Share': 'marketShare',
+          'Seasonal Factor': 'seasonalFactor'
+        };
         const beverageCategories = ['Specialty Coffee', 'Premium Tea', 'Energy Drinks', 'Smoothies', 'Kombucha', 'Cold Brew', 'Functional Beverages', 'Plant-Based Drinks'];
         const pricePoints = ['Premium ($4-6)', 'Mid-tier ($2-4)', 'Value ($1-2)', 'Ultra-Premium ($6+)'];
         const regionalPrefs = ['Urban Heavy', 'Suburban Focused', 'Mixed Demographics', 'College Towns'];
@@ -233,6 +276,16 @@ const DataViewer = () => {
 
       case 5: // Academic Bundle - Pro-Social Behavior
         headers = ['Metro Area', 'Community Actions', 'Local Spend Impact', 'Correlation Score', 'Population', 'Engagement Type', 'Economic Multiplier', 'Study Period'];
+        headerMapping = {
+          'Metro Area': 'metroArea',
+          'Community Actions': 'communityActions',
+          'Local Spend Impact': 'localSpendImpact',
+          'Correlation Score': 'correlationScore',
+          'Population': 'population',
+          'Engagement Type': 'engagementType',
+          'Economic Multiplier': 'economicMultiplier',
+          'Study Period': 'studyPeriod'
+        };
         const metroAreas = ['Louisville Metro', 'Lexington-Fayette', 'Bowling Green', 'Owensboro', 'Covington-Newport', 'Paducah', 'Henderson', 'Frankfort'];
         const engagementTypes = ['Volunteer Events', 'Community Clean-up', 'Local Fundraising', 'Neighborhood Watch', 'Youth Mentoring', 'Senior Support'];
         const studyPeriods = ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q4 2024', 'Q1 2025'];
@@ -260,6 +313,16 @@ const DataViewer = () => {
 
       case 6: // Urban Wellness Bundle - Using REAL data
         headers = ['Urban Zone', 'Avg Daily Steps', 'Active Calories', 'Popular Activity', 'Peak Activity Time', 'Sleep Duration', 'Heart Rate Zone', 'Workout Frequency'];
+        headerMapping = {
+          'Urban Zone': 'urbanZone',
+          'Avg Daily Steps': 'avgDailySteps',
+          'Active Calories': 'activeCalories',
+          'Popular Activity': 'popularActivity',
+          'Peak Activity Time': 'peakActivityTime',
+          'Sleep Duration': 'sleepDuration',
+          'Heart Rate Zone': 'heartRateZone',
+          'Workout Frequency': 'workoutFrequency'
+        };
         
         // Using the REAL data provided by the user
         const realWellnessData = [
@@ -382,6 +445,11 @@ const DataViewer = () => {
 
       default:
         headers = ['Data Point', 'Value', 'Category'];
+        headerMapping = {
+          'Data Point': 'dataPoint',
+          'Value': 'value',
+          'Category': 'category'
+        };
         mockData.push({
           id: 'default-1',
           dataPoint: 'Sample Data',
@@ -392,6 +460,7 @@ const DataViewer = () => {
     }
 
     setTableHeaders(headers);
+    setHeaderToKeyMapping(headerMapping);
     setDataRecords(mockData);
   };
 
@@ -462,10 +531,14 @@ const DataViewer = () => {
           <div className="space-y-2">
             {Object.entries(record).map(([key, value]) => {
               if (key === 'id') return null;
+              // Find the header name for this key
+              const headerName = Object.keys(headerToKeyMapping).find(
+                header => headerToKeyMapping[header] === key
+              ) || key;
               return (
                 <div key={key} className="flex justify-between items-center">
-                  <span className="text-xs font-medium text-gray-600 capitalize">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}:
+                  <span className="text-xs font-medium text-gray-600">
+                    {headerName}:
                   </span>
                   <span className="text-xs text-gray-900">{String(value)}</span>
                 </div>
@@ -490,9 +563,8 @@ const DataViewer = () => {
         {paginatedRecords.map((record) => (
           <TableRow key={record.id}>
             {tableHeaders.map((header) => {
-              const key = header.toLowerCase().replace(/\s+/g, '');
-              const camelCaseKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
-              const value = record[camelCaseKey] || record[key] || record[header.toLowerCase().replace(/\s+/g, '')];
+              const dataKey = headerToKeyMapping[header];
+              const value = record[dataKey];
               return (
                 <TableCell key={header}>
                   {String(value || '')}
