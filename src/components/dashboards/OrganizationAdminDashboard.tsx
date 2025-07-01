@@ -14,8 +14,11 @@ import {
   CheckCircle
 } from 'lucide-react';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
+import { usePipelineActivity } from '@/hooks/usePipelineActivity';
 
 const OrganizationAdminDashboard = () => {
+  const { activities, activityCount } = usePipelineActivity();
+  
   const organizationStats = {
     totalUsers: 24,
     activeTeams: 6,
@@ -25,29 +28,21 @@ const OrganizationAdminDashboard = () => {
     apiCalls: 12400
   };
 
-  const recentActivity = [
-    {
-      id: 1,
-      action: 'Team member added',
-      details: 'Sarah Johnson joined Marketing Team',
-      timestamp: '2 hours ago',
-      type: 'user'
-    },
-    {
-      id: 2,
-      action: 'Data bundle downloaded',
-      details: 'Tech Leadership Pipeline (150 credits)',
-      timestamp: '4 hours ago',
-      type: 'data'
-    },
-    {
-      id: 3,
-      action: 'API usage spike',
-      details: 'Development team exceeded daily limit',
-      timestamp: '6 hours ago',
-      type: 'api'
-    }
-  ];
+  // Convert pipeline activities to recent activity format
+  const recentActivity = activities.slice(-3).map((activity, index) => ({
+    id: activity.id,
+    action: activity.type === 'bundle_created' ? 'Data bundle created' :
+            activity.type === 'data_processed' ? 'Health data processed' : 'System activity',
+    details: activity.type === 'bundle_created' ? `${activity.details.title} (${activity.details.contactsCount} contacts)` :
+             activity.type === 'data_processed' ? `${activity.details.activityType} activity (Quality: ${(activity.details.qualityScore * 100).toFixed(0)}%)` :
+             'Pipeline activity detected',
+    timestamp: new Date(activity.timestamp).toLocaleDateString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    }) + ' ago',
+    type: activity.type
+  }));
 
   return (
     <div className="space-y-6">
@@ -56,11 +51,14 @@ const OrganizationAdminDashboard = () => {
         <p className="text-gray-600 mt-2">Manage your organization's data intelligence operations</p>
       </div>
 
-      {/* Synapse Visualizer */}
+      {/* Synapse Visualizer - Now Connected to Real Pipeline */}
       <Card>
         <CardHeader>
           <CardTitle>Organization Network Activity</CardTitle>
-          <CardDescription>Real-time view of your organization's contribution to the IDIA Synapse Engine™</CardDescription>
+          <CardDescription>
+            Real-time view of your organization's contribution to the IDIA Synapse Engine™ 
+            • {activityCount} activities processed
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <SynapseVisualizer />
@@ -142,21 +140,29 @@ const OrganizationAdminDashboard = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest organization activities</CardDescription>
+            <CardTitle>Pipeline Activity</CardTitle>
+            <CardDescription>Latest data processing activities</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivity.map((activity) => (
+              {recentActivity.length > 0 ? recentActivity.map((activity) => (
                 <div key={activity.id} className="flex items-start space-x-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2" />
+                  <div className={`w-2 h-2 rounded-full mt-2 ${
+                    activity.type === 'bundle_created' ? 'bg-purple-500' :
+                    activity.type === 'data_processed' ? 'bg-blue-500' : 'bg-green-500'
+                  }`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{activity.action}</p>
                     <p className="text-xs text-gray-600">{activity.details}</p>
                     <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-center text-gray-500 py-4">
+                  <p className="text-sm">No recent pipeline activity</p>
+                  <p className="text-xs">Data processing activities will appear here</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
