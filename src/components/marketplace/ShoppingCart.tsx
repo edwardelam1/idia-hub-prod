@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShoppingCart, Trash2, Coins, Plus, Minus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 interface CartItem {
   id: string;
@@ -25,7 +24,6 @@ interface ShoppingCartProps {
 }
 
 const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchase }: ShoppingCartProps) => {
-  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
   const totalCost = cartItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
@@ -51,8 +49,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
     if (canAfford && cartItems.length > 0) {
       onPurchase(totalCost);
       setIsOpen(false);
-      // Navigate to a custom data viewer or confirmation page
-      navigate('/marketplace');
+      // Navigation to My Reports is now handled in DataMarketplace
     }
   };
 
@@ -180,7 +177,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
                   disabled={!canAfford}
                   className="w-full"
                 >
-                  {!canAfford ? 'Insufficient Credits' : `Purchase (${totalCost} credits)`}
+                  {!canAfford ? 'Insufficient Credits' : `Purchase & View Reports (${totalCost} credits)`}
                 </Button>
                 <Button variant="outline" onClick={clearCart} className="w-full">
                   Clear Cart

@@ -6,6 +6,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { anonymizeBundleData } from '@/utils/dataAnonymizer';
 import { useNavigate } from 'react-router-dom';
 import { marketplaceBundles } from '@/data/marketplaceBundles';
+import { usePurchaseHistory } from '@/contexts/PurchaseHistoryContext';
 import MarketplaceHeader from './MarketplaceHeader';
 import MarketplaceFilters from './MarketplaceFilters';
 import ResultsHeader from './ResultsHeader';
@@ -29,6 +30,7 @@ interface CartItem {
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
   const { isMobile } = useResponsive();
+  const { addPurchase } = usePurchaseHistory();
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [userCredits, setUserCredits] = useState(12500);
@@ -39,6 +41,16 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const handleDownloadBundle = (bundle: any) => {
     if (userCredits >= bundle.price) {
       setUserCredits(prev => prev - bundle.price);
+      
+      // Add to purchase history
+      addPurchase({
+        bundleId: bundle.id,
+        bundleName: bundle.name,
+        items: [],
+        totalCost: bundle.price,
+        purchaseType: 'bundle'
+      });
+      
       navigate(`/data-viewer/${bundle.id}`);
     }
   };
@@ -58,9 +70,17 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const handlePurchase = (totalCost: number) => {
     if (userCredits >= totalCost) {
       setUserCredits(prev => prev - totalCost);
+      
+      // Add to purchase history
+      addPurchase({
+        items: cartItems,
+        totalCost,
+        purchaseType: 'ala-carte'
+      });
+      
       setCartItems([]);
-      // Could navigate to a custom data viewer for à la carte items
-      console.log('À la carte purchase completed!');
+      // Navigate to My Reports instead of marketplace
+      navigate('/my-reports');
     }
   };
 

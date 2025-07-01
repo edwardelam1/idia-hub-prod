@@ -14,7 +14,8 @@ import {
   Coins,
   TrendingUp,
   ShieldCheck,
-  Globe
+  Globe,
+  Package
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
@@ -42,6 +43,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
     const baseItems = [
       { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
       { title: 'Data Marketplace', url: '/marketplace', icon: Database },
+      { title: 'My Reports', url: '/my-reports', icon: Package },
     ];
 
     switch (userRole) {

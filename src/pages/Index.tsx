@@ -13,6 +13,7 @@ import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import DataViewer from '@/components/data/DataViewer';
+import MyReports from '@/components/reports/MyReports';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -62,6 +63,8 @@ const Index = () => {
         <Route path="/dashboard" element={renderDashboard()} />
         <Route path="/marketplace" element={<DataMarketplace userRole={userRole} />} />
         <Route path="/data-viewer/:bundleId" element={<DataViewer />} />
+        <Route path="/data-viewer/purchased/:purchaseId" element={<DataViewer />} />
+        <Route path="/my-reports" element={<MyReports />} />
         <Route path="/system-health" element={<SystemHealthDashboard />} />
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
