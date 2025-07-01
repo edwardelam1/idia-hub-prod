@@ -10,24 +10,14 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { ArrowLeft, Search, Download, Share, Save, Filter, Menu, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useResponsive } from '@/hooks/useResponsive';
-import { anonymizeContact, getMaskedDataWarning } from '@/utils/dataAnonymizer';
+import { getMaskedDataWarning } from '@/utils/dataAnonymizer';
 import DataViewerFilters from './DataViewerFilters';
 import SavedSearches from './SavedSearches';
 import ContactLists from './ContactLists';
 
-interface Contact {
+interface DataRecord {
   id: string;
-  name: string;
-  title: string;
-  company: string;
-  industry: string;
-  email: string;
-  phone: string;
-  location: string;
-  revenue?: string;
-  employees?: string;
-  technographics?: string[];
-  intentSignals?: string[];
+  [key: string]: any;
 }
 
 interface Bundle {
@@ -47,27 +37,27 @@ const DataViewer = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<any>({});
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
   const [showSavedSearches, setShowSavedSearches] = useState(false);
   const [showContactLists, setShowContactLists] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [bundle, setBundle] = useState<Bundle | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
+  const [dataRecords, setDataRecords] = useState<DataRecord[]>([]);
+  const [filteredRecords, setFilteredRecords] = useState<DataRecord[]>([]);
+  const [tableHeaders, setTableHeaders] = useState<string[]>([]);
 
   const itemsPerPage = isMobile ? 20 : 50;
 
   useEffect(() => {
     loadBundleData();
-    generateMockContacts();
+    generateBundleSpecificData();
   }, [bundleId]);
 
   useEffect(() => {
     applyFiltersAndSearch();
-  }, [contacts, filters, searchTerm]);
+  }, [dataRecords, filters, searchTerm]);
 
   const loadBundleData = () => {
-    // Enterprise bundles matching the marketplace
     const bundleMap: { [key: string]: Bundle } = {
       '1': {
         id: 1,
@@ -120,98 +110,141 @@ const DataViewer = () => {
     setBundle(currentBundle);
   };
 
-  const generateMockContacts = () => {
+  const generateBundleSpecificData = () => {
     const currentBundleId = bundleId || '1';
     const bundleIdNumber = parseInt(currentBundleId);
-    const mockContacts: Contact[] = [];
-    
-    // Generate different data based on bundle type
-    const bundleSpecificData = {
-      1: { // VC Bundle
-        titles: ['CEO', 'Founder', 'CFO', 'VP Finance', 'Head of Growth', 'CTO'],
-        industries: ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech'],
-        locations: ['Louisville, KY', 'Lexington, KY', 'Bowling Green, KY', 'Covington, KY']
-      },
-      2: { // CRM Bundle
-        titles: ['VP Sales', 'Sales Director', 'Revenue Operations', 'CRM Administrator', 'Sales Manager'],
-        industries: ['Technology', 'Software', 'SaaS', 'Professional Services', 'Manufacturing'],
-        locations: ['San Francisco, CA', 'Austin, TX', 'Boston, MA', 'Seattle, WA', 'Denver, CO']
-      },
-      3: { // Real Estate Bundle
-        titles: ['Property Manager', 'Leasing Director', 'Development Manager', 'Investment Analyst'],
-        industries: ['Commercial Real Estate', 'Property Management', 'Real Estate Investment'],
-        locations: ['Louisville, KY Metro Area', 'Jefferson County, KY', 'Oldham County, KY']
-      },
-      4: { // CPG Bundle
-        titles: ['Brand Manager', 'Category Manager', 'Market Research Analyst', 'Procurement Manager'],
-        industries: ['Consumer Goods', 'Retail', 'Food & Beverage', 'Distribution'],
-        locations: ['Chicago, IL', 'Atlanta, GA', 'Dallas, TX', 'Minneapolis, MN']
-      },
-      5: { // Academic Bundle
-        titles: ['Research Director', 'Policy Analyst', 'Community Outreach Manager', 'Program Coordinator'],
-        industries: ['Non-Profit', 'Government', 'Academic Research', 'Community Development'],
-        locations: ['Various Metro Areas', 'Community-Based Organizations', 'Research Institutions']
-      }
-    };
+    const mockData: DataRecord[] = [];
+    let headers: string[] = [];
 
-    const currentBundleData = bundleSpecificData[bundleIdNumber as keyof typeof bundleSpecificData] || bundleSpecificData[1];
-    const revenues = ['$1M-$10M', '$10M-$50M', '$50M-$100M', '$100M+'];
-    const employeeCounts = ['1-50', '51-200', '201-1000', '1000+'];
+    switch (bundleIdNumber) {
+      case 1: // VC Bundle - Kentucky Emerging Growth
+        headers = ['Company', 'Funding Round', 'Amount Raised', 'Hiring Velocity', 'Industry', 'Location', 'Employee Growth'];
+        const industries = ['FinTech', 'HealthTech', 'AI/ML', 'SaaS', 'E-commerce', 'BioTech'];
+        const locations = ['Louisville', 'Lexington', 'Bowling Green', 'Covington', 'Frankfort'];
+        for (let i = 0; i < 100; i++) {
+          mockData.push({
+            id: `vc-${i}`,
+            company: `Kentucky Co ${i + 1}`,
+            fundingRound: ['Series A', 'Series B', 'Seed', 'Pre-Series A'][i % 4],
+            amountRaised: `$${(Math.random() * 5 + 0.5).toFixed(1)}M`,
+            hiringVelocity: `+${Math.floor(Math.random() * 50 + 10)} employees`,
+            industry: industries[i % industries.length],
+            location: `${locations[i % locations.length]}, KY`,
+            employeeGrowth: `${Math.floor(Math.random() * 200 + 50)}%`
+          });
+        }
+        break;
 
-    for (let i = 0; i < 100; i++) {
-      const rawContact = {
-        id: `contact-${i}`,
-        name: `Contact ${i}`,
-        title: currentBundleData.titles[i % currentBundleData.titles.length],
-        company: `Company ${Math.floor(i / 5)}`,
-        industry: currentBundleData.industries[i % currentBundleData.industries.length],
-        email: `contact${i}@example.com`,
-        phone: `+1 555 ${String(Math.floor(Math.random() * 900) + 100)}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-        location: currentBundleData.locations[i % currentBundleData.locations.length],
-        revenue: revenues[i % revenues.length],
-        employees: employeeCounts[i % employeeCounts.length],
-      };
+      case 2: // CRM Bundle - Platform Migration
+        headers = ['Company', 'Previous CRM', 'Migration Date', 'Company Size', 'Industry', 'Migration Reason'];
+        const crmPlatforms = ['Salesforce', 'HubSpot', 'Pipedrive', 'Zoho', 'Microsoft Dynamics'];
+        const companySizes = ['51-200', '201-500', '501-1000', '1000+'];
+        for (let i = 0; i < 100; i++) {
+          mockData.push({
+            id: `crm-${i}`,
+            company: `Tech Company ${i + 1}`,
+            previousCrm: crmPlatforms[i % crmPlatforms.length],
+            migrationDate: `Q${Math.floor(Math.random() * 4) + 1} 2024`,
+            companySize: companySizes[i % companySizes.length],
+            industry: ['Technology', 'SaaS', 'Professional Services', 'Manufacturing'][i % 4],
+            migrationReason: ['Cost Reduction', 'Feature Limitations', 'Integration Issues', 'User Experience'][i % 4]
+          });
+        }
+        break;
 
-      // CRITICAL: Anonymize all contact data
-      mockContacts.push(anonymizeContact(rawContact, i));
+      case 3: // Real Estate Bundle - Louisville Corridors
+        headers = ['Corridor', 'Transaction Volume', 'Growth Rate', 'Merchant Category', 'Avg Transaction', 'Peak Hours'];
+        const corridors = ['Downtown', 'Highlands', 'Bardstown Road', 'Frankfort Avenue', 'Shelbyville Road'];
+        const categories = ['Restaurant', 'Retail', 'Professional Services', 'Entertainment', 'Healthcare'];
+        for (let i = 0; i < 100; i++) {
+          mockData.push({
+            id: `re-${i}`,
+            corridor: corridors[i % corridors.length],
+            transactionVolume: `${Math.floor(Math.random() * 500 + 200)}k`,
+            growthRate: `+${Math.floor(Math.random() * 30 + 5)}%`,
+            merchantCategory: categories[i % categories.length],
+            avgTransaction: `$${Math.floor(Math.random() * 100 + 25)}`,
+            peakHours: ['11am-2pm', '5pm-8pm', '7pm-10pm'][i % 3]
+          });
+        }
+        break;
+
+      case 4: // CPG Bundle - Beverage Trends
+        headers = ['Product Category', 'Cafe Sales', 'Grocery Sales', 'Growth Trend', 'Price Point', 'Regional Preference'];
+        const categories4 = ['Coffee', 'Tea', 'Energy Drinks', 'Smoothies', 'Kombucha', 'Specialty Beverages'];
+        for (let i = 0; i < 100; i++) {
+          mockData.push({
+            id: `cpg-${i}`,
+            productCategory: categories4[i % categories4.length],
+            cafeSales: `$${Math.floor(Math.random() * 200 + 50)}k`,
+            grocerySales: `$${Math.floor(Math.random() * 150 + 30)}k`,
+            growthTrend: `${Math.random() > 0.5 ? '+' : '-'}${Math.floor(Math.random() * 20 + 5)}%`,
+            pricePoint: ['Premium', 'Mid-tier', 'Value'][i % 3],
+            regionalPreference: ['Urban', 'Suburban', 'Mixed'][i % 3]
+          });
+        }
+        break;
+
+      case 5: // Academic Bundle - Pro-Social Behavior
+        headers = ['Metro Area', 'Community Actions', 'Local Spend Impact', 'Correlation Score', 'Population', 'Engagement Type'];
+        const metroAreas = ['Louisville', 'Lexington', 'Bowling Green', 'Owensboro', 'Covington'];
+        const engagementTypes = ['Volunteering', 'Local Events', 'Community Projects', 'Environmental Initiatives'];
+        for (let i = 0; i < 100; i++) {
+          mockData.push({
+            id: `academic-${i}`,
+            metroArea: metroAreas[i % metroAreas.length],
+            communityActions: Math.floor(Math.random() * 500 + 100),
+            localSpendImpact: `+$${Math.floor(Math.random() * 50 + 10)}k`,
+            correlationScore: `0.${Math.floor(Math.random() * 40 + 60)}`,
+            population: `${Math.floor(Math.random() * 200 + 50)}k`,
+            engagementType: engagementTypes[i % engagementTypes.length]
+          });
+        }
+        break;
+
+      default:
+        headers = ['Data Point', 'Value', 'Category'];
+        break;
     }
-    setContacts(mockContacts);
+
+    setTableHeaders(headers);
+    setDataRecords(mockData);
   };
 
   const applyFiltersAndSearch = () => {
-    let filtered = [...contacts];
+    let filtered = [...dataRecords];
 
     if (searchTerm) {
-      filtered = filtered.filter(contact =>
-        contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.industry.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(record =>
+        Object.values(record).some(value =>
+          String(value).toLowerCase().includes(searchTerm.toLowerCase())
+        )
       );
     }
 
-    // Apply filters
-    if (filters.industry) {
-      filtered = filtered.filter(contact => contact.industry === filters.industry);
-    }
-    if (filters.location) {
-      filtered = filtered.filter(contact => contact.location.includes(filters.location));
-    }
+    // Apply additional filters based on bundle type
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) {
+        filtered = filtered.filter(record => 
+          String(record[key]) === filters[key]
+        );
+      }
+    });
 
-    setFilteredContacts(filtered);
+    setFilteredRecords(filtered);
     setCurrentPage(1);
   };
 
   const handleExport = (format: 'csv' | 'excel') => {
-    console.log(`Exporting ${selectedContacts.length || filteredContacts.length} contacts as ${format}`);
+    console.log(`Exporting ${selectedRecords.length || filteredRecords.length} records as ${format}`);
   };
 
-  const paginatedContacts = filteredContacts.slice(
+  const paginatedRecords = filteredRecords.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
 
-  const totalPages = Math.ceil(filteredContacts.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
 
   if (!bundle) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -240,21 +273,20 @@ const DataViewer = () => {
 
   const MobileTable = () => (
     <div className="space-y-3">
-      {paginatedContacts.map((contact) => (
-        <Card key={contact.id} className="p-4">
+      {paginatedRecords.map((record) => (
+        <Card key={record.id} className="p-4">
           <div className="space-y-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="font-medium text-sm">{contact.name}</p>
-                <p className="text-xs text-gray-600">{contact.title}</p>
-              </div>
-              <Badge variant="outline" className="text-xs">{contact.industry}</Badge>
-            </div>
-            <div className="text-xs text-gray-600">
-              <p>{contact.company}</p>
-              <p>{contact.location}</p>
-              <p className="text-purple-600">{contact.email}</p>
-            </div>
+            {Object.entries(record).map(([key, value]) => {
+              if (key === 'id') return null;
+              return (
+                <div key={key} className="flex justify-between items-center">
+                  <span className="text-xs font-medium text-gray-600 capitalize">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}:
+                  </span>
+                  <span className="text-xs text-gray-900">{String(value)}</span>
+                </div>
+              );
+            })}
           </div>
         </Card>
       ))}
@@ -265,28 +297,23 @@ const DataViewer = () => {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Title</TableHead>
-          <TableHead>Company</TableHead>
-          <TableHead>Industry</TableHead>
-          <TableHead>Location</TableHead>
-          <TableHead>Contact</TableHead>
+          {tableHeaders.map((header) => (
+            <TableHead key={header}>{header}</TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {paginatedContacts.map((contact) => (
-          <TableRow key={contact.id}>
-            <TableCell className="font-medium">{contact.name}</TableCell>
-            <TableCell>{contact.title}</TableCell>
-            <TableCell>{contact.company}</TableCell>
-            <TableCell>{contact.industry}</TableCell>
-            <TableCell>{contact.location}</TableCell>
-            <TableCell>
-              <div className="text-sm">
-                <div className="text-purple-600">{contact.email}</div>
-                <div className="text-gray-500">{contact.phone}</div>
-              </div>
-            </TableCell>
+        {paginatedRecords.map((record) => (
+          <TableRow key={record.id}>
+            {tableHeaders.map((header) => {
+              const key = header.toLowerCase().replace(/\s+/g, '');
+              const camelCaseKey = key.charAt(0).toLowerCase() + key.slice(1).replace(/\s+/g, '');
+              return (
+                <TableCell key={header}>
+                  {String(record[camelCaseKey] || record[key] || '-')}
+                </TableCell>
+              );
+            })}
           </TableRow>
         ))}
       </TableBody>
@@ -351,7 +378,7 @@ const DataViewer = () => {
                         {bundle.category}
                       </Badge>
                       <span className="text-sm text-gray-600">
-                        {filteredContacts.length} of {contacts.length} records
+                        {filteredRecords.length} of {dataRecords.length} records
                       </span>
                     </div>
                   </div>
@@ -389,7 +416,7 @@ const DataViewer = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search anonymized records..."
+                  placeholder="Search dataset records..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className={`pl-10 ${isMobile ? 'text-sm' : ''}`}
@@ -398,7 +425,7 @@ const DataViewer = () => {
               {isMobile && (
                 <div className="flex justify-between items-center mt-3">
                   <span className="text-xs text-gray-600">
-                    {filteredContacts.length} results
+                    {filteredRecords.length} results
                   </span>
                   <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => setShowSavedSearches(true)}>
@@ -468,8 +495,8 @@ const DataViewer = () => {
       <ContactLists
         isOpen={showContactLists}
         onClose={() => setShowContactLists(false)}
-        selectedContacts={selectedContacts}
-        allContacts={filteredContacts}
+        selectedContacts={selectedRecords}
+        allContacts={filteredRecords}
       />
     </div>
   );
