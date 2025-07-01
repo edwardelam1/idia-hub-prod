@@ -1,5 +1,5 @@
-
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ interface DownloadModalProps {
 }
 
 const DownloadModal = ({ isOpen, onClose, bundle, userCredits, onConfirmDownload }: DownloadModalProps) => {
+  const navigate = useNavigate();
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadComplete, setDownloadComplete] = useState(false);
 
@@ -38,14 +39,11 @@ const DownloadModal = ({ isOpen, onClose, bundle, userCredits, onConfirmDownload
     // Simulate download process
     setTimeout(() => {
       setIsDownloading(false);
-      setDownloadComplete(true);
       onConfirmDownload(bundle.id, bundle.price);
       
-      // Auto close after success
-      setTimeout(() => {
-        setDownloadComplete(false);
-        onClose();
-      }, 2000);
+      // Navigate to data viewer instead of showing completion
+      onClose();
+      navigate(`/data-viewer/${bundle.id}`);
     }, 2000);
   };
 
@@ -176,7 +174,7 @@ const DownloadModal = ({ isOpen, onClose, bundle, userCredits, onConfirmDownload
               ) : (
                 <>
                   <Download className="mr-2 h-4 w-4" />
-                  Confirm Download
+                  Open Data Viewer
                 </>
               )}
             </Button>

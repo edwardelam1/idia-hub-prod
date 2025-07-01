@@ -12,6 +12,7 @@ import DataMarketplace from '@/components/marketplace/DataMarketplace';
 import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard';
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
+import DataViewer from '@/components/data/DataViewer';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -60,6 +61,7 @@ const Index = () => {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={renderDashboard()} />
         <Route path="/marketplace" element={<DataMarketplace userRole={userRole} />} />
+        <Route path="/data-viewer/:bundleId" element={<DataViewer />} />
         <Route path="/system-health" element={<SystemHealthDashboard />} />
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
