@@ -20,6 +20,7 @@ import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
+import GeminiConfigModal from '@/components/ai/GeminiConfigModal';
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -153,6 +154,9 @@ const SuperAdminDashboard = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Best Friend AI Configuration */}
+          <GeminiConfigModal />
 
           {/* Quick Actions & Alerts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

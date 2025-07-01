@@ -130,6 +130,33 @@ export type Database = {
           },
         ]
       }
+      device_events: {
+        Row: {
+          event_timestamp: string
+          event_type: string
+          id: number
+          json_payload: Json
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          event_timestamp?: string
+          event_type: string
+          id?: number
+          json_payload: Json
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          event_timestamp?: string
+          event_type?: string
+          id?: number
+          json_payload?: Json
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketplace_bundles: {
         Row: {
           bundle_id: string
@@ -187,6 +214,33 @@ export type Database = {
           tier?: string
           title?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      password_reset_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token: string
+          used: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token: string
+          used?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token?: string
+          used?: boolean
+          user_id?: string
         }
         Relationships: []
       }
@@ -426,6 +480,48 @@ export type Database = {
           source?: string | null
           status?: string | null
           transaction_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_proposals: {
+        Row: {
+          ai_validation_feedback: string | null
+          ai_validation_score: number | null
+          category: string
+          created_at: string
+          description: string
+          id: string
+          status: string
+          suggested_impact: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_validation_feedback?: string | null
+          ai_validation_score?: number | null
+          category: string
+          created_at?: string
+          description: string
+          id?: string
+          status?: string
+          suggested_impact?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_validation_feedback?: string | null
+          ai_validation_score?: number | null
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          status?: string
+          suggested_impact?: string
+          title?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
