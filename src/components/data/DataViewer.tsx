@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,7 +108,7 @@ const DataViewer = () => {
       '5': {
         id: 5,
         name: 'Pro-Social Behavior and Local Economic Impact Study',
-        tier: 'Foundational',
+        tier: 'Analyst',
         contacts: 3421,
         features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
         category: 'Academic & Research',
@@ -120,7 +121,8 @@ const DataViewer = () => {
   };
 
   const generateMockContacts = () => {
-    const bundleId = parseInt(bundleId || '1');
+    const currentBundleId = bundleId || '1';
+    const bundleIdNumber = parseInt(currentBundleId);
     const mockContacts: Contact[] = [];
     
     // Generate different data based on bundle type
@@ -152,7 +154,7 @@ const DataViewer = () => {
       }
     };
 
-    const currentBundleData = bundleSpecificData[bundleId as keyof typeof bundleSpecificData] || bundleSpecificData[1];
+    const currentBundleData = bundleSpecificData[bundleIdNumber as keyof typeof bundleSpecificData] || bundleSpecificData[1];
     const revenues = ['$1M-$10M', '$10M-$50M', '$50M-$100M', '$100M+'];
     const employeeCounts = ['1-50', '51-200', '201-1000', '1000+'];
 

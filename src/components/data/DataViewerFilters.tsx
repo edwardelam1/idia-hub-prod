@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,13 +22,13 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
   const [userCredits] = useState(1500);
   const { isMobile } = useResponsive();
   const [openSections, setOpenSections] = useState({
-    foundational: true,
+    analyst: true,
     professional: true,
     enterprise: true
   });
 
-  // Correct tier names per section 8.0
-  const hasFoundational = true; // Everyone has foundational
+  // Correct tier names: Analyst, Professional, Enterprise
+  const hasAnalyst = true; // Everyone has analyst
   const hasProfessional = ['Professional', 'Enterprise'].includes(bundle.tier);
   const hasEnterprise = bundle.tier === 'Enterprise';
 
@@ -105,7 +104,7 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
     switch (tier) {
       case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'Professional': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Foundational': return 'bg-green-100 text-green-800 border-green-200';
+      case 'Analyst': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -121,11 +120,11 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
         </Button>
       </div>
 
-      {/* Foundational Filters */}
+      {/* Analyst Filters */}
       <FilterSection
         title="Basic Filters"
-        tier="Foundational"
-        isAvailable={hasFoundational}
+        tier="Analyst"
+        isAvailable={hasAnalyst}
       >
         <div className="space-y-3">
           <div>

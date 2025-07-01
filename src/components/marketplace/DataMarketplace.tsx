@@ -90,7 +90,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       description: 'Anonymized dataset correlating hyperlocal economic activity with community engagement metrics. Helps researchers explore the relationship between pro-social behavior and local business spending.',
       price: 50,
       contacts: 3421,
-      tier: 'Foundational',
+      tier: 'Analyst',
       category: 'Academic & Research',
       features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
       match: 86
@@ -112,7 +112,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     switch (tier) {
       case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'Professional': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Foundational': return 'bg-green-100 text-green-800 border-green-200';
+      case 'Analyst': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
