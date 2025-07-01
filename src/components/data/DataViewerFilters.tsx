@@ -6,8 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Filter, Lock, Coins, RotateCcw } from 'lucide-react';
+import { Lock, Coins, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useResponsive } from '@/hooks/useResponsive';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface DataViewerFiltersProps {
   filters: any;
@@ -19,10 +20,18 @@ interface DataViewerFiltersProps {
 }
 
 const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFiltersProps) => {
-  const [userCredits] = useState(1500); // Mock user credits
+  const [userCredits] = useState(1500);
+  const { isMobile } = useResponsive();
+  const [openSections, setOpenSections] = useState({
+    foundational: true,
+    professional: true,
+    enterprise: true
+  });
 
-  const hasAdvanced = ['Advanced', 'Premier'].includes(bundle.tier);
-  const hasPremier = bundle.tier === 'Premier';
+  // Correct tier names per section 8.0
+  const hasFoundational = true; // Everyone has foundational
+  const hasProfessional = ['Professional', 'Enterprise'].includes(bundle.tier);
+  const hasEnterprise = bundle.tier === 'Enterprise';
 
   const industries = [
     'Technology', 'Software', 'SaaS', 'AI/ML', 'Cybersecurity', 'Cloud Services',
@@ -49,48 +58,80 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
     onFiltersChange({});
   };
 
-  const applyPremierFilter = () => {
-    if (userCredits < 50) {
-      alert('Insufficient credits for Premier filter search');
-      return;
+  const toggleSection = (section: keyof typeof openSections) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const FilterSection = ({ title, tier, isAvailable, children, cost }: any) => {
+    const sectionKey = tier.toLowerCase() as keyof typeof openSections;
+    
+    return (
+      <Card className={`${!isAvailable ? 'opacity-50' : ''} ${isMobile ? 'mb-2' : 'mb-4'}`}>
+        <Collapsible
+          open={openSections[sectionKey]}
+          onOpenChange={() => toggleSection(sectionKey)}
+        >
+          <CollapsibleTrigger asChild>
+            <CardHeader className={`cursor-pointer ${isMobile ? 'py-3' : 'py-4'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Badge variant="outline" className={getTierColor(tier)}>
+                    {tier}
+                  </Badge>
+                  <span className={`font-medium ${isMobile ? 'text-sm' : 'text-base'}`}>{title}</span>
+                  {!isAvailable && <Lock className="h-4 w-4 text-gray-400" />}
+                  {cost && (
+                    <div className="flex items-center text-purple-600 text-sm">
+                      <Coins className="mr-1 h-3 w-3" />
+                      {cost} credits
+                    </div>
+                  )}
+                </div>
+                {openSections[sectionKey] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className={`${!isAvailable ? 'pointer-events-none' : ''} ${isMobile ? 'px-3 pb-3' : 'px-6 pb-6'}`}>
+              {children}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
+    );
+  };
+
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+      case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Professional': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Foundational': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-    // In real app, would deduct credits and apply filter
-    console.log('Applied Premier filters, deducted 50 credits');
   };
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-2 ${isMobile ? 'px-2' : 'px-0'}`}>
       {/* Filter Header */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Filter className="mr-2 h-5 w-5" />
-              Data Filters
-            </div>
-            <Button variant="outline" size="sm" onClick={clearAllFilters}>
-              <RotateCcw className="mr-1 h-3 w-3" />
-              Reset
-            </Button>
-          </CardTitle>
-        </CardHeader>
-      </Card>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className={`font-semibold ${isMobile ? 'text-base' : 'text-lg'}`}>Filters</h3>
+        <Button variant="outline" size="sm" onClick={clearAllFilters}>
+          <RotateCcw className="mr-1 h-3 w-3" />
+          Reset
+        </Button>
+      </div>
 
       {/* Foundational Filters */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="bg-green-100 text-green-800">
-              Foundational
-            </Badge>
-            <span className="text-sm font-medium">Basic Filters</span>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <FilterSection
+        title="Basic Filters"
+        tier="Foundational"
+        isAvailable={hasFoundational}
+      >
+        <div className="space-y-3">
           <div>
-            <Label htmlFor="industry">Industry</Label>
+            <Label htmlFor="industry" className={isMobile ? 'text-sm' : ''}>Industry</Label>
             <Select value={filters.industry || ''} onValueChange={(value) => updateFilter('industry', value)}>
-              <SelectTrigger>
+              <SelectTrigger className={isMobile ? 'text-sm' : ''}>
                 <SelectValue placeholder="Select industry" />
               </SelectTrigger>
               <SelectContent>
@@ -104,9 +145,9 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
           </div>
 
           <div>
-            <Label htmlFor="location">Location</Label>
+            <Label htmlFor="location" className={isMobile ? 'text-sm' : ''}>Location</Label>
             <Select value={filters.location || ''} onValueChange={(value) => updateFilter('location', value)}>
-              <SelectTrigger>
+              <SelectTrigger className={isMobile ? 'text-sm' : ''}>
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
@@ -120,9 +161,9 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
           </div>
 
           <div>
-            <Label htmlFor="revenue">Annual Revenue</Label>
+            <Label htmlFor="revenue" className={isMobile ? 'text-sm' : ''}>Annual Revenue</Label>
             <Select value={filters.revenue || ''} onValueChange={(value) => updateFilter('revenue', value)}>
-              <SelectTrigger>
+              <SelectTrigger className={isMobile ? 'text-sm' : ''}>
                 <SelectValue placeholder="Select revenue range" />
               </SelectTrigger>
               <SelectContent>
@@ -134,41 +175,20 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </FilterSection>
 
+      {/* Professional Filters */}
+      <FilterSection
+        title="Professional Filters"
+        tier="Professional"
+        isAvailable={hasProfessional}
+      >
+        <div className="space-y-3">
           <div>
-            <Label htmlFor="employees">Company Size</Label>
-            <Select value={filters.employees || ''} onValueChange={(value) => updateFilter('employees', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select company size" />
-              </SelectTrigger>
-              <SelectContent>
-                {employeeCounts.map((count) => (
-                  <SelectItem key={count} value={count}>
-                    {count} employees
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Advanced Filters */}
-      <Card className={!hasAdvanced ? 'opacity-50' : ''}>
-        <CardHeader>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="bg-blue-100 text-blue-800">
-              Advanced
-            </Badge>
-            <span className="text-sm font-medium">Advanced Filters</span>
-            {!hasAdvanced && <Lock className="h-4 w-4 text-gray-400" />}
-          </div>
-        </CardHeader>
-        <CardContent className={`space-y-4 ${!hasAdvanced ? 'pointer-events-none' : ''}`}>
-          <div>
-            <Label>Job Titles</Label>
+            <Label className={isMobile ? 'text-sm' : ''}>Job Titles</Label>
             <div className="space-y-2 mt-2">
-              {jobTitles.map((title) => (
+              {jobTitles.slice(0, isMobile ? 4 : jobTitles.length).map((title) => (
                 <div key={title} className="flex items-center space-x-2">
                   <Checkbox
                     id={title}
@@ -182,19 +202,19 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
                       }
                     }}
                   />
-                  <Label htmlFor={title} className="text-sm">{title}</Label>
+                  <Label htmlFor={title} className={isMobile ? 'text-xs' : 'text-sm'}>{title}</Label>
                 </div>
               ))}
             </div>
           </div>
 
           <div>
-            <Label htmlFor="fundingStage">Funding Stage</Label>
+            <Label htmlFor="fundingStage" className={isMobile ? 'text-sm' : ''}>Funding Stage</Label>
             <Select
               value={filters.fundingStage || ''}
               onValueChange={(value) => updateFilter('fundingStage', value)}
             >
-              <SelectTrigger>
+              <SelectTrigger className={isMobile ? 'text-sm' : ''}>
                 <SelectValue placeholder="Select funding stage" />
               </SelectTrigger>
               <SelectContent>
@@ -206,36 +226,21 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FilterSection>
 
-      {/* Premier Filters */}
-      <Card className={!hasPremier ? 'opacity-50' : ''}>
-        <CardHeader>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="bg-purple-100 text-purple-800">
-              Premier
-            </Badge>
-            <span className="text-sm font-medium">Premier Filters</span>
-            {!hasPremier && <Lock className="h-4 w-4 text-gray-400" />}
-          </div>
-          {hasPremier && (
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex items-center text-purple-600 text-sm">
-                <Coins className="mr-1 h-4 w-4" />
-                50 credits per search
-              </div>
-              <div className="text-sm text-gray-600">
-                Balance: {userCredits.toLocaleString()} credits
-              </div>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent className={`space-y-4 ${!hasPremier ? 'pointer-events-none' : ''}`}>
+      {/* Enterprise Filters */}
+      <FilterSection
+        title="Enterprise Filters"
+        tier="Enterprise"
+        isAvailable={hasEnterprise}
+        cost={50}
+      >
+        <div className="space-y-3">
           <div>
-            <Label>Technographics</Label>
+            <Label className={isMobile ? 'text-sm' : ''}>Technographics</Label>
             <div className="space-y-2 mt-2">
-              {technologies.map((tech) => (
+              {technologies.slice(0, isMobile ? 3 : technologies.length).map((tech) => (
                 <div key={tech} className="flex items-center space-x-2">
                   <Checkbox
                     id={tech}
@@ -249,14 +254,14 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
                       }
                     }}
                   />
-                  <Label htmlFor={tech} className="text-sm">{tech}</Label>
+                  <Label htmlFor={tech} className={isMobile ? 'text-xs' : 'text-sm'}>{tech}</Label>
                 </div>
               ))}
             </div>
           </div>
 
           <div>
-            <Label>Intent Signals</Label>
+            <Label className={isMobile ? 'text-sm' : ''}>Intent Signals</Label>
             <div className="space-y-2 mt-2">
               {intentSignals.map((signal) => (
                 <div key={signal} className="flex items-center space-x-2">
@@ -272,20 +277,30 @@ const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFilte
                       }
                     }}
                   />
-                  <Label htmlFor={signal} className="text-sm">{signal}</Label>
+                  <Label htmlFor={signal} className={isMobile ? 'text-xs' : 'text-sm'}>{signal}</Label>
                 </div>
               ))}
             </div>
           </div>
 
-          {hasPremier && (
-            <Button onClick={applyPremierFilter} className="w-full">
+          {hasEnterprise && (
+            <Button 
+              onClick={() => console.log('Applied Enterprise filters, deducted 50 credits')}
+              className={`w-full ${isMobile ? 'text-sm py-2' : ''}`}
+              disabled={userCredits < 50}
+            >
               <Coins className="mr-2 h-4 w-4" />
-              Apply Premier Filters (-50 credits)
+              Apply Enterprise Filters (-50 credits)
             </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </FilterSection>
+
+      {isMobile && (
+        <div className="text-xs text-gray-500 text-center mt-4 p-2 bg-gray-50 rounded">
+          🔒 Enterprise features require sufficient credits
+        </div>
+      )}
     </div>
   );
 };
