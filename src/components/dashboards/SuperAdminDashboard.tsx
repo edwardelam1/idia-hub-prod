@@ -20,7 +20,6 @@ import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
-import BestFriendChat from '@/components/ai/BestFriendChat';
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -154,9 +153,6 @@ const SuperAdminDashboard = () => {
               </CardContent>
             </Card>
           </div>
-
-          {/* Best Friend AI Chat */}
-          <BestFriendChat />
 
           {/* Quick Actions & Alerts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

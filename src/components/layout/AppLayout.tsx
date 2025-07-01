@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { TopBar } from './TopBar';
 import { useResponsive } from '@/hooks/useResponsive';
+import FloatingBestFriend from '@/components/ai/FloatingBestFriend';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -24,6 +25,9 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
             {children}
           </main>
         </div>
+        
+        {/* Floating Best Friend - appears on all pages */}
+        <FloatingBestFriend userRole={userRole} />
       </div>
     </SidebarProvider>
   );

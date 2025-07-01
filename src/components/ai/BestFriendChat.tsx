@@ -6,8 +6,15 @@ import { Send, User, Bot, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 import BestFriendAvatar from './BestFriendAvatar';
 
-const BestFriendChat = () => {
-  const [open, setOpen] = useState(false);
+interface BestFriendChatProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+const BestFriendChat = ({ isOpen: externalOpen, onClose }: BestFriendChatProps = {}) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = onClose ? (value: boolean) => { if (!value) onClose(); } : setInternalOpen;
   const [conversation, setConversation] = useState<Array<{role: string, content: string}>>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
