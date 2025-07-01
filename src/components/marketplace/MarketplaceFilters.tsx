@@ -14,6 +14,7 @@ interface MarketplaceFiltersProps {
   setAppliedFilters: (filters: any) => void;
   userRole: string;
   isMobile: boolean;
+  bundleCategory?: string;
 }
 
 const MarketplaceFilters = ({
@@ -22,7 +23,8 @@ const MarketplaceFilters = ({
   appliedFilters,
   setAppliedFilters,
   userRole,
-  isMobile
+  isMobile,
+  bundleCategory
 }: MarketplaceFiltersProps) => {
   const activeFilterCount = Object.keys(appliedFilters).filter(key => appliedFilters[key]).length;
 
@@ -66,6 +68,7 @@ const MarketplaceFilters = ({
               userRole={userRole}
               onApplyFilters={handleApplyFilters}
               currentFilters={appliedFilters}
+              bundleCategory={bundleCategory}
             />
           </div>
         </div>

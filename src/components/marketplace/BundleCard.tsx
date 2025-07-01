@@ -3,21 +3,29 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Coins, Users, TrendingUp } from 'lucide-react';
+import AlaCarteModal from './AlaCarteModal';
 
 interface BundleCardProps {
   bundle: any;
   isMobile: boolean;
   userCredits: number;
   onDownload: (bundle: any) => void;
+  onAddToCart?: (items: any[]) => void;
 }
 
-const BundleCard = ({ bundle, isMobile, userCredits, onDownload }: BundleCardProps) => {
+const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'Professional': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Analyst': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const handleAddToCart = (items: any[]) => {
+    if (onAddToCart) {
+      onAddToCart(items);
     }
   };
 
@@ -109,14 +117,25 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload }: BundleCardPro
             )}
           </div>
 
-          {/* Action */}
-          <Button 
-            className={`w-full ${isMobile ? 'text-sm py-2' : ''}`}
-            onClick={() => onDownload(bundle)}
-            disabled={userCredits < bundle.price}
-          >
-            {userCredits < bundle.price ? 'Insufficient Credits' : 'Access Dataset'}
-          </Button>
+          {/* Actions */}
+          <div className="space-y-2">
+            <Button 
+              className={`w-full ${isMobile ? 'text-sm py-2' : ''}`}
+              onClick={() => onDownload(bundle)}
+              disabled={userCredits < bundle.price}
+            >
+              {userCredits < bundle.price ? 'Insufficient Credits' : 'Access Full Dataset'}
+            </Button>
+            
+            {/* À La Carte Option */}
+            <div className="flex justify-center">
+              <AlaCarteModal
+                bundle={bundle}
+                onAddToCart={handleAddToCart}
+                userCredits={userCredits}
+              />
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

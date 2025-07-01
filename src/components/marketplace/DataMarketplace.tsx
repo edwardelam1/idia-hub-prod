@@ -10,9 +10,20 @@ import MarketplaceHeader from './MarketplaceHeader';
 import MarketplaceFilters from './MarketplaceFilters';
 import ResultsHeader from './ResultsHeader';
 import BundleCard from './BundleCard';
+import ShoppingCartComponent from './ShoppingCart';
 
 interface DataMarketplaceProps {
   userRole: string;
+}
+
+interface CartItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  bundleId: number;
+  bundleName: string;
+  quantity?: number;
 }
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
@@ -21,6 +32,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [userCredits, setUserCredits] = useState(12500);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   const aiCuratedBundles = marketplaceBundles.map(bundle => anonymizeBundleData(bundle));
 
@@ -28,6 +40,27 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     if (userCredits >= bundle.price) {
       setUserCredits(prev => prev - bundle.price);
       navigate(`/data-viewer/${bundle.id}`);
+    }
+  };
+
+  const handleAddToCart = (items: any[]) => {
+    const newItems = items.map(item => ({
+      ...item,
+      quantity: 1
+    }));
+    setCartItems(prev => [...prev, ...newItems]);
+  };
+
+  const handleUpdateCart = (items: CartItem[]) => {
+    setCartItems(items);
+  };
+
+  const handlePurchase = (totalCost: number) => {
+    if (userCredits >= totalCost) {
+      setUserCredits(prev => prev - totalCost);
+      setCartItems([]);
+      // Could navigate to a custom data viewer for à la carte items
+      console.log('À la carte purchase completed!');
     }
   };
 
@@ -42,9 +75,20 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     return matchesSearch && matchesIndustry;
   });
 
+  // Get the most common category for filter context
+  const bundleCategory = filteredBundles.length > 0 ? filteredBundles[0].category : undefined;
+
   return (
     <div className={`space-y-4 ${isMobile ? 'p-2' : 'p-6'} bg-gray-50 min-h-screen`}>
-      <MarketplaceHeader userCredits={userCredits} isMobile={isMobile} />
+      <div className="flex items-center justify-between">
+        <MarketplaceHeader userCredits={userCredits} isMobile={isMobile} />
+        <ShoppingCartComponent
+          cartItems={cartItems}
+          onUpdateCart={handleUpdateCart}
+          userCredits={userCredits}
+          onPurchase={handlePurchase}
+        />
+      </div>
 
       <MarketplaceFilters
         searchQuery={searchQuery}
@@ -53,6 +97,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         setAppliedFilters={setAppliedFilters}
         userRole={userRole}
         isMobile={isMobile}
+        bundleCategory={bundleCategory}
       />
 
       <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} />
@@ -66,6 +111,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             isMobile={isMobile}
             userCredits={userCredits}
             onDownload={handleDownloadBundle}
+            onAddToCart={handleAddToCart}
           />
         ))}
       </div>
