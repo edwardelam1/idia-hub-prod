@@ -19,6 +19,7 @@ import {
 import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard';
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
+import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -83,6 +84,17 @@ const SuperAdminDashboard = () => {
         <h1 className="text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
         <p className="text-gray-600 mt-2">Platform oversight and system management</p>
       </div>
+
+      {/* Synapse Visualizer */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Network Activity Overview</CardTitle>
+          <CardDescription>Live visualization of the IDIA Synapse Engine™ data flow</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SynapseVisualizer />
+        </CardContent>
+      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-6">

@@ -1,233 +1,209 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { 
-  Search, 
-  FileText, 
-  Download, 
+  Target, 
   TrendingUp, 
-  Clock,
-  Database,
+  Download,
   Coins,
-  Share2
+  Calendar,
+  CheckCircle,
+  Clock,
+  Search,
+  Heart
 } from 'lucide-react';
+import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 
 const TeamMemberDashboard = () => {
-  const userStats = {
-    savedSearches: 12,
-    myLists: 8,
-    creditsUsed: 450,
-    monthlyLimit: 1000,
-    downloadsThisMonth: 23
+  const memberStats = {
+    monthlyGoal: 500,
+    achieved: 320,
+    synapseCredits: 150,
+    bundlesDownloaded: 5,
+    savedSearches: 8,
+    myLists: 3
   };
 
-  const mySearches = [
-    { name: 'SaaS Companies - Series B', created: '1 hour ago', results: 247, credits: 25 },
-    { name: 'Healthcare IT Directors', created: '3 hours ago', results: 189, credits: 45 },
-    { name: 'Fintech Startups West Coast', created: '1 day ago', results: 156, credits: 35 },
-    { name: 'E-commerce Marketing Leads', created: '2 days ago', results: 423, credits: 50 }
+  const recentActivity = [
+    {
+      id: 1,
+      action: 'Downloaded SaaS Growth Companies bundle',
+      timestamp: '2 hours ago',
+      credits: 45,
+      type: 'download'
+    },
+    {
+      id: 2,
+      action: 'Created new prospect list',
+      timestamp: '1 day ago',
+      credits: 0,
+      type: 'list'
+    },
+    {
+      id: 3,
+      action: 'Saved search query',
+      timestamp: '2 days ago',
+      credits: 0,
+      type: 'search'
+    }
   ];
 
-  const myLists = [
-    { name: 'Q4 Prospect Pipeline', contacts: 145, shared: false, updated: '2 hours ago' },
-    { name: 'Healthcare Decision Makers', contacts: 89, shared: true, updated: '1 day ago' },
-    { name: 'Tech Startup Founders', contacts: 203, shared: false, updated: '3 days ago' }
-  ];
-
-  const recentDownloads = [
-    { name: 'Premier Data Bundle - Tech Leaders', size: '2,450 contacts', date: '2 hours ago', credits: 150 },
-    { name: 'Advanced Healthcare Bundle', size: '1,200 contacts', date: '1 day ago', credits: 85 },
-    { name: 'Foundational Fintech Data', size: '890 contacts', date: '3 days ago', credits: 40 }
-  ];
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'download': return <Download className="h-4 w-4 text-blue-600" />;
+      case 'list': return <Heart className="h-4 w-4 text-red-600" />;
+      case 'search': return <Search className="h-4 w-4 text-green-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-600" />;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">My Dashboard</h1>
-        <p className="text-gray-600 mt-2">Access your saved searches, lists, and data downloads</p>
+        <p className="text-gray-600 mt-2">Track your data intelligence activities and performance</p>
       </div>
 
-      {/* Personal Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Synapse Visualizer */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Network Contribution</CardTitle>
+          <CardDescription>Your personal contribution to the IDIA Synapse Engine™ collective intelligence</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SynapseVisualizer />
+        </CardContent>
+      </Card>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saved Searches</CardTitle>
-            <Search className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Monthly Goal</CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userStats.savedSearches}</div>
-            <p className="text-xs text-gray-500 mt-1">Personal searches</p>
+            <div className="text-2xl font-bold">{Math.round((memberStats.achieved / memberStats.monthlyGoal) * 100)}%</div>
+            <p className="text-xs text-muted-foreground">${memberStats.achieved} / ${memberStats.monthlyGoal}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">My Lists</CardTitle>
-            <FileText className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">My Credits</CardTitle>
+            <Coins className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userStats.myLists}</div>
-            <p className="text-xs text-gray-500 mt-1">Contact lists</p>
+            <div className="text-2xl font-bold text-purple-600">{memberStats.synapseCredits}</div>
+            <p className="text-xs text-muted-foreground">Available balance</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Credits Used</CardTitle>
-            <Coins className="h-4 w-4 text-purple-600" />
+            <CardTitle className="text-sm font-medium">Downloaded</CardTitle>
+            <Download className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userStats.creditsUsed}</div>
-            <Progress value={(userStats.creditsUsed / userStats.monthlyLimit) * 100} className="mt-2" />
-            <p className="text-xs text-gray-500 mt-1">of {userStats.monthlyLimit} monthly limit</p>
+            <div className="text-2xl font-bold">{memberStats.bundlesDownloaded}</div>
+            <p className="text-xs text-muted-foreground">Data bundles</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Downloads</CardTitle>
-            <Download className="h-4 w-4 text-orange-600" />
+            <CardTitle className="text-sm font-medium">Saved Items</CardTitle>
+            <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userStats.downloadsThisMonth}</div>
-            <p className="text-xs text-gray-500 mt-1">This month</p>
+            <div className="text-2xl font-bold">{memberStats.savedSearches + memberStats.myLists}</div>
+            <p className="text-xs text-muted-foreground">Searches & Lists</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* My Saved Searches */}
-      <Card>
-        <CardHeader>
-          <CardTitle>My Saved Searches</CardTitle>
-          <CardDescription>Quick access to your frequently used search queries</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mySearches.map((search, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <Database className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <p className="font-medium">{search.name}</p>
-                    <p className="text-sm text-gray-500 flex items-center">
-                      <Clock className="h-3 w-3 mr-1" />
-                      Created {search.created}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{search.results} results</p>
-                  <p className="text-xs text-purple-600">{search.credits} credits</p>
-                </div>
+      {/* Performance and Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>My Performance</CardTitle>
+            <CardDescription>Progress towards personal goals</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm">Monthly Target</span>
+                <span className="text-sm font-medium">{Math.round((memberStats.achieved / memberStats.monthlyGoal) * 100)}%</span>
               </div>
-            ))}
-          </div>
-          <div className="mt-4 flex space-x-2">
-            <Button>Create New Search</Button>
-            <Button variant="outline">View All Searches</Button>
-          </div>
-        </CardContent>
-      </Card>
+              <Progress value={(memberStats.achieved / memberStats.monthlyGoal) * 100} />
+            </div>
+            
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm">Data Utilization</span>
+                <span className="text-sm font-medium">42%</span>
+              </div>
+              <Progress value={42} />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* My Lists */}
-      <Card>
-        <CardHeader>
-          <CardTitle>My Contact Lists</CardTitle>
-          <CardDescription>Manage your saved contact and company lists</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {myLists.map((list, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <FileText className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="font-medium">{list.name}</p>
-                    <p className="text-sm text-gray-500">Updated {list.updated}</p>
-                  </div>
-                  {list.shared && (
-                    <Badge variant="outline" className="text-blue-600 border-blue-600">
-                      <Share2 className="h-3 w-3 mr-1" />
-                      Shared
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{list.contacts} contacts</p>
-                  <Button variant="ghost" size="sm" className="mt-1">
-                    View List
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex space-x-2">
-            <Button>Create New List</Button>
-            <Button variant="outline">Manage Lists</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Downloads */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Downloads</CardTitle>
-          <CardDescription>Your latest data bundle downloads and exports</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentDownloads.map((download, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <Download className="h-5 w-5 text-purple-600" />
-                  <div>
-                    <p className="font-medium">{download.name}</p>
-                    <p className="text-sm text-gray-500">{download.size} • {download.date}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Your latest data intelligence actions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-start space-x-3">
+                  {getActivityIcon(activity.type)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{activity.action}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                      {activity.credits > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {activity.credits} credits
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">-{download.credits} credits</p>
-                  <Button variant="ghost" size="sm">
-                    Re-download
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <Database className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-            <h3 className="font-semibold mb-2">Browse Marketplace</h3>
-            <p className="text-sm text-gray-500 mb-4">Discover new data bundles</p>
-            <Button>Explore Data</Button>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <Search className="h-12 w-12 text-green-600 mx-auto mb-4" />
-            <h3 className="font-semibold mb-2">New Search</h3>
-            <p className="text-sm text-gray-500 mb-4">Create a targeted search query</p>
-            <Button variant="outline">Start Search</Button>
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="pt-6">
-            <TrendingUp className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-            <h3 className="font-semibold mb-2">Usage Analytics</h3>
-            <p className="text-sm text-gray-500 mb-4">Track your data usage</p>
-            <Button variant="outline">View Analytics</Button>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Commonly used features and tools</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <Search className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+              <p className="text-sm font-medium">Search Data</p>
+            </div>
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <Heart className="h-8 w-8 mx-auto mb-2 text-red-600" />
+              <p className="text-sm font-medium">My Lists</p>
+            </div>
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <Calendar className="h-8 w-8 mx-auto mb-2 text-green-600" />
+              <p className="text-sm font-medium">Saved Searches</p>
+            </div>
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+              <p className="text-sm font-medium">Analytics</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

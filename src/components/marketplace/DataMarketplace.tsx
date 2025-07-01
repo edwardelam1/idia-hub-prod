@@ -31,7 +31,7 @@ interface DataMarketplaceProps {
 }
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
-  const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [selectedIndustry, setSelectedIndustry] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPersonalization, setShowPersonalization] = useState(true);
   const [appliedFilters, setAppliedFilters] = useState<any>({});
@@ -109,6 +109,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
   const handleConfirmDownload = (bundleId: number, cost: number) => {
     setUserCredits(prev => prev - cost);
+    setShowDownloadModal(false);
     console.log(`Downloaded bundle ${bundleId} for ${cost} credits`);
   };
 
@@ -260,12 +261,12 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Select value={appliedFilters.industry || ''} onValueChange={(value) => setAppliedFilters({...appliedFilters, industry: value})}>
+              <Select value={appliedFilters.industry || ''} onValueChange={(value) => setAppliedFilters({...appliedFilters, industry: value || undefined})}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Industry" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Industries</SelectItem>
+                  <SelectItem value="all">All Industries</SelectItem>
                   {industries.map((industry) => (
                     <SelectItem key={industry} value={industry}>
                       {industry}
@@ -297,7 +298,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                     {key}: {Array.isArray(value) ? value.join(', ') : String(value)}
                     <X 
                       className="ml-1 h-3 w-3 cursor-pointer" 
-                      onClick={() => setAppliedFilters({...appliedFilters, [key]: null})}
+                      onClick={() => setAppliedFilters({...appliedFilters, [key]: undefined})}
                     />
                   </Badge>
                 );
@@ -314,72 +315,6 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           )}
         </CardContent>
       </Card>
-
-      {/* Filter Access Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center">
-          <Zap className="h-5 w-5 text-blue-600 mr-2" />
-          <div>
-            <p className="font-medium text-blue-900">Your Filter Access</p>
-            <p className="text-sm text-blue-700">
-              Available: {filterAccess.join(', ')} filters • 
-              {!filterAccess.includes('Premier') && ' Upgrade for Premier filters with Intent Signals & Technographics'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Collaboration Tools */}
-      {(savedSearches.length > 0 || myLists.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {savedSearches.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  <BookOpen className="mr-2 h-5 w-5" />
-                  Saved Searches
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {savedSearches.slice(0, 3).map((search) => (
-                  <div key={search.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm">{search.name}</span>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm">
-                        <Share2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {myLists.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  <Users className="mr-2 h-5 w-5" />
-                  My Lists
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {myLists.slice(0, 3).map((list) => (
-                  <div key={list.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <div>
-                      <span className="text-sm font-medium">{list.name}</span>
-                      <p className="text-xs text-gray-500">{list.contacts} contacts</p>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      <Share2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
 
       {/* AI-Curated Bundles */}
       <div>
@@ -487,80 +422,6 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           </div>
         )}
       </div>
-
-      {/* Browse All Categories */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Browse All Categories</CardTitle>
-          <CardDescription>Explore data bundles across different industries and use cases</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="industry" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="industry">By Industry</TabsTrigger>
-              <TabsTrigger value="role">By Role</TabsTrigger>
-              <TabsTrigger value="company-size">Company Size</TabsTrigger>
-              <TabsTrigger value="geography">Geography</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="industry" className="mt-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {industries.map((industry) => (
-                  <Card key={industry} className="cursor-pointer hover:bg-gray-50 transition-colors">
-                    <CardContent className="p-4 text-center">
-                      <Building2 className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <p className="font-medium text-sm">{industry}</p>
-                      <p className="text-xs text-gray-500 mt-1">12-45 bundles</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="role" className="mt-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {['C-Level Executives', 'IT Decision Makers', 'Marketing Leaders', 'Sales Directors', 'HR Managers', 'Procurement Officers'].map((role) => (
-                  <Card key={role} className="cursor-pointer hover:bg-gray-50 transition-colors">
-                    <CardContent className="p-4 text-center">
-                      <Users className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                      <p className="font-medium text-sm">{role}</p>
-                      <p className="text-xs text-gray-500 mt-1">8-24 bundles</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="company-size" className="mt-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {['Startups (1-50)', 'SMB (51-500)', 'Enterprise (500-5K)', 'Large Enterprise (5K+)'].map((size) => (
-                  <Card key={size} className="cursor-pointer hover:bg-gray-50 transition-colors">
-                    <CardContent className="p-4 text-center">
-                      <TrendingUp className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                      <p className="font-medium text-sm">{size}</p>
-                      <p className="text-xs text-gray-500 mt-1">15-32 bundles</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="geography" className="mt-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East', 'Global'].map((region) => (
-                  <Card key={region} className="cursor-pointer hover:bg-gray-50 transition-colors">
-                    <CardContent className="p-4 text-center">
-                      <Globe className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-                      <p className="font-medium text-sm">{region}</p>
-                      <p className="text-xs text-gray-500 mt-1">20-58 bundles</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
 
       {/* Download Modal */}
       <DownloadModal
