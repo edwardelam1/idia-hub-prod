@@ -20,6 +20,7 @@ import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
+import CrazyFriendSecurityDashboard from '@/components/security/CrazyFriendSecurityDashboard';
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -243,38 +244,7 @@ const SuperAdminDashboard = () => {
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security Management</CardTitle>
-              <CardDescription>Platform security settings and monitoring</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">IP Whitelisting</h3>
-                  <p className="text-gray-600 mb-4">Configure IP address restrictions for high-privilege accounts</p>
-                  <Button>Manage IP Whitelist</Button>
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Security Alerts</h3>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-red-800">Suspicious Login Detected</p>
-                          <p className="text-sm text-red-600">Multiple failed attempts from IP: 192.168.1.100</p>
-                        </div>
-                        <Badge variant="outline" className="bg-red-100 text-red-800">
-                          Blocked
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CrazyFriendSecurityDashboard />
         </TabsContent>
 
         <TabsContent value="audit-logs" className="space-y-6">
