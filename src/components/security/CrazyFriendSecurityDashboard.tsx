@@ -1,24 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Shield, 
   Eye, 
   Search, 
-  Zap, 
   Lock, 
   Database, 
   Layers, 
   Brain,
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
   TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SecurityOverviewCards } from './SecurityOverviewCards';
+import { AgentCards } from './AgentCards';
+import { ThreatAnalysis } from './ThreatAnalysis';
+import { HistoricalAnalytics } from './HistoricalAnalytics';
+import { AgentPerformance } from './AgentPerformance';
+import { SecurityOrchestration } from './SecurityOrchestration';
 
 interface Agent {
   id: string;
@@ -170,39 +168,6 @@ const CrazyFriendSecurityDashboard = () => {
     ]
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'alert': return 'bg-red-100 text-red-800';
-      case 'idle': return 'bg-gray-100 text-gray-800';
-      case 'maintenance': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getAlertColor = (level: string) => {
-    switch (level) {
-      case 'low': return 'bg-blue-100 text-blue-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'critical': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'low': return 'text-blue-600';
-      case 'medium': return 'text-yellow-600';
-      case 'high': return 'text-orange-600';
-      case 'critical': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  const handleAgentAction = (agentId: string, action: string) => {
-    toast.success(`${action} initiated for ${agents.find(a => a.id === agentId)?.name}`);
-  };
 
   const handleThreatAction = (threatId: number, action: string) => {
     setActiveThreats(prev => 
@@ -235,58 +200,7 @@ const CrazyFriendSecurityDashboard = () => {
         <p className="text-gray-600 mt-2">Enterprise-level autonomous defense system powered by The Crazy 8 agents</p>
       </div>
 
-      {/* System Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {agents.filter(a => a.status === 'active').length}/8
-            </div>
-            <p className="text-xs text-muted-foreground">All systems operational</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Threats Detected</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {agents.reduce((sum, agent) => sum + agent.threatsDetected, 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Last 24 hours</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Threats</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {activeThreats.filter(t => t.status === 'active').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Requiring attention</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Response Time</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">0.3s</div>
-            <p className="text-xs text-muted-foreground">Average detection to response</p>
-          </CardContent>
-        </Card>
-      </div>
+      <SecurityOverviewCards agents={agents} activeThreats={activeThreats} />
 
       <Tabs defaultValue="analytics" className="w-full">
         <TabsList className="grid w-full grid-cols-5">
@@ -298,334 +212,23 @@ const CrazyFriendSecurityDashboard = () => {
         </TabsList>
 
         <TabsContent value="agents" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {agents.map((agent) => {
-              const IconComponent = agent.icon;
-              return (
-                <Card key={agent.id} className="relative">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <IconComponent className="h-6 w-6 text-purple-600" />
-                      <Badge className={getStatusColor(agent.status)}>
-                        {agent.status}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-lg">{agent.name}</CardTitle>
-                    <CardDescription className="text-sm">
-                      {agent.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Last Activity:</span>
-                      <span>{agent.lastActivity}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Threats Detected:</span>
-                      <span className="font-semibold">{agent.threatsDetected}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Alert Level:</span>
-                      <Badge className={getAlertColor(agent.alertLevel)}>
-                        {agent.alertLevel}
-                      </Badge>
-                    </div>
-                    <div className="flex space-x-2 pt-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleAgentAction(agent.id, 'Configure')}
-                      >
-                        Configure
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleAgentAction(agent.id, 'View Details')}
-                      >
-                        Details
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+          <AgentCards agents={agents} />
         </TabsContent>
 
         <TabsContent value="threats" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Threat Analysis</CardTitle>
-              <CardDescription>Real-time threat detection and response coordination</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {activeThreats.map((threat) => (
-                  <div key={threat.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <AlertTriangle className={`h-4 w-4 ${getSeverityColor(threat.severity)}`} />
-                        <span className="font-medium">{threat.threat}</span>
-                        <Badge className={getAlertColor(threat.severity)}>
-                          {threat.severity}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Detected by {threat.agent} • {threat.timestamp}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500">Status:</span>
-                        <Badge variant="outline" className={
-                          threat.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                          threat.status === 'contained' ? 'bg-blue-100 text-blue-800' :
-                          threat.status === 'active' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }>
-                          {threat.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleThreatAction(threat.id, 'investigate')}
-                      >
-                        Investigate
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleThreatAction(threat.id, 'resolve')}
-                      >
-                        Resolve
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <ThreatAnalysis activeThreats={activeThreats} onThreatAction={handleThreatAction} />
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Weekly Threat Trends */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Weekly Threat Analysis</CardTitle>
-                <CardDescription>Threat detection and resolution patterns over the last 7 days</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {historicalData.weeklyThreats.map((day, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <span className="font-medium w-8">{day.day}</span>
-                        <div className="flex space-x-2">
-                          <Badge variant="outline" className="bg-orange-50 text-orange-800">
-                            {day.threats} threats
-                          </Badge>
-                          <Badge variant="outline" className="bg-green-50 text-green-800">
-                            {day.resolved} resolved
-                          </Badge>
-                          {day.critical > 0 && (
-                            <Badge variant="outline" className="bg-red-50 text-red-800">
-                              {day.critical} critical
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {Math.round((day.resolved / day.threats) * 100)}% resolved
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Threat Evolution */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Threat Landscape Evolution</CardTitle>
-                <CardDescription>Emerging threat patterns over the last 4 months</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {historicalData.threatEvolution.map((month, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{month.month} 2024</span>
-                        <span className="text-sm text-gray-600">
-                          {month.malware + month.phishing + month.apt + month.insider} total
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="text-center p-2 bg-red-50 rounded">
-                          <div className="text-lg font-semibold text-red-700">{month.malware}</div>
-                          <div className="text-xs text-red-600">Malware</div>
-                        </div>
-                        <div className="text-center p-2 bg-yellow-50 rounded">
-                          <div className="text-lg font-semibold text-yellow-700">{month.phishing}</div>
-                          <div className="text-xs text-yellow-600">Phishing</div>
-                        </div>
-                        <div className="text-center p-2 bg-purple-50 rounded">
-                          <div className="text-lg font-semibold text-purple-700">{month.apt}</div>
-                          <div className="text-xs text-purple-600">APT</div>
-                        </div>
-                        <div className="text-center p-2 bg-orange-50 rounded">
-                          <div className="text-lg font-semibold text-orange-700">{month.insider}</div>
-                          <div className="text-xs text-orange-600">Insider</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Key Historical Insights */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Critical Security Insights</CardTitle>
-              <CardDescription>AI-generated insights from historical threat data</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Brain className="h-5 w-5 text-blue-600" />
-                    <span className="font-semibold text-blue-800">Predictive Alert</span>
-                  </div>
-                  <p className="text-sm text-blue-700">
-                    85% probability of credential stuffing attack this week based on login pattern anomalies.
-                  </p>
-                </div>
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <TrendingUp className="h-5 w-5 text-green-600" />
-                    <span className="font-semibold text-green-800">Performance Improvement</span>
-                  </div>
-                  <p className="text-sm text-green-700">
-                    Response time improved by 47% since implementing Crazy Guardian automation.
-                  </p>
-                </div>
-                <div className="p-4 bg-orange-50 rounded-lg">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <AlertTriangle className="h-5 w-5 text-orange-600" />
-                    <span className="font-semibold text-orange-800">Risk Pattern</span>
-                  </div>
-                  <p className="text-sm text-orange-700">
-                    APT attacks increasing 22% monthly. Enhanced monitoring on endpoints recommended.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <HistoricalAnalytics historicalData={historicalData} />
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Agent Performance Analytics</CardTitle>
-              <CardDescription>Historical performance metrics for each Crazy 8 agent</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {historicalData.agentPerformance.map((agent, index) => (
-                  <div key={index} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg">Crazy {agent.agent}</h3>
-                      <Badge className={
-                        agent.accuracy >= 95 ? 'bg-green-100 text-green-800' :
-                        agent.accuracy >= 90 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-orange-100 text-orange-800'
-                      }>
-                        {agent.accuracy}% accuracy
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{agent.responseTime}s</div>
-                        <div className="text-sm text-gray-600">Avg Response Time</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-600">{agent.threatsFound}</div>
-                        <div className="text-sm text-gray-600">Threats Found</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{agent.accuracy}%</div>
-                        <div className="text-sm text-gray-600">Accuracy Rate</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <AgentPerformance performanceData={historicalData.agentPerformance} />
         </TabsContent>
 
         <TabsContent value="orchestration" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Central Security Orchestration</CardTitle>
-              <CardDescription>AI-powered coordination and automated response management</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Automated Playbooks</h3>
-                  <div className="space-y-2">
-                    {[
-                      'Incident Response Automation',
-                      'Threat Containment Protocol',
-                      'Data Loss Prevention Response',
-                      'Identity Compromise Mitigation',
-                      'Advanced Persistent Threat (APT) Response'
-                    ].map((playbook, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded">
-                        <span className="text-sm">{playbook}</span>
-                        <Badge className="bg-green-100 text-green-800">Active</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Integration Status</h3>
-                  <div className="space-y-2">
-                    {[
-                      'Best Friend AI Core',
-                      'Gemini API Integration',
-                      'SIEM/XDR Systems',
-                      'Endpoint Detection',
-                      'Cloud Security Posture'
-                    ].map((integration, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded">
-                        <span className="text-sm">{integration}</span>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <h3 className="text-lg font-semibold mb-4">Real-time Agent Communication</h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="text-sm font-mono space-y-1">
-                    <div className="text-green-600">[GUARDIAN] → Received alert from SENTINEL: Anomaly detected in user authentication patterns</div>
-                    <div className="text-blue-600">[ORACLE] → Predictive model suggests 85% probability of credential stuffing attack</div>
-                    <div className="text-purple-600">[HUNTER] → Initiating targeted hunt for related IOCs across network traffic</div>
-                    <div className="text-orange-600">[GATEKEEPER] → Implementing enhanced MFA requirements for affected user segments</div>
-                    <div className="text-green-600">[GUARDIAN] → Playbook "Credential-Stuffing-Response-v2.1" executed successfully</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <SecurityOrchestration />
         </TabsContent>
       </Tabs>
     </div>
