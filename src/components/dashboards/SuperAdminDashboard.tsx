@@ -21,6 +21,8 @@ import OrganizationManagement from '@/components/management/OrganizationManageme
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 import HealthDataDashboard from '@/components/health/HealthDataDashboard';
+import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
+import AuditLogs from '@/components/audit/AuditLogs';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
 
 
@@ -50,11 +52,7 @@ const SuperAdminDashboard = () => {
   };
 
   if (activeTab === 'system-health') {
-    return (
-      <div className="p-8 text-center text-gray-500">
-        System health monitoring awaiting live data pipeline
-      </div>
-    );
+    return <SystemHealthDashboard />;
   }
 
   if (activeTab === 'organizations') {
@@ -224,17 +222,7 @@ const SuperAdminDashboard = () => {
         </TabsContent>
 
         <TabsContent value="audit-logs" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Audit Logs</CardTitle>
-              <CardDescription>Audit logging awaiting live platform activity</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <p>Audit logs will appear here when platform activity begins</p>
-              </div>
-            </CardContent>
-          </Card>
+          <AuditLogs />
         </TabsContent>
       </Tabs>
     </div>

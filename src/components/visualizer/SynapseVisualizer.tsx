@@ -181,7 +181,7 @@ const SynapseVisualizer = () => {
             )}
           </div>
           <div className="text-xs text-gray-300">
-            Live Data Flow Network • {activityCount} processed
+            Live Data Flow Network • {activities.length} processed
           </div>
         </div>
       </div>

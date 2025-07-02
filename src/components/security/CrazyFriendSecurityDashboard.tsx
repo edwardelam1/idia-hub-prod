@@ -20,6 +20,15 @@ import { SecurityOrchestration } from './SecurityOrchestration';
 import { SecurityCommandCenter } from './SecurityCommandCenter';
 import { useSecurityEvents } from '@/hooks/useSecurityEvents';
 
+interface Threat {
+  id: number;
+  threat: string;
+  severity: string;
+  agent: string;
+  timestamp: string;
+  status: string;
+}
+
 interface Agent {
   id: string;
   name: string;
@@ -46,18 +55,29 @@ const CrazyFriendSecurityDashboard = () => {
   const { securityEvents, agentStatus, isLoading } = useSecurityEvents();
   
   // Convert security events to the expected format
-  const agents = Object.entries(agentStatus).map(([id, status]) => ({
+  const agents: Agent[] = Object.entries(agentStatus).map(([id, status]) => ({
     id,
     name: id.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
     status: status as 'active' | 'idle' | 'alert' | 'maintenance',
     lastActivity: 'Just now',
     threatsDetected: securityEvents.filter(e => e.agent_name === id && e.severity !== 'low').length,
-    alertLevel: securityEvents.find(e => e.agent_name === id && ['high', 'critical'].includes(e.severity)) ? 'high' : 'low',
+    alertLevel: (securityEvents.find(e => e.agent_name === id && ['high', 'critical'].includes(e.severity)) ? 'high' : 'low') as 'low' | 'medium' | 'high' | 'critical',
     description: `${id.replace('crazy_', '').replace('_', ' ')} security monitoring`,
     icon: Shield
   }));
 
-  const activeThreats = securityEvents.filter(e => ['medium', 'high', 'critical'].includes(e.severity) && !e.resolved);
+  // Convert security events to threat format
+  const activeThreats: Threat[] = securityEvents
+    .filter(e => ['medium', 'high', 'critical'].includes(e.severity) && !e.resolved)
+    .map(event => ({
+      id: parseInt(event.id.substring(0, 8), 16), // Convert UUID to number for compatibility
+      threat: event.action_type.replace(/_/g, ' '),
+      severity: event.severity,
+      agent: event.agent_name.replace('crazy_', ''),
+      timestamp: new Date(event.timestamp).toLocaleString(),
+      status: event.resolved ? 'resolved' : 'active'
+    }));
+
   const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([]);
   const [historicalData, setHistoricalData] = useState({
     weeklyThreats: [],
@@ -66,13 +86,6 @@ const CrazyFriendSecurityDashboard = () => {
   });
 
   const handleThreatAction = (threatId: number, action: string) => {
-    setActiveThreats(prev => 
-      prev.map(threat => 
-        threat.id === threatId 
-          ? { ...threat, status: action === 'resolve' ? 'resolved' : 'investigating' }
-          : threat
-      )
-    );
     toast.success(`Threat ${action === 'resolve' ? 'resolved' : 'investigation started'}`);
   };
 

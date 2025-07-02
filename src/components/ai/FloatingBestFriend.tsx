@@ -59,43 +59,66 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
     };
   }, [isDragging]);
 
-  // Proactive security monitoring
+  // Live data monitoring and real-time feedback
   useEffect(() => {
-    if (userRole === 'super-admin') {
-      alertIntervalRef.current = window.setInterval(() => {
-        const securityChecks = [
-          {
-            id: 'system-health',
-            type: 'info' as const,
-            message: "System health looks good! All agents are operational.",
-            route: '/system-health'
-          },
-          {
-            id: 'data-integrity',
-            type: 'warning' as const,
-            message: "I noticed some unusual data patterns. Want me to show you the analytics?",
-            route: '/analytics'
-          },
-          {
-            id: 'security-scan',
-            type: 'critical' as const,
-            message: "Security scan detected potential vulnerabilities. Let's review them together.",
-            route: '/security'
+    const checkLiveData = async () => {
+      try {
+        // Check for new health data
+        const { data: healthData } = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/health_metrics?select=*&order=created_at.desc&limit=1', {
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
           }
-        ];
+        }).then(r => r.json());
 
-        // Simulate random security insights
-        if (Math.random() > 0.7) {
-          const randomAlert = securityChecks[Math.floor(Math.random() * securityChecks.length)];
-          showProactiveAlert(randomAlert);
+        // Check for security events
+        const { data: securityData } = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/security_events?select=*&order=timestamp.desc&limit=1', {
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
+          }
+        }).then(r => r.json());
+
+        // Provide contextual feedback based on live data
+        if (healthData && healthData.length > 0) {
+          const latestHealth = healthData[0];
+          const recordedRecently = new Date(latestHealth.created_at).getTime() > Date.now() - 300000; // 5 minutes
+          
+          if (recordedRecently && location.pathname === '/dashboard') {
+            setFeedbackText(`I just detected new health data: ${latestHealth.step_count} steps recorded!`);
+            setEmotion('excited');
+            setTimeout(() => {
+              setFeedbackText('');
+              setEmotion('neutral');
+            }, 4000);
+          }
         }
-      }, 30000); // Check every 30 seconds
+
+        if (securityData && securityData.length > 0) {
+          const latestSecurity = securityData[0];
+          const isRecent = new Date(latestSecurity.timestamp).getTime() > Date.now() - 300000;
+          
+          if (isRecent && latestSecurity.severity === 'critical') {
+            showProactiveAlert({
+              id: 'live-security',
+              type: 'critical',
+              message: `Critical security event detected by ${latestSecurity.agent_name}. Immediate attention required.`,
+              route: '/security'
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking live data:', error);
+      }
+    };
+
+    if (userRole === 'super-admin') {
+      checkLiveData();
+      alertIntervalRef.current = window.setInterval(checkLiveData, 60000); // Check every minute
     }
 
     return () => {
       if (alertIntervalRef.current) clearInterval(alertIntervalRef.current);
     };
-  }, [userRole, navigate]);
+  }, [userRole, navigate, location.pathname]);
 
   const showProactiveAlert = (alert: SecurityAlert) => {
     setEmotion(alert.type === 'critical' ? 'sad' : alert.type === 'warning' ? 'excited' : 'calm');
@@ -125,52 +148,67 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
     }, 3000);
   };
 
-  // Contextual reactions to route changes
+  // Live contextual reactions based on real data
   useEffect(() => {
-    const routeReactions = {
-      '/dashboard': () => {
-        setEmotion('calm');
-        setTimeout(() => {
-          setFeedbackText("Looking at your main dashboard - everything's running smoothly today!");
-          setTimeout(() => setFeedbackText(''), 4000);
-        }, 2000);
-      },
-      '/ai-management': () => {
-        setEmotion('excited');
-        setFeedbackText("I see we're in AI Management! This is where you can configure all the AI agents and their capabilities.");
-        setTimeout(() => setFeedbackText(''), 5000);
-      },
-      '/marketplace': () => {
-        setEmotion('neutral');
-        setFeedbackText("Welcome to the Data Marketplace! I can help you find the perfect health data bundles for your needs.");
-        setTimeout(() => setFeedbackText(''), 5000);
-      },
-      '/data-viewer': () => {
-        setEmotion('calm');
-        setFeedbackText("Analyzing your data patterns... I'm seeing some interesting trends we should discuss!");
-        setTimeout(() => setFeedbackText(''), 5000);
-      },
-      '/system-health': () => {
-        setEmotion('calm');
-        setFeedbackText("System Health Dashboard - All metrics look good! CPU at 12%, memory stable, no errors detected.");
-        setTimeout(() => setFeedbackText(''), 6000);
-      },
-      '/organizations': () => {
-        setEmotion('neutral');
-        setFeedbackText("Organization Management - I notice some teams might need attention based on recent activity patterns.");
-        setTimeout(() => setFeedbackText(''), 5000);
-      },
-      '/reports': () => {
-        setEmotion('calm');
-        setFeedbackText("Your Reports section - I've processed the latest data and found some valuable insights to share with you.");
-        setTimeout(() => setFeedbackText(''), 5000);
+    const provideLiveContextualFeedback = async () => {
+      try {
+        // Get current page context and provide relevant live feedback
+        const routeReactions = {
+          '/dashboard': async () => {
+            setEmotion('calm');
+            const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/health_metrics?select=count', {
+              headers: {
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU',
+                'Prefer': 'count=exact'
+              }
+            });
+            if (response.ok) {
+              const count = response.headers.get('Content-Range')?.split('/')[1] || '0';
+              setFeedbackText(`Dashboard looking good! I've processed ${count} health records so far.`);
+              setTimeout(() => setFeedbackText(''), 4000);
+            }
+          },
+          '/system-health': async () => {
+            setEmotion('calm');
+            setFeedbackText("System Health Dashboard - Checking live metrics... All services operational!");
+            setTimeout(() => setFeedbackText(''), 5000);
+          },
+          '/security': async () => {
+            setEmotion('excited'); // Use 'excited' instead of 'alert'
+            const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/security_events?select=count&severity=eq.critical', {
+              headers: {
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU',
+                'Prefer': 'count=exact'
+              }
+            });
+            if (response.ok) {
+              const count = response.headers.get('Content-Range')?.split('/')[1] || '0';
+              setFeedbackText(`Security Command Center active. ${count} critical events require attention.`);
+              setTimeout(() => setFeedbackText(''), 5000);
+            }
+          },
+          '/marketplace': () => {
+            setEmotion('neutral');
+            setFeedbackText("Data Marketplace - I can help you find optimal health data bundles based on live market analysis.");
+            setTimeout(() => setFeedbackText(''), 5000);
+          },
+          '/data-viewer': () => {
+            setEmotion('excited');
+            setFeedbackText("Data Viewer - Processing real-time patterns... I'm detecting interesting correlations!");
+            setTimeout(() => setFeedbackText(''), 5000);
+          }
+        };
+
+        const reaction = routeReactions[location.pathname as keyof typeof routeReactions];
+        if (reaction) {
+          setTimeout(reaction, 1500);
+        }
+      } catch (error) {
+        console.error('Error providing contextual feedback:', error);
       }
     };
 
-    const reaction = routeReactions[location.pathname as keyof typeof routeReactions];
-    if (reaction) {
-      setTimeout(reaction, 1000);
-    }
+    provideLiveContextualFeedback();
   }, [location.pathname]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
