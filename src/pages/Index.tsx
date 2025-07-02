@@ -68,7 +68,7 @@ const Index = () => {
         <Route path="/system-health" element={<SystemHealthDashboard />} />
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
-        <Route path="/security" element={<div>Security (Coming Soon)</div>} />
+        <Route path="/security" element={<SuperAdminDashboard />} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<div>Team Management (Coming Soon)</div>} />
         <Route path="/billing" element={<div>Billing & Credits (Coming Soon)</div>} />

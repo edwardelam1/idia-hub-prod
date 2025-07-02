@@ -1,5 +1,6 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +24,15 @@ import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 import CrazyFriendSecurityDashboard from '@/components/security/CrazyFriendSecurityDashboard';
 
 const SuperAdminDashboard = () => {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Set active tab based on route
+  useEffect(() => {
+    if (location.pathname === '/security') {
+      setActiveTab('security');
+    }
+  }, [location.pathname]);
 
   const overviewStats = {
     totalOrganizations: 45,
