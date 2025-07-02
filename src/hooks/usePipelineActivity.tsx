@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface PipelineActivity {
   id: string;
-  type: 'data_processed' | 'bundle_created' | 'user_connected';
+  type: 'health_data_received' | 'data_processed' | 'bundle_created' | 'user_connected';
   timestamp: string;
   details: any;
 }
@@ -16,7 +16,7 @@ export const usePipelineActivity = () => {
   useEffect(() => {
     console.log('Setting up real-time pipeline activity monitoring...');
     
-    // Listen to staged_health_data for new data processing
+    // Listen to health_metrics for new health data
     const healthDataChannel = supabase
       .channel('pipeline-health-data')
       .on(
@@ -24,18 +24,18 @@ export const usePipelineActivity = () => {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'staged_health_data'
+          table: 'health_metrics'
         },
         (payload) => {
-          console.log('New health data processed:', payload);
+          console.log('New health data received:', payload);
           setActivities(prev => [...prev.slice(-49), {
-            id: payload.new.id,
-            type: 'data_processed',
+            id: payload.new.id.toString(),
+            type: 'health_data_received',
             timestamp: payload.new.created_at,
             details: {
-              activityType: payload.new.activity_type,
-              qualityScore: payload.new.data_quality_score,
-              location: payload.new.anonymized_location_zone
+              stepCount: payload.new.step_count,
+              recordedAt: payload.new.recorded_at,
+              userId: payload.new.user_id || 'anonymous'
             }
           }]);
           setIsActive(true);

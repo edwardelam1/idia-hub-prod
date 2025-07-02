@@ -20,15 +20,18 @@ import {
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
+import HealthDataDashboard from '@/components/health/HealthDataDashboard';
+import { useHealthMetrics } from '@/hooks/useHealthMetrics';
 
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const { healthStats } = useHealthMetrics();
 
-  // All mock data removed - awaiting real system metrics
+  // All mock data removed - awaiting real system metrics except health data (live)
   const overviewStats = {
     totalOrganizations: 0,
-    activeUsers: 0,
+    activeUsers: healthStats.totalRecords, // Live health data
     monthlyRevenue: 0,
     systemUptime: 0,
     pendingRequests: 0,
@@ -81,13 +84,18 @@ const SuperAdminDashboard = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="health-data">Health Data</TabsTrigger>
           <TabsTrigger value="system-health">System Health</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>
           <TabsTrigger value="ai-management">AI Management</TabsTrigger>
           <TabsTrigger value="audit-logs">Audit Logs</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="health-data" className="space-y-6">
+          <HealthDataDashboard />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
           {/* Key Metrics */}
@@ -105,12 +113,12 @@ const SuperAdminDashboard = () => {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+                <CardTitle className="text-sm font-medium">Health Records</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{overviewStats.activeUsers.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Awaiting live data</p>
+                <div className="text-2xl font-bold text-primary">{overviewStats.activeUsers.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">Live health data records</p>
               </CardContent>
             </Card>
 
