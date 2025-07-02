@@ -16,7 +16,7 @@ import {
   AlertTriangle,
   CheckCircle
 } from 'lucide-react';
-import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard';
+// SystemHealthDashboard removed - awaiting live data
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
@@ -25,38 +25,17 @@ import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
 
+  // All mock data removed - awaiting real system metrics
   const overviewStats = {
-    totalOrganizations: 45,
-    activeUsers: 1247,
-    monthlyRevenue: 89650,
-    systemUptime: 99.9,
-    pendingRequests: 3,
-    aiGeneratedBundles: 127
+    totalOrganizations: 0,
+    activeUsers: 0,
+    monthlyRevenue: 0,
+    systemUptime: 0,
+    pendingRequests: 0,
+    aiGeneratedBundles: 0
   };
 
-  const recentActivity = [
-    {
-      id: 1,
-      action: 'New organization created',
-      details: 'TechCorp Solutions - Enterprise Tier',
-      timestamp: '2 hours ago',
-      type: 'organization'
-    },
-    {
-      id: 2,
-      action: 'AI bundle approved',
-      details: 'Healthcare IT Directors Q1 2024',
-      timestamp: '4 hours ago',
-      type: 'ai'
-    },
-    {
-      id: 3,
-      action: 'Security alert resolved',
-      details: 'Suspicious login attempt blocked',
-      timestamp: '6 hours ago',
-      type: 'security'
-    }
-  ];
+  const recentActivity: Array<{ id: number; action: string; details: string; timestamp: string; type: string }> = [];
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -68,7 +47,11 @@ const SuperAdminDashboard = () => {
   };
 
   if (activeTab === 'system-health') {
-    return <SystemHealthDashboard />;
+    return (
+      <div className="p-8 text-center text-gray-500">
+        System health monitoring awaiting live data pipeline
+      </div>
+    );
   }
 
   if (activeTab === 'organizations') {
@@ -116,7 +99,7 @@ const SuperAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overviewStats.totalOrganizations}</div>
-                <p className="text-xs text-muted-foreground">+3 from last month</p>
+                <p className="text-xs text-muted-foreground">Awaiting live data</p>
               </CardContent>
             </Card>
 
@@ -127,7 +110,7 @@ const SuperAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overviewStats.activeUsers.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">+12% from last month</p>
+                <p className="text-xs text-muted-foreground">Awaiting live data</p>
               </CardContent>
             </Card>
 
@@ -196,17 +179,23 @@ const SuperAdminDashboard = () => {
                 <CardDescription>Latest platform activities</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-3">
-                      {getActivityIcon(activity.type)}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{activity.action}</p>
-                        <p className="text-xs text-gray-600">{activity.details}</p>
-                        <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
-                      </div>
+                <div className="text-center py-4 text-gray-500">
+                  {recentActivity.length === 0 ? (
+                    <p>Activity feed awaiting live platform events</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex items-start space-x-3">
+                          {getActivityIcon(activity.type)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{activity.action}</p>
+                            <p className="text-xs text-gray-600">{activity.details}</p>
+                            <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -216,27 +205,11 @@ const SuperAdminDashboard = () => {
           <Card>
             <CardHeader>
               <CardTitle>System Status Overview</CardTitle>
-              <CardDescription>Quick view of critical systems</CardDescription>
+              <CardDescription>System services awaiting live monitoring data</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { name: 'API Gateway', status: 'operational', uptime: '99.9%' },
-                  { name: 'Database', status: 'operational', uptime: '99.8%' },
-                  { name: 'AI Service', status: 'operational', uptime: '98.5%' },
-                  { name: 'Payment System', status: 'operational', uptime: '99.7%' }
-                ].map((service) => (
-                  <div key={service.name} className="text-center p-4 border rounded-lg">
-                    <div className="flex items-center justify-center mb-2">
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    </div>
-                    <h4 className="font-medium">{service.name}</h4>
-                    <p className="text-sm text-gray-600">{service.uptime} uptime</p>
-                    <Badge variant="outline" className="bg-green-100 text-green-800 mt-1">
-                      {service.status}
-                    </Badge>
-                  </div>
-                ))}
+              <div className="text-center py-8 text-gray-500">
+                <p>System monitoring awaiting live pipeline data</p>
               </div>
             </CardContent>
           </Card>
@@ -246,45 +219,11 @@ const SuperAdminDashboard = () => {
           <Card>
             <CardHeader>
               <CardTitle>Audit Logs</CardTitle>
-              <CardDescription>Detailed, immutable logs of all platform actions</CardDescription>
+              <CardDescription>Audit logging awaiting live platform activity</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  {
-                    timestamp: '2024-01-15 14:30:22',
-                    user: 'super-admin@idia.com',
-                    action: 'Organization Created',
-                    details: 'Created TechCorp Solutions with Enterprise tier',
-                    ip: '192.168.1.50'
-                  },
-                  {
-                    timestamp: '2024-01-15 14:25:15',
-                    user: 'admin@techcorp.com',
-                    action: 'Bundle Downloaded',
-                    details: 'Downloaded Healthcare IT Directors bundle (150 credits)',
-                    ip: '10.0.0.25'
-                  },
-                  {
-                    timestamp: '2024-01-15 14:20:08',
-                    user: 'ai-curator@system',
-                    action: 'Bundle Generated',
-                    details: 'Generated Fintech Startup Founders bundle (780 contacts)',
-                    ip: 'internal'
-                  }
-                ].map((log, index) => (
-                  <div key={index} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">{log.action}</span>
-                      <span className="text-sm text-gray-500">{log.timestamp}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1">{log.details}</p>
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span>User: {log.user}</span>
-                      <span>IP: {log.ip}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="text-center py-8 text-gray-500">
+                <p>Audit logs will appear here when platform activity begins</p>
               </div>
             </CardContent>
           </Card>
