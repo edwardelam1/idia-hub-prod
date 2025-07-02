@@ -14,6 +14,7 @@ import OrganizationManagement from '@/components/management/OrganizationManageme
 import AIManagement from '@/components/ai/AIManagement';
 import DataViewer from '@/components/data/DataViewer';
 import MyReports from '@/components/reports/MyReports';
+import SecurityPage from './SecurityPage';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -68,7 +69,7 @@ const Index = () => {
         <Route path="/system-health" element={<SystemHealthDashboard />} />
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
-        <Route path="/security" element={<SuperAdminDashboard />} />
+        <Route path="/security" element={<SecurityPage />} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<div>Team Management (Coming Soon)</div>} />
         <Route path="/billing" element={<div>Billing & Credits (Coming Soon)</div>} />

@@ -1,6 +1,5 @@
 
-import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,18 +20,10 @@ import SystemHealthDashboard from '@/components/monitoring/SystemHealthDashboard
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
-import CrazyFriendSecurityDashboard from '@/components/security/CrazyFriendSecurityDashboard';
+
 
 const SuperAdminDashboard = () => {
-  const location = useLocation();
   const [activeTab, setActiveTab] = useState('overview');
-
-  // Set active tab based on route
-  useEffect(() => {
-    if (location.pathname === '/security') {
-      setActiveTab('security');
-    }
-  }, [location.pathname]);
 
   const overviewStats = {
     totalOrganizations: 45,
@@ -107,12 +98,11 @@ const SuperAdminDashboard = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="system-health">System Health</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>
           <TabsTrigger value="ai-management">AI Management</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="audit-logs">Audit Logs</TabsTrigger>
         </TabsList>
 
@@ -250,10 +240,6 @@ const SuperAdminDashboard = () => {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="security" className="space-y-6">
-          <CrazyFriendSecurityDashboard />
         </TabsContent>
 
         <TabsContent value="audit-logs" className="space-y-6">
