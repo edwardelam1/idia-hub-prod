@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BestFriendAvatar from './BestFriendAvatar';
 import BestFriendChat from './BestFriendChat';
+import { useAudioCapabilities } from '@/hooks/useAudioCapabilities';
 import { toast } from 'sonner';
 import { AlertTriangle, Shield, Activity } from 'lucide-react';
 
@@ -30,9 +31,12 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
+  const [feedbackText, setFeedbackText] = useState<string>('');
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   
   const location = useLocation();
   const navigate = useNavigate();
+  const audio = useAudioCapabilities();
   const moveIntervalRef = useRef<number | null>(null);
   const alertIntervalRef = useRef<number | null>(null);
 
@@ -199,12 +203,72 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
     };
   }, [isDragging, dragOffset]);
 
-  const handleVoiceToggle = (isActive: boolean) => {
+  const handleVoiceToggle = async (isActive: boolean) => {
+    setIsVoiceMode(isActive);
     if (isActive) {
       setEmotion('excited');
-      toast.success("I'm listening! Tell me what you need.");
+      setFeedbackText('Listening...');
+      await audio.startRecording();
     } else {
       setEmotion('neutral');
+      setFeedbackText('Processing...');
+      const transcribedText = await audio.stopRecording();
+      
+      if (transcribedText) {
+        setFeedbackText('Thinking...');
+        await handleVoiceInput(transcribedText);
+      } else {
+        setFeedbackText('');
+      }
+    }
+  };
+
+  const handleVoiceInput = async (userInput: string) => {
+    try {
+      // Send to Best Friend AI
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/best-friend-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          message: userInput,
+          context: {
+            currentPage: location.pathname,
+            timestamp: new Date().toISOString(),
+            mode: 'voice'
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+      const aiResponse = data.response;
+      
+      setFeedbackText(aiResponse);
+      setEmotion('calm');
+      
+      // Speak the response
+      await audio.speak(aiResponse);
+      
+      // Clear feedback after speaking
+      setTimeout(() => {
+        setFeedbackText('');
+        setEmotion('neutral');
+      }, 3000);
+
+    } catch (error) {
+      console.error('Voice interaction error:', error);
+      setFeedbackText('Sorry, I had trouble understanding.');
+      setEmotion('sad');
+      setTimeout(() => {
+        setFeedbackText('');
+        setEmotion('neutral');
+      }, 3000);
     }
   };
 
@@ -231,6 +295,9 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
           onChatClick={handleChatClick}
           onVoiceToggle={handleVoiceToggle}
           emotion={emotion}
+          isListening={audio.isRecording}
+          isSpeaking={audio.isSpeaking}
+          feedbackText={feedbackText}
           className="drop-shadow-2xl"
         />
         

@@ -9,6 +9,8 @@ interface BestFriendAvatarProps {
   isSpeaking?: boolean;
   emotion?: 'excited' | 'calm' | 'sad' | 'neutral';
   className?: string;
+  feedbackText?: string;
+  onAudioResponse?: (text: string) => void;
 }
 
 const BestFriendAvatar = ({ 
@@ -17,7 +19,9 @@ const BestFriendAvatar = ({
   isListening = false,
   isSpeaking = false,
   emotion = 'neutral',
-  className = '' 
+  className = '',
+  feedbackText = '',
+  onAudioResponse
 }: BestFriendAvatarProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<any>(null);
@@ -229,9 +233,13 @@ const BestFriendAvatar = ({
         </div>
       )}
 
-      {/* Name Label */}
-      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center">
-        <p className="text-sm font-medium text-foreground">Best Friend</p>
+      {/* Feedback Text Area (replaces name label) */}
+      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-center w-48">
+        {feedbackText && (
+          <div className="bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 border border-border/50 shadow-lg">
+            <p className="text-xs font-medium text-foreground animate-fade-in">{feedbackText}</p>
+          </div>
+        )}
       </div>
     </div>
   );
