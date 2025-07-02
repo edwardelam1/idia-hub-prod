@@ -18,6 +18,7 @@ import { HistoricalAnalytics } from './HistoricalAnalytics';
 import { AgentPerformance } from './AgentPerformance';
 import { SecurityOrchestration } from './SecurityOrchestration';
 import { SecurityCommandCenter } from './SecurityCommandCenter';
+import { useSecurityEvents } from '@/hooks/useSecurityEvents';
 
 interface Agent {
   id: string;
@@ -42,9 +43,21 @@ interface RemediationPlan {
 }
 
 const CrazyFriendSecurityDashboard = () => {
-  // All mock data removed - awaiting real security agent data
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [activeThreats, setActiveThreats] = useState<any[]>([]);
+  const { securityEvents, agentStatus, isLoading } = useSecurityEvents();
+  
+  // Convert security events to the expected format
+  const agents = Object.entries(agentStatus).map(([id, status]) => ({
+    id,
+    name: id.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+    status: status as 'active' | 'idle' | 'alert' | 'maintenance',
+    lastActivity: 'Just now',
+    threatsDetected: securityEvents.filter(e => e.agent_name === id && e.severity !== 'low').length,
+    alertLevel: securityEvents.find(e => e.agent_name === id && ['high', 'critical'].includes(e.severity)) ? 'high' : 'low',
+    description: `${id.replace('crazy_', '').replace('_', ' ')} security monitoring`,
+    icon: Shield
+  }));
+
+  const activeThreats = securityEvents.filter(e => ['medium', 'high', 'critical'].includes(e.severity) && !e.resolved);
   const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([]);
   const [historicalData, setHistoricalData] = useState({
     weeklyThreats: [],

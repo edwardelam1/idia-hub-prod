@@ -306,6 +306,39 @@ export type Database = {
           },
         ]
       }
+      security_events: {
+        Row: {
+          action_type: string
+          agent_name: string
+          created_at: string | null
+          id: string
+          resolved: boolean | null
+          result_data: Json
+          severity: string
+          timestamp: string
+        }
+        Insert: {
+          action_type: string
+          agent_name: string
+          created_at?: string | null
+          id?: string
+          resolved?: boolean | null
+          result_data: Json
+          severity?: string
+          timestamp?: string
+        }
+        Update: {
+          action_type?: string
+          agent_name?: string
+          created_at?: string | null
+          id?: string
+          resolved?: boolean | null
+          result_data?: Json
+          severity?: string
+          timestamp?: string
+        }
+        Relationships: []
+      }
       staged_data: {
         Row: {
           activity_type: string
