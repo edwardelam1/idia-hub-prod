@@ -142,6 +142,34 @@ const CrazyFriendSecurityDashboard = () => {
     }
   ]);
 
+  const [historicalData, setHistoricalData] = useState({
+    weeklyThreats: [
+      { day: 'Mon', threats: 23, resolved: 21, critical: 2 },
+      { day: 'Tue', threats: 18, resolved: 18, critical: 0 },
+      { day: 'Wed', threats: 31, resolved: 28, critical: 3 },
+      { day: 'Thu', threats: 15, resolved: 15, critical: 0 },
+      { day: 'Fri', threats: 27, resolved: 24, critical: 3 },
+      { day: 'Sat', threats: 12, resolved: 12, critical: 0 },
+      { day: 'Sun', threats: 8, resolved: 8, critical: 0 }
+    ],
+    agentPerformance: [
+      { agent: 'Sentinel', accuracy: 94.2, responseTime: 0.8, threatsFound: 45 },
+      { agent: 'Oracle', accuracy: 89.7, responseTime: 2.1, threatsFound: 12 },
+      { agent: 'Hunter', accuracy: 91.5, responseTime: 1.2, threatsFound: 67 },
+      { agent: 'Guardian', accuracy: 98.1, responseTime: 0.3, threatsFound: 23 },
+      { agent: 'Gatekeeper', accuracy: 96.8, responseTime: 0.5, threatsFound: 8 },
+      { agent: 'Shield', accuracy: 93.4, responseTime: 1.1, threatsFound: 34 },
+      { agent: 'Mirror', accuracy: 87.9, responseTime: 3.2, threatsFound: 5 },
+      { agent: 'Insight', accuracy: 99.2, responseTime: 0.1, threatsFound: 0 }
+    ],
+    threatEvolution: [
+      { month: 'Oct', malware: 45, phishing: 23, apt: 8, insider: 3 },
+      { month: 'Nov', malware: 52, phishing: 31, apt: 12, insider: 2 },
+      { month: 'Dec', malware: 38, phishing: 28, apt: 15, insider: 5 },
+      { month: 'Jan', malware: 41, phishing: 35, apt: 18, insider: 4 }
+    ]
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
@@ -260,10 +288,12 @@ const CrazyFriendSecurityDashboard = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="agents" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="analytics" className="w-full">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="analytics">Historical Analytics</TabsTrigger>
           <TabsTrigger value="agents">The Crazy 8 Agents</TabsTrigger>
           <TabsTrigger value="threats">Active Threats</TabsTrigger>
+          <TabsTrigger value="performance">Agent Performance</TabsTrigger>
           <TabsTrigger value="orchestration">Central Orchestration</TabsTrigger>
         </TabsList>
 
@@ -370,6 +400,165 @@ const CrazyFriendSecurityDashboard = () => {
                       >
                         Resolve
                       </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Weekly Threat Trends */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Weekly Threat Analysis</CardTitle>
+                <CardDescription>Threat detection and resolution patterns over the last 7 days</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {historicalData.weeklyThreats.map((day, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <span className="font-medium w-8">{day.day}</span>
+                        <div className="flex space-x-2">
+                          <Badge variant="outline" className="bg-orange-50 text-orange-800">
+                            {day.threats} threats
+                          </Badge>
+                          <Badge variant="outline" className="bg-green-50 text-green-800">
+                            {day.resolved} resolved
+                          </Badge>
+                          {day.critical > 0 && (
+                            <Badge variant="outline" className="bg-red-50 text-red-800">
+                              {day.critical} critical
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {Math.round((day.resolved / day.threats) * 100)}% resolved
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Threat Evolution */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Threat Landscape Evolution</CardTitle>
+                <CardDescription>Emerging threat patterns over the last 4 months</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {historicalData.threatEvolution.map((month, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{month.month} 2024</span>
+                        <span className="text-sm text-gray-600">
+                          {month.malware + month.phishing + month.apt + month.insider} total
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="text-center p-2 bg-red-50 rounded">
+                          <div className="text-lg font-semibold text-red-700">{month.malware}</div>
+                          <div className="text-xs text-red-600">Malware</div>
+                        </div>
+                        <div className="text-center p-2 bg-yellow-50 rounded">
+                          <div className="text-lg font-semibold text-yellow-700">{month.phishing}</div>
+                          <div className="text-xs text-yellow-600">Phishing</div>
+                        </div>
+                        <div className="text-center p-2 bg-purple-50 rounded">
+                          <div className="text-lg font-semibold text-purple-700">{month.apt}</div>
+                          <div className="text-xs text-purple-600">APT</div>
+                        </div>
+                        <div className="text-center p-2 bg-orange-50 rounded">
+                          <div className="text-lg font-semibold text-orange-700">{month.insider}</div>
+                          <div className="text-xs text-orange-600">Insider</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Key Historical Insights */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Critical Security Insights</CardTitle>
+              <CardDescription>AI-generated insights from historical threat data</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Brain className="h-5 w-5 text-blue-600" />
+                    <span className="font-semibold text-blue-800">Predictive Alert</span>
+                  </div>
+                  <p className="text-sm text-blue-700">
+                    85% probability of credential stuffing attack this week based on login pattern anomalies.
+                  </p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    <span className="font-semibold text-green-800">Performance Improvement</span>
+                  </div>
+                  <p className="text-sm text-green-700">
+                    Response time improved by 47% since implementing Crazy Guardian automation.
+                  </p>
+                </div>
+                <div className="p-4 bg-orange-50 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <AlertTriangle className="h-5 w-5 text-orange-600" />
+                    <span className="font-semibold text-orange-800">Risk Pattern</span>
+                  </div>
+                  <p className="text-sm text-orange-700">
+                    APT attacks increasing 22% monthly. Enhanced monitoring on endpoints recommended.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Agent Performance Analytics</CardTitle>
+              <CardDescription>Historical performance metrics for each Crazy 8 agent</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {historicalData.agentPerformance.map((agent, index) => (
+                  <div key={index} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg">Crazy {agent.agent}</h3>
+                      <Badge className={
+                        agent.accuracy >= 95 ? 'bg-green-100 text-green-800' :
+                        agent.accuracy >= 90 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-orange-100 text-orange-800'
+                      }>
+                        {agent.accuracy}% accuracy
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">{agent.responseTime}s</div>
+                        <div className="text-sm text-gray-600">Avg Response Time</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">{agent.threatsFound}</div>
+                        <div className="text-sm text-gray-600">Threats Found</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{agent.accuracy}%</div>
+                        <div className="text-sm text-gray-600">Accuracy Rate</div>
+                      </div>
                     </div>
                   </div>
                 ))}
