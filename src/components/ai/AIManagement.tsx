@@ -31,46 +31,16 @@ const AIManagement = () => {
     autoApprove: false
   });
 
+  // All mock data removed - awaiting real AI management data
   const curatorStats = {
-    bundlesGenerated: 1247,
-    bundlesApproved: 1089,
-    bundlesRejected: 158,
-    avgMatchScore: 87.3,
-    uptime: 99.2
+    bundlesGenerated: 0,
+    bundlesApproved: 0,
+    bundlesRejected: 0,
+    avgMatchScore: 0,
+    uptime: 0
   };
 
-  const pendingBundles = [
-    {
-      id: 1,
-      name: 'Healthcare IT Directors Q1 2024',
-      description: 'CIOs and IT Directors at hospitals with 500+ beds',
-      contacts: 1250,
-      tier: 'Advanced',
-      matchScore: 92,
-      generated: '2024-01-15T10:30:00Z',
-      status: 'pending'
-    },
-    {
-      id: 2,
-      name: 'Fintech Startup Founders',
-      description: 'Founders and CEOs at Series A fintech companies',
-      contacts: 780,
-      tier: 'Premier',
-      matchScore: 89,
-      generated: '2024-01-15T09:15:00Z',
-      status: 'pending'
-    },
-    {
-      id: 3,
-      name: 'Manufacturing Supply Chain Leads',
-      description: 'Supply chain directors at manufacturing companies',
-      contacts: 950,
-      tier: 'Advanced',
-      matchScore: 85,
-      generated: '2024-01-15T08:45:00Z',
-      status: 'pending'
-    }
-  ];
+  const pendingBundles: any[] = [];
 
   const handleSettingChange = (key: string, value: any) => {
     setCuratorSettings(prev => ({
