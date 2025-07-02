@@ -226,11 +226,11 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const handleVoiceInput = async (userInput: string) => {
     try {
       // Send to Best Friend AI
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/best-friend-ai`, {
+      const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/best-friend-ai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
         },
         body: JSON.stringify({
           message: userInput,

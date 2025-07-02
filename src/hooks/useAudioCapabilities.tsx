@@ -19,8 +19,19 @@ export const useAudioCapabilities = (): AudioCapabilities => {
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      // Request user media with better error handling
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -30,11 +41,12 @@ export const useAudioCapabilities = (): AudioCapabilities => {
         }
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // Collect data every second
       setIsRecording(true);
+      console.log('Recording started successfully');
     } catch (error) {
       console.error('Error starting recording:', error);
-      toast.error('Could not access microphone');
+      toast.error('Could not access microphone. Please check permissions.');
     }
   }, []);
 
@@ -55,9 +67,12 @@ export const useAudioCapabilities = (): AudioCapabilities => {
           
           try {
             // Send to voice-to-text edge function
-            const response = await fetch('/functions/v1/voice-to-text', {
+            const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/voice-to-text', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
+              },
               body: JSON.stringify({ audio: base64Audio })
             });
 
@@ -65,6 +80,8 @@ export const useAudioCapabilities = (): AudioCapabilities => {
               const { text } = await response.json();
               resolve(text);
             } else {
+              const errorData = await response.text();
+              console.error('Voice-to-text error:', errorData);
               toast.error('Could not transcribe audio');
               resolve(null);
             }
@@ -91,9 +108,12 @@ export const useAudioCapabilities = (): AudioCapabilities => {
       
       // Try ElevenLabs first, fallback to browser speech synthesis
       try {
-        const response = await fetch('/functions/v1/text-to-speech', {
+        const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/text-to-speech', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
+          },
           body: JSON.stringify({ 
             text, 
             voice: 'Aria' // Using Aria voice from ElevenLabs
@@ -106,11 +126,18 @@ export const useAudioCapabilities = (): AudioCapabilities => {
           currentAudioRef.current = audio;
           
           audio.onended = () => setIsSpeaking(false);
+          audio.onerror = () => {
+            console.error('Audio playback error');
+            setIsSpeaking(false);
+          };
           await audio.play();
           return;
+        } else {
+          const errorData = await response.text();
+          console.error('Text-to-speech error:', errorData);
         }
       } catch (error) {
-        console.log('ElevenLabs not available, using browser TTS');
+        console.error('ElevenLabs not available, using browser TTS:', error);
       }
 
       // Fallback to browser speech synthesis

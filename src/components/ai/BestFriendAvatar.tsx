@@ -30,10 +30,23 @@ const BestFriendAvatar = ({
   const speechIntervalRef = useRef<number | null>(null);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
 
-  const handleVoiceClick = () => {
+  const handleVoiceClick = async () => {
     const newState = !isVoiceActive;
     setIsVoiceActive(newState);
-    onVoiceToggle(newState);
+    
+    // Add haptic feedback and visual indication
+    if (newState) {
+      // Request microphone permission first
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        onVoiceToggle(newState);
+      } catch (error) {
+        console.error('Microphone permission denied:', error);
+        setIsVoiceActive(false);
+      }
+    } else {
+      onVoiceToggle(newState);
+    }
   };
 
   // Simulate syllable changes when speaking
