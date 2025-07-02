@@ -21,6 +21,10 @@ interface DataViewerHeaderProps {
   onShare: () => void;
   onSave: () => void;
   onExport: () => void;
+  pipelineStats?: {
+    processedCount: number;
+    bundleCount: number;
+  };
 }
 
 const DataViewerHeader = ({ 
@@ -29,7 +33,8 @@ const DataViewerHeader = ({
   totalCount, 
   onShare, 
   onSave, 
-  onExport 
+  onExport,
+  pipelineStats
 }: DataViewerHeaderProps) => {
   return (
     <Card>
@@ -50,6 +55,11 @@ const DataViewerHeader = ({
               <span className="text-sm text-gray-600">
                 {filteredCount} of {totalCount} records
               </span>
+              {pipelineStats && (
+                <Badge variant="outline" className="bg-green-100 text-green-800">
+                  Pipeline: {pipelineStats.processedCount} processed
+                </Badge>
+              )}
             </div>
           </div>
           <div className="flex space-x-2">

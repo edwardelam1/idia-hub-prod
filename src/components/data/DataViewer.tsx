@@ -9,6 +9,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import { getMaskedDataWarning } from '@/utils/dataAnonymizer';
 import { useBundleData } from '@/hooks/useBundleData';
 import { useDataGeneration } from '@/hooks/useDataGeneration';
+import { useHealthMetrics } from '@/hooks/useHealthMetrics';
 import DataViewerHeader from './DataViewerHeader';
 import DataViewerSearch from './DataViewerSearch';
 import DataViewerTable from './DataViewerTable';
@@ -33,6 +34,8 @@ const DataViewer = () => {
   const [showContactLists, setShowContactLists] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [filteredRecords, setFilteredRecords] = useState<DataRecord[]>([]);
+  
+  const { healthStats } = useHealthMetrics();
 
   const bundle = useBundleData(bundleId);
   const { dataRecords, tableHeaders, headerToKeyMapping } = useDataGeneration(bundle, bundleId);
@@ -140,6 +143,10 @@ const DataViewer = () => {
               onShare={() => setShowSavedSearches(true)}
               onSave={() => setShowContactLists(true)}
               onExport={() => handleExport('csv')}
+              pipelineStats={{
+                processedCount: healthStats.totalRecords,
+                bundleCount: dataRecords.length
+              }}
             />
           )}
 

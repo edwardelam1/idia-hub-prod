@@ -41,8 +41,8 @@ serve(async (req) => {
 
     console.log(`Processing ${healthData.length} health records`)
 
-    // Generate bundles by category
-    const bundles = await generateHealthBundles(healthData)
+    // Use AI Data Curator to analyze and curate bundles
+    const bundles = await generateAICuratedBundles(supabaseClient, healthData)
 
     // Insert bundles into marketplace
     const bundleResults = []
@@ -122,6 +122,157 @@ async function generateHealthBundles(healthData: any[]) {
   }
 
   return bundles
+}
+
+async function generateAICuratedBundles(supabaseClient: any, healthData: any[]) {
+  console.log('Using AI Data Curator to generate bundles...');
+  
+  try {
+    // Call AI Data Curator for analysis
+    const analysisResponse = await supabaseClient.functions.invoke('ai-data-curator', {
+      body: {
+        action: 'analyze_data',
+        data: healthData
+      }
+    });
+
+    if (analysisResponse.error) {
+      console.error('AI Curator analysis failed, falling back to standard generation');
+      return await generateHealthBundles(healthData);
+    }
+
+    const analysis = analysisResponse.data.result;
+    const bundles = [];
+
+    // Generate bundles based on AI recommendations
+    for (const bundleType of analysis.recommended_bundles || ['wellness', 'performance', 'regional']) {
+      const bundleData = filterDataForBundle(healthData, bundleType);
+      
+      if (bundleData.length > 20) { // Minimum threshold
+        // Get AI-curated metadata
+        const metadataResponse = await supabaseClient.functions.invoke('ai-data-curator', {
+          body: {
+            action: 'curate_bundle',
+            data: {
+              length: bundleData.length,
+              geographic_coverage: [...new Set(bundleData.map(d => d.anonymized_location_zone))].length,
+              avg_quality_score: analysis.data_quality_score,
+              activity_types: [...new Set(bundleData.map(d => d.activity_type))]
+            },
+            bundleType
+          }
+        });
+
+        // Get AI pricing recommendation
+        const pricingResponse = await supabaseClient.functions.invoke('ai-data-curator', {
+          body: {
+            action: 'recommend_pricing',
+            data: {
+              length: bundleData.length,
+              avg_quality: analysis.data_quality_score,
+              uniqueness_score: 'high',
+              enterprise_value: analysis.enterprise_value,
+              market_demand: 'medium-high'
+            }
+          }
+        });
+
+        if (!metadataResponse.error && !pricingResponse.error) {
+          const metadata = metadataResponse.data.result;
+          const pricing = pricingResponse.data.result;
+
+          bundles.push({
+            title: metadata.title,
+            description: metadata.description,
+            category: getCategoryFromType(bundleType),
+            tier: pricing.tier,
+            price: pricing.recommended_price,
+            contacts_count: bundleData.length,
+            data_json: aggregateDataForBundle(bundleData, bundleType),
+            key_insights: metadata.key_insights,
+            features: metadata.features,
+            suggested_filters: metadata.suggested_filters,
+            match_percentage: Math.floor(80 + analysis.data_quality_score * 20)
+          });
+        }
+      }
+    }
+
+    // Fallback to standard generation if AI didn't produce enough bundles
+    if (bundles.length === 0) {
+      console.log('AI generated no bundles, falling back to standard generation');
+      return await generateHealthBundles(healthData);
+    }
+
+    console.log(`AI Data Curator generated ${bundles.length} curated bundles`);
+    return bundles;
+
+  } catch (error) {
+    console.error('Error with AI Data Curator, falling back to standard generation:', error);
+    return await generateHealthBundles(healthData);
+  }
+}
+
+function filterDataForBundle(data: any[], bundleType: string) {
+  switch (bundleType) {
+    case 'wellness':
+      return data.filter(d => d.steps_count || d.sleep_duration);
+    case 'performance':
+      return data.filter(d => d.workout_intensity && d.recovery_score);
+    case 'regional':
+      return data.filter(d => d.anonymized_location_zone);
+    default:
+      return data;
+  }
+}
+
+function getCategoryFromType(bundleType: string): string {
+  switch (bundleType) {
+    case 'wellness':
+      return 'Health & Wellness';
+    case 'performance':
+      return 'Sports & Performance';
+    case 'regional':
+      return 'Market Research';
+    default:
+      return 'Health & Fitness';
+  }
+}
+
+function aggregateDataForBundle(data: any[], bundleType: string) {
+  const baseMetrics = {
+    total_records: data.length,
+    avg_quality_score: calculateAverage(data, 'data_quality_score'),
+    geographic_coverage: [...new Set(data.map(d => d.anonymized_location_zone))].length,
+    activity_types: [...new Set(data.map(d => d.activity_type))]
+  };
+
+  switch (bundleType) {
+    case 'wellness':
+      return {
+        ...baseMetrics,
+        avg_steps: calculateAverage(data, 'steps_count'),
+        avg_sleep_quality: calculateAverage(data, 'sleep_quality_score'),
+        wellness_distribution: calculateWellnessDistribution(data)
+      };
+    case 'performance':
+      return {
+        ...baseMetrics,
+        avg_intensity: calculateAverage(data, 'workout_intensity'),
+        avg_recovery: calculateAverage(data, 'recovery_score'),
+        performance_correlation: calculatePerformanceCorrelation(data)
+      };
+    default:
+      return baseMetrics;
+  }
+}
+
+function calculateWellnessDistribution(data: any[]) {
+  return {
+    high_activity: data.filter(d => (d.steps_count || 0) > 8000).length,
+    moderate_activity: data.filter(d => (d.steps_count || 0) > 4000 && (d.steps_count || 0) <= 8000).length,
+    low_activity: data.filter(d => (d.steps_count || 0) <= 4000).length
+  };
 }
 
 function createUrbanWellnessBundle(data: any[]) {
