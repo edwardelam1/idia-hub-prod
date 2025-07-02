@@ -22,8 +22,8 @@ export const SecurityOrchestration = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Central Security Orchestration</CardTitle>
-        <CardDescription>AI-powered coordination and automated response management</CardDescription>
+        <CardTitle>Central Security Orchestration Hub</CardTitle>
+        <CardDescription>Gemini-powered command center with continuous feedback loops and human-AI collaboration</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -53,14 +53,29 @@ export const SecurityOrchestration = () => {
         </div>
 
         <div className="pt-4 border-t">
-          <h3 className="text-lg font-semibold mb-4">Real-time Agent Communication</h3>
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4">Gemini-Powered Agent Intelligence Bus</h3>
+          <div className="bg-gray-50 p-4 rounded-lg mb-4">
             <div className="text-sm font-mono space-y-1">
-              <div className="text-green-600">[GUARDIAN] → Received alert from SENTINEL: Anomaly detected in user authentication patterns</div>
-              <div className="text-blue-600">[ORACLE] → Predictive model suggests 85% probability of credential stuffing attack</div>
-              <div className="text-purple-600">[HUNTER] → Initiating targeted hunt for related IOCs across network traffic</div>
-              <div className="text-orange-600">[GATEKEEPER] → Implementing enhanced MFA requirements for affected user segments</div>
-              <div className="text-green-600">[GUARDIAN] → Playbook "Credential-Stuffing-Response-v2.1" executed successfully</div>
+              <div className="text-green-600">[GUARDIAN] → Orchestrating response to SENTINEL anomaly: Authentication deviation detected</div>
+              <div className="text-blue-600">[ORACLE] → Gemini analysis: 89% confidence credential stuffing imminent (next 47 minutes)</div>
+              <div className="text-purple-600">[HUNTER] → Correlating IOCs across 847 data sources • 3 suspicious patterns identified</div>
+              <div className="text-orange-600">[GATEKEEPER] → Dynamic MFA enforcement activated for risk score &gt;0.7 users</div>
+              <div className="text-cyan-600">[INSIGHT] → Human explanation: Automated response justified due to historical pattern match</div>
+              <div className="text-green-600">[GUARDIAN] → Playbook executed successfully • Human review requested for false positive analysis</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-3 bg-blue-50 rounded border-l-4 border-blue-400">
+              <h4 className="font-medium text-blue-800">Continuous Learning</h4>
+              <p className="text-sm text-blue-700">127 feedback loops active</p>
+            </div>
+            <div className="p-3 bg-green-50 rounded border-l-4 border-green-400">
+              <h4 className="font-medium text-green-800">Model Refinement</h4>
+              <p className="text-sm text-green-700">Last update: 23 minutes ago</p>
+            </div>
+            <div className="p-3 bg-purple-50 rounded border-l-4 border-purple-400">
+              <h4 className="font-medium text-purple-800">Human-AI Collaboration</h4>
+              <p className="text-sm text-purple-700">94.7% accuracy with oversight</p>
             </div>
           </div>
         </div>

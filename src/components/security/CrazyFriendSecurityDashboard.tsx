@@ -17,6 +17,7 @@ import { ThreatAnalysis } from './ThreatAnalysis';
 import { HistoricalAnalytics } from './HistoricalAnalytics';
 import { AgentPerformance } from './AgentPerformance';
 import { SecurityOrchestration } from './SecurityOrchestration';
+import { SecurityCommandCenter } from './SecurityCommandCenter';
 
 interface Agent {
   id: string;
@@ -140,6 +141,50 @@ const CrazyFriendSecurityDashboard = () => {
     }
   ]);
 
+  interface RemediationPlan {
+    id: string;
+    title: string;
+    agent: string;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    status: 'pending' | 'approved' | 'rejected' | 'executed';
+    explanation: string;
+    actions: string[];
+    timestamp: string;
+  }
+
+  const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([
+    {
+      id: '1',
+      title: 'Credential Stuffing Attack Response',
+      agent: 'Crazy Guardian',
+      severity: 'high',
+      status: 'pending',
+      explanation: 'Based on Crazy Sentinel\'s anomaly detection and Crazy Oracle\'s predictive analysis, this appears to be a coordinated credential stuffing attack. The automated response includes blocking suspicious IPs and enforcing enhanced MFA.',
+      actions: [
+        'Block 47 identified malicious IP addresses',
+        'Enforce MFA for affected user segments (892 users)',
+        'Initiate password reset for compromised accounts',
+        'Deploy enhanced monitoring on authentication endpoints'
+      ],
+      timestamp: '3 minutes ago'
+    },
+    {
+      id: '2',
+      title: 'Data Exfiltration Prevention',
+      agent: 'Crazy Shield',
+      severity: 'critical',
+      status: 'executed',
+      explanation: 'Crazy Shield detected unauthorized data access patterns consistent with data exfiltration. The response was automatically executed due to the critical nature of the threat.',
+      actions: [
+        'Immediately suspended user account ID: USR-7742',
+        'Blocked data download for affected dataset',
+        'Initiated forensic data collection',
+        'Notified compliance team for breach assessment'
+      ],
+      timestamp: '1 hour ago'
+    }
+  ]);
+
   const [historicalData, setHistoricalData] = useState({
     weeklyThreats: [
       { day: 'Mon', threats: 23, resolved: 21, critical: 2 },
@@ -180,6 +225,24 @@ const CrazyFriendSecurityDashboard = () => {
     toast.success(`Threat ${action === 'resolve' ? 'resolved' : 'investigation started'}`);
   };
 
+  const handleRemediationApproval = (planId: string) => {
+    setRemediationPlans(prev =>
+      prev.map(plan =>
+        plan.id === planId ? { ...plan, status: 'executed' as const } : plan
+      )
+    );
+    toast.success('Remediation plan approved and executed');
+  };
+
+  const handleRemediationRejection = (planId: string) => {
+    setRemediationPlans(prev =>
+      prev.map(plan =>
+        plan.id === planId ? { ...plan, status: 'rejected' as const } : plan
+      )
+    );
+    toast.success('Remediation plan rejected');
+  };
+
   // Simulate real-time updates
   useEffect(() => {
     const interval = setInterval(() => {
@@ -197,13 +260,21 @@ const CrazyFriendSecurityDashboard = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Crazy Friend AI Security Protocol</h1>
-        <p className="text-gray-600 mt-2">Enterprise-level autonomous defense system powered by The Crazy 8 agents</p>
+        <p className="text-gray-600 mt-2">Enterprise-grade autonomous defense system with Gemini-powered AI agents providing proactive threat intelligence and automated response capabilities</p>
+        <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg">
+          <div className="flex items-center">
+            <Shield className="h-5 w-5 text-blue-600 mr-2" />
+            <h3 className="text-sm font-medium text-blue-800">Security Command Center Status</h3>
+          </div>
+          <p className="text-sm text-blue-700 mt-1">All Crazy 8 agents operational • Central orchestration active • Real-time threat monitoring enabled</p>
+        </div>
       </div>
 
       <SecurityOverviewCards agents={agents} activeThreats={activeThreats} />
 
-      <Tabs defaultValue="analytics" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="command-center" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="command-center">Command Center</TabsTrigger>
           <TabsTrigger value="analytics">Historical Analytics</TabsTrigger>
           <TabsTrigger value="agents">The Crazy 8 Agents</TabsTrigger>
           <TabsTrigger value="threats">Active Threats</TabsTrigger>
@@ -225,6 +296,14 @@ const CrazyFriendSecurityDashboard = () => {
 
         <TabsContent value="performance" className="space-y-6">
           <AgentPerformance performanceData={historicalData.agentPerformance} />
+        </TabsContent>
+
+        <TabsContent value="command-center" className="space-y-6">
+          <SecurityCommandCenter 
+            remediationPlans={remediationPlans}
+            onApprove={handleRemediationApproval}
+            onReject={handleRemediationRejection}
+          />
         </TabsContent>
 
         <TabsContent value="orchestration" className="space-y-6">

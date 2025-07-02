@@ -59,6 +59,7 @@ export const AgentCards = ({ agents }: AgentCardsProps) => {
               <CardTitle className="text-lg">{agent.name}</CardTitle>
               <CardDescription className="text-sm">
                 {agent.description}
+                <div className="mt-2 text-xs text-blue-600 font-medium">Gemini-Powered</div>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
