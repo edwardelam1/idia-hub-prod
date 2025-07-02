@@ -130,33 +130,40 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
     const routeReactions = {
       '/dashboard': () => {
         setEmotion('calm');
-        if (Math.random() > 0.8) {
-          setTimeout(() => {
-            toast("Welcome back! Everything's running smoothly. Want to see today's highlights?", {
-              duration: 5000
-            });
-          }, 2000);
-        }
+        setTimeout(() => {
+          setFeedbackText("Looking at your main dashboard - everything's running smoothly today!");
+          setTimeout(() => setFeedbackText(''), 4000);
+        }, 2000);
       },
-      '/security': () => {
+      '/ai-management': () => {
         setEmotion('excited');
-        toast("Good choice! I've been monitoring some security patterns. Let me help you review them.", {
-          duration: 6000
-        });
+        setFeedbackText("I see we're in AI Management! This is where you can configure all the AI agents and their capabilities.");
+        setTimeout(() => setFeedbackText(''), 5000);
+      },
+      '/marketplace': () => {
+        setEmotion('neutral');
+        setFeedbackText("Welcome to the Data Marketplace! I can help you find the perfect health data bundles for your needs.");
+        setTimeout(() => setFeedbackText(''), 5000);
+      },
+      '/data-viewer': () => {
+        setEmotion('calm');
+        setFeedbackText("Analyzing your data patterns... I'm seeing some interesting trends we should discuss!");
+        setTimeout(() => setFeedbackText(''), 5000);
       },
       '/system-health': () => {
         setEmotion('calm');
-        toast("All systems are green! But I'll keep watching for any anomalies.", {
-          duration: 4000
-        });
+        setFeedbackText("System Health Dashboard - All metrics look good! CPU at 12%, memory stable, no errors detected.");
+        setTimeout(() => setFeedbackText(''), 6000);
       },
       '/organizations': () => {
         setEmotion('neutral');
-        if (Math.random() > 0.7) {
-          toast("I noticed some organizations might need attention. Want me to highlight them?", {
-            duration: 5000
-          });
-        }
+        setFeedbackText("Organization Management - I notice some teams might need attention based on recent activity patterns.");
+        setTimeout(() => setFeedbackText(''), 5000);
+      },
+      '/reports': () => {
+        setEmotion('calm');
+        setFeedbackText("Your Reports section - I've processed the latest data and found some valuable insights to share with you.");
+        setTimeout(() => setFeedbackText(''), 5000);
       }
     };
 
