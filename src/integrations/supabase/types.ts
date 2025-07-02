@@ -157,6 +157,30 @@ export type Database = {
         }
         Relationships: []
       }
+      health_metrics: {
+        Row: {
+          created_at: string | null
+          id: number
+          recorded_at: string | null
+          step_count: number | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: never
+          recorded_at?: string | null
+          step_count?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: never
+          recorded_at?: string | null
+          step_count?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       marketplace_bundles: {
         Row: {
           bundle_id: string
