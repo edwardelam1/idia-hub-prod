@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { 
   Shield, 
   Eye, 
@@ -8,7 +9,9 @@ import {
   Database, 
   Layers, 
   Brain,
-  TrendingUp
+  TrendingUp,
+  Activity,
+  BarChart3
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SecurityOverviewCards } from './SecurityOverviewCards';
@@ -123,44 +126,102 @@ const CrazyFriendSecurityDashboard = () => {
 
       <SecurityOverviewCards agents={agents} activeThreats={activeThreats} />
 
-      <Tabs defaultValue="command-center" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="command-center">Command Center</TabsTrigger>
-          <TabsTrigger value="analytics">Historical Analytics</TabsTrigger>
-          <TabsTrigger value="agents">The Crazy 8 Agents</TabsTrigger>
-          <TabsTrigger value="threats">Active Threats</TabsTrigger>
-          <TabsTrigger value="performance">Agent Performance</TabsTrigger>
-          <TabsTrigger value="orchestration">Central Orchestration</TabsTrigger>
-        </TabsList>
+      {/* Security Action Buttons */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <Shield className="h-6 w-6" />
+              <span className="text-sm">Command Center</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Security Command Center</DialogTitle>
+            </DialogHeader>
+            <SecurityCommandCenter 
+              remediationPlans={remediationPlans}
+              onApprove={handleRemediationApproval}
+              onReject={handleRemediationRejection}
+            />
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="agents" className="space-y-6">
-          <AgentCards agents={agents} />
-        </TabsContent>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <BarChart3 className="h-6 w-6" />
+              <span className="text-sm">Historical Analytics</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Historical Analytics</DialogTitle>
+            </DialogHeader>
+            <HistoricalAnalytics historicalData={historicalData} />
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="threats" className="space-y-6">
-          <ThreatAnalysis activeThreats={activeThreats} onThreatAction={handleThreatAction} />
-        </TabsContent>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <Brain className="h-6 w-6" />
+              <span className="text-sm">The Crazy 8 Agents</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>The Crazy 8 Agents</DialogTitle>
+            </DialogHeader>
+            <AgentCards agents={agents} />
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="analytics" className="space-y-6">
-          <HistoricalAnalytics historicalData={historicalData} />
-        </TabsContent>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <Search className="h-6 w-6" />
+              <span className="text-sm">Active Threats</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Active Threats</DialogTitle>
+            </DialogHeader>
+            <ThreatAnalysis activeThreats={activeThreats} onThreatAction={handleThreatAction} />
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="performance" className="space-y-6">
-          <AgentPerformance performanceData={historicalData.agentPerformance} />
-        </TabsContent>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <TrendingUp className="h-6 w-6" />
+              <span className="text-sm">Agent Performance</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Agent Performance</DialogTitle>
+            </DialogHeader>
+            <AgentPerformance performanceData={historicalData.agentPerformance} />
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="command-center" className="space-y-6">
-          <SecurityCommandCenter 
-            remediationPlans={remediationPlans}
-            onApprove={handleRemediationApproval}
-            onReject={handleRemediationRejection}
-          />
-        </TabsContent>
-
-        <TabsContent value="orchestration" className="space-y-6">
-          <SecurityOrchestration />
-        </TabsContent>
-      </Tabs>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+              <Layers className="h-6 w-6" />
+              <span className="text-sm">Central Orchestration</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Central Orchestration</DialogTitle>
+            </DialogHeader>
+            <SecurityOrchestration />
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 };
