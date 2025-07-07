@@ -34,19 +34,27 @@ serve(async (req) => {
     const recentCount = recentData?.length || 0;
     console.log(`Found ${recentCount} recent health records`);
 
-    // If we have significant new data, trigger bundle generation
-    if (recentCount >= 3) { // Lower threshold for testing
-      console.log('Triggering bundle generation due to new data...');
-      
+    // Always attempt to trigger bundle generation when engaged manually
+    console.log('Triggering bundle generation...');
+    
+    try {
       const bundleResponse = await supabaseClient.functions.invoke('create-health-data-bundle', {
-        body: { trigger: 'real-time', dataCount: recentCount }
+        body: { 
+          trigger: 'manual_engage',
+          dataCount: recentCount,
+          threshold_override: true // Allow processing even with low data count
+        }
       });
 
       if (bundleResponse.error) {
         console.error('Bundle generation error:', bundleResponse.error);
+        // Don't throw error, continue with response
       } else {
         console.log('Bundle generation triggered successfully:', bundleResponse.data);
       }
+    } catch (bundleError) {
+      console.error('Bundle generation failed:', bundleError);
+      // Don't throw error, continue with response
     }
 
     // Get current marketplace status
