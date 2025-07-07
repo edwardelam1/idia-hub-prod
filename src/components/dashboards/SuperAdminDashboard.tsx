@@ -24,6 +24,8 @@ import HealthDataDashboard from '@/components/health/HealthDataDashboard';
 import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
 import AuditLogs from '@/components/audit/AuditLogs';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 
 const SuperAdminDashboard = () => {
@@ -51,6 +53,30 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const handleEngageDataProcessing = async () => {
+    try {
+      toast.loading('Engaging IDIA Synapse Engine...', { id: 'engage-processing' });
+      
+      // Trigger health data processor to pull staged data
+      const { data, error } = await supabase.functions.invoke('health-data-processor', {
+        body: { trigger: 'manual_engage' }
+      });
+
+      if (error) throw error;
+
+      toast.success('Synapse Engine engaged successfully', { id: 'engage-processing' });
+      
+      // Refresh the page data after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error engaging data processing:', error);
+      toast.error('Failed to engage Synapse Engine', { id: 'engage-processing' });
+    }
+  };
+
   if (activeTab === 'system-health') {
     return <SystemHealthDashboard />;
   }
@@ -72,9 +98,18 @@ const SuperAdminDashboard = () => {
 
       {/* Synapse Visualizer */}
       <Card>
-        <CardHeader>
-          <CardTitle>Network Activity Overview</CardTitle>
-          <CardDescription>Live visualization of the IDIA Synapse Engine™ data flow</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle>Network Activity Overview</CardTitle>
+            <CardDescription>Live visualization of the IDIA Synapse Engine™ data flow</CardDescription>
+          </div>
+          <Button 
+            onClick={handleEngageDataProcessing}
+            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            Engage
+          </Button>
         </CardHeader>
         <CardContent>
           <SynapseVisualizer />
