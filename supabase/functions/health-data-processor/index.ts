@@ -34,6 +34,16 @@ serve(async (req) => {
     const recentCount = recentData?.length || 0;
     console.log(`Found ${recentCount} recent health records`);
 
+    // Get all staged health data (not just recent) for manual engagement
+    const { data: allStagedData, error: allDataError } = await supabaseClient
+      .from('staged_health_data')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1000); // Get up to 1000 records
+
+    const stagedCount = allStagedData?.length || 0;
+    console.log(`Found ${stagedCount} total staged health records`);
+
     // Always attempt to trigger bundle generation when engaged manually
     console.log('Triggering bundle generation...');
     
@@ -41,8 +51,9 @@ serve(async (req) => {
       const bundleResponse = await supabaseClient.functions.invoke('create-health-data-bundle', {
         body: { 
           trigger: 'manual_engage',
-          dataCount: recentCount,
-          threshold_override: true // Allow processing even with low data count
+          dataCount: stagedCount,
+          threshold_override: true, // Allow processing even with low data count
+          force_process: true // Force processing regardless of data age
         }
       });
 
@@ -73,10 +84,11 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         recentDataCount: recentCount,
+        totalStagedData: stagedCount,
         activeBundles: bundles?.length || 0,
         latestBundles: bundles?.map(b => ({ id: b.bundle_id, title: b.title })) || [],
         timestamp: new Date().toISOString(),
-        message: `Processed ${recentCount} recent records, ${bundles?.length || 0} active bundles`
+        message: `Processed ${stagedCount} staged records (${recentCount} recent), ${bundles?.length || 0} active bundles`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

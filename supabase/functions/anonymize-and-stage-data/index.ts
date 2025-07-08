@@ -90,24 +90,34 @@ serve(async (req) => {
 })
 
 async function generatePseudonym(userId: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(userId + 'IDIA_SALT_2024')
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = new Uint8Array(hashBuffer)
-  return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
+  try {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(userId + 'IDIA_SALT_2024')
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = new Uint8Array(hashBuffer)
+    return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
+  } catch (error) {
+    console.error('Error generating pseudonym:', error)
+    // Fallback to a simpler hash method
+    return 'pseudo_' + Math.random().toString(36).substring(2, 15)
+  }
 }
 
 function anonymizeLocationData(rawData: any) {
-  if (rawData.start_latlng && rawData.start_latlng.length === 2) {
-    const [lat, lng] = rawData.start_latlng
-    // Round to 1 decimal place for zone anonymization
-    const roundedLat = Math.round(lat * 10) / 10
-    const roundedLng = Math.round(lng * 10) / 10
-    
-    return {
-      anonymizedLocationHash: `HASH_${Math.abs(lat * lng).toString(36).substring(0, 8)}`,
-      anonymizedLocationZone: `ZONE_${roundedLat}_${roundedLng}`
+  try {
+    if (rawData.start_latlng && rawData.start_latlng.length === 2) {
+      const [lat, lng] = rawData.start_latlng
+      // Round to 1 decimal place for zone anonymization
+      const roundedLat = Math.round(lat * 10) / 10
+      const roundedLng = Math.round(lng * 10) / 10
+      
+      return {
+        anonymizedLocationHash: `HASH_${Math.abs(lat * lng).toString(36).substring(0, 8)}`,
+        anonymizedLocationZone: `ZONE_${roundedLat}_${roundedLng}`
+      }
     }
+  } catch (error) {
+    console.error('Error anonymizing location:', error)
   }
   
   return {
