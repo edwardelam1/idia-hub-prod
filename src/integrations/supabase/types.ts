@@ -97,6 +97,7 @@ export type Database = {
       data_processing_queue: {
         Row: {
           created_at: string | null
+          data_source_type: string | null
           error_details: Json | null
           id: string
           processing_stage: string | null
@@ -107,6 +108,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          data_source_type?: string | null
           error_details?: Json | null
           id?: string
           processing_stage?: string | null
@@ -117,6 +119,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          data_source_type?: string | null
           error_details?: Json | null
           id?: string
           processing_stage?: string | null
@@ -125,15 +128,7 @@ export type Database = {
           retry_count?: number | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "data_processing_queue_raw_data_id_fkey"
-            columns: ["raw_data_id"]
-            isOneToOne: false
-            referencedRelation: "raw_strava_data"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       device_events: {
         Row: {
