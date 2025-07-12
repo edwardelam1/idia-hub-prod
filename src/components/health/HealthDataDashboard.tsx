@@ -122,10 +122,10 @@ const HealthDataDashboard = () => {
               {healthMetrics.slice(0, 10).map((metric) => (
                 <div key={metric.id} className="grid grid-cols-4 gap-4 text-sm">
                   <div className="font-medium">
-                    {metric.step_count?.toLocaleString() || 'N/A'}
+                    {metric.metric_type === 'steps' ? metric.metric_value.toLocaleString() : `${metric.metric_value} ${metric.unit}`}
                   </div>
                   <div className="text-gray-600">
-                    {metric.recorded_at ? format(new Date(metric.recorded_at), 'MMM d, HH:mm') : 'N/A'}
+                    {metric.recorded_date ? format(new Date(metric.recorded_date), 'MMM d') : 'N/A'}
                   </div>
                   <div className="text-gray-600">
                     {metric.created_at ? format(new Date(metric.created_at), 'MMM d, HH:mm') : 'N/A'}
