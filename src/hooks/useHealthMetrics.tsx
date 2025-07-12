@@ -2,14 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface HealthMetric {
-  id: string;
-  metric_type: string;
-  metric_value: number;
-  user_id: string;
-  recorded_date: string;
-  source_data_ids: string[] | null;
+  id: number;
+  step_count: number | null;
+  user_id: string | null;
+  recorded_at: string | null;
   created_at: string | null;
-  unit: string;
 }
 
 interface HealthStats {
@@ -59,9 +56,9 @@ export const useHealthMetrics = () => {
       if (todayError) throw todayError;
 
       // Calculate average steps from step-related metrics
-      const stepMetrics = metrics?.filter(m => m.metric_type === 'steps' && m.metric_value !== null) || [];
+      const stepMetrics = metrics?.filter(m => m.step_count !== null) || [];
       const averageSteps = stepMetrics.length > 0 
-        ? Math.round(stepMetrics.reduce((sum, m) => sum + m.metric_value, 0) / stepMetrics.length)
+        ? Math.round(stepMetrics.reduce((sum, m) => sum + (m.step_count || 0), 0) / stepMetrics.length)
         : 0;
 
       const lastActivity = metrics?.[0]?.created_at || null;

@@ -101,7 +101,7 @@ export const useSystemHealth = () => {
             id: `health_${metric.id}`,
             timestamp: metric.created_at,
             action: 'Data Ingestion',
-            details: `Health metric recorded: ${metric.metric_value} ${metric.unit} (${metric.metric_type})`,
+            details: `Health metric recorded: ${metric.step_count || 0} steps`,
             user: metric.user_id || 'System',
             status: 'success',
             category: 'data'
