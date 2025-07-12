@@ -38,7 +38,7 @@ const DataViewer = () => {
   const { healthStats } = useHealthMetrics();
 
   const bundle = useBundleData(bundleId);
-  const { dataRecords, tableHeaders, headerToKeyMapping } = useDataGeneration(bundle, bundleId);
+  const { dataRecords, tableHeaders, headerToKeyMapping, loading, error } = useDataGeneration(bundle, bundleId);
 
   const itemsPerPage = isMobile ? 20 : 50;
 
@@ -57,14 +57,33 @@ const DataViewer = () => {
       );
     }
 
-    // Apply additional filters based on bundle type
-    Object.keys(filters).forEach(key => {
-      if (filters[key]) {
-        filtered = filtered.filter(record => 
-          String(record[key]) === filters[key]
-        );
-      }
-    });
+    // Apply activity type filter
+    if (filters.activity_type) {
+      filtered = filtered.filter(record => 
+        record.activity_type === filters.activity_type
+      );
+    }
+    
+    // Apply device type filter
+    if (filters.device_type) {
+      filtered = filtered.filter(record => 
+        record.device_type === filters.device_type
+      );
+    }
+    
+    // Apply minimum duration filter
+    if (filters.min_duration) {
+      filtered = filtered.filter(record => 
+        record.duration_minutes >= parseInt(filters.min_duration)
+      );
+    }
+    
+    // Apply minimum distance filter
+    if (filters.min_distance) {
+      filtered = filtered.filter(record => 
+        parseFloat(record.distance_km) >= parseFloat(filters.min_distance)
+      );
+    }
 
     setFilteredRecords(filtered);
     setCurrentPage(1);
@@ -82,7 +101,36 @@ const DataViewer = () => {
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
 
   if (!bundle) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Bundle Not Found</h1>
+          <p className="text-gray-600">The requested data bundle could not be found.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading Data...</h1>
+          <p className="text-gray-600">Please wait while we fetch your data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Data</h1>
+          <p className="text-gray-600">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   const FilterSidebar = () => (

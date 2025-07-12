@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import DataViewerFilters from './DataViewerFilters';
+import DataViewerFilters from './DataViewerFiltersSimple';
 
 interface Bundle {
   id: number;

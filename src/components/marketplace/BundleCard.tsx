@@ -29,6 +29,10 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: 
     }
   };
 
+  const handleFullDatasetAccess = () => {
+    window.location.href = `/data-viewer/${bundle.id}`;
+  };
+
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
       <CardContent className={isMobile ? 'p-4' : 'p-6'}>
@@ -121,7 +125,7 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: 
           <div className="space-y-2">
             <Button 
               className={`w-full ${isMobile ? 'text-sm py-2' : ''}`}
-              onClick={() => onDownload(bundle)}
+              onClick={handleFullDatasetAccess}
               disabled={userCredits < bundle.price}
             >
               {userCredits < bundle.price ? 'Insufficient Credits' : 'Access Full Dataset'}
