@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { PipelineActivityMonitor } from './PipelineActivityMonitor';
 import { 
   Activity, 
   Cpu, 
@@ -236,6 +237,9 @@ const SystemHealthDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pipeline Activity Monitor */}
+      <PipelineActivityMonitor />
     </div>
   );
 };
