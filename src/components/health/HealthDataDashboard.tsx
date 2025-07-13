@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Activity, Clock, TrendingUp, Users } from 'lucide-react';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
+import { HealthDataProcessor } from './HealthDataProcessor';
 import { format } from 'date-fns';
 
 const HealthDataDashboard = () => {
@@ -41,6 +42,9 @@ const HealthDataDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Health Data Processor */}
+      <HealthDataProcessor />
+      
       {/* Health Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>

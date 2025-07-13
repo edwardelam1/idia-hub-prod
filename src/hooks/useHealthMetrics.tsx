@@ -29,27 +29,33 @@ export const useHealthMetrics = () => {
 
   const fetchHealthMetrics = async () => {
     try {
-      // Get recent health metrics
+      // Get recent health metrics with valid step counts only
       const { data: metrics, error: metricsError } = await supabase
         .from('health_metrics')
         .select('*')
+        .not('step_count', 'is', null)
+        .gt('step_count', 0)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (metricsError) throw metricsError;
 
-      // Get total count
+      // Get total count of valid records
       const { count: totalCount, error: countError } = await supabase
         .from('health_metrics')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .not('step_count', 'is', null)
+        .gt('step_count', 0);
 
       if (countError) throw countError;
 
-      // Calculate today's records
+      // Calculate today's records with valid step counts
       const today = new Date().toISOString().split('T')[0];
       const { count: todayCount, error: todayError } = await supabase
         .from('health_metrics')
         .select('*', { count: 'exact', head: true })
+        .not('step_count', 'is', null)
+        .gt('step_count', 0)
         .gte('created_at', `${today}T00:00:00.000Z`)
         .lt('created_at', `${today}T23:59:59.999Z`);
 

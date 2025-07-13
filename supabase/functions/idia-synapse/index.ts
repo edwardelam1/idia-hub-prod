@@ -15,6 +15,18 @@ Deno.serve(async (req) => {
     // 1. Get the data from the request body.
     const { step_count, recorded_at } = await req.json()
 
+    // Validate required data
+    if (!step_count || step_count <= 0) {
+      console.warn('Invalid step count received:', step_count)
+      return new Response(JSON.stringify({ 
+        error: "Invalid step count",
+        message: "Step count must be a positive number"
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
+
     // 2. Create a Supabase client with the user's authorization.
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
