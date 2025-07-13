@@ -60,19 +60,20 @@ serve(async (req) => {
     // Insert bundles into marketplace with duplication prevention
     const bundleResults = []
     for (const bundle of bundles) {
-      // Check for existing similar bundles
+      // Check for existing similar bundles (check ALL active bundles, not just recent ones)
       const { data: existingBundles } = await supabaseClient
         .from('marketplace_bundles')
-        .select('bundle_id, title, created_at')
+        .select('bundle_id, title, created_at, bundle_version')
         .eq('title', bundle.title)
         .eq('category', bundle.category)
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
+        .eq('is_active', true) // Only check active bundles, no time restriction
 
       if (existingBundles && existingBundles.length > 0) {
         console.log(`Skipping duplicate bundle: ${bundle.title}`)
         
         // Update existing bundle instead of creating new one
         const existingBundle = existingBundles[0]
+        const newVersion = (existingBundle.bundle_version || 1) + 1
         const { data: updatedBundle, error: updateError } = await supabaseClient
           .from('marketplace_bundles')
           .update({
@@ -80,7 +81,7 @@ serve(async (req) => {
             data_json: bundle.data_json,
             key_insights: bundle.key_insights,
             updated_at: new Date().toISOString(),
-            bundle_version: 1 // Increment version
+            bundle_version: newVersion // Properly increment version
           })
           .eq('bundle_id', existingBundle.bundle_id)
           .select()
