@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Bundle, DataRecord } from '@/types/marketplace';
+import { transformActivityType, transformDeviceType, getRealisticActivityTypes, getRealisticDeviceTypes } from '@/utils/dataTransformations';
 
 interface UseDataGenerationReturn {
   dataRecords: DataRecord[];
@@ -50,7 +51,7 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         if (healthMetrics && healthMetrics.length > 0) {
           const transformedHealthData = healthMetrics.map((record, index) => ({
             id: record.id?.toString() || `health-${index}`,
-            activity_type: 'Daily Activity',
+            activity_type: transformActivityType('Daily Activity'),
             duration_minutes: null,
             distance_km: null,
             avg_heart_rate: null,
@@ -58,7 +59,7 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
             calories_burned: null,
             steps_count: record.step_count,
             location_zone: null,
-            device_type: 'Health App',
+            device_type: transformDeviceType('Health App'),
             data_quality: 85,
             processed_date: record.recorded_at ? new Date(record.recorded_at).toLocaleDateString() : null
           }));
@@ -115,14 +116,14 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
           // Transform real data into display format
           const transformedData = data.map((record, index) => ({
             id: record.id || `record-${index}`,
-            activity_type: record.activity_type,
+            activity_type: transformActivityType(record.activity_type),
             duration_minutes: record.duration_seconds ? Math.round(record.duration_seconds / 60) : null,
             distance_km: record.distance_meters ? (record.distance_meters / 1000).toFixed(2) : null,
             avg_heart_rate: record.average_heartrate,
             max_heart_rate: record.max_heartrate,
             calories_burned: record.calories_burned,
             location_zone: record.anonymized_location_zone,
-            device_type: record.device_type,
+            device_type: transformDeviceType(record.device_type),
             data_quality: record.data_quality_score ? Math.round(record.data_quality_score * 100) : null,
             processed_date: record.processed_at ? new Date(record.processed_at).toLocaleDateString() : null
           }));
@@ -175,8 +176,8 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
 
 // Generate sample data when no real data exists (for demo purposes)
 const generateSampleData = (bundle: Bundle, limit: number): DataRecord[] => {
-  const activities = ['Run', 'Bike', 'Walk', 'Swim', 'Hike', 'TrailRun'];
-  const devices = ['iPhone', 'Apple Watch', 'Garmin', 'Fitbit', 'Strava'];
+  const activities = getRealisticActivityTypes();
+  const devices = getRealisticDeviceTypes();
   const zones = ['ZONE_A1B2C3D4', 'ZONE_E5F6G7H8', 'ZONE_I9J0K1L2'];
   
   return Array.from({ length: Math.min(limit, 25) }, (_, i) => ({

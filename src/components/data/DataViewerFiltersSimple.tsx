@@ -8,8 +8,9 @@ interface DataViewerFiltersProps {
 }
 
 const DataViewerFilters = ({ filters, onFiltersChange, bundle }: DataViewerFiltersProps) => {
-  const activityTypes = ['All', 'Run', 'Bike', 'Walk', 'Swim', 'Hike', 'TrailRun'];
-  const deviceTypes = ['All', 'iPhone', 'Apple Watch', 'Garmin', 'Fitbit', 'Strava'];
+  // Include both real database values and user-friendly options
+  const activityTypes = ['All', 'Daily Activity', 'Run', 'Bike', 'Walk', 'Swim', 'Hike', 'TrailRun', 'Workout', 'Exercise'];
+  const deviceTypes = ['All', 'Health App', 'iPhone Health App', 'iPhone', 'Apple Watch', 'Garmin', 'Fitbit', 'Strava'];
   
   const handleFilterChange = (key: string, value: string) => {
     onFiltersChange({

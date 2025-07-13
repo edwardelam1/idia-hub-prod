@@ -1,6 +1,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Data transformation utilities
+const transformActivityType = (activityType: string): string => {
+  const activityMapping: { [key: string]: string } = {
+    'daily_activity': 'Walk',
+    'health_metrics': 'Daily Activity',
+    'Daily Activity': 'Walk'
+  };
+  
+  // Return a realistic activity type or the original if already realistic
+  const realisticTypes = ['Run', 'Walk', 'Bike', 'Swim', 'Hike', 'Workout', 'TrailRun'];
+  if (realisticTypes.includes(activityType)) return activityType;
+  
+  return activityMapping[activityType] || 'Walk';
+};
+
+const transformDeviceType = (deviceType: string): string => {
+  const deviceMapping: { [key: string]: string } = {
+    'Health App': 'iPhone',
+    'iPhone Health App': 'iPhone',
+    'mobile_app': 'iPhone'
+  };
+  
+  // Return a realistic device type or the original if already realistic
+  const realisticDevices = ['iPhone', 'Apple Watch', 'Garmin', 'Fitbit', 'Strava'];
+  if (realisticDevices.includes(deviceType)) return deviceType;
+  
+  return deviceMapping[deviceType] || 'iPhone';
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -180,25 +209,32 @@ async function generateHealthBundles(healthData: any[]) {
 }
 
 function createUrbanWellnessBundle(data: any[]) {
+  // Transform generic activity types to more realistic ones
+  const transformedData = data.map(d => ({
+    ...d,
+    activity_type: transformActivityType(d.activity_type),
+    device_type: transformDeviceType(d.device_type)
+  }));
+
   const aggregatedData = {
-    total_activities: data.length,
-    avg_workout_intensity: calculateAverage(data, 'workout_intensity'),
-    avg_steps_per_day: calculateAverage(data, 'steps_count'),
-    avg_sleep_quality: calculateAverage(data, 'sleep_quality_score'),
-    stress_distribution: calculateStressDistribution(data),
-    activity_type_breakdown: calculateActivityBreakdown(data),
-    zone_coverage: [...new Set(data.map(d => d.anonymized_location_zone))].length
+    total_activities: transformedData.length,
+    avg_workout_intensity: calculateAverage(transformedData, 'workout_intensity'),
+    avg_steps_per_day: calculateAverage(transformedData, 'steps_count'),
+    avg_sleep_quality: calculateAverage(transformedData, 'sleep_quality_score'),
+    stress_distribution: calculateStressDistribution(transformedData),
+    activity_type_breakdown: calculateActivityBreakdown(transformedData),
+    zone_coverage: [...new Set(transformedData.map(d => d.anonymized_location_zone))].length
   }
 
   const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: `Urban Wellness Dynamics: ${dateStr} Health Trends (${data.length} Records)`,
+    title: `Urban Wellness Dynamics: ${dateStr} Health Trends (${transformedData.length} Records)`,
     description: 'Comprehensive anonymized view of urban population activity and wellness trends',
     category: 'Health & Fitness',
     tier: 'Enterprise',
     price: Math.floor(Math.random() * 3000) + 2000,
-    contacts_count: data.length,
-    data_json: aggregatedData,
+    contacts_count: transformedData.length,
+    data_json: { ...aggregatedData, sample_data: transformedData.slice(0, 10) },
     key_insights: [
       `${aggregatedData.total_activities} anonymized health activities analyzed`,
       `Average workout intensity: ${aggregatedData.avg_workout_intensity?.toFixed(1)}%`,
