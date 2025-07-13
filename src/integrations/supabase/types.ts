@@ -901,9 +901,28 @@ export type Database = {
         }
         Returns: number
       }
+      check_pipeline_health: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          total_raw_data: number
+          unprocessed_raw_data: number
+          processing_raw_data: number
+          processed_raw_data: number
+          total_staged_data: number
+          unrewarded_staged_data: number
+          total_transactions: number
+        }[]
+      }
       generate_pseudonym: {
         Args: { input_text: string }
         Returns: string
+      }
+      process_backlog_data: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          processed_count: number
+          error_count: number
+        }[]
       }
     }
     Enums: {
