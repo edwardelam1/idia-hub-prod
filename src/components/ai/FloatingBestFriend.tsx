@@ -40,15 +40,74 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const moveIntervalRef = useRef<number | null>(null);
   const alertIntervalRef = useRef<number | null>(null);
 
+  // Helper function to check if position overlaps with text content
+  const isPositionOverText = (x: number, y: number, width = 200, height = 200) => {
+    const rect = { left: x, top: y, right: x + width, bottom: y + height };
+    
+    // Get all text elements and content areas to avoid
+    const textSelectors = [
+      'p', 'span', 'div[class*="text"]', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      '[class*="heading"]', '[class*="title"]', '[class*="content"]',
+      'td', 'th', 'label', 'button', '[role="button"]'
+    ];
+    
+    const elements = document.querySelectorAll(textSelectors.join(', '));
+    
+    for (const element of elements) {
+      const elementRect = element.getBoundingClientRect();
+      
+      // Skip very small elements (likely icons or decorative)
+      if (elementRect.width < 50 || elementRect.height < 20) continue;
+      
+      // Check for overlap
+      if (rect.left < elementRect.right && 
+          rect.right > elementRect.left && 
+          rect.top < elementRect.bottom && 
+          rect.bottom > elementRect.top) {
+        
+        // Additional check: ensure element has meaningful text content
+        const text = element.textContent?.trim() || '';
+        if (text.length > 10) { // Only avoid elements with substantial text
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  };
+
+  // Find safe position that doesn't overlap text
+  const findSafePosition = (attempts = 0): Position => {
+    if (attempts > 20) {
+      // Fallback to corners if no safe position found
+      const corners = [
+        { x: 20, y: 20 },
+        { x: window.innerWidth - 240, y: 20 },
+        { x: 20, y: window.innerHeight - 240 },
+        { x: window.innerWidth - 240, y: window.innerHeight - 240 }
+      ];
+      return corners[Math.floor(Math.random() * corners.length)];
+    }
+
+    const newPos = {
+      x: Math.max(20, Math.min(window.innerWidth - 220, Math.random() * (window.innerWidth - 240))),
+      y: Math.max(20, Math.min(window.innerHeight - 220, Math.random() * (window.innerHeight - 240)))
+    };
+
+    if (isPositionOverText(newPos.x, newPos.y)) {
+      return findSafePosition(attempts + 1);
+    }
+
+    return newPos;
+  };
+
   // Autonomous movement system
   useEffect(() => {
     if (!isDragging) {
       moveIntervalRef.current = window.setInterval(() => {
-        // Random gentle movement when not being dragged
-        setPosition(prev => ({
-          x: Math.max(20, Math.min(window.innerWidth - 220, prev.x + (Math.random() - 0.5) * 30)),
-          y: Math.max(20, Math.min(window.innerHeight - 220, prev.y + (Math.random() - 0.5) * 30))
-        }));
+        // Find a safe position that doesn't overlap text
+        const safePosition = findSafePosition();
+        setPosition(safePosition);
         setIsMoving(true);
         setTimeout(() => setIsMoving(false), 1000);
       }, 8000 + Math.random() * 7000); // Random interval between 8-15 seconds
