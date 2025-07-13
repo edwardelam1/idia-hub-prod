@@ -25,36 +25,6 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
       setError(null);
       
       try {
-        // Fetch staged health data based on bundle category and tier
-        let query = supabase.from('staged_health_data').select('*');
-        
-        // Apply filters based on bundle category and data JSON
-        if (bundle.category === 'Health & Fitness' || bundle.category === 'Fitness & Sports') {
-          query = query.in('activity_type', ['Run', 'Bike', 'Swim', 'TrailRun', 'Hike']);
-        } else if (bundle.category === 'Wellness & Recovery') {
-          query = query.not('sleep_duration', 'is', null);
-        } else if (bundle.category === 'Urban Mobility') {
-          query = query.in('activity_type', ['Walk', 'Run', 'Bike']);
-        } else {
-          // For other categories, use suggested filters if available
-          if (bundle.suggestedFilters && bundle.suggestedFilters.length > 0) {
-            // Apply first filter as activity type filter if it matches our data
-            const activityFilter = bundle.suggestedFilters.find(f => 
-              ['Run', 'Bike', 'Swim', 'Walk', 'Hike', 'TrailRun'].some(activity => 
-                f.toLowerCase().includes(activity.toLowerCase())
-              )
-            );
-            if (activityFilter) {
-              const activities = ['Run', 'Bike', 'Swim', 'Walk', 'Hike', 'TrailRun'].filter(activity =>
-                activityFilter.toLowerCase().includes(activity.toLowerCase())
-              );
-              if (activities.length > 0) {
-                query = query.in('activity_type', activities);
-              }
-            }
-          }
-        }
-        
         // Limit data based on tier
         const tierLimits = {
           'Essential': 50,
@@ -63,6 +33,70 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
           'Enterprise': 1000
         };
         const limit = tierLimits[bundle.tier as keyof typeof tierLimits] || 100;
+        
+        // Fetch staged health data based on bundle category and tier
+        let query = supabase.from('staged_health_data').select('*');
+        
+        // Use actual activity types from the database
+        const actualActivityTypes = ['Daily Activity', 'health_metrics', 'daily_activity'];
+        
+        // First try to get health metrics data
+        const { data: healthMetrics } = await supabase
+          .from('health_metrics')
+          .select('*')
+          .limit(limit);
+          
+        // If we have health metrics, transform and use them
+        if (healthMetrics && healthMetrics.length > 0) {
+          const transformedHealthData = healthMetrics.map((record, index) => ({
+            id: record.id?.toString() || `health-${index}`,
+            activity_type: 'Daily Activity',
+            duration_minutes: null,
+            distance_km: null,
+            avg_heart_rate: null,
+            max_heart_rate: null,
+            calories_burned: null,
+            steps_count: record.step_count,
+            location_zone: null,
+            device_type: 'Health App',
+            data_quality: 85,
+            processed_date: record.recorded_at ? new Date(record.recorded_at).toLocaleDateString() : null
+          }));
+          setDataRecords(transformedHealthData);
+          
+          // Set up headers for health metrics
+          const headers = [
+            'Activity Type',
+            'Steps Count',
+            'Date Recorded',
+            'Device',
+            'Data Quality (%)'
+          ];
+          
+          const mapping = {
+            'Activity Type': 'activity_type',
+            'Steps Count': 'steps_count',
+            'Date Recorded': 'processed_date',
+            'Device': 'device_type',
+            'Data Quality (%)': 'data_quality'
+          };
+          
+          setTableHeaders(headers);
+          setHeaderToKeyMapping(mapping);
+          setLoading(false);
+          return;
+        }
+        
+        // Apply filters based on bundle category for staged health data
+        if (bundle.category === 'Health & Fitness' || bundle.category === 'Fitness & Sports') {
+          query = query.in('activity_type', actualActivityTypes);
+        } else if (bundle.category === 'Wellness & Recovery') {
+          query = query.not('sleep_duration', 'is', null);
+        } else {
+          // Default to actual activity types that exist in the database
+          query = query.in('activity_type', actualActivityTypes);
+        }
+        
         query = query.limit(limit);
         
         const { data, error: queryError } = await query;

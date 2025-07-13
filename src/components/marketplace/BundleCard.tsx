@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Coins, Users, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import AlaCarteModal from './AlaCarteModal';
 
 interface BundleCardProps {
@@ -14,6 +15,8 @@ interface BundleCardProps {
 }
 
 const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
+  const navigate = useNavigate();
+  
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -30,7 +33,7 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: 
   };
 
   const handleFullDatasetAccess = () => {
-    window.location.href = `/data-viewer/${bundle.id}`;
+    navigate(`/data-viewer/${bundle.bundle_id}`);
   };
 
   return (

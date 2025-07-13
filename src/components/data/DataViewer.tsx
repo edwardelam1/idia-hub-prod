@@ -18,6 +18,23 @@ import SavedSearches from './SavedSearches';
 import ContactLists from './ContactLists';
 import { DataRecord } from '@/types/marketplace';
 
+// Error Boundary Component
+const ErrorBoundary = ({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) => {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const handleError = () => setHasError(true);
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) {
+    return <>{fallback}</>;
+  }
+
+  return <>{children}</>;
+};
+
 const DataViewer = () => {
   const { bundleId, purchaseId } = useParams();
   const navigate = useNavigate();
@@ -73,14 +90,21 @@ const DataViewer = () => {
     // Apply minimum duration filter
     if (filters.min_duration) {
       filtered = filtered.filter(record => 
-        record.duration_minutes >= parseInt(filters.min_duration)
+        record.duration_minutes && record.duration_minutes >= parseInt(filters.min_duration)
       );
     }
     
     // Apply minimum distance filter
     if (filters.min_distance) {
       filtered = filtered.filter(record => 
-        parseFloat(record.distance_km) >= parseFloat(filters.min_distance)
+        record.distance_km && parseFloat(record.distance_km) >= parseFloat(filters.min_distance)
+      );
+    }
+    
+    // Apply minimum steps filter
+    if (filters.min_steps) {
+      filtered = filtered.filter(record => 
+        record.steps_count && record.steps_count >= parseInt(filters.min_steps)
       );
     }
 
@@ -142,34 +166,47 @@ const DataViewer = () => {
   );
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${isMobile ? 'p-2' : 'p-6'}`}>
-      {/* Mobile Header */}
-      {isMobile && (
-        <div className="flex items-center justify-between mb-4 bg-white p-3 rounded-lg shadow-sm">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/marketplace')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="font-semibold text-sm truncate mx-2">{bundle.name}</h1>
-          <Sheet open={showMobileFilters} onOpenChange={setShowMobileFilters}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-full max-w-sm p-0">
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Filters</h2>
-                  <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <FilterSidebar />
-              </div>
-            </SheetContent>
-          </Sheet>
+    <ErrorBoundary 
+      fallback={
+        <div className="container mx-auto p-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
+            <p className="text-gray-600">Please try refreshing the page or go back to the marketplace.</p>
+            <Button onClick={() => navigate('/marketplace')} className="mt-4">
+              Back to Marketplace
+            </Button>
+          </div>
         </div>
-      )}
+      }
+    >
+      <div className={`min-h-screen bg-gray-50 ${isMobile ? 'p-2' : 'p-6'}`}>
+        {/* Mobile Header */}
+        {isMobile && (
+          <div className="flex items-center justify-between mb-4 bg-white p-3 rounded-lg shadow-sm">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/marketplace')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="font-semibold text-sm truncate mx-2">{bundle.name}</h1>
+            <Sheet open={showMobileFilters} onOpenChange={setShowMobileFilters}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-full max-w-sm p-0">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold">Filters</h2>
+                    <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <FilterSidebar />
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        )}
 
       <div className={`flex ${isMobile ? 'flex-col' : 'gap-6'}`}>
         {/* Desktop Sidebar */}
@@ -229,21 +266,22 @@ const DataViewer = () => {
         </div>
       </div>
 
-      {/* Modals */}
-      <SavedSearches
-        isOpen={showSavedSearches}
-        onClose={() => setShowSavedSearches(false)}
-        currentFilters={filters}
-        searchTerm={searchTerm}
-      />
+        {/* Modals */}
+        <SavedSearches
+          isOpen={showSavedSearches}
+          onClose={() => setShowSavedSearches(false)}
+          currentFilters={filters}
+          searchTerm={searchTerm}
+        />
 
-      <ContactLists
-        isOpen={showContactLists}
-        onClose={() => setShowContactLists(false)}
-        selectedContacts={selectedRecords}
-        allContacts={filteredRecords}
-      />
-    </div>
+        <ContactLists
+          isOpen={showContactLists}
+          onClose={() => setShowContactLists(false)}
+          selectedContacts={selectedRecords}
+          allContacts={filteredRecords}
+        />
+      </div>
+    </ErrorBoundary>
   );
 };
 
