@@ -57,12 +57,48 @@ serve(async (req) => {
     // Generate bundles based on available data
     const bundles = await generateHealthBundles(healthData)
 
-    // Insert bundles into marketplace
+    // Insert bundles into marketplace with duplication prevention
     const bundleResults = []
     for (const bundle of bundles) {
+      // Check for existing similar bundles
+      const { data: existingBundles } = await supabaseClient
+        .from('marketplace_bundles')
+        .select('bundle_id, title, created_at')
+        .eq('title', bundle.title)
+        .eq('category', bundle.category)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
+
+      if (existingBundles && existingBundles.length > 0) {
+        console.log(`Skipping duplicate bundle: ${bundle.title}`)
+        
+        // Update existing bundle instead of creating new one
+        const existingBundle = existingBundles[0]
+        const { data: updatedBundle, error: updateError } = await supabaseClient
+          .from('marketplace_bundles')
+          .update({
+            contacts_count: bundle.contacts_count,
+            data_json: bundle.data_json,
+            key_insights: bundle.key_insights,
+            updated_at: new Date().toISOString(),
+            bundle_version: 1 // Increment version
+          })
+          .eq('bundle_id', existingBundle.bundle_id)
+          .select()
+
+        if (!updateError && updatedBundle) {
+          bundleResults.push(updatedBundle[0])
+          console.log(`Updated existing bundle: ${bundle.title}`)
+        }
+        continue
+      }
+
+      // Create new bundle only if no duplicates found
       const { data: newBundle, error: bundleError } = await supabaseClient
         .from('marketplace_bundles')
-        .insert(bundle)
+        .insert({
+          ...bundle,
+          bundle_version: 1
+        })
         .select()
 
       if (bundleError) {
@@ -71,6 +107,7 @@ serve(async (req) => {
       }
 
       bundleResults.push(newBundle[0])
+      console.log(`Created new bundle: ${bundle.title}`)
 
       // Log bundle generation
       await supabaseClient

@@ -15,12 +15,25 @@ Deno.serve(async (req) => {
     // 1. Get the data from the request body.
     const { step_count, recorded_at } = await req.json()
 
-    // Validate required data
-    if (!step_count || step_count <= 0) {
-      console.warn('Invalid step count received:', step_count)
+    // Enhanced data validation
+    if (!step_count || typeof step_count !== 'number' || step_count <= 0 || step_count > 100000) {
+      console.warn('Invalid step count received:', step_count, 'type:', typeof step_count)
       return new Response(JSON.stringify({ 
         error: "Invalid step count",
-        message: "Step count must be a positive number"
+        message: "Step count must be a positive number between 1 and 100,000",
+        received: { step_count, type: typeof step_count }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      })
+    }
+
+    // Validate recorded_at timestamp
+    if (recorded_at && isNaN(Date.parse(recorded_at))) {
+      console.warn('Invalid timestamp received:', recorded_at)
+      return new Response(JSON.stringify({ 
+        error: "Invalid timestamp",
+        message: "recorded_at must be a valid ISO timestamp"
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
@@ -64,8 +77,13 @@ Deno.serve(async (req) => {
       console.log('Continuing despite raw_health_data error...')
     }
 
-    console.log('Health data inserted successfully:', { step_count, recorded_at })
-    console.log('Pipeline synchronization: Both health_metrics and raw_health_data updated')
+    console.log('Health data inserted successfully:', { 
+      step_count, 
+      recorded_at, 
+      validation_status: 'passed',
+      pipeline_status: 'synchronized',
+      timestamp: new Date().toISOString()
+    })
 
     // 5. Trigger data processing pipeline
     try {

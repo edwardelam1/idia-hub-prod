@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, Clock, TrendingUp, Users } from 'lucide-react';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
 import { HealthDataProcessor } from './HealthDataProcessor';
+import { PipelineMonitor } from './PipelineMonitor';
 import { format } from 'date-fns';
 
 const HealthDataDashboard = () => {
@@ -42,6 +43,9 @@ const HealthDataDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Pipeline Monitor */}
+      <PipelineMonitor />
+      
       {/* Health Data Processor */}
       <HealthDataProcessor />
       
