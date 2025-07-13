@@ -190,8 +190,9 @@ function createUrbanWellnessBundle(data: any[]) {
     zone_coverage: [...new Set(data.map(d => d.anonymized_location_zone))].length
   }
 
+  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: `Urban Wellness Dynamics: Aggregated Activity & Health Trends`,
+    title: `Urban Wellness Dynamics: ${dateStr} Health Trends (${data.length} Records)`,
     description: 'Comprehensive anonymized view of urban population activity and wellness trends',
     category: 'Health & Fitness',
     tier: 'Enterprise',
@@ -219,8 +220,9 @@ function createPerformanceAnalyticsBundle(data: any[]) {
     activity_patterns: calculateActivityPatterns(data)
   }
 
+  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: 'Athletic Performance & Activity Analytics',
+    title: `Athletic Performance Analytics: ${dateStr} Dataset (${data.length} Sessions)`,
     description: 'Advanced metrics on workout intensity, activity patterns, and performance optimization',
     category: 'Sports & Performance',
     tier: 'Professional',
@@ -248,8 +250,9 @@ function createSleepRecoveryBundle(data: any[]) {
     recovery_insights: calculateRecoveryInsights(data)
   }
 
+  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: 'Sleep Quality & Recovery Patterns Study',
+    title: `Sleep & Recovery Patterns: ${dateStr} Study (${data.length} Cycles)`,
     description: 'Comprehensive analysis of sleep patterns, quality metrics, and recovery correlations',
     category: 'Health & Wellness',
     tier: 'Professional',
@@ -279,8 +282,9 @@ function createRegionalTrendsBundle(regionalData: any) {
     demographic_insights: calculateDemographicInsights(regionalData)
   }
 
+  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: 'Regional Health & Wellness Trends Analysis',
+    title: `Regional Health Trends: ${dateStr} Analysis (${regions.length} Regions)`,
     description: 'Cross-regional comparison of health trends, activity patterns, and wellness metrics',
     category: 'Market Research',
     tier: 'Enterprise',
