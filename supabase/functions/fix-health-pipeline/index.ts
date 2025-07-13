@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       .from('raw_health_data')
       .select('*')
       .eq('processed', false)
-      .limit(20)
+      .limit(50) // Increased batch size
 
     if (rawDataError) {
       console.error('Error fetching unprocessed raw data:', rawDataError)
@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
         const stepCount = rawData.step_count || rawData.raw_payload?.step_count
         const recordedAt = rawData.recorded_at || rawData.raw_payload?.recorded_at
 
-        if (stepCount && stepCount > 0) {
+        if (stepCount !== null && stepCount !== undefined && stepCount >= 0) {
           // Create staged health data entry
           const { error: stagedError } = await supabaseClient
             .from('staged_health_data')
@@ -70,6 +70,15 @@ Deno.serve(async (req) => {
             })
 
           if (!stagedError) {
+            // Also insert into health_metrics for immediate display
+            const { error: healthMetricError } = await supabaseClient
+              .from('health_metrics')
+              .insert({
+                step_count: stepCount,
+                recorded_at: recordedAt,
+                user_id: rawData.user_id
+              })
+
             // Mark raw data as processed
             await supabaseClient
               .from('raw_health_data')
@@ -80,7 +89,9 @@ Deno.serve(async (req) => {
               .eq('id', rawData.id)
 
             processedCount++
-            console.log(`Processed raw health data item ${rawData.id}`)
+            console.log(`Processed raw health data item ${rawData.id}, health_metric_error:`, healthMetricError)
+          } else {
+            console.error(`Failed to create staged data for ${rawData.id}:`, stagedError)
           }
         }
       } catch (error) {

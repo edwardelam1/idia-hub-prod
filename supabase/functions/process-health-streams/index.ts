@@ -20,12 +20,13 @@ serve(async (req) => {
 
     console.log('Processing real-time health data streams...')
 
-    // Get pending data from processing queue
+    // Get pending data from processing queue (health data priority)
     const { data: pendingData, error: queueError } = await supabaseClient
       .from('data_processing_queue')
-      .select('*, raw_strava_data(*)')
+      .select('*')
       .eq('processing_status', 'pending')
-      .limit(10) // Process in batches
+      .order('created_at', { ascending: true })
+      .limit(25) // Increased batch size
 
     if (queueError) {
       console.error('Error fetching pending data:', queueError)
@@ -78,34 +79,81 @@ async function processBatch(supabaseClient: any, pendingData: any[]): Promise<nu
         })
         .eq('id', item.id)
 
-      // Call anonymization function
-      const anonymizeResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/anonymize-and-stage-data`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
-        },
-        body: JSON.stringify({
-          rawData: item.raw_strava_data,
-          userId: item.raw_strava_data.user_id,
-          connectionId: item.raw_strava_data.connection_id
-        })
-      })
+      // Handle health data processing differently
+      if (item.data_source_type === 'health_data') {
+        // Get raw health data
+        const { data: rawHealthData, error: rawError } = await supabaseClient
+          .from('raw_health_data')
+          .select('*')
+          .eq('id', item.raw_data_id)
+          .single()
 
-      if (anonymizeResponse.ok) {
-        await supabaseClient
-          .from('data_processing_queue')
-          .update({ 
-            processing_status: 'completed',
-            processing_stage: 'staging',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', item.id)
-        
-        processedCount++
+        if (!rawError && rawHealthData) {
+          // Process directly for health data
+          const stepCount = rawHealthData.step_count || rawHealthData.raw_payload?.step_count
+          const recordedAt = rawHealthData.recorded_at || rawHealthData.raw_payload?.recorded_at
+
+          if (stepCount !== null && stepCount !== undefined && stepCount >= 0) {
+            // Insert into health_metrics and staged_health_data
+            const [healthMetricResult, stagedResult] = await Promise.allSettled([
+              supabaseClient.from('health_metrics').insert({
+                step_count: stepCount,
+                recorded_at: recordedAt,
+                user_id: rawHealthData.user_id
+              }),
+              supabaseClient.from('staged_health_data').insert({
+                pseudo_user_id: rawHealthData.user_id ? `user_${rawHealthData.user_id.slice(0, 8)}` : 'anonymous',
+                activity_type: 'daily_activity',
+                steps_count: stepCount,
+                device_type: rawHealthData.device_type || 'mobile_app',
+                data_quality_score: stepCount > 0 ? 0.8 : 0.3,
+                data_completeness_score: 0.7,
+                raw_data_id: rawHealthData.id
+              })
+            ])
+
+            // Mark raw data as processed
+            await supabaseClient
+              .from('raw_health_data')
+              .update({ 
+                processed: true,
+                processing_completed_at: new Date().toISOString()
+              })
+              .eq('id', rawHealthData.id)
+
+            console.log(`Processed health data: ${stepCount} steps, health_metric: ${healthMetricResult.status}, staged: ${stagedResult.status}`)
+          }
+        }
       } else {
-        throw new Error(`Anonymization failed: ${await anonymizeResponse.text()}`)
+        // Call anonymization function for other data types
+        const anonymizeResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/anonymize-and-stage-data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+          },
+          body: JSON.stringify({
+            rawData: item,
+            trigger: 'process_health_streams'
+          })
+        })
+
+        if (!anonymizeResponse.ok) {
+          throw new Error(`Anonymization failed: ${await anonymizeResponse.text()}`)
+        }
       }
+
+      // Mark as completed
+      await supabaseClient
+        .from('data_processing_queue')
+        .update({ 
+          processing_status: 'completed',
+          processing_stage: 'staging',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', item.id)
+      
+      processedCount++
 
     } catch (error) {
       console.error(`Error processing item ${item.id}:`, error)

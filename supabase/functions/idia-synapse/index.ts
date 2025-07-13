@@ -15,12 +15,12 @@ Deno.serve(async (req) => {
     // 1. Get the data from the request body.
     const { step_count, recorded_at } = await req.json()
 
-    // Enhanced data validation
-    if (!step_count || typeof step_count !== 'number' || step_count <= 0 || step_count > 100000) {
+    // Enhanced data validation - more permissive
+    if (!step_count || typeof step_count !== 'number' || step_count < 0 || step_count > 200000) {
       console.warn('Invalid step count received:', step_count, 'type:', typeof step_count)
       return new Response(JSON.stringify({ 
         error: "Invalid step count",
-        message: "Step count must be a positive number between 1 and 100,000",
+        message: "Step count must be a non-negative number below 200,000",
         received: { step_count, type: typeof step_count }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -82,7 +82,9 @@ Deno.serve(async (req) => {
       recorded_at, 
       validation_status: 'passed',
       pipeline_status: 'synchronized',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      health_metrics_inserted: !healthMetricsError,
+      raw_health_data_inserted: !rawDataError
     })
 
     // 5. Trigger data processing pipeline
