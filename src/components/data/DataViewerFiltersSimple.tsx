@@ -1,14 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-interface Bundle {
-  id: number;
-  name: string;
-  tier: string;
-  contacts: number;
-  features: string[];
-  category: string;
-  description: string;
-}
+import { Bundle } from '@/types/marketplace';
 
 interface DataViewerFiltersProps {
   filters: any;

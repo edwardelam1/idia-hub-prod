@@ -1,80 +1,66 @@
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Bundle } from '@/types/marketplace';
 
-interface Bundle {
-  id: number;
-  name: string;
-  tier: string;
-  contacts: number;
-  features: string[];
-  category: string;
-  description: string;
-}
-
-export const useBundleData = (bundleId?: string): Bundle | null => {
+export const useBundleData = (bundleId?: string): { bundle: Bundle | null; loading: boolean; error: string | null } => {
   const [bundle, setBundle] = useState<Bundle | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const bundleMap: { [key: string]: Bundle } = {
-      '1': {
-        id: 1,
-        name: 'Q2 2025 Emerging Growth Index: Kentucky',
-        tier: 'Enterprise',
-        contacts: 1847,
-        features: ['Intent Signals', 'Advanced Hiring Trends', 'Geographic Targeting', 'Funding Status'],
-        category: 'Venture Capital & Private Equity',
-        description: 'Premier dataset of private companies in Kentucky with new capital and hiring velocity'
-      },
-      '2': {
-        id: 2,
-        name: 'CRM Competitive Displacement Opportunity Report',
-        tier: 'Professional',
-        contacts: 892,
-        features: ['Technographics', 'Intent Signals', 'Company Size Filtering', 'Platform Migration Data'],
-        category: 'SaaS & Technology',
-        description: 'Companies that recently removed competing CRM platforms'
-      },
-      '3': {
-        id: 3,
-        name: 'Louisville Commercial Corridor Velocity Analysis',
-        tier: 'Enterprise',
-        contacts: 2456,
-        features: ['Advanced Time-Series Analysis', 'Geographic Targeting', 'Merchant Categories', 'Transaction Velocity'],
-        category: 'Commercial Real Estate',
-        description: 'Transaction growth analysis across Louisville commercial corridors'
-      },
-      '4': {
-        id: 4,
-        name: 'Consumer Beverage Trends: Cafe vs. Grocery Spend',
-        tier: 'Professional',
-        contacts: 1234,
-        features: ['Anonymized Merchant IDs', 'Category Comparison', 'Trend Analysis', 'Channel Strategy'],
-        category: 'Consumer Packaged Goods',
-        description: 'Consumer spending velocity for beverage products across channels'
-      },
-      '5': {
-        id: 5,
-        name: 'Pro-Social Behavior and Local Economic Impact Study',
-        tier: 'Analyst',
-        contacts: 3421,
-        features: ['IDIA Life Integration', 'Time-Series Analysis', 'Geographic Correlation', 'Community Metrics'],
-        category: 'Academic & Research',
-        description: 'Community engagement correlation with local business spending'
-      },
-      '6': {
-        id: 6,
-        name: 'Urban Wellness Dynamics: Aggregated Activity & Health Trends',
-        tier: 'Enterprise',
-        contacts: 5670,
-        features: ['IDIA Synapse Engine™', 'Anonymized Health Data', 'Urban Zone Analysis', 'Activity Pattern Recognition'],
-        category: 'Health & Fitness',
-        description: 'Comprehensive anonymized view of urban population activity and wellness trends'
+    if (!bundleId) return;
+    
+    const fetchBundle = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase
+          .from('marketplace_bundles')
+          .select('*')
+          .eq('bundle_id', bundleId)
+          .eq('is_active', true)
+          .single();
+
+        if (error) {
+          console.error('Error fetching bundle:', error);
+          setError('Bundle not found or access denied');
+          setBundle(null);
+          return;
+        }
+
+        if (data) {
+          const convertedBundle: Bundle = {
+            bundle_id: data.bundle_id,
+            id: data.bundle_id, // For compatibility
+            name: data.title,
+            tier: data.tier,
+            contacts: data.contacts_count || 0,
+            features: data.features || [],
+            category: data.category,
+            description: data.description,
+            keyInsights: data.key_insights || [],
+            dataPoints: data.data_points || [],
+            suggestedFilters: data.suggested_filters || [],
+            price: data.price,
+            dataJson: data.data_json
+          };
+          setBundle(convertedBundle);
+        } else {
+          setError('Bundle not found');
+          setBundle(null);
+        }
+      } catch (err) {
+        console.error('Unexpected error fetching bundle:', err);
+        setError('Failed to load bundle');
+        setBundle(null);
+      } finally {
+        setLoading(false);
       }
     };
 
-    const currentBundle = bundleMap[bundleId || '1'];
-    setBundle(currentBundle);
+    fetchBundle();
   }, [bundleId]);
 
-  return bundle;
+  return { bundle, loading, error };
 };

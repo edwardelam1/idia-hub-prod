@@ -3,16 +3,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Filter, Share, Save, Download } from 'lucide-react';
-
-interface Bundle {
-  id: number;
-  name: string;
-  tier: string;
-  contacts: number;
-  features: string[];
-  category: string;
-  description: string;
-}
+import { Bundle } from '@/types/marketplace';
 
 interface DataViewerHeaderProps {
   bundle: Bundle;

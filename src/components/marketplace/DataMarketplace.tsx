@@ -12,19 +12,10 @@ import MarketplaceFilters from './MarketplaceFilters';
 import ResultsHeader from './ResultsHeader';
 import BundleCard from './BundleCard';
 import ShoppingCartComponent from './ShoppingCart';
+import { CartItem } from '@/types/marketplace';
 
 interface DataMarketplaceProps {
   userRole: string;
-}
-
-interface CartItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  bundleId: number;
-  bundleName: string;
-  quantity?: number;
 }
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
@@ -38,9 +29,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [userCredits, setUserCredits] = useState(12500);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // Convert database bundles to the format expected by the UI
+  // Use real database bundles directly (no ID conversion needed)
   const convertedBundles = bundles.map(bundle => ({
-    id: parseInt(bundle.bundle_id.replace(/\D/g, '')) || Math.floor(Math.random() * 1000000), // Extract number or generate random
+    bundle_id: bundle.bundle_id, // Keep as UUID
+    id: bundle.bundle_id, // For compatibility with existing components
     name: bundle.title,
     description: bundle.description,
     tier: bundle.tier,
@@ -64,14 +56,14 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       
       // Add to purchase history
       addPurchase({
-        bundleId: bundle.id,
+        bundleId: bundle.bundle_id,
         bundleName: bundle.name,
         items: [],
         totalCost: bundle.price,
         purchaseType: 'bundle'
       });
       
-      navigate(`/data-viewer/${bundle.id}`);
+      navigate(`/data-viewer/${bundle.bundle_id}`);
     }
   };
 

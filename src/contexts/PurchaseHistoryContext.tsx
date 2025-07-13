@@ -6,7 +6,7 @@ export interface PurchasedItem {
   name: string;
   description: string;
   price: number;
-  bundleId: number;
+  bundleId: string; // Changed to string to support UUIDs
   bundleName: string;
   quantity?: number;
 }
@@ -14,7 +14,7 @@ export interface PurchasedItem {
 export interface PurchaseRecord {
   id: string;
   items: PurchasedItem[];
-  bundleId?: number;
+  bundleId?: string; // Changed to string to support UUIDs
   bundleName?: string;
   purchaseDate: string;
   totalCost: number;

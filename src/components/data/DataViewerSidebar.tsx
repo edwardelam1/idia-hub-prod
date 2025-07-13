@@ -3,16 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DataViewerFilters from './DataViewerFiltersSimple';
-
-interface Bundle {
-  id: number;
-  name: string;
-  tier: string;
-  contacts: number;
-  features: string[];
-  category: string;
-  description: string;
-}
+import { Bundle } from '@/types/marketplace';
 
 interface DataViewerSidebarProps {
   filters: any;

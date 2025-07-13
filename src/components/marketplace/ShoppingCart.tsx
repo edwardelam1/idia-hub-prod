@@ -5,16 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShoppingCart, Trash2, Coins, Plus, Minus } from 'lucide-react';
-
-interface CartItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  bundleId: number;
-  bundleName: string;
-  quantity?: number;
-}
+import { CartItem } from '@/types/marketplace';
 
 interface ShoppingCartProps {
   cartItems: CartItem[];

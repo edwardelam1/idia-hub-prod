@@ -1,20 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
-interface DataRecord {
-  id: string;
-  [key: string]: any;
-}
-
-interface Bundle {
-  id: number;
-  name: string;
-  tier: string;
-  contacts: number;
-  features: string[];
-  category: string;
-  description: string;
-}
+import { Bundle, DataRecord } from '@/types/marketplace';
 
 interface UseDataGenerationReturn {
   dataRecords: DataRecord[];
@@ -42,18 +28,37 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         // Fetch staged health data based on bundle category and tier
         let query = supabase.from('staged_health_data').select('*');
         
-        // Apply filters based on bundle category
-        if (bundle.category === 'Fitness & Sports') {
+        // Apply filters based on bundle category and data JSON
+        if (bundle.category === 'Health & Fitness' || bundle.category === 'Fitness & Sports') {
           query = query.in('activity_type', ['Run', 'Bike', 'Swim', 'TrailRun', 'Hike']);
         } else if (bundle.category === 'Wellness & Recovery') {
           query = query.not('sleep_duration', 'is', null);
         } else if (bundle.category === 'Urban Mobility') {
           query = query.in('activity_type', ['Walk', 'Run', 'Bike']);
+        } else {
+          // For other categories, use suggested filters if available
+          if (bundle.suggestedFilters && bundle.suggestedFilters.length > 0) {
+            // Apply first filter as activity type filter if it matches our data
+            const activityFilter = bundle.suggestedFilters.find(f => 
+              ['Run', 'Bike', 'Swim', 'Walk', 'Hike', 'TrailRun'].some(activity => 
+                f.toLowerCase().includes(activity.toLowerCase())
+              )
+            );
+            if (activityFilter) {
+              const activities = ['Run', 'Bike', 'Swim', 'Walk', 'Hike', 'TrailRun'].filter(activity =>
+                activityFilter.toLowerCase().includes(activity.toLowerCase())
+              );
+              if (activities.length > 0) {
+                query = query.in('activity_type', activities);
+              }
+            }
+          }
         }
         
         // Limit data based on tier
         const tierLimits = {
           'Essential': 50,
+          'Analyst': 100,
           'Professional': 200,
           'Enterprise': 1000
         };

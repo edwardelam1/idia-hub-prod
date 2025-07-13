@@ -16,11 +16,7 @@ import DataViewerTable from './DataViewerTable';
 import DataViewerSidebar from './DataViewerSidebar';
 import SavedSearches from './SavedSearches';
 import ContactLists from './ContactLists';
-
-interface DataRecord {
-  id: string;
-  [key: string]: any;
-}
+import { DataRecord } from '@/types/marketplace';
 
 const DataViewer = () => {
   const { bundleId, purchaseId } = useParams();
@@ -37,8 +33,11 @@ const DataViewer = () => {
   
   const { healthStats } = useHealthMetrics();
 
-  const bundle = useBundleData(bundleId);
-  const { dataRecords, tableHeaders, headerToKeyMapping, loading, error } = useDataGeneration(bundle, bundleId);
+  const { bundle, loading: bundleLoading, error: bundleError } = useBundleData(bundleId);
+  const { dataRecords, tableHeaders, headerToKeyMapping, loading: dataLoading, error: dataError } = useDataGeneration(bundle, bundleId);
+  
+  const loading = bundleLoading || dataLoading;
+  const error = bundleError || dataError;
 
   const itemsPerPage = isMobile ? 20 : 50;
 

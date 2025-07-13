@@ -79,7 +79,7 @@ const AlaCarteModal = ({ bundle, onAddToCart, userCredits }: AlaCarteModalProps)
     if (selectedItems.length > 0 && canAfford) {
       onAddToCart(selectedItems.map(item => ({
         ...item,
-        bundleId: bundle.id,
+        bundleId: bundle.bundle_id || bundle.id, // Use bundle_id or fallback to id
         bundleName: bundle.name
       })));
       setOpen(false);
