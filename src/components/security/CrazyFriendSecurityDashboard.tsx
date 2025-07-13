@@ -43,19 +43,19 @@ interface Agent {
   icon: React.ElementType;
 }
 
-interface RemediationPlan {
-  id: string;
-  title: string;
-  agent: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  status: 'pending' | 'approved' | 'rejected' | 'executed';
-  explanation: string;
-  actions: string[];
-  timestamp: string;
-}
+// Remove duplicate interface since we import from useSecurityEvents
 
 const CrazyFriendSecurityDashboard = () => {
-  const { securityEvents, agentStatus, isLoading } = useSecurityEvents();
+  const { 
+    securityEvents, 
+    agentStatus, 
+    remediationPlans,
+    agentPerformance,
+    historicalData,
+    isLoading,
+    updateRemediationPlan,
+    generateSecurityEvents
+  } = useSecurityEvents();
   
   // Convert security events to the expected format
   const agents: Agent[] = Object.entries(agentStatus).map(([id, status]) => ({
@@ -81,32 +81,27 @@ const CrazyFriendSecurityDashboard = () => {
       status: event.resolved ? 'resolved' : 'active'
     }));
 
-  const [remediationPlans, setRemediationPlans] = useState<RemediationPlan[]>([]);
-  const [historicalData, setHistoricalData] = useState({
-    weeklyThreats: [],
-    agentPerformance: [],
-    threatEvolution: []
-  });
+  // Add generate events button handler
+  const handleGenerateEvents = async () => {
+    try {
+      await generateSecurityEvents();
+      toast.success('Security events generated successfully');
+    } catch (error) {
+      toast.error('Failed to generate security events');
+    }
+  };
 
   const handleThreatAction = (threatId: number, action: string) => {
     toast.success(`Threat ${action === 'resolve' ? 'resolved' : 'investigation started'}`);
   };
 
-  const handleRemediationApproval = (planId: string) => {
-    setRemediationPlans(prev =>
-      prev.map(plan =>
-        plan.id === planId ? { ...plan, status: 'executed' as const } : plan
-      )
-    );
+  const handleRemediationApproval = async (planId: string) => {
+    await updateRemediationPlan(planId, 'executed');
     toast.success('Remediation plan approved and executed');
   };
 
-  const handleRemediationRejection = (planId: string) => {
-    setRemediationPlans(prev =>
-      prev.map(plan =>
-        plan.id === planId ? { ...plan, status: 'rejected' as const } : plan
-      )
-    );
+  const handleRemediationRejection = async (planId: string) => {
+    await updateRemediationPlan(planId, 'rejected');
     toast.success('Remediation plan rejected');
   };
 
@@ -115,12 +110,24 @@ const CrazyFriendSecurityDashboard = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Crazy Friend AI Security Protocol</h1>
         <p className="text-gray-600 mt-2">Enterprise-grade autonomous defense system - awaiting live threat data</p>
-        <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg">
-          <div className="flex items-center">
-            <Shield className="h-5 w-5 text-blue-600 mr-2" />
-            <h3 className="text-sm font-medium text-blue-800">Security Command Center Status</h3>
+        <div className="mt-4 p-4 bg-green-50 border-l-4 border-green-400 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Shield className="h-5 w-5 text-green-600 mr-2" />
+              <h3 className="text-sm font-medium text-green-800">Security Command Center Status</h3>
+            </div>
+            <Button 
+              onClick={handleGenerateEvents}
+              size="sm"
+              variant="outline"
+              className="ml-4"
+            >
+              Generate Security Events
+            </Button>
           </div>
-          <p className="text-sm text-blue-700 mt-1">Awaiting security agent initialization and live threat monitoring</p>
+          <p className="text-sm text-green-700 mt-1">
+            Live threat monitoring active • {securityEvents.length} events tracked • {remediationPlans.filter(p => p.status === 'pending').length} pending remediations
+          </p>
         </div>
       </div>
 
@@ -203,7 +210,7 @@ const CrazyFriendSecurityDashboard = () => {
             <DialogHeader>
               <DialogTitle>Agent Performance</DialogTitle>
             </DialogHeader>
-            <AgentPerformance performanceData={historicalData.agentPerformance} />
+            <AgentPerformance performanceData={agentPerformance} />
           </DialogContent>
         </Dialog>
 
