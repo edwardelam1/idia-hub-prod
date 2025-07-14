@@ -108,7 +108,7 @@ export const PipelineMonitor = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const hasIssues = stats.pendingQueueItems > 0 || stats.unprocessedRawData > 0 || stats.nullStepCountRecords > 0;
+  const hasIssues = stats.pendingQueueItems > 0 || stats.unprocessedRawData > 0;
 
   return (
     <div className="space-y-6">
@@ -137,10 +137,10 @@ export const PipelineMonitor = () => {
               <div className="text-sm text-muted-foreground">Unprocessed Raw</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">
+              <div className="text-2xl font-bold text-blue-600">
                 {stats.nullStepCountRecords}
               </div>
-              <div className="text-sm text-muted-foreground">Null Step Counts</div>
+              <div className="text-sm text-muted-foreground">Non-Step Data</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
@@ -154,7 +154,7 @@ export const PipelineMonitor = () => {
             <Alert className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Pipeline issues detected. There are {stats.pendingQueueItems + stats.unprocessedRawData + stats.nullStepCountRecords} items requiring attention.
+                Pipeline issues detected. There are {stats.pendingQueueItems + stats.unprocessedRawData} items requiring attention.
               </AlertDescription>
             </Alert>
           )}
