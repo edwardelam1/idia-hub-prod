@@ -893,6 +893,10 @@ export type Database = {
         Args: { p_step_count: number; p_recorded_at: string; p_user_id: string }
         Returns: boolean
       }
+      cleanup_orphaned_queue_items: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       generate_pseudonym: {
         Args: { input_text: string }
         Returns: string
