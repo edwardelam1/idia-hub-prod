@@ -913,6 +913,10 @@ export type Database = {
           total_transactions: number
         }[]
       }
+      check_raw_health_data_duplicate: {
+        Args: { p_step_count: number; p_recorded_at: string; p_user_id: string }
+        Returns: boolean
+      }
       generate_pseudonym: {
         Args: { input_text: string }
         Returns: string

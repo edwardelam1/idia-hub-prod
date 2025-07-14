@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface HealthMetric {
-  id: number;
+  id: string;
   step_count: number | null;
   user_id: string | null;
   recorded_at: string | null;
@@ -29,10 +29,10 @@ export const useHealthMetrics = () => {
 
   const fetchHealthMetrics = async () => {
     try {
-      // Get recent health metrics with valid step counts only
+      // Get recent health metrics from raw_health_data with valid step counts only
       const { data: metrics, error: metricsError } = await supabase
-        .from('health_metrics')
-        .select('*')
+        .from('raw_health_data')
+        .select('id, step_count, recorded_at, created_at, user_id')
         .not('step_count', 'is', null)
         .gt('step_count', 0)
         .order('created_at', { ascending: false })
@@ -42,7 +42,7 @@ export const useHealthMetrics = () => {
 
       // Get total count of valid records
       const { count: totalCount, error: countError } = await supabase
-        .from('health_metrics')
+        .from('raw_health_data')
         .select('*', { count: 'exact', head: true })
         .not('step_count', 'is', null)
         .gt('step_count', 0);
@@ -52,7 +52,7 @@ export const useHealthMetrics = () => {
       // Calculate today's records with valid step counts
       const today = new Date().toISOString().split('T')[0];
       const { count: todayCount, error: todayError } = await supabase
-        .from('health_metrics')
+        .from('raw_health_data')
         .select('*', { count: 'exact', head: true })
         .not('step_count', 'is', null)
         .gt('step_count', 0)
@@ -88,15 +88,15 @@ export const useHealthMetrics = () => {
   useEffect(() => {
     fetchHealthMetrics();
 
-    // Set up real-time subscription
+    // Set up real-time subscription for raw_health_data
     const channel = supabase
-      .channel('health-metrics-changes')
+      .channel('raw-health-data-changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'health_metrics'
+          table: 'raw_health_data'
         },
         () => {
           fetchHealthMetrics(); // Refetch data when changes occur

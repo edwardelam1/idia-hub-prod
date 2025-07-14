@@ -47,17 +47,42 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     )
 
-    // 3. Insert into health_metrics (legacy table for Hub display)
-    const { error: healthMetricsError } = await supabaseClient
-      .from('health_metrics')
-      .insert({ step_count, recorded_at })
+    // 3. Check for existing similar records to prevent duplicates
+    const { data: existingRecords, error: checkError } = await supabaseClient
+      .from('raw_health_data')
+      .select('id, recorded_at')
+      .eq('step_count', step_count)
+      .gte('recorded_at', new Date(Date.now() - 60000).toISOString()) // Within last minute
+      .lte('recorded_at', new Date(Date.now() + 60000).toISOString()); // Within next minute (for clock skew)
 
-    if (healthMetricsError) {
-      console.error('Health metrics error:', healthMetricsError)
-      throw healthMetricsError
+    if (checkError) {
+      console.error('Error checking for duplicates:', checkError);
     }
 
-    // 4. Insert into raw_health_data (new pipeline for processing)
+    // If we found a very similar record, return success without inserting
+    if (existingRecords && existingRecords.length > 0) {
+      const existingRecord = existingRecords.find(record => {
+        const timeDiff = Math.abs(new Date(record.recorded_at).getTime() - new Date(recorded_at || Date.now()).getTime());
+        return timeDiff < 60000; // Within 1 minute
+      });
+
+      if (existingRecord) {
+        console.log('Duplicate record detected, skipping insert:', existingRecord.id);
+        return new Response(
+          JSON.stringify({ 
+            message: 'Data received (duplicate detected and skipped)',
+            duplicate_id: existingRecord.id,
+            pipeline_status: 'deduplicated'
+          }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    }
+
+    // 4. Insert into raw_health_data (primary data source)
     const rawHealthData = {
       raw_payload: { step_count, recorded_at, source: 'idia_life_app' },
       device_type: 'mobile_app',
@@ -73,8 +98,18 @@ Deno.serve(async (req) => {
 
     if (rawDataError) {
       console.error('Raw health data error:', rawDataError)
-      // Don't throw - we want to continue even if this fails
-      console.log('Continuing despite raw_health_data error...')
+      throw rawDataError
+    }
+
+    // 5. Insert into health_metrics (legacy table for immediate display)
+    const { error: healthMetricsError } = await supabaseClient
+      .from('health_metrics')
+      .insert({ step_count, recorded_at })
+
+    if (healthMetricsError) {
+      console.error('Health metrics error (legacy):', healthMetricsError)
+      // Don't throw - this is legacy support only
+      console.log('Continuing despite health_metrics error...')
     }
 
     console.log('Health data inserted successfully:', { 
