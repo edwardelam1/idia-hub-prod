@@ -47,101 +47,76 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     )
 
-    // 3. Check for existing similar records to prevent duplicates
-    const { data: existingRecords, error: checkError } = await supabaseClient
-      .from('raw_health_data')
-      .select('id, recorded_at')
-      .eq('step_count', step_count)
-      .gte('recorded_at', new Date(Date.now() - 60000).toISOString()) // Within last minute
-      .lte('recorded_at', new Date(Date.now() + 60000).toISOString()); // Within next minute (for clock skew)
+    // 3. Extract user_id if available for better deduplication
+    let user_id = null;
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        user_id = payload.sub;
+      } catch (e) {
+        console.log('Could not extract user_id from token, proceeding without user_id');
+      }
+    }
+
+    // 4. Use improved duplicate checking function
+    const { data: isDuplicate, error: checkError } = await supabaseClient.rpc(
+      'check_raw_health_data_duplicate',
+      {
+        p_step_count: step_count,
+        p_recorded_at: recorded_at || new Date().toISOString(),
+        p_user_id: user_id
+      }
+    );
 
     if (checkError) {
       console.error('Error checking for duplicates:', checkError);
     }
 
-    // If we found a very similar record, return success without inserting
-    if (existingRecords && existingRecords.length > 0) {
-      const existingRecord = existingRecords.find(record => {
-        const timeDiff = Math.abs(new Date(record.recorded_at).getTime() - new Date(recorded_at || Date.now()).getTime());
-        return timeDiff < 60000; // Within 1 minute
-      });
-
-      if (existingRecord) {
-        console.log('Duplicate record detected, skipping insert:', existingRecord.id);
-        return new Response(
-          JSON.stringify({ 
-            message: 'Data received (duplicate detected and skipped)',
-            duplicate_id: existingRecord.id,
-            pipeline_status: 'deduplicated'
-          }),
-          { 
-            status: 200, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
+    if (isDuplicate) {
+      console.log('Duplicate record detected, skipping insert');
+      return new Response(
+        JSON.stringify({ 
+          message: 'Data received (duplicate detected and skipped)',
+          pipeline_status: 'deduplicated'
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    // 4. Insert into raw_health_data (primary data source)
+    // 5. Insert into raw_health_data (simplified - single pipeline)
     const rawHealthData = {
-      raw_payload: { step_count, recorded_at, source: 'idia_life_app' },
+      raw_payload: { step_count, recorded_at, source: 'idia_synapse' },
       device_type: 'mobile_app',
       step_count,
-      recorded_at,
-      user_id: null, // Will be handled by RLS if auth is present
+      recorded_at: recorded_at || new Date().toISOString(),
+      user_id,
       processed: false
     }
 
-    const { error: rawDataError } = await supabaseClient
+    const { data: insertedData, error: rawDataError } = await supabaseClient
       .from('raw_health_data')
       .insert(rawHealthData)
+      .select()
+      .single()
 
     if (rawDataError) {
       console.error('Raw health data error:', rawDataError)
       throw rawDataError
     }
 
-    // 5. Insert into health_metrics (legacy table for immediate display)
-    const { error: healthMetricsError } = await supabaseClient
-      .from('health_metrics')
-      .insert({ step_count, recorded_at })
-
-    if (healthMetricsError) {
-      console.error('Health metrics error (legacy):', healthMetricsError)
-      // Don't throw - this is legacy support only
-      console.log('Continuing despite health_metrics error...')
-    }
-
     console.log('Health data inserted successfully:', { 
       step_count, 
       recorded_at, 
+      data_id: insertedData?.id,
       validation_status: 'passed',
-      pipeline_status: 'synchronized',
-      timestamp: new Date().toISOString(),
-      health_metrics_inserted: !healthMetricsError,
-      raw_health_data_inserted: !rawDataError
+      pipeline_status: 'linear',
+      timestamp: new Date().toISOString()
     })
-
-    // 5. Trigger data processing pipeline
-    try {
-      const processResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/process-health-streams`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')}`
-        },
-        body: JSON.stringify({ trigger: 'idia-synapse' })
-      })
-      
-      if (processResponse.ok) {
-        console.log('Processing pipeline triggered successfully')
-      } else {
-        console.log('Processing pipeline trigger failed, but continuing...')
-      }
-    } catch (processError) {
-      console.log('Processing pipeline trigger error:', processError)
-      // Continue - this is not critical for immediate response
-    }
 
     // 6. Return a success response.
     return new Response(JSON.stringify({ 

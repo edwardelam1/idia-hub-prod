@@ -99,6 +99,7 @@ export const useHealthMetrics = () => {
           table: 'raw_health_data'
         },
         () => {
+          console.log('Raw health data updated, refetching...');
           fetchHealthMetrics(); // Refetch data when changes occur
         }
       )

@@ -39,9 +39,9 @@ export const PipelineMonitor = () => {
         .select('*')
         .eq('processed', false);
 
-      // Get health metrics with null step counts
+      // Get raw health data with null step counts
       const { data: nullData, error: nullError } = await supabase
-        .from('health_metrics')
+        .from('raw_health_data')
         .select('*')
         .is('step_count', null);
 

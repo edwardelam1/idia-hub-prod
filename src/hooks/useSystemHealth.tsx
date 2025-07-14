@@ -85,7 +85,7 @@ export const useSystemHealth = () => {
     try {
       // Get real data from various tables to calculate metrics
       const [healthData, securityEvents, bundles, processQueue] = await Promise.all([
-        supabase.from('health_metrics').select('*').limit(100),
+        supabase.from('raw_health_data').select('*').limit(100),
         supabase.from('security_events').select('*').limit(50),
         supabase.from('marketplace_bundles').select('*').limit(20),
         supabase.from('data_processing_queue').select('*').limit(30)

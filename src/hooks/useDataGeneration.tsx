@@ -39,18 +39,19 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         let query = supabase.from('staged_health_data').select('*');
         
         // Use actual activity types from the database
-        const actualActivityTypes = ['Daily Activity', 'health_metrics', 'daily_activity'];
+        const actualActivityTypes = ['Daily Activity', 'raw_health_data', 'daily_activity'];
         
-        // First try to get health metrics data
+        // Get raw health data
         const { data: healthMetrics } = await supabase
-          .from('health_metrics')
+          .from('raw_health_data')
           .select('*')
+          .not('step_count', 'is', null)
           .limit(limit);
           
         // If we have health metrics, transform and use them
         if (healthMetrics && healthMetrics.length > 0) {
           const transformedHealthData = healthMetrics.map((record, index) => ({
-            id: record.id?.toString() || `health-${index}`,
+            id: record.id || `health-${index}`,
             activity_type: transformActivityType('Daily Activity'),
             duration_minutes: null,
             distance_km: null,
