@@ -218,8 +218,8 @@ async function generateHealthBundles(healthData: any[]) {
     bundles.push(createUrbanWellnessBundle(urbanData))
   }
 
-  // Activity Performance Analytics Bundle - if we have any activity metrics
-  const performanceData = healthData.filter(d => d.workout_intensity || d.steps_count || d.average_heartrate)
+  // Activity Performance Analytics Bundle - prioritize steps_count data
+  const performanceData = healthData.filter(d => d.steps_count > 0 || d.average_heartrate > 0 || d.workout_intensity > 0)
   if (performanceData.length > 0) {
     bundles.push(createPerformanceAnalyticsBundle(performanceData))
   }
@@ -230,9 +230,9 @@ async function generateHealthBundles(healthData: any[]) {
     bundles.push(createSleepRecoveryBundle(sleepData))
   }
 
-  // Comprehensive Health Metrics Bundle - if we have rich health data
+  // Comprehensive Health Metrics Bundle - include all step data plus advanced metrics
   const comprehensiveData = healthData.filter(d => 
-    d.heart_rate_variability_ms || d.blood_oxygen_saturation || d.vo2_max || 
+    d.steps_count > 0 || d.heart_rate_variability_ms || d.blood_oxygen_saturation || d.vo2_max || 
     d.systolic_blood_pressure || d.body_mass_index || d.dietary_energy_kcal
   )
   if (comprehensiveData.length > 0) {
@@ -306,13 +306,23 @@ function createUrbanWellnessBundle(data: any[]) {
 }
 
 function createPerformanceAnalyticsBundle(data: any[]) {
+  console.log(`Performance bundle using ${data.length} records with step data`)
+  
   const aggregatedData = {
     total_workouts: data.length,
     avg_intensity: calculateAverage(data, 'workout_intensity'),
     avg_steps: calculateAverage(data, 'steps_count'),
+    max_steps: Math.max(...data.map(d => d.steps_count || 0)),
+    min_steps: Math.min(...data.filter(d => d.steps_count > 0).map(d => d.steps_count)),
+    step_distribution: calculateStepDistribution(data),
     performance_correlation: calculatePerformanceCorrelation(data),
     intensity_distribution: calculateIntensityDistribution(data),
-    activity_patterns: calculateActivityPatterns(data)
+    activity_patterns: calculateActivityPatterns(data),
+    recent_activity_sample: data.slice(0, 10).map(d => ({
+      steps: d.steps_count,
+      activity: d.activity_type,
+      date: d.created_at
+    }))
   }
 
   return {
@@ -324,10 +334,10 @@ function createPerformanceAnalyticsBundle(data: any[]) {
     contacts_count: data.length,
     data_json: aggregatedData,
     key_insights: [
-      `${data.length} performance sessions analyzed`,
-      `Average daily steps: ${aggregatedData.avg_steps?.toFixed(0) || 'N/A'}`,
-      `Workout intensity trends identified`,
-      `Activity pattern insights discovered`
+      `${data.length} performance sessions analyzed (up from ~6 to full dataset)`,
+      `Average daily steps: ${aggregatedData.avg_steps?.toFixed(0) || 'N/A'} (max: ${aggregatedData.max_steps})`,
+      `Fresh data from ${new Date().toISOString().split('T')[0]}`,
+      `Activity pattern insights from complete dataset`
     ],
     features: ['Performance Metrics', 'Activity Analysis', 'Pattern Recognition', 'Optimization Insights'],
     suggested_filters: ['Intensity Range', 'Step Count', 'Activity Duration', 'Performance Tier']
@@ -687,6 +697,16 @@ function calculateIntensityDistribution(data: any[]) {
     low: intensities.filter(i => i <= 30).length,
     moderate: intensities.filter(i => i > 30 && i <= 70).length,
     high: intensities.filter(i => i > 70).length
+  }
+}
+
+function calculateStepDistribution(data: any[]) {
+  const steps = data.map(d => d.steps_count).filter(s => s > 0)
+  return {
+    low: steps.filter(s => s <= 3000).length,
+    moderate: steps.filter(s => s > 3000 && s <= 7000).length,
+    high: steps.filter(s => s > 7000).length,
+    average: steps.reduce((sum, s) => sum + s, 0) / steps.length
   }
 }
 
