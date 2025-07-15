@@ -7,6 +7,7 @@ interface HealthMetric {
   user_id: string | null;
   recorded_at: string | null;
   created_at: string | null;
+  raw_payload: any;
 }
 
 interface HealthStats {
@@ -14,6 +15,8 @@ interface HealthStats {
   todayRecords: number;
   averageSteps: number;
   lastActivity: string | null;
+  dataTypes: string[];
+  comprehensiveScore: number;
 }
 
 export const useHealthMetrics = () => {
@@ -22,17 +25,19 @@ export const useHealthMetrics = () => {
     totalRecords: 0,
     todayRecords: 0,
     averageSteps: 0,
-    lastActivity: null
+    lastActivity: null,
+    dataTypes: [],
+    comprehensiveScore: 0
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchHealthMetrics = async () => {
     try {
-      // Get recent health metrics from raw_health_data with valid step counts only
+      // Get recent health metrics from raw_health_data including raw_payload for analysis
       const { data: metrics, error: metricsError } = await supabase
         .from('raw_health_data')
-        .select('id, step_count, recorded_at, created_at, user_id')
+        .select('id, step_count, recorded_at, created_at, user_id, raw_payload')
         .not('step_count', 'is', null)
         .gt('step_count', 0)
         .order('created_at', { ascending: false })
@@ -61,6 +66,27 @@ export const useHealthMetrics = () => {
 
       if (todayError) throw todayError;
 
+      // Analyze data types and comprehensive score
+      const dataTypes = new Set<string>();
+      let totalQualityScore = 0;
+      let qualityScoreCount = 0;
+
+      metrics?.forEach(metric => {
+        const payload = metric.raw_payload as any || {};
+        
+        // Track available data types with proper type checking
+        if (payload?.step_count || payload?.steps) dataTypes.add('Steps');
+        if (payload?.heartRate || payload?.averageHeartRate) dataTypes.add('Heart Rate');
+        if (payload?.calories || payload?.activeEnergyBurned) dataTypes.add('Calories');
+        if (payload?.sleepHours || payload?.timeAsleep) dataTypes.add('Sleep');
+        if (payload?.mindfulMinutes) dataTypes.add('Mindfulness');
+        if (payload?.weight) dataTypes.add('Weight');
+        if (payload?.bloodPressureSystolic) dataTypes.add('Blood Pressure');
+        if (payload?.oxygenSaturation) dataTypes.add('Oxygen Saturation');
+        if (payload?.vo2Max) dataTypes.add('VO2 Max');
+        if (payload?.walkingDistance || payload?.runningDistance) dataTypes.add('Distance');
+      });
+
       // Calculate average steps from step-related metrics
       const stepMetrics = metrics?.filter(m => m.step_count !== null) || [];
       const averageSteps = stepMetrics.length > 0 
@@ -68,13 +94,16 @@ export const useHealthMetrics = () => {
         : 0;
 
       const lastActivity = metrics?.[0]?.created_at || null;
+      const comprehensiveScore = dataTypes.size > 1 ? Math.min(dataTypes.size * 0.15 + 0.25, 1.0) : 0.3;
 
       setHealthMetrics(metrics || []);
       setHealthStats({
         totalRecords: totalCount || 0,
         todayRecords: todayCount || 0,
         averageSteps,
-        lastActivity
+        lastActivity,
+        dataTypes: Array.from(dataTypes),
+        comprehensiveScore
       });
       setError(null);
     } catch (err) {
