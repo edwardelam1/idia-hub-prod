@@ -15,12 +15,15 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  ArrowLeft
 } from 'lucide-react';
 import { useSystemHealth } from '@/hooks/useSystemHealth';
+import { useNavigate } from 'react-router-dom';
 
 const SystemHealthDashboard = () => {
   const { metrics, services, auditLogs, isLoading, refetch } = useSystemHealth();
+  const navigate = useNavigate();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -62,9 +65,15 @@ const SystemHealthDashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">System Health Dashboard</h2>
-          <p className="text-gray-600">Real-time monitoring of IDIA platform infrastructure</p>
+        <div className="flex items-center gap-4">
+          <Button onClick={() => navigate('/')} variant="outline" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Dashboard
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold">System Health Dashboard</h2>
+            <p className="text-muted-foreground">Real-time monitoring of IDIA platform infrastructure</p>
+          </div>
         </div>
         <Button onClick={refetch} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 mr-2" />
