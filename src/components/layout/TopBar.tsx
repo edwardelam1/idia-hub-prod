@@ -39,33 +39,42 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-      <div className="flex items-center space-x-4">
-        <SidebarTrigger />
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">
+    <header className="
+      sticky top-0 z-40 
+      h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 
+      border-b border-border 
+      flex items-center justify-between 
+      px-4 md:px-6
+      flex-shrink-0
+    ">
+      <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
+        <SidebarTrigger className="flex-shrink-0" />
+        <div className="min-w-0">
+          <h1 className="text-sm md:text-lg font-semibold text-foreground truncate">
             Welcome back, {getUserName()}
           </h1>
-          <p className="text-sm text-gray-500">{getOrganization()}</p>
+          <p className="text-xs md:text-sm text-muted-foreground truncate hidden sm:block">
+            {getOrganization()}
+          </p>
         </div>
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         {/* Synapse Credits - shown for non-super-admin users */}
         {userRole !== 'super-admin' && (
-          <div className="flex items-center space-x-2 bg-purple-50 px-3 py-1 rounded-full">
-            <Coins className="h-4 w-4 text-purple-600" />
-            <span className="text-sm font-medium text-purple-700">
-              {synapseCredits.toLocaleString()} Credits
+          <div className="hidden sm:flex items-center space-x-2 bg-primary/10 px-2 md:px-3 py-1 rounded-full">
+            <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
+            <span className="text-xs md:text-sm font-medium text-primary">
+              {synapseCredits.toLocaleString()}
             </span>
           </div>
         )}
 
         {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative">
-          <Bell className="h-4 w-4" />
+        <Button variant="ghost" size="sm" className="relative h-8 w-8 md:h-9 md:w-9">
+          <Bell className="h-3 w-3 md:h-4 md:w-4" />
           {notifications > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+            <Badge className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 flex items-center justify-center p-0 text-xs">
               {notifications}
             </Badge>
           )}
@@ -74,33 +83,33 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center space-x-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-purple-100 text-purple-700">
+            <Button variant="ghost" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9">
+              <Avatar className="h-6 w-6 md:h-8 md:w-8">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs md:text-sm">
                   {getUserName().split(' ').map(n => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3 w-3 md:h-4 md:w-4 hidden sm:block" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-48 md:w-56">
             <DropdownMenuLabel>
               <div>
-                <p className="font-medium">{getUserName()}</p>
-                <p className="text-sm text-gray-500 capitalize">{userRole.replace('-', ' ')}</p>
+                <p className="font-medium text-sm">{getUserName()}</p>
+                <p className="text-xs text-muted-foreground capitalize">{userRole.replace('-', ' ')}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem className="text-sm">
               <User className="mr-2 h-4 w-4" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem className="text-sm">
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onLogout} className="text-red-600">
+            <DropdownMenuItem onClick={onLogout} className="text-destructive text-sm">
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>

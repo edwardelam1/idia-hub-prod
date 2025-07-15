@@ -86,70 +86,112 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <Sidebar className={isCollapsed ? 'w-14' : 'w-64'} collapsible="icon">
-      <SidebarContent className="bg-white border-r">
-        <div className="p-4 border-b">
-          <div className="flex items-center space-x-3">
+    <Sidebar 
+      className={`
+        ${isCollapsed ? 'w-14' : 'w-64'}
+        h-full flex-shrink-0
+        fixed left-0 top-0 z-30
+        md:relative md:z-auto
+        transition-all duration-300 ease-in-out
+      `}
+      collapsible="icon"
+    >
+      <SidebarContent className="bg-background border-r border-border h-full flex flex-col">
+        {/* Logo Section */}
+        <div className="p-3 md:p-4 border-b border-border flex-shrink-0">
+          <div className="flex items-center space-x-2 md:space-x-3">
             <img 
               src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png" 
               alt="IDIA Hub" 
-              className="w-8 h-8"
+              className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0"
             />
             {!isCollapsed && (
-              <div>
-                <h2 className="font-bold text-lg text-gray-900">IDIA Hub</h2>
-                <p className="text-xs text-gray-500 capitalize">{userRole.replace('-', ' ')}</p>
+              <div className="min-w-0">
+                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">
+                  IDIA Hub
+                </h2>
+                <p className="text-xs text-muted-foreground capitalize truncate">
+                  {userRole.replace('-', ' ')}
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    asChild
-                    className={isActive(item.url) ? 'bg-purple-50 text-purple-700 border-r-2 border-purple-700' : 'hover:bg-gray-50'}
-                  >
-                    <NavLink to={item.url} className="flex items-center">
-                      <item.icon className="mr-3 h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {(userRole === 'organization-admin' || userRole === 'team-lead' || userRole === 'team-member') && (
-          <SidebarGroup>
-            <SidebarGroupLabel>DeFi Tools</SidebarGroupLabel>
+        {/* Navigation Section - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <SidebarGroup className="py-2">
+            <SidebarGroupLabel className="px-3 text-xs">Navigation</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink to="/trading" className="flex items-center">
-                      <TrendingUp className="mr-3 h-4 w-4" />
-                      {!isCollapsed && <span>Trading Interface</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink to="/liquidity" className="flex items-center">
-                      <Coins className="mr-3 h-4 w-4" />
-                      {!isCollapsed && <span>Liquidity Pools</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              <SidebarMenu className="space-y-1">
+                {menuItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton 
+                      asChild
+                      className={`
+                        mx-2 rounded-md transition-colors
+                        ${isActive(item.url) 
+                          ? 'bg-primary/10 text-primary border-r-2 border-primary' 
+                          : 'hover:bg-accent hover:text-accent-foreground'
+                        }
+                      `}
+                    >
+                      <NavLink to={item.url} className="flex items-center px-2 py-2">
+                        <item.icon className="h-4 w-4 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <span className="ml-3 text-sm font-medium truncate">
+                            {item.title}
+                          </span>
+                        )}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        )}
+
+          {/* DeFi Tools Section */}
+          {(userRole === 'organization-admin' || userRole === 'team-lead' || userRole === 'team-member') && (
+            <SidebarGroup className="py-2">
+              <SidebarGroupLabel className="px-3 text-xs">DeFi Tools</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="space-y-1">
+                  <SidebarMenuItem>
+                    <SidebarMenuButton 
+                      asChild
+                      className="mx-2 rounded-md hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <NavLink to="/trading" className="flex items-center px-2 py-2">
+                        <TrendingUp className="h-4 w-4 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <span className="ml-3 text-sm font-medium truncate">
+                            Trading Interface
+                          </span>
+                        )}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton 
+                      asChild
+                      className="mx-2 rounded-md hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <NavLink to="/liquidity" className="flex items-center px-2 py-2">
+                        <Coins className="h-4 w-4 flex-shrink-0" />
+                        {!isCollapsed && (
+                          <span className="ml-3 text-sm font-medium truncate">
+                            Liquidity Pools
+                          </span>
+                        )}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </div>
       </SidebarContent>
     </Sidebar>
   );
