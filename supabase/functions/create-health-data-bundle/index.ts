@@ -452,9 +452,8 @@ function createRegionalTrendsBundle(regionalData: any) {
     demographic_insights: calculateDemographicInsights(regionalData)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0]
   return {
-    title: `Regional Health Trends: ${dateStr} Analysis (${regions.length} Regions)`,
+    title: `Regional Health Trends Collection (${regions.length} Regions)`,
     description: 'Cross-regional comparison of health trends, activity patterns, and wellness metrics',
     category: 'Market Research',
     tier: 'Enterprise',
