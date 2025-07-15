@@ -51,19 +51,18 @@ serve(async (req) => {
     
     console.log(`Starting ${trigger} health data bundle creation...`)
 
-    // Get staged health data based on trigger type
+    // Get staged health data - prioritize fresh data
     let healthDataQuery = supabaseClient.from('staged_health_data').select('*');
     
     if (trigger === 'real_time') {
-      // For real-time triggers, process recent data (last 24 hours) to create comprehensive bundles
-      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false }).limit(500);
-    } else if (trigger === 'manual_engage' || force_process) {
-      // For manual engagement, get all available data
+      // For real-time triggers, get recent data with priority on fresh entries
       healthDataQuery = healthDataQuery.order('created_at', { ascending: false }).limit(1000);
+    } else if (trigger === 'manual_engage' || force_process) {
+      // For manual engagement, get ALL available data to ensure comprehensive bundles
+      healthDataQuery = healthDataQuery.order('created_at', { ascending: false });
     } else {
-      // For scheduled runs, get data from last 6 hours (more frequent updates)
-      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString());
+      // For scheduled runs, get all data to ensure comprehensive bundle content
+      healthDataQuery = healthDataQuery.order('created_at', { ascending: false }).limit(2000);
     }
 
     const { data: healthData, error: dataError } = await healthDataQuery;
@@ -93,53 +92,61 @@ serve(async (req) => {
     // Insert bundles into marketplace with duplication prevention
     const bundleResults = []
     for (const bundle of bundles) {
-      // Check for existing similar bundles (check ALL active bundles, not just recent ones)
+      // Check for existing similar bundles and force fresh data update
       const { data: existingBundles } = await supabaseClient
         .from('marketplace_bundles')
-        .select('bundle_id, title, created_at, bundle_version')
+        .select('bundle_id, title, created_at, bundle_version, data_json')
         .eq('title', bundle.title)
         .eq('category', bundle.category)
-        .eq('is_active', true) // Only check active bundles, no time restriction
+        .eq('is_active', true)
 
       if (existingBundles && existingBundles.length > 0) {
-        console.log(`Updating existing bundle: ${bundle.title}`)
+        console.log(`Force updating existing bundle with fresh data: ${bundle.title}`)
         
-        // Update existing bundle with new data
+        // REPLACE existing bundle data with fresh data (don't merge)
         const existingBundle = existingBundles[0]
         const newVersion = (existingBundle.bundle_version || 1) + 1
         
-        // Merge new data with existing data
-        const existingData = existingBundle.data_json || {}
-        const mergedData = {
+        // Use fresh data entirely, include sample of actual records
+        const freshData = {
           ...bundle.data_json,
-          total_records: (existingData.total_records || 0) + bundle.contacts_count,
           last_update: new Date().toISOString(),
-          update_history: [
-            ...(existingData.update_history || []),
-            { version: newVersion, updated_at: new Date().toISOString(), records_added: bundle.contacts_count }
-          ].slice(-10) // Keep last 10 updates
+          data_source: 'Fresh staged health data',
+          total_fresh_records: bundle.contacts_count,
+          sample_fresh_data: healthData.slice(0, 15).map(d => ({
+            activity_type: d.activity_type,
+            steps_count: d.steps_count,
+            device_type: d.device_type,
+            created_at: d.created_at,
+            avg_heartrate: d.average_heartrate,
+            calories_burned: d.calories_burned
+          })),
+          version_history: [
+            { version: newVersion, updated_at: new Date().toISOString(), data_source: 'fresh_staged_data' }
+          ]
         }
         
         const { data: updatedBundle, error: updateError } = await supabaseClient
           .from('marketplace_bundles')
           .update({
-            contacts_count: (existingBundle.contacts_count || 0) + bundle.contacts_count,
-            data_json: mergedData,
+            contacts_count: bundle.contacts_count, // Use fresh count
+            data_json: freshData, // Use entirely fresh data
             key_insights: [
               ...bundle.key_insights,
-              `Updated with ${bundle.contacts_count} new records`,
-              `Total records: ${(existingBundle.contacts_count || 0) + bundle.contacts_count}`
+              `Refreshed with ${bundle.contacts_count} current records`,
+              `Fresh data from ${new Date().toISOString().split('T')[0]}`,
+              `Latest step counts and activity data included`
             ],
             updated_at: new Date().toISOString(),
             bundle_version: newVersion,
-            price: calculateBundlePrice(healthData, bundle.tier, mergedData)
+            price: calculateBundlePrice(healthData, bundle.tier, freshData)
           })
           .eq('bundle_id', existingBundle.bundle_id)
           .select()
 
         if (!updateError && updatedBundle) {
           bundleResults.push(updatedBundle[0])
-          console.log(`Updated existing bundle: ${bundle.title} to version ${newVersion}`)
+          console.log(`Force updated existing bundle: ${bundle.title} to version ${newVersion} with fresh data`)
         }
         continue
       }
@@ -258,8 +265,9 @@ async function generateHealthBundles(healthData: any[]) {
 }
 
 function createUrbanWellnessBundle(data: any[]) {
-  // Transform generic activity types to more realistic ones
-  const transformedData = data.map(d => ({
+  // Use fresh data with priority on recent entries
+  const freshData = data.slice(0, 500); // Take most recent 500 records
+  const transformedData = freshData.map(d => ({
     ...d,
     activity_type: transformActivityType(d.activity_type),
     device_type: transformDeviceType(d.device_type)
@@ -272,7 +280,10 @@ function createUrbanWellnessBundle(data: any[]) {
     avg_sleep_quality: calculateAverage(transformedData, 'sleep_quality_score'),
     stress_distribution: calculateStressDistribution(transformedData),
     activity_type_breakdown: calculateActivityBreakdown(transformedData),
-    zone_coverage: [...new Set(transformedData.map(d => d.anonymized_location_zone))].length
+    zone_coverage: [...new Set(transformedData.map(d => d.anonymized_location_zone))].length,
+    latest_step_counts: transformedData.slice(0, 5).map(d => d.steps_count).filter(Boolean),
+    data_freshness: new Date().toISOString(),
+    sample_activities: transformedData.slice(0, 10)
   }
 
   return {
