@@ -31,8 +31,8 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
         
         {/* Main Content Area */}
         <div className={`
-          flex-1 flex flex-col min-w-0 relative
-          ${isMobile ? 'ml-0' : 'md:ml-64'}
+          flex-1 flex flex-col min-w-0 relative h-full
+          ${isMobile ? 'ml-0' : 'ml-64'}
           transition-all duration-300 ease-in-out
         `}>
           {/* Fixed Header */}
@@ -40,11 +40,11 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
           
           {/* Scrollable Main Content */}
           <main className={`
-            flex-1 overflow-auto
+            flex-1 overflow-auto h-full
             ${isMobile ? 'p-2' : isTablet ? 'p-4' : 'p-6'}
             bg-background
           `}>
-            <div className="h-full max-w-full">
+            <div className="w-full h-full">
               {children}
             </div>
           </main>
