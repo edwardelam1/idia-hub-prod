@@ -19,11 +19,13 @@ serve(async (req) => {
 
     console.log('Force generating fresh bundles with latest staged health data...')
 
-    // Call the create-health-data-bundle function with force_process
+    // Call the create-health-data-bundle function with force_process and comprehensive data collection
     const { data, error } = await supabaseClient.functions.invoke('create-health-data-bundle', {
       body: { 
-        trigger: 'manual_engage', 
-        force_process: true 
+        trigger: 'comprehensive_healthkit_generation', 
+        force_process: true,
+        enable_all_healthkit_types: true,
+        comprehensive_bundle_generation: true
       }
     })
 

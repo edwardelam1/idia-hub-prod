@@ -99,13 +99,103 @@ Deno.serve(async (req) => {
       raw_payload: { 
         ...healthData, 
         source: 'apple_health',
-        processed_at: new Date().toISOString()
+        processed_at: new Date().toISOString(),
+        // Preserve all HealthKit data types
+        healthkit_data_types: extractHealthKitDataTypes(healthData),
+        data_completeness: calculateDataCompleteness(healthData)
       },
       device_type: healthData.device_type || 'apple_health',
       step_count,
       recorded_at: recorded_at || new Date().toISOString(),
       user_id,
       processed: false
+    }
+
+    // Helper function to extract and categorize HealthKit data types
+    function extractHealthKitDataTypes(data: any) {
+      const healthkitTypes = {
+        activity: {},
+        vitals: {},
+        nutrition: {},
+        sleep: {},
+        clinical: {},
+        reproductive: {},
+        mindfulness: {},
+        body_measurements: {}
+      };
+
+      // Activity data
+      if (data.steps || data.step_count) healthkitTypes.activity.steps = data.steps || data.step_count;
+      if (data.distanceWalkingRunning) healthkitTypes.activity.walking_distance = data.distanceWalkingRunning;
+      if (data.distanceCycling) healthkitTypes.activity.cycling_distance = data.distanceCycling;
+      if (data.flightsClimbed) healthkitTypes.activity.flights_climbed = data.flightsClimbed;
+      if (data.activeEnergyBurned) healthkitTypes.activity.active_calories = data.activeEnergyBurned;
+      if (data.basalEnergyBurned) healthkitTypes.activity.basal_calories = data.basalEnergyBurned;
+
+      // Vitals
+      if (data.heartRate) healthkitTypes.vitals.heart_rate = data.heartRate;
+      if (data.heartRateVariability) healthkitTypes.vitals.heart_rate_variability = data.heartRateVariability;
+      if (data.restingHeartRate) healthkitTypes.vitals.resting_heart_rate = data.restingHeartRate;
+      if (data.bloodPressureSystolic) healthkitTypes.vitals.blood_pressure_systolic = data.bloodPressureSystolic;
+      if (data.bloodPressureDiastolic) healthkitTypes.vitals.blood_pressure_diastolic = data.bloodPressureDiastolic;
+      if (data.respiratoryRate) healthkitTypes.vitals.respiratory_rate = data.respiratoryRate;
+      if (data.oxygenSaturation) healthkitTypes.vitals.oxygen_saturation = data.oxygenSaturation;
+      if (data.bodyTemperature) healthkitTypes.vitals.body_temperature = data.bodyTemperature;
+
+      // Body measurements
+      if (data.height) healthkitTypes.body_measurements.height = data.height;
+      if (data.bodyMass || data.weight) healthkitTypes.body_measurements.weight = data.bodyMass || data.weight;
+      if (data.bodyMassIndex) healthkitTypes.body_measurements.bmi = data.bodyMassIndex;
+      if (data.bodyFatPercentage) healthkitTypes.body_measurements.body_fat_percentage = data.bodyFatPercentage;
+      if (data.leanBodyMass) healthkitTypes.body_measurements.lean_body_mass = data.leanBodyMass;
+      if (data.waistCircumference) healthkitTypes.body_measurements.waist_circumference = data.waistCircumference;
+
+      // Nutrition
+      if (data.dietaryEnergyConsumed) healthkitTypes.nutrition.calories = data.dietaryEnergyConsumed;
+      if (data.dietaryProtein) healthkitTypes.nutrition.protein = data.dietaryProtein;
+      if (data.dietaryFatTotal) healthkitTypes.nutrition.fat_total = data.dietaryFatTotal;
+      if (data.dietaryCarbohydrates) healthkitTypes.nutrition.carbohydrates = data.dietaryCarbohydrates;
+      if (data.dietaryFiber) healthkitTypes.nutrition.fiber = data.dietaryFiber;
+      if (data.dietarySugar) healthkitTypes.nutrition.sugar = data.dietarySugar;
+      if (data.dietaryWater) healthkitTypes.nutrition.water = data.dietaryWater;
+      if (data.dietaryCaffeine) healthkitTypes.nutrition.caffeine = data.dietaryCaffeine;
+
+      // Sleep
+      if (data.sleepAnalysis) healthkitTypes.sleep.sleep_analysis = data.sleepAnalysis;
+      if (data.timeInBed) healthkitTypes.sleep.time_in_bed = data.timeInBed;
+      if (data.timeAsleep) healthkitTypes.sleep.time_asleep = data.timeAsleep;
+
+      // Clinical
+      if (data.bloodGlucose) healthkitTypes.clinical.blood_glucose = data.bloodGlucose;
+      if (data.insulinDelivery) healthkitTypes.clinical.insulin_delivery = data.insulinDelivery;
+      if (data.medications) healthkitTypes.clinical.medications = data.medications;
+      if (data.allergies) healthkitTypes.clinical.allergies = data.allergies;
+
+      // Reproductive Health
+      if (data.menstrualFlow) healthkitTypes.reproductive.menstrual_flow = data.menstrualFlow;
+      if (data.ovulationTestResult) healthkitTypes.reproductive.ovulation_test = data.ovulationTestResult;
+      if (data.basalBodyTemperature) healthkitTypes.reproductive.basal_body_temperature = data.basalBodyTemperature;
+      if (data.cervicalMucusQuality) healthkitTypes.reproductive.cervical_mucus = data.cervicalMucusQuality;
+
+      // Mindfulness & Mental Health
+      if (data.mindfulSession) healthkitTypes.mindfulness.mindful_session = data.mindfulSession;
+      if (data.moodScore) healthkitTypes.mindfulness.mood = data.moodScore;
+
+      return healthkitTypes;
+    }
+
+    function calculateDataCompleteness(data: any): number {
+      const totalPossibleFields = 65; // Approximate count of HealthKit data types
+      let fieldsPresent = 0;
+      
+      // Count present fields
+      Object.keys(data).forEach(key => {
+        if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+          fieldsPresent++;
+        }
+      });
+      
+      return Math.min(1.0, fieldsPresent / totalPossibleFields);
     }
 
     const { data: insertedData, error: rawDataError } = await supabaseClient

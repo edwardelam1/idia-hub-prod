@@ -209,58 +209,98 @@ serve(async (req) => {
 
 async function generateHealthBundles(healthData: any[]) {
   const bundles = []
+  console.log(`Generating bundles from ${healthData.length} health records`)
 
-  // Always try to create bundles regardless of data count (removed artificial thresholds)
-  
-  // Urban Wellness Dynamics Bundle - if we have any location data
-  const urbanData = healthData.filter(d => d.anonymized_location_zone?.includes('ZONE_'))
-  if (urbanData.length > 0) {
-    bundles.push(createUrbanWellnessBundle(urbanData))
+  // 1. Apple HealthKit Vitals Bundle - cardiovascular and respiratory data
+  const vitalsData = healthData.filter(d => 
+    d.average_heartrate || d.resting_heart_rate || d.heart_rate_variability_ms || 
+    d.blood_oxygen_saturation || d.systolic_blood_pressure || d.diastolic_blood_pressure ||
+    d.respiratory_rate_per_min || d.body_temperature_celsius
+  )
+  if (vitalsData.length > 0) {
+    bundles.push(createHealthKitVitalsBundle(vitalsData))
   }
 
-  // Activity Performance Analytics Bundle - prioritize steps_count data
-  const performanceData = healthData.filter(d => d.steps_count > 0 || d.average_heartrate > 0 || d.workout_intensity > 0)
-  if (performanceData.length > 0) {
-    bundles.push(createPerformanceAnalyticsBundle(performanceData))
+  // 2. Body Composition & Fitness Bundle - body measurements and fitness metrics
+  const bodyCompData = healthData.filter(d => 
+    d.height_cm || d.weight_kg || d.body_mass_index || d.body_fat_percentage || 
+    d.lean_body_mass_kg || d.waist_circumference_cm || d.vo2_max
+  )
+  if (bodyCompData.length > 0) {
+    bundles.push(createBodyCompositionBundle(bodyCompData))
   }
 
-  // Sleep & Recovery Insights Bundle - if we have any sleep data
-  const sleepData = healthData.filter(d => d.sleep_duration || d.sleep_quality_score || d.time_asleep_minutes)
+  // 3. Nutritional Health Bundle - comprehensive nutrition tracking
+  const nutritionData = healthData.filter(d => 
+    d.dietary_energy_kcal || d.protein_g || d.carbohydrates_g || d.total_fat_g || 
+    d.fiber_g || d.sugar_g || d.water_ml || d.caffeine_mg || d.vitamin_c_mg || 
+    d.vitamin_d_mcg || d.calcium_mg || d.iron_mg || d.sodium_mg || d.potassium_mg
+  )
+  if (nutritionData.length > 0) {
+    bundles.push(createNutritionalHealthBundle(nutritionData))
+  }
+
+  // 4. Sleep & Recovery Analytics Bundle - comprehensive sleep metrics
+  const sleepData = healthData.filter(d => 
+    d.sleep_duration || d.time_in_bed_minutes || d.time_asleep_minutes || 
+    d.rem_duration_minutes || d.core_sleep_duration_minutes || d.deep_sleep_duration_minutes || 
+    d.awake_duration_minutes || d.sleep_quality_score
+  )
   if (sleepData.length > 0) {
     bundles.push(createSleepRecoveryBundle(sleepData))
   }
 
-  // Comprehensive Health Metrics Bundle - include all step data plus advanced metrics
-  const comprehensiveData = healthData.filter(d => 
-    d.steps_count > 0 || d.heart_rate_variability_ms || d.blood_oxygen_saturation || d.vo2_max || 
-    d.systolic_blood_pressure || d.body_mass_index || d.dietary_energy_kcal
+  // 5. Activity & Movement Bundle - steps, distance, exercise metrics
+  const activityData = healthData.filter(d => 
+    d.steps_count || d.distance_walking_running_meters || d.distance_cycling_meters || 
+    d.flights_climbed || d.walking_speed_mps || d.step_length_cm || d.calories_burned ||
+    d.walking_asymmetry_percentage || d.double_support_time_percentage
   )
-  if (comprehensiveData.length > 0) {
-    bundles.push(createComprehensiveHealthBundle(comprehensiveData))
+  if (activityData.length > 0) {
+    bundles.push(createActivityMovementBundle(activityData))
   }
 
-  // Nutritional Insights Bundle - if we have nutrition data
-  const nutritionData = healthData.filter(d => 
-    d.dietary_energy_kcal || d.protein_g || d.carbohydrates_g || d.total_fat_g || d.water_ml
+  // 6. Women's Health Bundle - reproductive and hormonal health
+  const womensHealthData = healthData.filter(d => 
+    d.menstrual_flow || d.ovulation_test_result || d.basal_body_temperature_celsius || 
+    d.cervical_mucus_quality
   )
-  if (nutritionData.length > 0) {
-    bundles.push(createNutritionalInsightsBundle(nutritionData))
+  if (womensHealthData.length > 0) {
+    bundles.push(createWomensHealthBundle(womensHealthData))
   }
 
-  // Clinical Health Bundle - if we have clinical data
+  // 7. Mental Health & Mindfulness Bundle - mood, stress, mindfulness
+  const mentalHealthData = healthData.filter(d => 
+    d.mindful_minutes || d.mood_score || d.stress_level || d.emotional_state
+  )
+  if (mentalHealthData.length > 0) {
+    bundles.push(createMentalHealthBundle(mentalHealthData))
+  }
+
+  // 8. Clinical Health Bundle - medical conditions and medications
   const clinicalData = healthData.filter(d => 
-    d.clinical_conditions || d.clinical_medications || d.clinical_vitals || d.clinical_lab_results
+    d.clinical_conditions || d.clinical_medications || d.clinical_vitals || 
+    d.clinical_lab_results || d.clinical_allergies || d.clinical_immunizations
   )
   if (clinicalData.length > 0) {
     bundles.push(createClinicalHealthBundle(clinicalData))
   }
 
-  // Regional Health Trends Bundle - if we have multiple regions
-  const regionalData = groupByRegion(healthData)
-  if (Object.keys(regionalData).length > 0) {
-    bundles.push(createRegionalTrendsBundle(regionalData))
+  // 9. Comprehensive HealthKit Collection - all available data types
+  const comprehensiveData = healthData.filter(d => 
+    Object.keys(d).filter(key => d[key] !== null && d[key] !== undefined).length >= 5
+  )
+  if (comprehensiveData.length > 0) {
+    bundles.push(createComprehensiveHealthKitBundle(comprehensiveData))
   }
 
+  // 10. Urban Wellness Dynamics Bundle - location-based health patterns
+  const urbanData = healthData.filter(d => d.anonymized_location_zone?.includes('ZONE_'))
+  if (urbanData.length > 0) {
+    bundles.push(createUrbanWellnessBundle(urbanData))
+  }
+
+  console.log(`Generated ${bundles.length} unique health data bundles`)
   return bundles
 }
 
@@ -770,5 +810,575 @@ function calculateDemographicInsights(regionalData: any) {
     geographic_diversity: Object.keys(regionalData).length,
     data_density: Object.values(regionalData).reduce((sum: number, data: any) => sum + data.length, 0),
     coverage_quality: 'high'
+  }
+}
+
+// New HealthKit-specific bundle creation functions
+
+function createHealthKitVitalsBundle(data: any[]) {
+  const aggregatedData = {
+    total_vitals_records: data.length,
+    avg_heart_rate: calculateAverage(data, 'average_heartrate'),
+    avg_resting_heart_rate: calculateAverage(data, 'resting_heart_rate'),
+    avg_heart_rate_variability: calculateAverage(data, 'heart_rate_variability_ms'),
+    avg_blood_oxygen: calculateAverage(data, 'blood_oxygen_saturation'),
+    avg_systolic_bp: calculateAverage(data, 'systolic_blood_pressure'),
+    avg_diastolic_bp: calculateAverage(data, 'diastolic_blood_pressure'),
+    avg_respiratory_rate: calculateAverage(data, 'respiratory_rate_per_min'),
+    avg_body_temperature: calculateAverage(data, 'body_temperature_celsius'),
+    vitals_completeness: calculateVitalsCompleteness(data),
+    cardiovascular_insights: calculateCardiovascularInsights(data)
+  }
+
+  return {
+    title: `Apple HealthKit Vitals Collection`,
+    description: 'Comprehensive cardiovascular and respiratory health metrics from Apple HealthKit',
+    category: 'Health & Vitals',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} vital signs measurements`,
+      `Heart rate: ${aggregatedData.avg_heart_rate?.toFixed(0) || 'N/A'} bpm average`,
+      `Blood oxygen: ${aggregatedData.avg_blood_oxygen?.toFixed(1) || 'N/A'}% average`,
+      `Heart rate variability tracked`
+    ],
+    features: ['Heart Rate Analysis', 'Blood Pressure Tracking', 'Oxygen Saturation', 'Respiratory Metrics'],
+    suggested_filters: ['Heart Rate Range', 'Blood Pressure Category', 'Oxygen Level', 'Temperature Range']
+  }
+}
+
+function createBodyCompositionBundle(data: any[]) {
+  const aggregatedData = {
+    total_body_records: data.length,
+    avg_height: calculateAverage(data, 'height_cm'),
+    avg_weight: calculateAverage(data, 'weight_kg'),
+    avg_bmi: calculateAverage(data, 'body_mass_index'),
+    avg_body_fat: calculateAverage(data, 'body_fat_percentage'),
+    avg_lean_mass: calculateAverage(data, 'lean_body_mass_kg'),
+    avg_waist_circumference: calculateAverage(data, 'waist_circumference_cm'),
+    avg_vo2_max: calculateAverage(data, 'vo2_max'),
+    body_composition_trends: calculateBodyCompositionTrends(data),
+    fitness_level_distribution: calculateFitnessLevelDistribution(data)
+  }
+
+  return {
+    title: `Body Composition & Fitness Metrics Collection`,
+    description: 'Advanced body composition analysis and fitness performance indicators',
+    category: 'Fitness & Body Composition',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} body composition measurements`,
+      `Average BMI: ${aggregatedData.avg_bmi?.toFixed(1) || 'N/A'}`,
+      `VO2 Max: ${aggregatedData.avg_vo2_max?.toFixed(1) || 'N/A'} ml/kg/min`,
+      `Body fat percentage tracked`
+    ],
+    features: ['BMI Analysis', 'Body Fat Tracking', 'VO2 Max Metrics', 'Lean Mass Monitoring'],
+    suggested_filters: ['BMI Category', 'Body Fat Range', 'VO2 Max Level', 'Weight Range']
+  }
+}
+
+function createNutritionalHealthBundle(data: any[]) {
+  const aggregatedData = {
+    total_nutrition_records: data.length,
+    avg_daily_calories: calculateAverage(data, 'dietary_energy_kcal'),
+    avg_protein: calculateAverage(data, 'protein_g'),
+    avg_carbs: calculateAverage(data, 'carbohydrates_g'),
+    avg_fat: calculateAverage(data, 'total_fat_g'),
+    avg_fiber: calculateAverage(data, 'fiber_g'),
+    avg_sugar: calculateAverage(data, 'sugar_g'),
+    avg_water: calculateAverage(data, 'water_ml'),
+    avg_caffeine: calculateAverage(data, 'caffeine_mg'),
+    vitamin_mineral_tracking: calculateVitaminMineralTracking(data),
+    macronutrient_distribution: calculateMacronutrientDistribution(data)
+  }
+
+  return {
+    title: `Apple HealthKit Nutrition Collection`,
+    description: 'Comprehensive nutritional intake analysis including macronutrients, micronutrients, and hydration',
+    category: 'Nutrition & Diet',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} nutritional data entries`,
+      `Average calories: ${aggregatedData.avg_daily_calories?.toFixed(0) || 'N/A'} kcal/day`,
+      `Protein intake: ${aggregatedData.avg_protein?.toFixed(1) || 'N/A'}g average`,
+      `Comprehensive micronutrient tracking`
+    ],
+    features: ['Caloric Analysis', 'Macronutrient Breakdown', 'Micronutrient Tracking', 'Hydration Monitoring'],
+    suggested_filters: ['Calorie Range', 'Protein Level', 'Carb Intake', 'Vitamin Levels']
+  }
+}
+
+function createActivityMovementBundle(data: any[]) {
+  const aggregatedData = {
+    total_activity_records: data.length,
+    avg_daily_steps: calculateAverage(data, 'steps_count'),
+    avg_walking_distance: calculateAverage(data, 'distance_walking_running_meters'),
+    avg_cycling_distance: calculateAverage(data, 'distance_cycling_meters'),
+    avg_flights_climbed: calculateAverage(data, 'flights_climbed'),
+    avg_walking_speed: calculateAverage(data, 'walking_speed_mps'),
+    avg_step_length: calculateAverage(data, 'step_length_cm'),
+    walking_asymmetry: calculateAverage(data, 'walking_asymmetry_percentage'),
+    movement_patterns: calculateMovementPatterns(data),
+    activity_diversity: calculateActivityDiversity(data)
+  }
+
+  return {
+    title: `Activity & Movement Analytics Collection`,
+    description: 'Detailed analysis of daily movement patterns, walking gait, and physical activity metrics',
+    category: 'Activity & Movement',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} activity measurements`,
+      `Average steps: ${aggregatedData.avg_daily_steps?.toFixed(0) || 'N/A'} per day`,
+      `Walking speed: ${aggregatedData.avg_walking_speed?.toFixed(2) || 'N/A'} m/s`,
+      `Gait analysis and movement patterns`
+    ],
+    features: ['Step Counting', 'Distance Tracking', 'Gait Analysis', 'Movement Patterns'],
+    suggested_filters: ['Step Range', 'Distance Type', 'Walking Speed', 'Activity Level']
+  }
+}
+
+function createWomensHealthBundle(data: any[]) {
+  const aggregatedData = {
+    total_reproductive_records: data.length,
+    menstrual_flow_tracking: calculateMenstrualFlowTracking(data),
+    ovulation_data: calculateOvulationData(data),
+    basal_temperature_trends: calculateBasalTemperatureTrends(data),
+    cervical_mucus_patterns: calculateCervicalMucusPatterns(data),
+    reproductive_health_insights: calculateReproductiveHealthInsights(data)
+  }
+
+  return {
+    title: `Women's Health & Reproductive Analytics Collection`,
+    description: 'Comprehensive reproductive health tracking including menstrual cycles, ovulation, and fertility indicators',
+    category: 'Women\'s Health',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} reproductive health data points`,
+      `Menstrual cycle tracking available`,
+      `Ovulation pattern analysis`,
+      `Fertility indicator monitoring`
+    ],
+    features: ['Cycle Tracking', 'Ovulation Analysis', 'Temperature Monitoring', 'Fertility Insights'],
+    suggested_filters: ['Cycle Phase', 'Flow Intensity', 'Ovulation Status', 'Fertility Window']
+  }
+}
+
+function createMentalHealthBundle(data: any[]) {
+  const aggregatedData = {
+    total_mental_health_records: data.length,
+    avg_mindful_minutes: calculateAverage(data, 'mindful_minutes'),
+    avg_mood_score: calculateAverage(data, 'mood_score'),
+    avg_stress_level: calculateAverage(data, 'stress_level'),
+    emotional_state_distribution: calculateEmotionalStateDistribution(data),
+    mindfulness_patterns: calculateMindfulnessPatterns(data),
+    stress_correlation: calculateStressCorrelation(data)
+  }
+
+  return {
+    title: `Mental Health & Mindfulness Collection`,
+    description: 'Comprehensive mental wellness tracking including mood, stress levels, and mindfulness practices',
+    category: 'Mental Health',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} mental health assessments`,
+      `Average mood score: ${aggregatedData.avg_mood_score?.toFixed(1) || 'N/A'}/10`,
+      `Mindfulness: ${aggregatedData.avg_mindful_minutes?.toFixed(0) || 'N/A'} minutes average`,
+      `Stress pattern analysis available`
+    ],
+    features: ['Mood Tracking', 'Stress Analysis', 'Mindfulness Monitoring', 'Emotional Pattern Recognition'],
+    suggested_filters: ['Mood Range', 'Stress Level', 'Mindfulness Duration', 'Emotional State']
+  }
+}
+
+function createComprehensiveHealthKitBundle(data: any[]) {
+  const aggregatedData = {
+    total_comprehensive_records: data.length,
+    data_types_available: calculateDataTypesAvailable(data),
+    health_score: calculateOverallHealthScore(data),
+    data_richness_metrics: calculateDataRichnessMetrics(data),
+    comprehensive_insights: calculateComprehensiveInsights(data),
+    healthkit_coverage: calculateHealthKitCoverage(data)
+  }
+
+  return {
+    title: `Comprehensive Apple HealthKit Collection`,
+    description: 'Complete health ecosystem data including all available HealthKit metrics and insights',
+    category: 'Comprehensive Health',
+    tier: 'Enterprise',
+    price: calculateBundlePrice(data, 'Enterprise', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} comprehensive health records`,
+      `${aggregatedData.data_types_available} different HealthKit data types`,
+      `Multi-dimensional health analysis`,
+      `Complete health ecosystem coverage`
+    ],
+    features: ['All HealthKit Metrics', 'Cross-Category Analysis', 'Health Score Calculation', 'Comprehensive Insights'],
+    suggested_filters: ['Data Type', 'Health Category', 'Data Completeness', 'Time Period']
+  }
+}
+
+// Helper functions for new bundle types
+
+function calculateVitalsCompleteness(data: any[]): number {
+  const vitalFields = ['average_heartrate', 'resting_heart_rate', 'blood_oxygen_saturation', 'systolic_blood_pressure']
+  return data.map(record => {
+    const completedFields = vitalFields.filter(field => record[field] !== null && record[field] !== undefined)
+    return completedFields.length / vitalFields.length
+  }).reduce((sum, val) => sum + val, 0) / data.length
+}
+
+function calculateCardiovascularInsights(data: any[]) {
+  return {
+    heart_rate_zones: calculateHeartRateZones(data),
+    blood_pressure_categories: calculateBloodPressureCategories(data),
+    cardiovascular_risk_factors: calculateCardiovascularRiskFactors(data)
+  }
+}
+
+function calculateHeartRateZones(data: any[]) {
+  const heartRates = data.map(d => d.average_heartrate).filter(hr => hr)
+  return {
+    resting: heartRates.filter(hr => hr < 60).length,
+    normal: heartRates.filter(hr => hr >= 60 && hr <= 100).length,
+    elevated: heartRates.filter(hr => hr > 100).length
+  }
+}
+
+function calculateBloodPressureCategories(data: any[]) {
+  const bpData = data.filter(d => d.systolic_blood_pressure && d.diastolic_blood_pressure)
+  return {
+    normal: bpData.filter(d => d.systolic_blood_pressure < 120 && d.diastolic_blood_pressure < 80).length,
+    elevated: bpData.filter(d => d.systolic_blood_pressure >= 120 && d.systolic_blood_pressure < 130 && d.diastolic_blood_pressure < 80).length,
+    high: bpData.filter(d => d.systolic_blood_pressure >= 130 || d.diastolic_blood_pressure >= 80).length
+  }
+}
+
+function calculateCardiovascularRiskFactors(data: any[]) {
+  return {
+    total_assessments: data.length,
+    heart_rate_variability_tracked: data.filter(d => d.heart_rate_variability_ms).length,
+    blood_pressure_tracked: data.filter(d => d.systolic_blood_pressure && d.diastolic_blood_pressure).length
+  }
+}
+
+function calculateBodyCompositionTrends(data: any[]) {
+  return {
+    bmi_distribution: calculateBMIDistribution(data),
+    body_fat_trends: calculateBodyFatTrends(data),
+    fitness_metrics: calculateFitnessMetrics(data)
+  }
+}
+
+function calculateBMIDistribution(data: any[]) {
+  const bmis = data.map(d => d.body_mass_index).filter(bmi => bmi)
+  return {
+    underweight: bmis.filter(bmi => bmi < 18.5).length,
+    normal: bmis.filter(bmi => bmi >= 18.5 && bmi < 25).length,
+    overweight: bmis.filter(bmi => bmi >= 25 && bmi < 30).length,
+    obese: bmis.filter(bmi => bmi >= 30).length
+  }
+}
+
+function calculateBodyFatTrends(data: any[]) {
+  const bodyFats = data.map(d => d.body_fat_percentage).filter(bf => bf)
+  return {
+    low: bodyFats.filter(bf => bf < 15).length,
+    normal: bodyFats.filter(bf => bf >= 15 && bf <= 25).length,
+    high: bodyFats.filter(bf => bf > 25).length,
+    average: bodyFats.length > 0 ? bodyFats.reduce((sum, bf) => sum + bf, 0) / bodyFats.length : null
+  }
+}
+
+function calculateFitnessMetrics(data: any[]) {
+  return {
+    vo2_max_tracked: data.filter(d => d.vo2_max).length,
+    body_composition_tracked: data.filter(d => d.body_fat_percentage || d.lean_body_mass_kg).length,
+    physical_measurements_tracked: data.filter(d => d.height_cm || d.weight_kg).length
+  }
+}
+
+function calculateFitnessLevelDistribution(data: any[]) {
+  const vo2MaxValues = data.map(d => d.vo2_max).filter(v => v)
+  return {
+    poor: vo2MaxValues.filter(v => v < 25).length,
+    fair: vo2MaxValues.filter(v => v >= 25 && v < 35).length,
+    good: vo2MaxValues.filter(v => v >= 35 && v < 45).length,
+    excellent: vo2MaxValues.filter(v => v >= 45).length
+  }
+}
+
+function calculateVitaminMineralTracking(data: any[]) {
+  const vitamins = ['vitamin_c_mg', 'vitamin_d_mcg']
+  const minerals = ['calcium_mg', 'iron_mg', 'sodium_mg', 'potassium_mg']
+  
+  return {
+    vitamins_tracked: vitamins.filter(vitamin => data.some(d => d[vitamin])).length,
+    minerals_tracked: minerals.filter(mineral => data.some(d => d[mineral])).length,
+    total_micronutrients: [...vitamins, ...minerals].filter(nutrient => data.some(d => d[nutrient])).length
+  }
+}
+
+function calculateMacronutrientDistribution(data: any[]) {
+  const proteinCalories = data.map(d => (d.protein_g || 0) * 4)
+  const carbCalories = data.map(d => (d.carbohydrates_g || 0) * 4)
+  const fatCalories = data.map(d => (d.total_fat_g || 0) * 9)
+  
+  return {
+    avg_protein_calories: proteinCalories.reduce((sum, cal) => sum + cal, 0) / proteinCalories.length,
+    avg_carb_calories: carbCalories.reduce((sum, cal) => sum + cal, 0) / carbCalories.length,
+    avg_fat_calories: fatCalories.reduce((sum, cal) => sum + cal, 0) / fatCalories.length
+  }
+}
+
+function calculateMovementPatterns(data: any[]) {
+  return {
+    high_step_days: data.filter(d => (d.steps_count || 0) > 10000).length,
+    moderate_step_days: data.filter(d => (d.steps_count || 0) >= 5000 && (d.steps_count || 0) <= 10000).length,
+    low_step_days: data.filter(d => (d.steps_count || 0) < 5000).length,
+    flights_climbed_tracked: data.filter(d => d.flights_climbed).length
+  }
+}
+
+function calculateActivityDiversity(data: any[]) {
+  const walkingData = data.filter(d => d.distance_walking_running_meters)
+  const cyclingData = data.filter(d => d.distance_cycling_meters)
+  
+  return {
+    walking_sessions: walkingData.length,
+    cycling_sessions: cyclingData.length,
+    total_activity_types: (walkingData.length > 0 ? 1 : 0) + (cyclingData.length > 0 ? 1 : 0)
+  }
+}
+
+function calculateMenstrualFlowTracking(data: any[]) {
+  const flowData = data.map(d => d.menstrual_flow).filter(f => f)
+  return {
+    total_entries: flowData.length,
+    flow_patterns: flowData.reduce((acc, flow) => {
+      acc[flow] = (acc[flow] || 0) + 1
+      return acc
+    }, {} as { [key: string]: number })
+  }
+}
+
+function calculateOvulationData(data: any[]) {
+  const ovulationData = data.map(d => d.ovulation_test_result).filter(o => o)
+  return {
+    total_tests: ovulationData.length,
+    positive_results: ovulationData.filter(result => result === 'positive').length,
+    negative_results: ovulationData.filter(result => result === 'negative').length
+  }
+}
+
+function calculateBasalTemperatureTrends(data: any[]) {
+  const temperatures = data.map(d => d.basal_body_temperature_celsius).filter(t => t)
+  return {
+    total_measurements: temperatures.length,
+    avg_temperature: temperatures.length > 0 ? temperatures.reduce((sum, t) => sum + t, 0) / temperatures.length : null,
+    temperature_range: temperatures.length > 0 ? {
+      min: Math.min(...temperatures),
+      max: Math.max(...temperatures)
+    } : null
+  }
+}
+
+function calculateCervicalMucusPatterns(data: any[]) {
+  const mucusData = data.map(d => d.cervical_mucus_quality).filter(m => m)
+  return {
+    total_observations: mucusData.length,
+    quality_patterns: mucusData.reduce((acc, quality) => {
+      acc[quality] = (acc[quality] || 0) + 1
+      return acc
+    }, {} as { [key: string]: number })
+  }
+}
+
+function calculateReproductiveHealthInsights(data: any[]) {
+  return {
+    menstrual_tracking: data.filter(d => d.menstrual_flow).length,
+    ovulation_tracking: data.filter(d => d.ovulation_test_result).length,
+    temperature_tracking: data.filter(d => d.basal_body_temperature_celsius).length,
+    comprehensive_fertility_data: data.filter(d => 
+      d.menstrual_flow || d.ovulation_test_result || d.basal_body_temperature_celsius || d.cervical_mucus_quality
+    ).length
+  }
+}
+
+function calculateEmotionalStateDistribution(data: any[]) {
+  const states = data.map(d => d.emotional_state).filter(s => s)
+  return states.reduce((acc, state) => {
+    acc[state] = (acc[state] || 0) + 1
+    return acc
+  }, {} as { [key: string]: number })
+}
+
+function calculateMindfulnessPatterns(data: any[]) {
+  const mindfulSessions = data.filter(d => d.mindful_minutes)
+  return {
+    total_sessions: mindfulSessions.length,
+    avg_session_length: mindfulSessions.length > 0 ? 
+      mindfulSessions.reduce((sum, d) => sum + d.mindful_minutes, 0) / mindfulSessions.length : null,
+    consistency_score: mindfulSessions.length / data.length
+  }
+}
+
+function calculateStressCorrelation(data: any[]) {
+  const stressData = data.filter(d => d.stress_level && d.mindful_minutes)
+  return {
+    stress_mindfulness_correlation: stressData.length,
+    avg_stress_with_mindfulness: stressData.length > 0 ? 
+      stressData.reduce((sum, d) => sum + d.stress_level, 0) / stressData.length : null
+  }
+}
+
+function calculateDataTypesAvailable(data: any[]): number {
+  const allFields = new Set()
+  data.forEach(record => {
+    Object.keys(record).forEach(key => {
+      if (record[key] !== null && record[key] !== undefined) {
+        allFields.add(key)
+      }
+    })
+  })
+  return allFields.size
+}
+
+function calculateOverallHealthScore(data: any[]): number {
+  let totalScore = 0
+  let scoredRecords = 0
+  
+  data.forEach(record => {
+    let recordScore = 50 // Base score
+    let factors = 0
+    
+    // Vitals factors
+    if (record.average_heartrate && record.average_heartrate >= 60 && record.average_heartrate <= 100) {
+      recordScore += 10
+      factors++
+    }
+    if (record.blood_oxygen_saturation && record.blood_oxygen_saturation >= 95) {
+      recordScore += 10
+      factors++
+    }
+    
+    // Fitness factors
+    if (record.steps_count && record.steps_count >= 8000) {
+      recordScore += 15
+      factors++
+    }
+    if (record.vo2_max && record.vo2_max >= 35) {
+      recordScore += 15
+      factors++
+    }
+    
+    // Body composition factors
+    if (record.body_mass_index && record.body_mass_index >= 18.5 && record.body_mass_index < 25) {
+      recordScore += 10
+      factors++
+    }
+    
+    if (factors > 0) {
+      totalScore += Math.min(100, recordScore)
+      scoredRecords++
+    }
+  })
+  
+  return scoredRecords > 0 ? totalScore / scoredRecords : 50
+}
+
+function calculateDataRichnessMetrics(data: any[]) {
+  const categories = {
+    activity: ['steps_count', 'distance_walking_running_meters', 'calories_burned'],
+    vitals: ['average_heartrate', 'blood_oxygen_saturation', 'systolic_blood_pressure'],
+    body: ['height_cm', 'weight_kg', 'body_mass_index'],
+    nutrition: ['dietary_energy_kcal', 'protein_g', 'carbohydrates_g'],
+    sleep: ['sleep_duration', 'time_asleep_minutes', 'sleep_quality_score'],
+    mental: ['mood_score', 'stress_level', 'mindful_minutes']
+  }
+  
+  const richness = {}
+  Object.keys(categories).forEach(category => {
+    const fields = categories[category as keyof typeof categories]
+    const coverage = fields.filter(field => data.some(d => d[field])).length
+    richness[category] = coverage / fields.length
+  })
+  
+  return richness
+}
+
+function calculateComprehensiveInsights(data: any[]) {
+  return {
+    total_data_points: data.length,
+    data_completeness: calculateDataCompleteness(data),
+    health_categories_covered: Object.keys(calculateDataRichnessMetrics(data)).length,
+    data_quality_score: calculateAverageQuality(data),
+    temporal_coverage: calculateTemporalCoverage(data)
+  }
+}
+
+function calculateHealthKitCoverage(data: any[]) {
+  const healthkitCategories = [
+    'activity', 'vitals', 'body_measurements', 'nutrition', 
+    'sleep', 'reproductive_health', 'mental_health', 'clinical'
+  ]
+  
+  let coveredCategories = 0
+  
+  // Activity
+  if (data.some(d => d.steps_count || d.distance_walking_running_meters)) coveredCategories++
+  // Vitals  
+  if (data.some(d => d.average_heartrate || d.blood_oxygen_saturation)) coveredCategories++
+  // Body measurements
+  if (data.some(d => d.height_cm || d.weight_kg || d.body_mass_index)) coveredCategories++
+  // Nutrition
+  if (data.some(d => d.dietary_energy_kcal || d.protein_g)) coveredCategories++
+  // Sleep
+  if (data.some(d => d.sleep_duration || d.time_asleep_minutes)) coveredCategories++
+  // Reproductive health
+  if (data.some(d => d.menstrual_flow || d.ovulation_test_result)) coveredCategories++
+  // Mental health
+  if (data.some(d => d.mood_score || d.stress_level || d.mindful_minutes)) coveredCategories++
+  // Clinical
+  if (data.some(d => d.clinical_conditions || d.clinical_medications)) coveredCategories++
+  
+  return {
+    categories_covered: coveredCategories,
+    total_categories: healthkitCategories.length,
+    coverage_percentage: (coveredCategories / healthkitCategories.length) * 100
+  }
+}
+
+function calculateTemporalCoverage(data: any[]) {
+  const dates = data.map(d => new Date(d.created_at || d.processed_at)).filter(d => !isNaN(d.getTime()))
+  if (dates.length === 0) return { days_covered: 0 }
+  
+  const minDate = new Date(Math.min(...dates.map(d => d.getTime())))
+  const maxDate = new Date(Math.max(...dates.map(d => d.getTime())))
+  const daysCovered = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24))
+  
+  return {
+    days_covered: daysCovered,
+    start_date: minDate.toISOString().split('T')[0],
+    end_date: maxDate.toISOString().split('T')[0]
   }
 }
