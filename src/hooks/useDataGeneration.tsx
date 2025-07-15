@@ -15,62 +15,79 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
   const [dataRecords, setDataRecords] = useState<DataRecord[]>([]);
   const [tableHeaders, setTableHeaders] = useState<string[]>([]);
   const [headerToKeyMapping, setHeaderToKeyMapping] = useState<{ [key: string]: string }>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!bundle || !bundleId) return;
-    
-    const fetchHealthData = async () => {
-      setLoading(true);
-      setError(null);
-      
+    const fetchData = async () => {
+      if (!bundle && !bundleId) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Limit data based on tier
-        const tierLimits = {
-          'Essential': 50,
-          'Analyst': 100,
-          'Professional': 200,
-          'Enterprise': 1000
-        };
-        const limit = tierLimits[bundle.tier as keyof typeof tierLimits] || 100;
-        
-        // Fetch staged health data based on bundle category and tier
+        setLoading(true);
+        setError(null);
+
+        let currentBundle = bundle;
+
+        // If we only have bundleId, fetch bundle from database
+        if (!currentBundle && bundleId) {
+          console.log('Fetching bundle data for ID:', bundleId);
+          const { data: bundleData, error: bundleError } = await supabase
+            .from('marketplace_bundles')
+            .select('*')
+            .eq('bundle_id', bundleId)
+            .single();
+
+          if (bundleError) {
+            console.error('Error fetching bundle:', bundleError);
+            throw bundleError;
+          }
+
+          currentBundle = bundleData as any;
+        }
+
+        if (!currentBundle) {
+          throw new Error('No bundle data available');
+        }
+
+        console.log('Processing bundle:', (currentBundle as any).title || currentBundle.name);
+        console.log('Bundle data preview:', JSON.stringify((currentBundle as any).data_json || currentBundle.dataJson).substring(0, 200));
+
+        // Always fetch fresh data from staged_health_data to ensure accuracy
+        console.log('Fetching ALL available records from staged_health_data...');
         let query = supabase.from('staged_health_data').select('*');
-        
-        // Use actual activity types from the database
-        const actualActivityTypes = ['Daily Activity', 'raw_health_data', 'daily_activity'];
-        
-        // Get raw health data
-        const { data: healthMetrics } = await supabase
-          .from('raw_health_data')
-          .select('*')
-          .not('step_count', 'is', null)
-          .limit(limit);
+
+        // Apply filtering based on what data actually exists
+        query = query.not('steps_count', 'is', null).order('created_at', { ascending: false });
+
+        // Get tier limit but ensure minimum of 1000 records for Professional tier and above
+        const tierLimits = {
+          'Essential': 100,
+          'Analyst': 500,
+          'Professional': 2000,
+          'Enterprise': 5000
+        };
+        const limit = tierLimits[currentBundle.tier as keyof typeof tierLimits] || 2000;
+        query = query.limit(limit);
+
+        const { data: healthData, error: healthError } = await query;
+
+        if (healthError) {
+          console.error('Error fetching health data:', healthError);
+          throw healthError;
+        }
+
+        if (!healthData || healthData.length === 0) {
+          console.log('No staged health data found, generating sample data');
+          const sampleData = generateSampleData(currentBundle, 50);
+          setDataRecords(sampleData);
           
-        // If we have health metrics, transform and use them
-        if (healthMetrics && healthMetrics.length > 0) {
-          const transformedHealthData = healthMetrics.map((record, index) => ({
-            id: record.id || `health-${index}`,
-            activity_type: transformActivityType('Daily Activity'),
-            duration_minutes: null,
-            distance_km: null,
-            avg_heart_rate: null,
-            max_heart_rate: null,
-            calories_burned: null,
-            steps_count: record.step_count,
-            location_zone: null,
-            device_type: transformDeviceType('Health App'),
-            data_quality: 85,
-            processed_date: record.recorded_at ? new Date(record.recorded_at).toLocaleDateString() : null
-          }));
-          setDataRecords(transformedHealthData);
-          
-          // Set up headers for health metrics
           const headers = [
             'Activity Type',
             'Steps Count',
-            'Date Recorded',
+            'Date Processed',
             'Device',
             'Data Quality (%)'
           ];
@@ -78,7 +95,7 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
           const mapping = {
             'Activity Type': 'activity_type',
             'Steps Count': 'steps_count',
-            'Date Recorded': 'processed_date',
+            'Date Processed': 'processed_date',
             'Device': 'device_type',
             'Data Quality (%)': 'data_quality'
           };
@@ -88,52 +105,35 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
           setLoading(false);
           return;
         }
-        
-        // Apply filters based on bundle category for staged health data
-        if (bundle.category === 'Health & Fitness' || bundle.category === 'Fitness & Sports') {
-          query = query.in('activity_type', actualActivityTypes);
-        } else if (bundle.category === 'Wellness & Recovery') {
-          query = query.not('sleep_duration', 'is', null);
-        } else {
-          // Default to actual activity types that exist in the database
-          query = query.in('activity_type', actualActivityTypes);
-        }
-        
-        query = query.limit(limit);
-        
-        const { data, error: queryError } = await query;
-        
-        if (queryError) {
-          console.error('Error fetching health data:', queryError);
-          setError('Failed to load data');
-          return;
-        }
-        
-        if (!data || data.length === 0) {
-          // Generate sample data structure for demo when no real data exists
-          const sampleData = generateSampleData(bundle, limit);
-          setDataRecords(sampleData);
-        } else {
-          // Transform real data into display format
-          const transformedData = data.map((record, index) => ({
-            id: record.id || `record-${index}`,
-            activity_type: transformActivityType(record.activity_type),
-            duration_minutes: record.duration_seconds ? Math.round(record.duration_seconds / 60) : null,
-            distance_km: record.distance_meters ? (record.distance_meters / 1000).toFixed(2) : null,
-            avg_heart_rate: record.average_heartrate,
-            max_heart_rate: record.max_heartrate,
-            calories_burned: record.calories_burned,
-            location_zone: record.anonymized_location_zone,
-            device_type: transformDeviceType(record.device_type),
-            data_quality: record.data_quality_score ? Math.round(record.data_quality_score * 100) : null,
-            processed_date: record.processed_at ? new Date(record.processed_at).toLocaleDateString() : null
-          }));
-          setDataRecords(transformedData);
-        }
-        
-        // Set up table headers and mapping
+
+        console.log(`✅ Found ${healthData.length} records with step data!`);
+        console.log(`Steps range: ${Math.min(...healthData.map(r => r.steps_count || 0))} - ${Math.max(...healthData.map(r => r.steps_count || 0))}`);
+        console.log(`Average steps: ${Math.round(healthData.reduce((sum, r) => sum + (r.steps_count || 0), 0) / healthData.length)}`);
+
+        // Transform health data to display format with all available fields
+        const records: DataRecord[] = healthData.map((record, index) => ({
+          id: record.id || `record-${index}`,
+          activity_type: transformActivityType(record.activity_type || 'Daily Activity'),
+          steps_count: record.steps_count || 0,
+          duration_minutes: record.duration_seconds ? Math.round(record.duration_seconds / 60) : null,
+          distance_km: record.distance_meters ? (record.distance_meters / 1000).toFixed(2) : null,
+          avg_heart_rate: record.average_heartrate || null,
+          max_heart_rate: record.max_heartrate || null,
+          calories_burned: record.calories_burned || null,
+          location_zone: record.anonymized_location_zone || 'ZONE_UNKNOWN',
+          device_type: transformDeviceType(record.device_type || 'iPhone'),
+          data_quality: record.data_quality_score ? Math.round(record.data_quality_score * 100) : 85,
+          processed_date: record.processed_at ? new Date(record.processed_at).toLocaleDateString() : new Date().toLocaleDateString(),
+          sleep_duration: record.sleep_duration ? Math.round(record.sleep_duration / 60) : null,
+          sleep_quality: record.sleep_quality_score || null,
+          stress_level: record.stress_level || null,
+          recovery_score: record.recovery_score || null
+        }));
+
+        // Set up comprehensive table headers
         const headers = [
           'Activity Type',
+          'Steps Count',
           'Duration (min)',
           'Distance (km)',
           'Avg Heart Rate',
@@ -147,6 +147,7 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         
         const mapping = {
           'Activity Type': 'activity_type',
+          'Steps Count': 'steps_count',
           'Duration (min)': 'duration_minutes',
           'Distance (km)': 'distance_km',
           'Avg Heart Rate': 'avg_heart_rate',
@@ -157,19 +158,55 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
           'Data Quality (%)': 'data_quality',
           'Date Processed': 'processed_date'
         };
-        
+
+        setDataRecords(records);
         setTableHeaders(headers);
         setHeaderToKeyMapping(mapping);
+
+      } catch (err: any) {
+        console.error('Error in useDataGeneration:', err);
+        setError(err.message || 'Failed to fetch data');
         
-      } catch (err) {
-        console.error('Unexpected error:', err);
-        setError('An unexpected error occurred');
+        // Fallback: Generate sample data
+        if (bundle || bundleId) {
+          console.log('Generating sample data as fallback');
+          const fallbackBundle = bundle || { 
+            bundle_id: 'sample', 
+            id: 'sample', 
+            name: 'Sample Data', 
+            category: 'Health', 
+            tier: 'Standard',
+            contacts: 100,
+            features: []
+          } as Bundle;
+          const sampleData = generateSampleData(fallbackBundle, 25);
+          setDataRecords(sampleData);
+          
+          const headers = [
+            'Activity Type',
+            'Steps Count',
+            'Date Processed',
+            'Device',
+            'Data Quality (%)'
+          ];
+          
+          const mapping = {
+            'Activity Type': 'activity_type',
+            'Steps Count': 'steps_count',
+            'Date Processed': 'processed_date',
+            'Device': 'device_type',
+            'Data Quality (%)': 'data_quality'
+          };
+          
+          setTableHeaders(headers);
+          setHeaderToKeyMapping(mapping);
+        }
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchHealthData();
+
+    fetchData();
   }, [bundle, bundleId]);
 
   return { dataRecords, tableHeaders, headerToKeyMapping, loading, error };
