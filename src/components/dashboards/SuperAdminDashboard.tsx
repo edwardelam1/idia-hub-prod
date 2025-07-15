@@ -98,18 +98,9 @@ const SuperAdminDashboard = () => {
 
       {/* Synapse Visualizer */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle>Network Activity Overview</CardTitle>
-            <CardDescription>Live visualization of the IDIA Synapse Engine™ data flow</CardDescription>
-          </div>
-          <Button 
-            onClick={handleEngageDataProcessing}
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Engage
-          </Button>
+        <CardHeader>
+          <CardTitle>Network Activity Overview</CardTitle>
+          <CardDescription>Live visualization of the IDIA Synapse Engine™ data flow</CardDescription>
         </CardHeader>
         <CardContent>
           <SynapseVisualizer />
