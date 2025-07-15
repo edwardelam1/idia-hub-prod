@@ -55,9 +55,9 @@ serve(async (req) => {
     let healthDataQuery = supabaseClient.from('staged_health_data').select('*');
     
     if (trigger === 'real_time') {
-      // For real-time triggers, process recent data (last hour) to create fresh bundles
-      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false }).limit(100);
+      // For real-time triggers, process recent data (last 24 hours) to create comprehensive bundles
+      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false }).limit(500);
     } else if (trigger === 'manual_engage' || force_process) {
       // For manual engagement, get all available data
       healthDataQuery = healthDataQuery.order('created_at', { ascending: false }).limit(1000);
@@ -102,26 +102,44 @@ serve(async (req) => {
         .eq('is_active', true) // Only check active bundles, no time restriction
 
       if (existingBundles && existingBundles.length > 0) {
-        console.log(`Skipping duplicate bundle: ${bundle.title}`)
+        console.log(`Updating existing bundle: ${bundle.title}`)
         
-        // Update existing bundle instead of creating new one
+        // Update existing bundle with new data
         const existingBundle = existingBundles[0]
         const newVersion = (existingBundle.bundle_version || 1) + 1
+        
+        // Merge new data with existing data
+        const existingData = existingBundle.data_json || {}
+        const mergedData = {
+          ...bundle.data_json,
+          total_records: (existingData.total_records || 0) + bundle.contacts_count,
+          last_update: new Date().toISOString(),
+          update_history: [
+            ...(existingData.update_history || []),
+            { version: newVersion, updated_at: new Date().toISOString(), records_added: bundle.contacts_count }
+          ].slice(-10) // Keep last 10 updates
+        }
+        
         const { data: updatedBundle, error: updateError } = await supabaseClient
           .from('marketplace_bundles')
           .update({
-            contacts_count: bundle.contacts_count,
-            data_json: bundle.data_json,
-            key_insights: bundle.key_insights,
+            contacts_count: (existingBundle.contacts_count || 0) + bundle.contacts_count,
+            data_json: mergedData,
+            key_insights: [
+              ...bundle.key_insights,
+              `Updated with ${bundle.contacts_count} new records`,
+              `Total records: ${(existingBundle.contacts_count || 0) + bundle.contacts_count}`
+            ],
             updated_at: new Date().toISOString(),
-            bundle_version: newVersion // Properly increment version
+            bundle_version: newVersion,
+            price: calculateBundlePrice(healthData, bundle.tier, mergedData)
           })
           .eq('bundle_id', existingBundle.bundle_id)
           .select()
 
         if (!updateError && updatedBundle) {
           bundleResults.push(updatedBundle[0])
-          console.log(`Updated existing bundle: ${bundle.title}`)
+          console.log(`Updated existing bundle: ${bundle.title} to version ${newVersion}`)
         }
         continue
       }
@@ -257,9 +275,8 @@ function createUrbanWellnessBundle(data: any[]) {
     zone_coverage: [...new Set(transformedData.map(d => d.anonymized_location_zone))].length
   }
 
-  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: `Urban Wellness Dynamics: ${dateStr} Health Trends (${transformedData.length} Records)`,
+    title: `Urban Wellness Dynamics Collection`,
     description: 'Comprehensive anonymized view of urban population activity and wellness trends',
     category: 'Health & Fitness',
     tier: 'Enterprise',
@@ -287,9 +304,8 @@ function createPerformanceAnalyticsBundle(data: any[]) {
     activity_patterns: calculateActivityPatterns(data)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: `Athletic Performance Analytics: ${dateStr} Dataset (${data.length} Sessions)`,
+    title: `Athletic Performance Analytics Collection`,
     description: 'Advanced metrics on workout intensity, activity patterns, and performance optimization',
     category: 'Sports & Performance',
     tier: 'Professional',
@@ -317,9 +333,8 @@ function createSleepRecoveryBundle(data: any[]) {
     recovery_insights: calculateRecoveryInsights(data)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
   return {
-    title: `Sleep & Recovery Patterns: ${dateStr} Study (${data.length} Cycles)`,
+    title: `Sleep & Recovery Patterns Collection`,
     description: 'Comprehensive analysis of sleep patterns, quality metrics, and recovery correlations',
     category: 'Health & Wellness',
     tier: 'Professional',
@@ -348,9 +363,8 @@ function createComprehensiveHealthBundle(data: any[]) {
     health_score_distribution: calculateHealthScoreDistribution(data)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0]
   return {
-    title: `Comprehensive Health Metrics: ${dateStr} Dataset (${data.length} Records)`,
+    title: `Comprehensive Health Metrics Collection`,
     description: 'Advanced health analytics including cardiovascular, respiratory, and metabolic indicators',
     category: 'Health & Fitness',
     tier: 'Professional',
@@ -378,9 +392,8 @@ function createNutritionalInsightsBundle(data: any[]) {
     nutrition_completeness: calculateNutritionCompleteness(data)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0]
   return {
-    title: `Nutritional Insights Analytics: ${dateStr} Study (${data.length} Records)`,
+    title: `Nutritional Insights Collection`,
     description: 'Comprehensive nutritional intake analysis including macronutrients and hydration patterns',
     category: 'Health & Nutrition',
     tier: 'Professional',
@@ -407,9 +420,8 @@ function createClinicalHealthBundle(data: any[]) {
     clinical_insights: calculateClinicalInsights(data)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0]
   return {
-    title: `Clinical Health Analytics: ${dateStr} Dataset (${data.length} Records)`,
+    title: `Clinical Health Analytics Collection`,
     description: 'Advanced clinical data including conditions, medications, and vital signs analysis',
     category: 'Clinical Research',
     tier: 'Enterprise',

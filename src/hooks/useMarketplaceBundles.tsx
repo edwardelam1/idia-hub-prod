@@ -33,17 +33,17 @@ export const useMarketplaceBundles = () => {
         .from('marketplace_bundles')
         .select('*')
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('updated_at', { ascending: false }); // Order by updated_at to show most recently updated bundles first
 
       if (error) {
         console.error('Error fetching marketplace bundles:', error);
         throw error;
       }
 
-      console.log(`Fetched ${data?.length || 0} bundles from database`);
+      console.log(`Fetched ${data?.length || 0} bundles from database (ordered by last update)`);
       return data as MarketplaceBundle[];
     },
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes for real-time updates
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds for near real-time updates
   });
 
   // Set up real-time subscription for bundle updates
@@ -61,6 +61,8 @@ export const useMarketplaceBundles = () => {
         },
         (payload) => {
           console.log('Real-time bundle update received:', payload);
+          const bundleTitle = (payload.new as any)?.title || (payload.old as any)?.title || 'Unknown';
+          console.log('Bundle change event:', payload.eventType, bundleTitle);
           refetch(); // Refetch data when changes occur
         }
       )
