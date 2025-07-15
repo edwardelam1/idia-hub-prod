@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Filter, Lock, Zap, Coins } from 'lucide-react';
+import { useDynamicFilters } from '@/hooks/useDynamicFilters';
+import { useMarketplaceBundles } from '@/hooks/useMarketplaceBundles';
 
 interface FilterModalProps {
   userRole: string;
@@ -20,6 +22,8 @@ interface FilterModalProps {
 const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory }: FilterModalProps) => {
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState(currentFilters);
+  const { bundles } = useMarketplaceBundles();
+  const dynamicFilters = useDynamicFilters(bundles);
 
   const getFilterAccess = () => {
     switch (userRole) {
@@ -35,13 +39,14 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
   const hasProfessional = filterAccess.includes('Professional');
   const hasEnterprise = filterAccess.includes('Enterprise');
 
-  const industries = [
-    'Technology', 'Healthcare', 'Financial Services', 'Manufacturing',
-    'Retail & E-commerce', 'Real Estate', 'Education', 'Professional Services'
-  ];
-
-  const companySizes = ['1-50', '51-500', '501-5000', '5000+'];
-  const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East', 'Global'];
+  // Use dynamic data from actual bundles
+  const categories = dynamicFilters.categories;
+  const tiers = dynamicFilters.tiers;
+  const features = dynamicFilters.features;
+  const activityTypes = dynamicFilters.activityTypes;
+  const healthMetrics = dynamicFilters.healthMetrics;
+  const dataTypes = dynamicFilters.dataTypes;
+  const priceRanges = dynamicFilters.priceRanges;
 
   // Context-aware filters based on bundle category
   const getContextualFilters = () => {
@@ -133,15 +138,15 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="industry">Industry</Label>
-                <Select value={filters.industry || ''} onValueChange={(value) => setFilters({...filters, industry: value})}>
+                <Label htmlFor="category">Data Category</Label>
+                <Select value={filters.category || ''} onValueChange={(value) => setFilters({...filters, category: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select industry" />
+                    <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {industries.map((industry) => (
-                      <SelectItem key={industry} value={industry}>
-                        {industry}
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -149,15 +154,15 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
               </div>
 
               <div>
-                <Label htmlFor="companySize">Company Size</Label>
-                <Select value={filters.companySize || ''} onValueChange={(value) => setFilters({...filters, companySize: value})}>
+                <Label htmlFor="tier">Data Tier</Label>
+                <Select value={filters.tier || ''} onValueChange={(value) => setFilters({...filters, tier: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select company size" />
+                    <SelectValue placeholder="Select tier" />
                   </SelectTrigger>
                   <SelectContent>
-                    {companySizes.map((size) => (
-                      <SelectItem key={size} value={size}>
-                        {size} employees
+                    {tiers.map((tier) => (
+                      <SelectItem key={tier} value={tier}>
+                        {tier}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -165,15 +170,15 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
               </div>
 
               <div>
-                <Label htmlFor="region">Geographic Region</Label>
-                <Select value={filters.region || ''} onValueChange={(value) => setFilters({...filters, region: value})}>
+                <Label htmlFor="healthMetric">Health Metrics</Label>
+                <Select value={filters.healthMetric || ''} onValueChange={(value) => setFilters({...filters, healthMetric: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select region" />
+                    <SelectValue placeholder="Select health metric" />
                   </SelectTrigger>
                   <SelectContent>
-                    {regions.map((region) => (
-                      <SelectItem key={region} value={region}>
-                        {region}
+                    {healthMetrics.map((metric) => (
+                      <SelectItem key={metric} value={metric}>
+                        {metric}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -181,16 +186,49 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
               </div>
 
               <div>
-                <Label htmlFor="revenue">Annual Revenue</Label>
-                <Select value={filters.revenue || ''} onValueChange={(value) => setFilters({...filters, revenue: value})}>
+                <Label htmlFor="activityType">Activity Type</Label>
+                <Select value={filters.activityType || ''} onValueChange={(value) => setFilters({...filters, activityType: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select revenue range" />
+                    <SelectValue placeholder="Select activity type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="under-1m">Under $1M</SelectItem>
-                    <SelectItem value="1m-10m">$1M - $10M</SelectItem>
-                    <SelectItem value="10m-100m">$10M - $100M</SelectItem>
-                    <SelectItem value="over-100m">Over $100M</SelectItem>
+                    {activityTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="dataType">Data Type</Label>
+                <Select value={filters.dataType || ''} onValueChange={(value) => setFilters({...filters, dataType: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select data type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dataTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="priceRange">Price Range</Label>
+                <Select value={filters.priceRange || ''} onValueChange={(value) => setFilters({...filters, priceRange: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select price range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {priceRanges.map((range) => (
+                      <SelectItem key={range} value={range}>
+                        {range}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

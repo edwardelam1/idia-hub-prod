@@ -99,12 +99,52 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const filteredBundles = convertedBundles.filter(bundle => {
     const matchesSearch = !searchQuery || 
       bundle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bundle.description.toLowerCase().includes(searchQuery.toLowerCase());
+      bundle.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bundle.keyInsights?.some(insight => insight.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesIndustry = !appliedFilters.industry || bundle.category === appliedFilters.industry;
+    const matchesCategory = !appliedFilters.category || bundle.category === appliedFilters.category;
     const matchesTier = !appliedFilters.tier || bundle.tier === appliedFilters.tier;
     
-    return matchesSearch && matchesIndustry && matchesTier;
+    // Health metric filtering
+    const matchesHealthMetric = !appliedFilters.healthMetric || (() => {
+      const metric = appliedFilters.healthMetric.toLowerCase();
+      return bundle.name.toLowerCase().includes(metric) ||
+             bundle.description.toLowerCase().includes(metric) ||
+             bundle.keyInsights?.some(insight => insight.toLowerCase().includes(metric));
+    })();
+    
+    // Activity type filtering
+    const matchesActivityType = !appliedFilters.activityType || (() => {
+      const activityType = appliedFilters.activityType;
+      return bundle.dataJson?.activity_type_breakdown && 
+             Object.keys(bundle.dataJson.activity_type_breakdown).includes(activityType);
+    })();
+    
+    // Data type filtering
+    const matchesDataType = !appliedFilters.dataType || (() => {
+      const dataType = appliedFilters.dataType.toLowerCase();
+      if (dataType.includes('activity') && (bundle.dataJson?.total_activities || bundle.dataJson?.total_workouts)) return true;
+      if (dataType.includes('sleep') && bundle.dataJson?.total_sleep_records) return true;
+      if (dataType.includes('nutrition') && bundle.dataJson?.total_nutrition_records) return true;
+      if (dataType.includes('clinical') && bundle.dataJson?.total_clinical_records) return true;
+      if (dataType.includes('geographic') && bundle.dataJson?.regions_covered) return true;
+      return false;
+    })();
+    
+    // Price range filtering
+    const matchesPriceRange = !appliedFilters.priceRange || (() => {
+      const price = bundle.price || 0;
+      const range = appliedFilters.priceRange;
+      if (range === 'Under $500') return price < 500;
+      if (range === '$500 - $1,000') return price >= 500 && price < 1000;
+      if (range === '$1,000 - $2,500') return price >= 1000 && price < 2500;
+      if (range === '$2,500 - $5,000') return price >= 2500 && price < 5000;
+      if (range === '$5,000+') return price >= 5000;
+      return true;
+    })();
+    
+    return matchesSearch && matchesCategory && matchesTier && matchesHealthMetric && 
+           matchesActivityType && matchesDataType && matchesPriceRange;
   });
 
   // Get the most common category for filter context

@@ -54,12 +54,16 @@ serve(async (req) => {
     // Get staged health data based on trigger type
     let healthDataQuery = supabaseClient.from('staged_health_data').select('*');
     
-    if (trigger === 'manual_engage' || force_process) {
+    if (trigger === 'real_time') {
+      // For real-time triggers, process recent data (last hour) to create fresh bundles
+      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false }).limit(100);
+    } else if (trigger === 'manual_engage' || force_process) {
       // For manual engagement, get all available data
       healthDataQuery = healthDataQuery.order('created_at', { ascending: false }).limit(1000);
     } else {
-      // For scheduled runs, get data from last 24 hours
-      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      // For scheduled runs, get data from last 6 hours (more frequent updates)
+      healthDataQuery = healthDataQuery.gte('created_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString());
     }
 
     const { data: healthData, error: dataError } = await healthDataQuery;
@@ -181,27 +185,54 @@ serve(async (req) => {
 async function generateHealthBundles(healthData: any[]) {
   const bundles = []
 
-  // Urban Wellness Dynamics Bundle
+  // Always try to create bundles regardless of data count (removed artificial thresholds)
+  
+  // Urban Wellness Dynamics Bundle - if we have any location data
   const urbanData = healthData.filter(d => d.anonymized_location_zone?.includes('ZONE_'))
-  if (urbanData.length > 5) { // Lower threshold for manual engagement
+  if (urbanData.length > 0) {
     bundles.push(createUrbanWellnessBundle(urbanData))
   }
 
-  // Activity Performance Analytics Bundle
-  const performanceData = healthData.filter(d => d.workout_intensity && d.steps_count)
-  if (performanceData.length > 3) { // Lower threshold
+  // Activity Performance Analytics Bundle - if we have any activity metrics
+  const performanceData = healthData.filter(d => d.workout_intensity || d.steps_count || d.average_heartrate)
+  if (performanceData.length > 0) {
     bundles.push(createPerformanceAnalyticsBundle(performanceData))
   }
 
-  // Sleep & Recovery Insights Bundle
-  const sleepData = healthData.filter(d => d.sleep_duration || d.sleep_quality_score)
-  if (sleepData.length > 3) { // Lower threshold
+  // Sleep & Recovery Insights Bundle - if we have any sleep data
+  const sleepData = healthData.filter(d => d.sleep_duration || d.sleep_quality_score || d.time_asleep_minutes)
+  if (sleepData.length > 0) {
     bundles.push(createSleepRecoveryBundle(sleepData))
   }
 
-  // Regional Health Trends Bundle
+  // Comprehensive Health Metrics Bundle - if we have rich health data
+  const comprehensiveData = healthData.filter(d => 
+    d.heart_rate_variability_ms || d.blood_oxygen_saturation || d.vo2_max || 
+    d.systolic_blood_pressure || d.body_mass_index || d.dietary_energy_kcal
+  )
+  if (comprehensiveData.length > 0) {
+    bundles.push(createComprehensiveHealthBundle(comprehensiveData))
+  }
+
+  // Nutritional Insights Bundle - if we have nutrition data
+  const nutritionData = healthData.filter(d => 
+    d.dietary_energy_kcal || d.protein_g || d.carbohydrates_g || d.total_fat_g || d.water_ml
+  )
+  if (nutritionData.length > 0) {
+    bundles.push(createNutritionalInsightsBundle(nutritionData))
+  }
+
+  // Clinical Health Bundle - if we have clinical data
+  const clinicalData = healthData.filter(d => 
+    d.clinical_conditions || d.clinical_medications || d.clinical_vitals || d.clinical_lab_results
+  )
+  if (clinicalData.length > 0) {
+    bundles.push(createClinicalHealthBundle(clinicalData))
+  }
+
+  // Regional Health Trends Bundle - if we have multiple regions
   const regionalData = groupByRegion(healthData)
-  if (Object.keys(regionalData).length > 1) { // Lower threshold
+  if (Object.keys(regionalData).length > 0) {
     bundles.push(createRegionalTrendsBundle(regionalData))
   }
 
@@ -306,6 +337,96 @@ function createSleepRecoveryBundle(data: any[]) {
   }
 }
 
+function createComprehensiveHealthBundle(data: any[]) {
+  const aggregatedData = {
+    total_records: data.length,
+    health_metrics_available: calculateHealthMetricsAvailable(data),
+    average_bmi: calculateAverage(data, 'body_mass_index'),
+    average_vo2_max: calculateAverage(data, 'vo2_max'),
+    heart_rate_variability: calculateAverage(data, 'heart_rate_variability_ms'),
+    blood_oxygen_levels: calculateAverage(data, 'blood_oxygen_saturation'),
+    health_score_distribution: calculateHealthScoreDistribution(data)
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0]
+  return {
+    title: `Comprehensive Health Metrics: ${dateStr} Dataset (${data.length} Records)`,
+    description: 'Advanced health analytics including cardiovascular, respiratory, and metabolic indicators',
+    category: 'Health & Fitness',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} comprehensive health records`,
+      `Average BMI: ${aggregatedData.average_bmi?.toFixed(1) || 'N/A'}`,
+      `VO2 Max insights available`,
+      `Cardiovascular health patterns identified`
+    ],
+    features: ['Advanced Health Metrics', 'Cardiovascular Analysis', 'Metabolic Insights', 'Wellness Scoring'],
+    suggested_filters: ['BMI Range', 'VO2 Max Level', 'Heart Rate Variability', 'Health Score']
+  }
+}
+
+function createNutritionalInsightsBundle(data: any[]) {
+  const aggregatedData = {
+    total_nutrition_records: data.length,
+    avg_daily_calories: calculateAverage(data, 'dietary_energy_kcal'),
+    avg_protein_intake: calculateAverage(data, 'protein_g'),
+    avg_carb_intake: calculateAverage(data, 'carbohydrates_g'),
+    avg_water_intake: calculateAverage(data, 'water_ml'),
+    nutrition_completeness: calculateNutritionCompleteness(data)
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0]
+  return {
+    title: `Nutritional Insights Analytics: ${dateStr} Study (${data.length} Records)`,
+    description: 'Comprehensive nutritional intake analysis including macronutrients and hydration patterns',
+    category: 'Health & Nutrition',
+    tier: 'Professional',
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} nutritional data points analyzed`,
+      `Average daily calories: ${aggregatedData.avg_daily_calories?.toFixed(0) || 'N/A'} kcal`,
+      `Protein intake patterns identified`,
+      `Hydration trends analyzed`
+    ],
+    features: ['Macronutrient Analysis', 'Caloric Tracking', 'Hydration Patterns', 'Nutritional Scoring'],
+    suggested_filters: ['Calorie Range', 'Protein Level', 'Carbohydrate Intake', 'Water Consumption']
+  }
+}
+
+function createClinicalHealthBundle(data: any[]) {
+  const aggregatedData = {
+    total_clinical_records: data.length,
+    conditions_tracked: calculateConditionsTracked(data),
+    medications_analyzed: calculateMedicationsAnalyzed(data),
+    vital_signs_coverage: calculateVitalSignsCoverage(data),
+    clinical_insights: calculateClinicalInsights(data)
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0]
+  return {
+    title: `Clinical Health Analytics: ${dateStr} Dataset (${data.length} Records)`,
+    description: 'Advanced clinical data including conditions, medications, and vital signs analysis',
+    category: 'Clinical Research',
+    tier: 'Enterprise',
+    price: calculateBundlePrice(data, 'Enterprise', aggregatedData),
+    contacts_count: data.length,
+    data_json: aggregatedData,
+    key_insights: [
+      `${data.length} clinical health records`,
+      `Multiple health conditions tracked`,
+      `Medication adherence patterns`,
+      `Vital signs monitoring insights`
+    ],
+    features: ['Clinical Data Analysis', 'Condition Tracking', 'Medication Insights', 'Vital Signs Monitoring'],
+    suggested_filters: ['Condition Type', 'Medication Category', 'Age Group', 'Vital Signs Range']
+  }
+}
+
 function createRegionalTrendsBundle(regionalData: any) {
   const regions = Object.keys(regionalData)
   const totalRecords = Object.values(regionalData).reduce((sum: number, data: any) => sum + data.length, 0)
@@ -319,7 +440,7 @@ function createRegionalTrendsBundle(regionalData: any) {
     demographic_insights: calculateDemographicInsights(regionalData)
   }
 
-  const dateStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+  const dateStr = new Date().toISOString().split('T')[0]
   return {
     title: `Regional Health Trends: ${dateStr} Analysis (${regions.length} Regions)`,
     description: 'Cross-regional comparison of health trends, activity patterns, and wellness metrics',
@@ -412,6 +533,71 @@ function calculateBundlePrice(data: any[], tier: string, aggregatedData: any): n
 function calculateAverage(data: any[], field: string): number | null {
   const values = data.map(d => d[field]).filter(v => v !== null && v !== undefined && !isNaN(v))
   return values.length > 0 ? values.reduce((sum, val) => sum + val, 0) / values.length : null
+}
+
+function calculateHealthMetricsAvailable(data: any[]) {
+  const metrics = ['heart_rate_variability_ms', 'blood_oxygen_saturation', 'vo2_max', 'body_mass_index', 'systolic_blood_pressure']
+  return metrics.filter(metric => data.some(d => d[metric] !== null && d[metric] !== undefined)).length
+}
+
+function calculateHealthScoreDistribution(data: any[]) {
+  // Create a health score based on available metrics
+  const scores = data.map(d => {
+    let score = 50 // Base score
+    if (d.vo2_max > 35) score += 20
+    if (d.body_mass_index && d.body_mass_index < 25) score += 15
+    if (d.blood_oxygen_saturation > 95) score += 15
+    return Math.min(100, score)
+  })
+  
+  return {
+    excellent: scores.filter(s => s >= 80).length,
+    good: scores.filter(s => s >= 60 && s < 80).length,
+    fair: scores.filter(s => s >= 40 && s < 60).length,
+    poor: scores.filter(s => s < 40).length
+  }
+}
+
+function calculateNutritionCompleteness(data: any[]) {
+  const nutritionFields = ['dietary_energy_kcal', 'protein_g', 'carbohydrates_g', 'total_fat_g', 'water_ml']
+  return data.map(record => {
+    const completedFields = nutritionFields.filter(field => record[field] !== null && record[field] !== undefined)
+    return completedFields.length / nutritionFields.length
+  }).reduce((sum, val) => sum + val, 0) / data.length
+}
+
+function calculateConditionsTracked(data: any[]) {
+  const conditions = new Set()
+  data.forEach(d => {
+    if (d.clinical_conditions && Array.isArray(d.clinical_conditions)) {
+      d.clinical_conditions.forEach((condition: any) => conditions.add(condition.name || condition))
+    }
+  })
+  return conditions.size
+}
+
+function calculateMedicationsAnalyzed(data: any[]) {
+  const medications = new Set()
+  data.forEach(d => {
+    if (d.clinical_medications && Array.isArray(d.clinical_medications)) {
+      d.clinical_medications.forEach((med: any) => medications.add(med.name || med))
+    }
+  })
+  return medications.size
+}
+
+function calculateVitalSignsCoverage(data: any[]) {
+  const vitalSigns = ['systolic_blood_pressure', 'diastolic_blood_pressure', 'respiratory_rate_per_min', 'body_temperature_celsius']
+  return vitalSigns.filter(vital => data.some(d => d[vital] !== null && d[vital] !== undefined)).length
+}
+
+function calculateClinicalInsights(data: any[]) {
+  return {
+    total_conditions: calculateConditionsTracked(data),
+    total_medications: calculateMedicationsAnalyzed(data),
+    vital_signs_tracked: calculateVitalSignsCoverage(data),
+    data_richness_score: (calculateConditionsTracked(data) + calculateMedicationsAnalyzed(data) + calculateVitalSignsCoverage(data)) / 3
+  }
 }
 
 function calculateAverageQuality(data: any[]): number {
