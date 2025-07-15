@@ -15,6 +15,7 @@ import AIManagement from '@/components/ai/AIManagement';
 import DataViewer from '@/components/data/DataViewer';
 import MyReports from '@/components/reports/MyReports';
 import SecurityPage from './SecurityPage';
+import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -66,7 +67,7 @@ const Index = () => {
         <Route path="/data-viewer/:bundleId" element={<DataViewer />} />
         <Route path="/data-viewer/purchased/:purchaseId" element={<DataViewer />} />
         <Route path="/my-reports" element={<MyReports />} />
-        <Route path="/system-health" element={<div className="p-8 text-center text-gray-500">System health monitoring awaiting live data</div>} />
+        <Route path="/system-health" element={<SystemHealthDashboard />} />
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<SecurityPage />} />
