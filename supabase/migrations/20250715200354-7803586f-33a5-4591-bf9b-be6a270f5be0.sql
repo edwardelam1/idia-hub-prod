@@ -16,3 +16,10 @@ CREATE POLICY "Allow authenticated read access"
 ON staged_health_data 
 FOR SELECT 
 USING (true);
+
+-- Create the missing trigger on staged_health_data for immediate bundle generation
+DROP TRIGGER IF EXISTS immediate_bundle_generation ON staged_health_data;
+CREATE TRIGGER immediate_bundle_generation
+  AFTER INSERT ON staged_health_data
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_bundle_generation();
