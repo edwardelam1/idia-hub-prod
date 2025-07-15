@@ -12,11 +12,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Get the data from the request body.
-    const { step_count, recorded_at } = await req.json()
-
+    // 1. Get the data from the request body - now accepts all health data
+    const healthData = await req.json()
+    
+    console.log('Received health data:', healthData)
+    
+    // Extract step count for validation (still required as primary field)
+    const step_count = healthData.step_count || healthData.steps || 0
+    const recorded_at = healthData.recorded_at || healthData.timestamp
+    
     // Enhanced data validation - more permissive
-    if (!step_count || typeof step_count !== 'number' || step_count < 0 || step_count > 200000) {
+    if (typeof step_count !== 'number' || step_count < 0 || step_count > 200000) {
       console.warn('Invalid step count received:', step_count, 'type:', typeof step_count)
       return new Response(JSON.stringify({ 
         error: "Invalid step count",
@@ -88,10 +94,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Insert into raw_health_data (simplified - single pipeline)
+    // 5. Insert into raw_health_data with complete Apple Health data
     const rawHealthData = {
-      raw_payload: { step_count, recorded_at, source: 'idia_synapse' },
-      device_type: 'mobile_app',
+      raw_payload: { 
+        ...healthData, 
+        source: 'apple_health',
+        processed_at: new Date().toISOString()
+      },
+      device_type: healthData.device_type || 'apple_health',
       step_count,
       recorded_at: recorded_at || new Date().toISOString(),
       user_id,
