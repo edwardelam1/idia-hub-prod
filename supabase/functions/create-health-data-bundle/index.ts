@@ -232,7 +232,7 @@ function createUrbanWellnessBundle(data: any[]) {
     description: 'Comprehensive anonymized view of urban population activity and wellness trends',
     category: 'Health & Fitness',
     tier: 'Enterprise',
-    price: Math.floor(Math.random() * 3000) + 2000,
+    price: calculateBundlePrice(transformedData, 'Enterprise', aggregatedData),
     contacts_count: transformedData.length,
     data_json: { ...aggregatedData, sample_data: transformedData.slice(0, 10) },
     key_insights: [
@@ -262,7 +262,7 @@ function createPerformanceAnalyticsBundle(data: any[]) {
     description: 'Advanced metrics on workout intensity, activity patterns, and performance optimization',
     category: 'Sports & Performance',
     tier: 'Professional',
-    price: Math.floor(Math.random() * 2000) + 1500,
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
     contacts_count: data.length,
     data_json: aggregatedData,
     key_insights: [
@@ -292,7 +292,7 @@ function createSleepRecoveryBundle(data: any[]) {
     description: 'Comprehensive analysis of sleep patterns, quality metrics, and recovery correlations',
     category: 'Health & Wellness',
     tier: 'Professional',
-    price: Math.floor(Math.random() * 1800) + 1200,
+    price: calculateBundlePrice(data, 'Professional', aggregatedData),
     contacts_count: data.length,
     data_json: aggregatedData,
     key_insights: [
@@ -309,6 +309,7 @@ function createSleepRecoveryBundle(data: any[]) {
 function createRegionalTrendsBundle(regionalData: any) {
   const regions = Object.keys(regionalData)
   const totalRecords = Object.values(regionalData).reduce((sum: number, data: any) => sum + data.length, 0)
+  const flatData = Object.values(regionalData).flat() as any[]
 
   const aggregatedData = {
     regions_covered: regions.length,
@@ -324,7 +325,7 @@ function createRegionalTrendsBundle(regionalData: any) {
     description: 'Cross-regional comparison of health trends, activity patterns, and wellness metrics',
     category: 'Market Research',
     tier: 'Enterprise',
-    price: Math.floor(Math.random() * 4000) + 3000,
+    price: calculateBundlePrice(flatData, 'Enterprise', aggregatedData),
     contacts_count: totalRecords,
     data_json: aggregatedData,
     key_insights: [
@@ -336,6 +337,75 @@ function createRegionalTrendsBundle(regionalData: any) {
     features: ['Regional Analysis', 'Trend Mapping', 'Comparative Metrics', 'Demographic Insights'],
     suggested_filters: ['Geographic Region', 'Trend Period', 'Health Metric', 'Population Segment']
   }
+}
+
+// Data-based pricing algorithm
+function calculateBundlePrice(data: any[], tier: string, aggregatedData: any): number {
+  // Base price per data record depending on quality
+  const basePrice = 75;
+  const dataCount = data.length;
+  
+  // Calculate quality multiplier (0.8x - 1.2x)
+  const avgQualityScore = calculateAverage(data, 'data_quality_score') || 0.5;
+  const qualityMultiplier = 0.8 + (avgQualityScore * 0.4);
+  
+  // Calculate completeness multiplier (0.9x - 1.1x)
+  const completenessScore = calculateDataCompleteness(data);
+  const completenessMultiplier = 0.9 + (completenessScore * 0.2);
+  
+  // Tier multipliers
+  const tierMultipliers = {
+    'Analyst': 1.0,
+    'Professional': 1.3,
+    'Enterprise': 1.6
+  };
+  const tierMultiplier = tierMultipliers[tier] || 1.0;
+  
+  // Data richness bonuses
+  let richnessBonus = 1.0;
+  
+  // Multiple activity types bonus (+10% per additional type)
+  const activityTypes = new Set(data.map(d => d.activity_type).filter(a => a));
+  if (activityTypes.size > 1) {
+    richnessBonus += (activityTypes.size - 1) * 0.1;
+  }
+  
+  // Zone coverage bonus (+5% per zone)
+  const zones = new Set(data.map(d => d.anonymized_location_zone).filter(z => z));
+  if (zones.size > 1) {
+    richnessBonus += (zones.size - 1) * 0.05;
+  }
+  
+  // Clinical data present (+25%)
+  const hasClinicalData = data.some(d => 
+    d.clinical_conditions || d.clinical_medications || d.clinical_vitals || d.clinical_lab_results
+  );
+  if (hasClinicalData) {
+    richnessBonus += 0.25;
+  }
+  
+  // Sleep data present (+15%)
+  const hasSleepData = data.some(d => d.sleep_duration || d.sleep_quality_score);
+  if (hasSleepData) {
+    richnessBonus += 0.15;
+  }
+  
+  // Nutritional data present (+20%)
+  const hasNutritionalData = data.some(d => 
+    d.dietary_energy_kcal || d.protein_g || d.carbohydrates_g || d.total_fat_g
+  );
+  if (hasNutritionalData) {
+    richnessBonus += 0.20;
+  }
+  
+  // Calculate final price
+  let finalPrice = dataCount * basePrice * qualityMultiplier * completenessMultiplier * tierMultiplier * richnessBonus;
+  
+  // Apply reasonable bounds ($300-8000)
+  finalPrice = Math.max(300, Math.min(8000, finalPrice));
+  
+  // Round to nearest dollar
+  return Math.round(finalPrice);
 }
 
 // Helper functions
