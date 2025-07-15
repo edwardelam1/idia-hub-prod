@@ -8,6 +8,7 @@ interface HealthMetric {
   recorded_at: string | null;
   created_at: string | null;
   raw_payload: any;
+  device_type: string | null;
 }
 
 interface HealthStats {
@@ -35,15 +36,38 @@ export const useHealthMetrics = () => {
   const fetchHealthMetrics = async () => {
     try {
       // Get recent health metrics from raw_health_data including raw_payload for analysis
+      // Apply deduplication by grouping records with same step_count and recorded_at
       const { data: metrics, error: metricsError } = await supabase
         .from('raw_health_data')
-        .select('id, step_count, recorded_at, created_at, user_id, raw_payload')
+        .select('id, step_count, recorded_at, created_at, user_id, raw_payload, device_type')
         .not('step_count', 'is', null)
         .gt('step_count', 0)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
 
       if (metricsError) throw metricsError;
+
+      // Deduplicate records - keep only the one with most health data (non-zero heartRate)
+      const deduplicatedMetrics = metrics?.reduce((acc: any[], current) => {
+        const existing = acc.find(item => 
+          item.step_count === current.step_count && 
+          Math.abs(new Date(item.recorded_at || '').getTime() - new Date(current.recorded_at || '').getTime()) < 60000 // within 1 minute
+        );
+        
+        if (!existing) {
+          acc.push(current);
+        } else {
+          // Keep the record with more health data (non-zero heart rate or more complete payload)
+          const currentPayload = current.raw_payload as any || {};
+          const existingPayload = existing.raw_payload as any || {};
+          
+          if ((currentPayload?.heartRate || 0) > (existingPayload?.heartRate || 0)) {
+            const index = acc.indexOf(existing);
+            acc[index] = current;
+          }
+        }
+        return acc;
+      }, []) || [];
 
       // Get total count of valid records
       const { count: totalCount, error: countError } = await supabase
@@ -71,7 +95,7 @@ export const useHealthMetrics = () => {
       let totalQualityScore = 0;
       let qualityScoreCount = 0;
 
-      metrics?.forEach(metric => {
+      deduplicatedMetrics?.forEach(metric => {
         const payload = metric.raw_payload as any || {};
         
         // Track available data types with proper type checking
@@ -88,15 +112,15 @@ export const useHealthMetrics = () => {
       });
 
       // Calculate average steps from step-related metrics
-      const stepMetrics = metrics?.filter(m => m.step_count !== null) || [];
+      const stepMetrics = deduplicatedMetrics?.filter(m => m.step_count !== null) || [];
       const averageSteps = stepMetrics.length > 0 
         ? Math.round(stepMetrics.reduce((sum, m) => sum + (m.step_count || 0), 0) / stepMetrics.length)
         : 0;
 
-      const lastActivity = metrics?.[0]?.created_at || null;
+      const lastActivity = deduplicatedMetrics?.[0]?.created_at || null;
       const comprehensiveScore = dataTypes.size > 1 ? Math.min(dataTypes.size * 0.15 + 0.25, 1.0) : 0.3;
 
-      setHealthMetrics(metrics || []);
+      setHealthMetrics(deduplicatedMetrics || []);
       setHealthStats({
         totalRecords: totalCount || 0,
         todayRecords: todayCount || 0,

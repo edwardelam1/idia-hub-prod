@@ -79,13 +79,13 @@ const HealthDataDashboard = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Steps</CardTitle>
+            <CardTitle className="text-sm font-medium">Data Types</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{healthStats.averageSteps.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-primary">{healthStats.dataTypes.length}</div>
             <p className="text-xs text-muted-foreground">
-              From recent submissions
+              Types of health data
             </p>
           </CardContent>
         </Card>
@@ -122,29 +122,57 @@ const HealthDataDashboard = () => {
           {healthMetrics.length > 0 ? (
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-600 border-b pb-2">
-                <div>Step Count</div>
+                <div>Health Data</div>
                 <div>Recorded At</div>
                 <div>Received At</div>
-                <div>Source</div>
+                <div>Device</div>
               </div>
-              {healthMetrics.slice(0, 10).map((metric) => (
-                <div key={metric.id} className="grid grid-cols-4 gap-4 text-sm">
-                  <div className="font-medium">
-                    {metric.step_count?.toLocaleString() || '0'}
+              {healthMetrics.slice(0, 10).map((metric) => {
+                const payload = metric.raw_payload as any || {};
+                const heartRate = payload?.heartRate || 0;
+                const calories = payload?.calories || 0;
+                
+                // Extract device information from raw_payload
+                const deviceType = payload?.device_type || metric.device_type || 'Unknown';
+                const source = payload?.source || '';
+                
+                // Format device display
+                let deviceDisplay = deviceType;
+                if (deviceType.includes('iPhone')) {
+                  deviceDisplay = source === 'apple_health' ? 'iPhone Health App' : 'iPhone';
+                } else if (deviceType.includes('Android')) {
+                  deviceDisplay = 'Android Health';
+                }
+                
+                return (
+                  <div key={metric.id} className="grid grid-cols-4 gap-4 text-sm">
+                    <div className="font-medium">
+                      <div className="space-y-1">
+                        {metric.step_count && metric.step_count > 0 && (
+                          <div>🚶 {metric.step_count.toLocaleString()} steps</div>
+                        )}
+                        {heartRate > 0 && (
+                          <div>❤️ {heartRate} bpm</div>
+                        )}
+                        {calories > 0 && (
+                          <div>🔥 {calories} cal</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-gray-600">
+                      {metric.recorded_at ? format(new Date(metric.recorded_at), 'MMM d') : 'N/A'}
+                    </div>
+                    <div className="text-gray-600">
+                      {metric.created_at ? format(new Date(metric.created_at), 'MMM d, HH:mm') : 'N/A'}
+                    </div>
+                    <div>
+                      <Badge variant="secondary">
+                        {deviceDisplay}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-gray-600">
-                    {metric.recorded_at ? format(new Date(metric.recorded_at), 'MMM d') : 'N/A'}
-                  </div>
-                  <div className="text-gray-600">
-                    {metric.created_at ? format(new Date(metric.created_at), 'MMM d, HH:mm') : 'N/A'}
-                  </div>
-                  <div>
-                    <Badge variant="secondary">
-                      {metric.user_id ? 'User' : 'Anonymous'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
