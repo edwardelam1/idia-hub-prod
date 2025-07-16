@@ -35,15 +35,15 @@ export const useHealthMetrics = () => {
 
   const fetchHealthMetrics = async () => {
     try {
-      // Get recent health metrics from raw_health_data including raw_payload for analysis
-      // Apply deduplication by grouping records with same step_count and recorded_at
+      setIsLoading(true);
+      
+      // Get ALL health metrics from raw_health_data including raw_payload for analysis
+      // Include records with null step counts to show processing status
       const { data: metrics, error: metricsError } = await supabase
         .from('raw_health_data')
-        .select('id, step_count, recorded_at, created_at, user_id, raw_payload, device_type')
-        .not('step_count', 'is', null)
-        .gt('step_count', 0)
+        .select('id, step_count, recorded_at, created_at, user_id, raw_payload, device_type, processing_status, processed')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (metricsError) throw metricsError;
 
