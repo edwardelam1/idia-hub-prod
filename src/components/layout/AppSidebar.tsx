@@ -87,13 +87,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
 
   return (
     <Sidebar 
-      className={`
-        ${isCollapsed ? 'w-14' : 'w-64'}
-        h-full flex-shrink-0
-        fixed left-0 top-0 z-30
-        md:relative md:z-auto
-        transition-all duration-300 ease-in-out
-      `}
+      className="h-full flex-shrink-0"
       collapsible="icon"
     >
       <SidebarContent className="bg-background border-r border-border h-full flex flex-col">

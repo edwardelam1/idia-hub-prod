@@ -168,7 +168,7 @@ const DataViewer = () => {
   return (
     <ErrorBoundary 
       fallback={
-        <div className="container mx-auto p-6">
+        <div className="p-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
             <p className="text-gray-600">Please try refreshing the page or go back to the marketplace.</p>
@@ -179,10 +179,10 @@ const DataViewer = () => {
         </div>
       }
     >
-      <div className={`min-h-screen bg-gray-50 ${isMobile ? 'p-2' : 'p-6'}`}>
+      <div className={`h-full bg-background ${isMobile ? 'p-4' : 'p-6'}`}>
         {/* Mobile Header */}
         {isMobile && (
-          <div className="flex items-center justify-between mb-4 bg-white p-3 rounded-lg shadow-sm">
+          <div className="flex items-center justify-between mb-4 bg-card p-3 rounded-lg border">
             <Button variant="ghost" size="sm" onClick={() => navigate('/marketplace')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -193,8 +193,8 @@ const DataViewer = () => {
                   <Filter className="h-4 w-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-full max-w-sm p-0">
-                <div className="p-4">
+              <SheetContent side="right" className="w-full max-w-sm">
+                <div className="py-4">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold">Filters</h2>
                     <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
@@ -208,63 +208,63 @@ const DataViewer = () => {
           </div>
         )}
 
-      <div className={`flex ${isMobile ? 'flex-col' : 'gap-6'}`}>
-        {/* Desktop Sidebar */}
-        {!isMobile && (
-          <div className="w-80">
-            <FilterSidebar />
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 space-y-4">
-          {/* Header */}
+        <div className={`flex ${isMobile ? 'flex-col' : 'gap-6'} h-full`}>
+          {/* Desktop Sidebar */}
           {!isMobile && (
-            <DataViewerHeader
-              bundle={bundle}
-              filteredCount={filteredRecords.length}
-              totalCount={dataRecords.length}
-              onShare={() => setShowSavedSearches(true)}
-              onSave={() => setShowContactLists(true)}
-              onExport={() => handleExport('csv')}
-              pipelineStats={{
-                processedCount: healthStats.totalRecords,
-                bundleCount: dataRecords.length
-              }}
-            />
+            <div className="w-80 flex-shrink-0">
+              <FilterSidebar />
+            </div>
           )}
 
-          {/* Data Privacy Warning */}
-          <Card className="border-purple-200 bg-purple-50">
-            <CardContent className={`${isMobile ? 'p-3' : 'pt-6'}`}>
-              <p className={`text-purple-700 ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                {getMaskedDataWarning()}
-              </p>
-            </CardContent>
-          </Card>
+          {/* Main Content */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {/* Header */}
+            {!isMobile && (
+              <DataViewerHeader
+                bundle={bundle}
+                filteredCount={filteredRecords.length}
+                totalCount={dataRecords.length}
+                onShare={() => setShowSavedSearches(true)}
+                onSave={() => setShowContactLists(true)}
+                onExport={() => handleExport('csv')}
+                pipelineStats={{
+                  processedCount: healthStats.totalRecords,
+                  bundleCount: dataRecords.length
+                }}
+              />
+            )}
 
-          {/* Search Bar */}
-          <DataViewerSearch
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            filteredCount={filteredRecords.length}
-            onSavedSearches={() => setShowSavedSearches(true)}
-            onExport={() => handleExport('csv')}
-            isMobile={isMobile}
-          />
+            {/* Data Privacy Warning */}
+            <Card className="border-purple-200 bg-purple-50">
+              <CardContent className={`${isMobile ? 'p-3' : 'pt-6'}`}>
+                <p className={`text-purple-700 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                  {getMaskedDataWarning()}
+                </p>
+              </CardContent>
+            </Card>
 
-          {/* Data Table */}
-          <DataViewerTable
-            paginatedRecords={paginatedRecords}
-            tableHeaders={tableHeaders}
-            headerToKeyMapping={headerToKeyMapping}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            isMobile={isMobile}
-          />
+            {/* Search Bar */}
+            <DataViewerSearch
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              filteredCount={filteredRecords.length}
+              onSavedSearches={() => setShowSavedSearches(true)}
+              onExport={() => handleExport('csv')}
+              isMobile={isMobile}
+            />
+
+            {/* Data Table */}
+            <DataViewerTable
+              paginatedRecords={paginatedRecords}
+              tableHeaders={tableHeaders}
+              headerToKeyMapping={headerToKeyMapping}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              isMobile={isMobile}
+            />
+          </div>
         </div>
-      </div>
 
         {/* Modals */}
         <SavedSearches
