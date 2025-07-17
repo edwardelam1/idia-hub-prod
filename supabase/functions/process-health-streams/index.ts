@@ -89,26 +89,98 @@ async function processBatch(supabaseClient: any, pendingData: any[]): Promise<nu
           .single()
 
         if (!rawError && rawHealthData) {
-          // Process directly for health data
-          const stepCount = rawHealthData.step_count || rawHealthData.raw_payload?.step_count
-          const recordedAt = rawHealthData.recorded_at || rawHealthData.raw_payload?.recorded_at
+          // Extract comprehensive HealthKit data from raw_payload
+          const payload = rawHealthData.raw_payload || {}
+          const healthkitTypes = payload.healthkit_data_types || {}
+          
+          // Extract all available health data points
+          const stepCount = rawHealthData.step_count || payload.steps || payload.step_count
+          const recordedAt = rawHealthData.recorded_at || payload.recorded_at
+          
+          // Extract comprehensive health metrics
+          const heartRate = payload.heartRate || healthkitTypes.vitals?.heart_rate
+          const calories = payload.calories || payload.activeEnergyBurned || healthkitTypes.activity?.active_calories
+          const sleepHours = payload.sleepHours || payload.timeAsleep || healthkitTypes.sleep?.time_asleep
+          const restingHeartRate = payload.restingHeartRate || healthkitTypes.vitals?.resting_heart_rate
+          const bloodPressureSystolic = payload.bloodPressureSystolic || healthkitTypes.vitals?.blood_pressure_systolic
+          const bloodPressureDiastolic = payload.bloodPressureDiastolic || healthkitTypes.vitals?.blood_pressure_diastolic
+          const weight = payload.bodyMass || payload.weight || healthkitTypes.body_measurements?.weight
+          const height = payload.height || healthkitTypes.body_measurements?.height
+          const bodyFatPercentage = payload.bodyFatPercentage || healthkitTypes.body_measurements?.body_fat_percentage
+          const vo2Max = payload.vo2Max || healthkitTypes.vitals?.vo2_max
+          const walkingDistance = payload.distanceWalkingRunning || healthkitTypes.activity?.walking_distance
+          const cyclingDistance = payload.distanceCycling || healthkitTypes.activity?.cycling_distance
+          const flightsClimbed = payload.flightsClimbed || healthkitTypes.activity?.flights_climbed
+          
+          // Nutrition data
+          const dietaryEnergy = payload.dietaryEnergyConsumed || healthkitTypes.nutrition?.calories
+          const protein = payload.dietaryProtein || healthkitTypes.nutrition?.protein
+          const totalFat = payload.dietaryFatTotal || healthkitTypes.nutrition?.fat_total
+          const carbohydrates = payload.dietaryCarbohydrates || healthkitTypes.nutrition?.carbohydrates
+          const water = payload.dietaryWater || healthkitTypes.nutrition?.water
+          const caffeine = payload.dietaryCaffeine || healthkitTypes.nutrition?.caffeine
 
           if (stepCount !== null && stepCount !== undefined && stepCount >= 0) {
-            // Insert into health_metrics and staged_health_data
+            // Calculate comprehensive data quality and completeness scores
+            const basicMetrics = [stepCount, heartRate, calories, sleepHours].filter(v => v != null).length
+            const vitals = [heartRate, restingHeartRate, bloodPressureSystolic, bloodPressureDiastolic].filter(v => v != null).length
+            const nutrition = [dietaryEnergy, protein, totalFat, carbohydrates, water, caffeine].filter(v => v != null).length
+            const hasBodyMeasurements = weight != null || height != null || bodyFatPercentage != null
+            const hasSleepData = sleepHours != null && sleepHours > 0
+            
+            // Use comprehensive data quality calculation
+            const dataQualityScore = 0.3 + (basicMetrics * 0.1) + (vitals * 0.08) + (nutrition * 0.05) + 
+                                   (hasBodyMeasurements ? 0.15 : 0) + (hasSleepData ? 0.15 : 0)
+            const dataCompletenessScore = Math.min(1.0, (basicMetrics + vitals + nutrition) / 20)
+
+            // Insert comprehensive health metrics
             const [healthMetricResult, stagedResult] = await Promise.allSettled([
               supabaseClient.from('health_metrics').insert({
                 step_count: stepCount,
+                heart_rate: heartRate,
+                calories_burned: calories,
                 recorded_at: recordedAt,
-                user_id: rawHealthData.user_id
+                user_id: rawHealthData.user_id,
+                activity_type: 'comprehensive_health',
+                device_type: rawHealthData.device_type || payload.device_type || 'iPhone Health App',
+                raw_data: {
+                  comprehensive_healthkit: true,
+                  data_points_count: basicMetrics + vitals + nutrition,
+                  source: payload.source || 'apple_health'
+                }
               }),
               supabaseClient.from('staged_health_data').insert({
                 pseudo_user_id: rawHealthData.user_id ? `user_${rawHealthData.user_id.slice(0, 8)}` : 'anonymous',
-                activity_type: 'daily_activity',
+                activity_type: 'comprehensive_health_data',
                 steps_count: stepCount,
-                device_type: rawHealthData.device_type || 'mobile_app',
-                data_quality_score: stepCount > 0 ? 0.8 : 0.3,
-                data_completeness_score: 0.7,
-                raw_data_id: rawHealthData.id
+                average_heartrate: heartRate,
+                resting_heart_rate: restingHeartRate,
+                calories_burned: calories,
+                sleep_duration: sleepHours ? sleepHours * 60 : null, // Convert to minutes
+                systolic_blood_pressure: bloodPressureSystolic,
+                diastolic_blood_pressure: bloodPressureDiastolic,
+                weight_kg: weight,
+                height_cm: height,
+                body_fat_percentage: bodyFatPercentage,
+                vo2_max: vo2Max,
+                distance_walking_running_meters: walkingDistance,
+                distance_cycling_meters: cyclingDistance,
+                flights_climbed: flightsClimbed,
+                dietary_energy_kcal: dietaryEnergy,
+                protein_g: protein,
+                total_fat_g: totalFat,
+                carbohydrates_g: carbohydrates,
+                water_ml: water,
+                caffeine_mg: caffeine,
+                device_type: rawHealthData.device_type || payload.device_type || 'iPhone Health App',
+                data_quality_score: Math.min(1.0, dataQualityScore),
+                data_completeness_score: dataCompletenessScore,
+                raw_data_id: rawHealthData.id,
+                healthkit_source_bundles: {
+                  comprehensive_healthkit: true,
+                  original_payload: payload,
+                  extracted_data_points: basicMetrics + vitals + nutrition
+                }
               })
             ])
 
