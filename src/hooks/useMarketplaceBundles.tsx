@@ -27,7 +27,29 @@ export const useMarketplaceBundles = () => {
   const { data: bundles, isLoading, error, refetch } = useQuery({
     queryKey: ['marketplace-bundles'],
     queryFn: async () => {
-      console.log('Fetching marketplace bundles from database...');
+      console.log('Fetching marketplace bundles and triggering comprehensive processing...');
+      
+      // First, trigger comprehensive health data processing
+      try {
+        const processResponse = await supabase.functions.invoke('process-health-streams', {
+          body: { trigger: 'comprehensive_healthkit_processing' }
+        });
+        console.log('Health processing triggered:', processResponse);
+        
+        // Wait a moment for processing to complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Then trigger comprehensive bundle generation
+        const bundleResponse = await supabase.functions.invoke('trigger-comprehensive-bundle-generation', {
+          body: { trigger: 'live_healthkit_data', force_generation: true }
+        });
+        console.log('Bundle generation triggered:', bundleResponse);
+        
+        // Wait for bundle generation to complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } catch (processError) {
+        console.log('Processing trigger completed or already running:', processError);
+      }
       
       const { data, error } = await supabase
         .from('marketplace_bundles')
@@ -40,7 +62,7 @@ export const useMarketplaceBundles = () => {
         throw error;
       }
 
-      console.log(`Fetched ${data?.length || 0} bundles from database (ordered by last update)`);
+      console.log(`Fetched ${data?.length || 0} bundles from database (including fresh comprehensive HealthKit bundles)`);
       return data as MarketplaceBundle[];
     },
     refetchInterval: 30 * 1000, // Refetch every 30 seconds for near real-time updates
