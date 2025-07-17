@@ -123,96 +123,125 @@ function anonymizeLocationData(rawData: any) {
 function extractHealthMetrics(rawData: any) {
   // Handle both Apple Health and Strava data formats
   const isAppleHealth = rawData.source === 'apple_health'
-  const healthkitData = rawData.healthkit_data_types || {}
+  
+  console.log('Extracting health metrics from flat payload:', {
+    source: rawData.source,
+    availableFields: Object.keys(rawData || {}),
+    sampleValues: {
+      steps: rawData.steps,
+      heartRate: rawData.heartRate,
+      weight: rawData.weight,
+      height: rawData.height,
+      oxygenSaturation: rawData.oxygenSaturation
+    }
+  })
   
   if (isAppleHealth) {
+    // Extract from flat HealthKitManager.swift payload structure
     return {
-      // Activity metrics
-      steps_count: healthkitData.activity?.steps || rawData.step_count || rawData.steps || null,
-      distance_walking_running_meters: healthkitData.activity?.walking_distance || rawData.distanceWalkingRunning || null,
-      distance_cycling_meters: healthkitData.activity?.cycling_distance || rawData.distanceCycling || null,
-      flights_climbed: healthkitData.activity?.flights_climbed || rawData.flightsClimbed || null,
-      calories_burned: healthkitData.activity?.active_calories || rawData.activeEnergyBurned || rawData.calories || null,
+      // Basic Activity Metrics (always collected)
+      steps_count: rawData.steps || rawData.step_count || null,
+      calories_burned: rawData.calories || rawData.activeEnergyBurned || null,
+      distance_walking_running_meters: rawData.distanceWalkingRunning || rawData.walkingRunningDistance || null,
+      distance_cycling_meters: rawData.distanceCycling || rawData.cyclingDistance || null,
+      flights_climbed: rawData.flightsClimbed || null,
       
-      // Vitals
-      average_heartrate: healthkitData.vitals?.heart_rate || rawData.heartRate || rawData.averageHeartRate || null,
-      resting_heart_rate: healthkitData.vitals?.resting_heart_rate || rawData.restingHeartRate || null,
-      heart_rate_variability_ms: healthkitData.vitals?.heart_rate_variability || rawData.heartRateVariability || null,
-      blood_oxygen_saturation: healthkitData.vitals?.oxygen_saturation || rawData.oxygenSaturation || null,
-      systolic_blood_pressure: healthkitData.vitals?.blood_pressure_systolic || rawData.bloodPressureSystolic || null,
-      diastolic_blood_pressure: healthkitData.vitals?.blood_pressure_diastolic || rawData.bloodPressureDiastolic || null,
-      respiratory_rate_per_min: healthkitData.vitals?.respiratory_rate || rawData.respiratoryRate || null,
-      body_temperature_celsius: healthkitData.vitals?.body_temperature || rawData.bodyTemperature || null,
+      // Heart Rate and Cardiovascular (primary vitals)
+      average_heartrate: rawData.heartRate || rawData.averageHeartRate || null,
+      resting_heart_rate: rawData.restingHeartRate || null,
+      heart_rate_variability_ms: rawData.heartRateVariability || rawData.hrv || null,
+      blood_oxygen_saturation: rawData.oxygenSaturation || rawData.bloodOxygen || null,
+      systolic_blood_pressure: rawData.bloodPressureSystolic || rawData.systolicBP || null,
+      diastolic_blood_pressure: rawData.bloodPressureDiastolic || rawData.diastolicBP || null,
+      vo2_max: rawData.vo2Max || rawData.maxOxygenUptake || null,
       
-      // Body measurements
-      height_cm: healthkitData.body_measurements?.height || rawData.height || null,
-      weight_kg: healthkitData.body_measurements?.weight || rawData.bodyMass || rawData.weight || null,
-      body_mass_index: healthkitData.body_measurements?.bmi || rawData.bodyMassIndex || null,
-      body_fat_percentage: healthkitData.body_measurements?.body_fat_percentage || rawData.bodyFatPercentage || null,
-      lean_body_mass_kg: healthkitData.body_measurements?.lean_body_mass || rawData.leanBodyMass || null,
-      waist_circumference_cm: healthkitData.body_measurements?.waist_circumference || rawData.waistCircumference || null,
+      // Body Measurements & Composition
+      height_cm: rawData.height || rawData.bodyHeight || null,
+      weight_kg: rawData.weight || rawData.bodyMass || null,
+      body_mass_index: rawData.bodyMassIndex || rawData.bmi || null,
+      body_fat_percentage: rawData.bodyFatPercentage || null,
+      lean_body_mass_kg: rawData.leanBodyMass || null,
+      waist_circumference_cm: rawData.waistCircumference || null,
       
-      // Nutrition
-      dietary_energy_kcal: healthkitData.nutrition?.calories || rawData.dietaryEnergyConsumed || null,
-      protein_g: healthkitData.nutrition?.protein || rawData.dietaryProtein || null,
-      total_fat_g: healthkitData.nutrition?.fat_total || rawData.dietaryFatTotal || null,
-      carbohydrates_g: healthkitData.nutrition?.carbohydrates || rawData.dietaryCarbohydrates || null,
-      fiber_g: healthkitData.nutrition?.fiber || rawData.dietaryFiber || null,
-      sugar_g: healthkitData.nutrition?.sugar || rawData.dietarySugar || null,
-      water_ml: healthkitData.nutrition?.water || rawData.dietaryWater || null,
-      caffeine_mg: healthkitData.nutrition?.caffeine || rawData.dietaryCaffeine || null,
+      // Temperature and Respiratory
+      body_temperature_celsius: rawData.bodyTemperature || null,
+      basal_body_temperature_celsius: rawData.basalBodyTemperature || null,
+      respiratory_rate_per_min: rawData.respiratoryRate || null,
       
-      // Sleep
-      sleep_duration: healthkitData.sleep?.sleep_analysis?.duration || rawData.sleepHours ? rawData.sleepHours * 3600 : null,
-      time_in_bed_minutes: healthkitData.sleep?.time_in_bed || rawData.timeInBed ? rawData.timeInBed * 60 : null,
-      time_asleep_minutes: healthkitData.sleep?.time_asleep || rawData.timeAsleep ? rawData.timeAsleep * 60 : null,
-      sleep_quality_score: rawData.sleepQuality || rawData.sleep_quality || null,
+      // Sleep Metrics (comprehensive)
+      sleep_duration: rawData.sleepHours ? rawData.sleepHours * 3600 : rawData.sleepAnalysis || null,
+      time_in_bed_minutes: rawData.timeInBed ? rawData.timeInBed * 60 : null,
+      time_asleep_minutes: rawData.timeAsleep ? rawData.timeAsleep * 60 : null,
+      awake_duration_minutes: rawData.awakeDuration || null,
+      rem_duration_minutes: rawData.remSleep || null,
+      core_sleep_duration_minutes: rawData.coreSleep || null,
+      deep_sleep_duration_minutes: rawData.deepSleep || null,
+      sleep_quality_score: rawData.sleepQuality || null,
       
-      // Clinical
-      clinical_conditions: healthkitData.clinical?.medications ? [healthkitData.clinical.medications] : null,
-      clinical_medications: healthkitData.clinical?.medications ? [healthkitData.clinical.medications] : null,
-      clinical_allergies: healthkitData.clinical?.allergies ? [healthkitData.clinical.allergies] : null,
+      // Nutrition & Hydration (comprehensive)
+      dietary_energy_kcal: rawData.dietaryEnergyConsumed || rawData.calories || null,
+      protein_g: rawData.dietaryProtein || null,
+      total_fat_g: rawData.dietaryFatTotal || null,
+      saturated_fat_g: rawData.dietaryFatSaturated || null,
+      polyunsaturated_fat_g: rawData.dietaryFatPolyunsaturated || null,
+      monounsaturated_fat_g: rawData.dietaryFatMonounsaturated || null,
+      carbohydrates_g: rawData.dietaryCarbohydrates || null,
+      fiber_g: rawData.dietaryFiber || null,
+      sugar_g: rawData.dietarySugar || null,
+      water_ml: rawData.dietaryWater || null,
+      caffeine_mg: rawData.dietaryCaffeine || null,
       
-      // Reproductive Health
-      menstrual_flow: healthkitData.reproductive?.menstrual_flow || rawData.menstrualFlow || null,
-      ovulation_test_result: healthkitData.reproductive?.ovulation_test || rawData.ovulationTestResult || null,
-      basal_body_temperature_celsius: healthkitData.reproductive?.basal_body_temperature || rawData.basalBodyTemperature || null,
-      cervical_mucus_quality: healthkitData.reproductive?.cervical_mucus || rawData.cervicalMucusQuality || null,
+      // Vitamins & Minerals
+      vitamin_c_mg: rawData.dietaryVitaminC || null,
+      vitamin_d_mcg: rawData.dietaryVitaminD || null,
+      calcium_mg: rawData.dietaryCalcium || null,
+      iron_mg: rawData.dietaryIron || null,
+      sodium_mg: rawData.dietarySodium || null,
+      potassium_mg: rawData.dietaryPotassium || null,
       
-      // Mindfulness & Mental Health
-      mindful_minutes: healthkitData.mindfulness?.mindful_session || rawData.mindfulMinutes || null,
-      mood_score: healthkitData.mindfulness?.mood || rawData.moodScore || null,
-      stress_level: rawData.stressLevel || rawData.stress_level || null,
-      emotional_state: rawData.emotionalState || null,
-      
-      // Additional Apple Health specific metrics
-      vo2_max: rawData.vo2Max || null,
+      // Movement & Mobility Metrics
       walking_speed_mps: rawData.walkingSpeed || null,
       step_length_cm: rawData.stepLength || null,
       walking_asymmetry_percentage: rawData.walkingAsymmetry || null,
       double_support_time_percentage: rawData.doubleSupportTime || null,
       
-      // Vitamin and mineral intake
-      vitamin_c_mg: rawData.vitaminC || null,
-      vitamin_d_mcg: rawData.vitaminD || null,
-      calcium_mg: rawData.calcium || null,
-      iron_mg: rawData.iron || null,
-      sodium_mg: rawData.sodium || null,
-      potassium_mg: rawData.potassium || null,
+      // Reproductive Health
+      menstrual_flow: rawData.menstrualFlow || null,
+      ovulation_test_result: rawData.ovulationTestResult || null,
+      cervical_mucus_quality: rawData.cervicalMucusQuality || null,
+      sexual_activity: rawData.sexualActivity || null,
       
-      // Additional sleep metrics
-      rem_duration_minutes: rawData.remSleep || null,
-      core_sleep_duration_minutes: rawData.coreSleep || null,
-      deep_sleep_duration_minutes: rawData.deepSleep || null,
-      awake_duration_minutes: rawData.awakeDuration || null,
+      // Mental Health & Wellness
+      mindful_minutes: rawData.mindfulMinutes || null,
+      mood_score: rawData.moodScore || null,
+      stress_level: rawData.stressLevel || null,
+      emotional_state: rawData.emotionalState || null,
       
-      // Workout intensity and recovery
+      // ECG and advanced cardiac
+      ecg_classification: rawData.ecgClassification || null,
+      
+      // Exercise and Performance
       workout_intensity: rawData.workoutIntensity || calculateWorkoutIntensity(rawData),
-      recovery_score: rawData.recoveryScore || rawData.recovery_score || null,
+      recovery_score: rawData.recoveryScore || null,
       effort_score: rawData.effortScore || null,
       
-      // Health source tracking
-      healthkit_source_bundles: rawData.sourceBundle ? [rawData.sourceBundle] : null
+      // Clinical Data (if available)
+      clinical_allergies: rawData.allergies ? JSON.stringify(rawData.allergies) : null,
+      clinical_conditions: rawData.conditions ? JSON.stringify(rawData.conditions) : null,
+      clinical_medications: rawData.medications ? JSON.stringify(rawData.medications) : null,
+      clinical_procedures: rawData.procedures ? JSON.stringify(rawData.procedures) : null,
+      clinical_lab_results: rawData.labResults ? JSON.stringify(rawData.labResults) : null,
+      clinical_vitals: rawData.clinicalVitals ? JSON.stringify(rawData.clinicalVitals) : null,
+      clinical_immunizations: rawData.immunizations ? JSON.stringify(rawData.immunizations) : null,
+      
+      // Symptoms and medication adherence
+      symptoms_logged: rawData.symptoms ? JSON.stringify(rawData.symptoms) : null,
+      medication_doses: rawData.medicationDoses ? JSON.stringify(rawData.medicationDoses) : null,
+      medication_adherence_score: rawData.medicationAdherence || null,
+      
+      // Source and device tracking
+      healthkit_source_bundles: rawData.sourceBundle ? JSON.stringify([rawData.sourceBundle]) : null,
+      device_type: rawData.deviceName || rawData.device_type || 'iPhone'
     }
   } else {
     // Strava format (existing logic)
@@ -241,35 +270,118 @@ function calculateComprehensiveDataQualityScore(healthMetrics: any, rawData: any
   let basicMetricsCount = 0
   let vitalsCount = 0
   let nutritionCount = 0
-  let hasSleepData = false
-  let hasClinicalData = false
-  let symptomsCount = 0
+  let sleepMetricsCount = 0
+  let bodyCompositionCount = 0
+  let reproductiveHealthCount = 0
+  let mentalHealthCount = 0
+  let clinicalDataCount = 0
+  let totalFieldsPresent = 0
   
-  // Count basic metrics
-  if (healthMetrics.steps_count) basicMetricsCount++
-  if (healthMetrics.calories_burned) basicMetricsCount++
-  if (healthMetrics.distance_walking_running_meters) basicMetricsCount++
-  if (healthMetrics.average_heartrate) basicMetricsCount++
+  console.log('Calculating comprehensive data quality for all 37 HealthKit fields...')
   
-  // Count vitals
-  if (healthMetrics.resting_heart_rate) vitalsCount++
-  if (healthMetrics.heart_rate_variability_ms) vitalsCount++
-  if (healthMetrics.blood_oxygen_saturation) vitalsCount++
-  if (rawData.bodyTemperature) vitalsCount++
+  // Count basic activity metrics (5 fields)
+  if (healthMetrics.steps_count) { basicMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.calories_burned) { basicMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.distance_walking_running_meters) { basicMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.distance_cycling_meters) { basicMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.flights_climbed) { basicMetricsCount++; totalFieldsPresent++ }
   
-  // Check for sleep data
-  if (healthMetrics.sleep_duration || healthMetrics.time_asleep_minutes) {
-    hasSleepData = true
-  }
+  // Count cardiovascular and vitals (7 fields)
+  if (healthMetrics.average_heartrate) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.resting_heart_rate) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.heart_rate_variability_ms) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.blood_oxygen_saturation) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.systolic_blood_pressure) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.diastolic_blood_pressure) { vitalsCount++; totalFieldsPresent++ }
+  if (healthMetrics.vo2_max) { vitalsCount++; totalFieldsPresent++ }
   
-  // Check for clinical data
-  if (rawData.bloodPressure || rawData.weight || rawData.height) {
-    hasClinicalData = true
-  }
+  // Count body composition and measurements (6 fields)
+  if (healthMetrics.height_cm) { bodyCompositionCount++; totalFieldsPresent++ }
+  if (healthMetrics.weight_kg) { bodyCompositionCount++; totalFieldsPresent++ }
+  if (healthMetrics.body_mass_index) { bodyCompositionCount++; totalFieldsPresent++ }
+  if (healthMetrics.body_fat_percentage) { bodyCompositionCount++; totalFieldsPresent++ }
+  if (healthMetrics.lean_body_mass_kg) { bodyCompositionCount++; totalFieldsPresent++ }
+  if (healthMetrics.waist_circumference_cm) { bodyCompositionCount++; totalFieldsPresent++ }
   
-  // Use the comprehensive scoring function from database
-  return Math.min(1.0, 0.3 + (basicMetricsCount * 0.1) + (vitalsCount * 0.08) + 
-    (hasSleepData ? 0.15 : 0) + (hasClinicalData ? 0.2 : 0))
+  // Count nutrition data (11 fields)
+  if (healthMetrics.dietary_energy_kcal) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.protein_g) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.total_fat_g) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.carbohydrates_g) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.fiber_g) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.sugar_g) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.water_ml) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.caffeine_mg) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.vitamin_c_mg) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.vitamin_d_mcg) { nutritionCount++; totalFieldsPresent++ }
+  if (healthMetrics.calcium_mg) { nutritionCount++; totalFieldsPresent++ }
+  
+  // Count sleep metrics (8 fields)
+  if (healthMetrics.sleep_duration) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.time_in_bed_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.time_asleep_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.awake_duration_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.rem_duration_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.core_sleep_duration_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.deep_sleep_duration_minutes) { sleepMetricsCount++; totalFieldsPresent++ }
+  if (healthMetrics.sleep_quality_score) { sleepMetricsCount++; totalFieldsPresent++ }
+  
+  // Count reproductive health (4 fields)
+  if (healthMetrics.menstrual_flow) { reproductiveHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.ovulation_test_result) { reproductiveHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.cervical_mucus_quality) { reproductiveHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.basal_body_temperature_celsius) { reproductiveHealthCount++; totalFieldsPresent++ }
+  
+  // Count mental health and wellness (4 fields)
+  if (healthMetrics.mindful_minutes) { mentalHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.mood_score) { mentalHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.stress_level) { mentalHealthCount++; totalFieldsPresent++ }
+  if (healthMetrics.emotional_state) { mentalHealthCount++; totalFieldsPresent++ }
+  
+  // Count clinical data (7 fields)
+  if (healthMetrics.clinical_allergies) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_conditions) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_medications) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_procedures) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_lab_results) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_vitals) { clinicalDataCount++; totalFieldsPresent++ }
+  if (healthMetrics.clinical_immunizations) { clinicalDataCount++; totalFieldsPresent++ }
+  
+  // Calculate comprehensive score weighted by category importance
+  const activityScore = (basicMetricsCount / 5) * 0.20  // 20% weight
+  const vitalsScore = (vitalsCount / 7) * 0.25         // 25% weight (most important)
+  const nutritionScore = (nutritionCount / 11) * 0.15  // 15% weight
+  const sleepScore = (sleepMetricsCount / 8) * 0.15    // 15% weight
+  const bodyScore = (bodyCompositionCount / 6) * 0.10  // 10% weight
+  const reproductiveScore = (reproductiveHealthCount / 4) * 0.05  // 5% weight
+  const mentalScore = (mentalHealthCount / 4) * 0.05   // 5% weight
+  const clinicalScore = (clinicalDataCount / 7) * 0.05 // 5% weight
+  
+  const comprehensiveScore = activityScore + vitalsScore + nutritionScore + 
+    sleepScore + bodyScore + reproductiveScore + mentalScore + clinicalScore
+  
+  // Data completeness based on total fields present out of 37
+  const completenessScore = totalFieldsPresent / 37
+  
+  // Final score combines both comprehensive scoring and completeness
+  const finalScore = Math.min(1.0, (comprehensiveScore * 0.7) + (completenessScore * 0.3))
+  
+  console.log('Data quality breakdown:', {
+    totalFieldsPresent,
+    basicMetrics: basicMetricsCount,
+    vitals: vitalsCount,
+    nutrition: nutritionCount,
+    sleep: sleepMetricsCount,
+    bodyComposition: bodyCompositionCount,
+    reproductiveHealth: reproductiveHealthCount,
+    mentalHealth: mentalHealthCount,
+    clinical: clinicalDataCount,
+    comprehensiveScore: comprehensiveScore.toFixed(3),
+    completenessScore: completenessScore.toFixed(3),
+    finalScore: finalScore.toFixed(3)
+  })
+  
+  return finalScore
 }
 
 function mapToStagedHealthData(rawData: any, healthMetrics: any, metadata: any) {
