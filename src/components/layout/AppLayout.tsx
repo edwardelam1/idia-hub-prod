@@ -30,7 +30,7 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
           <TopBar userRole={userRole} onLogout={onLogout} />
           
           {/* Scrollable Main Content */}
-          <main className="flex-1 overflow-auto bg-background">
+          <main className="flex-1 overflow-auto bg-background pl-6">
             {children}
           </main>
         </div>
