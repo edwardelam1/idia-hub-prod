@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
@@ -9,13 +8,17 @@ import OrganizationAdminDashboard from '@/components/dashboards/OrganizationAdmi
 import TeamLeadDashboard from '@/components/dashboards/TeamLeadDashboard';
 import TeamMemberDashboard from '@/components/dashboards/TeamMemberDashboard';
 import DataMarketplace from '@/components/marketplace/DataMarketplace';
-// SystemHealthDashboard removed - awaiting live data
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
 import DataViewer from '@/components/data/DataViewer';
 import MyReports from '@/components/reports/MyReports';
 import SecurityPage from './SecurityPage';
 import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
+import TradingInterface from '@/components/trading/TradingInterface';
+import LiquidityPools from '@/components/liquidity/LiquidityPools';
+import BillingCredits from '@/components/billing/BillingCredits';
+import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
+import TeamManagement from '@/components/teams/TeamManagement';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -72,16 +75,16 @@ const Index = () => {
         <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
-        <Route path="/teams" element={<div>Team Management (Coming Soon)</div>} />
-        <Route path="/billing" element={<div>Billing & Credits (Coming Soon)</div>} />
-        <Route path="/compliance" element={<div>Compliance (Coming Soon)</div>} />
+        <Route path="/teams" element={<TeamManagement />} />
+        <Route path="/billing" element={<BillingCredits />} />
+        <Route path="/compliance" element={<ComplianceDashboard />} />
         <Route path="/settings" element={<div>Settings (Coming Soon)</div>} />
         <Route path="/my-team" element={<div>My Team (Coming Soon)</div>} />
         <Route path="/saved-searches" element={<div>Saved Searches - Available in Data Viewer</div>} />
         <Route path="/analytics" element={<div>Analytics (Coming Soon)</div>} />
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
-        <Route path="/trading" element={<div>Trading Interface (Coming Soon)</div>} />
-        <Route path="/liquidity" element={<div>Liquidity Pools (Coming Soon)</div>} />
+        <Route path="/trading" element={<TradingInterface />} />
+        <Route path="/liquidity" element={<LiquidityPools />} />
       </Routes>
     </AppLayout>
   );
