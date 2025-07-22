@@ -55,6 +55,9 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           { title: 'AI Management', url: '/ai-management', icon: Zap },
           { title: 'Security', url: '/security', icon: ShieldCheck },
           { title: 'Audit Logs', url: '/audit-logs', icon: FileText },
+          // Add Trading and Liquidity for super-admin too
+          { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+          { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
         ];
       case 'organization-admin':
         return [
@@ -63,6 +66,8 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           { title: 'Billing & Credits', url: '/billing', icon: DollarSign },
           { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
           { title: 'Settings', url: '/settings', icon: Settings },
+          { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+          { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
         ];
       case 'team-lead':
         return [
@@ -70,12 +75,16 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           { title: 'My Team', url: '/my-team', icon: Users },
           { title: 'Saved Searches', url: '/saved-searches', icon: Search },
           { title: 'Analytics', url: '/analytics', icon: TrendingUp },
+          { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+          { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
         ];
       case 'team-member':
         return [
           ...baseItems,
           { title: 'My Lists', url: '/my-lists', icon: FileText },
           { title: 'Saved Searches', url: '/saved-searches', icon: Search },
+          { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+          { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
         ];
       default:
         return baseItems;
@@ -144,47 +153,6 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-
-          {/* DeFi Tools Section */}
-          {(userRole === 'organization-admin' || userRole === 'team-lead' || userRole === 'team-member') && (
-            <SidebarGroup className="py-2">
-              <SidebarGroupLabel className="px-3 text-xs">DeFi Tools</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu className="space-y-1">
-                  <SidebarMenuItem>
-                    <SidebarMenuButton 
-                      asChild
-                      className="mx-2 rounded-md hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <NavLink to="/trading" className="flex items-center px-2 py-2">
-                        <TrendingUp className="h-4 w-4 flex-shrink-0" />
-                        {!isCollapsed && (
-                          <span className="ml-3 text-sm font-medium truncate">
-                            Trading Interface
-                          </span>
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton 
-                      asChild
-                      className="mx-2 rounded-md hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <NavLink to="/liquidity" className="flex items-center px-2 py-2">
-                        <Coins className="h-4 w-4 flex-shrink-0" />
-                        {!isCollapsed && (
-                          <span className="ml-3 text-sm font-medium truncate">
-                            Liquidity Pools
-                          </span>
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          )}
         </div>
       </SidebarContent>
     </Sidebar>

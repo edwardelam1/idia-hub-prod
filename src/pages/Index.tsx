@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
@@ -83,6 +84,7 @@ const Index = () => {
         <Route path="/saved-searches" element={<div>Saved Searches - Available in Data Viewer</div>} />
         <Route path="/analytics" element={<div>Analytics (Coming Soon)</div>} />
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
+        {/* Ensure Trading and Liquidity routes are properly defined */}
         <Route path="/trading" element={<TradingInterface />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
       </Routes>
