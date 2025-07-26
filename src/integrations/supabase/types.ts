@@ -5722,6 +5722,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_votes: {
+        Row: {
+          created_at: string | null
+          id: string
+          proposal_id: string
+          user_id: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          proposal_id: string
+          user_id: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          proposal_id?: string
+          user_id?: string
+          vote_type?: string
+        }
+        Relationships: []
+      }
       user_wallets: {
         Row: {
           created_at: string
@@ -6027,6 +6051,15 @@ export type Database = {
         Returns: {
           processed_count: number
           error_count: number
+        }[]
+      }
+      process_synapse_backlog: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          processed_health_data: number
+          processed_lifestyle_queue: number
+          processed_business_queue: number
+          bundles_generated: number
         }[]
       }
       recover_all_stuck_health_data: {
