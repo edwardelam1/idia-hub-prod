@@ -18,14 +18,13 @@ Deno.serve(async (req) => {
 
     console.log('Triggering comprehensive bundle generation with live HealthKit data...')
 
-    // Get recent comprehensive health data for bundle generation
+    // Get recent comprehensive health data for bundle generation (remove restrictive filters)
     const { data: recentHealthData, error: healthError } = await supabaseClient
       .from('staged_health_data')
       .select('*')
-      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
-      .not('steps_count', 'is', null)
+      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // Last 7 days for more data
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(200)
 
     if (healthError) {
       console.error('Error fetching health data:', healthError)
