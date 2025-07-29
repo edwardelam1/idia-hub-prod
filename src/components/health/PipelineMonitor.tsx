@@ -168,29 +168,6 @@ export const PipelineMonitor = () => {
                 Last updated: {lastUpdate.toLocaleTimeString()}
               </span>
             </div>
-            
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchPipelineStats}
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              
-              {hasIssues && (
-                <Button
-                  onClick={triggerPipelineFix}
-                  disabled={isRefreshing}
-                  size="sm"
-                >
-                  <Activity className="h-4 w-4 mr-2" />
-                  Fix Pipeline
-                </Button>
-              )}
-            </div>
           </div>
 
           {stats.lastProcessed && (
