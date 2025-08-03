@@ -2,8 +2,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Activity, Clock, TrendingUp, Users } from 'lucide-react';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
-import { HealthDataProcessor } from './HealthDataProcessor';
-import { PipelineMonitor } from './PipelineMonitor';
 import { format } from 'date-fns';
 
 const HealthDataDashboard = () => {
@@ -43,17 +41,12 @@ const HealthDataDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Pipeline Monitor */}
-      <PipelineMonitor />
-      
-      {/* Health Data Processor */}
-      <HealthDataProcessor />
       
       {/* Health Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Health Records</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Records</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -85,7 +78,7 @@ const HealthDataDashboard = () => {
           <CardContent>
             <div className="text-2xl font-bold text-primary">{healthStats.dataTypes.length}</div>
             <p className="text-xs text-muted-foreground">
-              Types of health data
+              Types of data
             </p>
           </CardContent>
         </Card>
@@ -113,16 +106,16 @@ const HealthDataDashboard = () => {
       {/* Recent Health Data */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Health Data</CardTitle>
+          <CardTitle>Recent Data</CardTitle>
           <CardDescription>
-            Latest health metrics received from connected devices
+            Latest metrics received from connected devices
           </CardDescription>
         </CardHeader>
         <CardContent>
           {healthMetrics.length > 0 ? (
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-600 border-b pb-2">
-                <div>Health Data</div>
+                <div>Data</div>
                 <div>Recorded At</div>
                 <div>Received At</div>
                 <div>Device</div>
@@ -177,7 +170,7 @@ const HealthDataDashboard = () => {
           ) : (
             <div className="text-center py-8 text-gray-500">
               <Activity className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>No health data received yet</p>
+              <p>No data received yet</p>
               <p className="text-sm">Waiting for device connections...</p>
             </div>
           )}
