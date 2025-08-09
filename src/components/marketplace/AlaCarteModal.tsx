@@ -19,43 +19,23 @@ const AlaCarteModal = ({ bundle, onAddToCart, userCredits }: AlaCarteModalProps)
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Generate sample data points based on bundle type
+  // Get actual data points from live bundle data
   const getDataPoints = () => {
-    const basePrice = Math.ceil(bundle.price / 100); // Per-record pricing
-
-    switch (bundle.category) {
-      case 'Venture Capital & Private Equity':
-        return [
-          { id: 'company-profile', name: 'Company Profile', description: 'Basic company information', price: basePrice },
-          { id: 'funding-history', name: 'Funding History', description: 'Complete funding rounds data', price: basePrice * 2 },
-          { id: 'leadership-team', name: 'Leadership Team', description: 'Executive and board information', price: basePrice * 1.5 },
-          { id: 'hiring-data', name: 'Hiring Velocity', description: 'Recent hiring trends and job postings', price: basePrice * 2 },
-          { id: 'investor-network', name: 'Investor Network', description: 'Current and past investors', price: basePrice * 3 },
-          { id: 'financial-metrics', name: 'Financial Metrics', description: 'Revenue and growth indicators', price: basePrice * 4 }
-        ];
-      case 'Commercial Real Estate':
-        return [
-          { id: 'property-details', name: 'Property Details', description: 'Location, size, and specifications', price: basePrice },
-          { id: 'transaction-history', name: 'Transaction History', description: 'Sale and lease records', price: basePrice * 2 },
-          { id: 'market-analytics', name: 'Market Analytics', description: 'Comparable properties and trends', price: basePrice * 3 },
-          { id: 'tenant-information', name: 'Tenant Information', description: 'Current and historical tenants', price: basePrice * 2 },
-          { id: 'financial-performance', name: 'Financial Performance', description: 'NOI, cap rates, and returns', price: basePrice * 4 }
-        ];
-      case 'Consumer Packaged Goods':
-        return [
-          { id: 'product-category', name: 'Product Category Data', description: 'Category performance metrics', price: basePrice },
-          { id: 'channel-analysis', name: 'Channel Analysis', description: 'Performance across retail channels', price: basePrice * 2 },
-          { id: 'consumer-behavior', name: 'Consumer Behavior', description: 'Purchase patterns and preferences', price: basePrice * 3 },
-          { id: 'pricing-trends', name: 'Pricing Trends', description: 'Price elasticity and optimization', price: basePrice * 2 },
-          { id: 'seasonal-patterns', name: 'Seasonal Patterns', description: 'Seasonal demand variations', price: basePrice * 1.5 }
-        ];
-      default:
-        return [
-          { id: 'basic-data', name: 'Basic Dataset', description: 'Core data points', price: basePrice },
-          { id: 'enhanced-data', name: 'Enhanced Dataset', description: 'Additional data fields', price: basePrice * 2 },
-          { id: 'premium-insights', name: 'Premium Insights', description: 'Advanced analytics and trends', price: basePrice * 3 }
-        ];
+    // Extract real data points from the bundle's actual data
+    if (!bundle || !bundle.data_json) {
+      return [];
     }
+
+    const basePrice = Math.ceil(bundle.price / 100);
+    
+    // Generate data points based on the actual bundle content
+    const dataTypes = bundle.features || [];
+    return dataTypes.map((feature, index) => ({
+      id: `data-point-${index}`,
+      name: feature,
+      description: `Live ${feature} data from verified sources`,
+      price: basePrice * (index + 1)
+    }));
   };
 
   const dataPoints = getDataPoints();

@@ -1,11 +1,17 @@
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Clock, TrendingUp, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Activity, Clock, TrendingUp, Users, Plus } from 'lucide-react';
 import { useHealthMetrics } from '@/hooks/useHealthMetrics';
+import NoDataState from '@/components/health/NoDataState';
+import HealthDataInput from '@/components/health/HealthDataInput';
 import { format } from 'date-fns';
 
 const HealthDataDashboard = () => {
   const { healthMetrics, healthStats, isLoading, error } = useHealthMetrics();
+  const [showAddDataModal, setShowAddDataModal] = useState(false);
 
   if (isLoading) {
     return (
@@ -168,14 +174,32 @@ const HealthDataDashboard = () => {
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8">
               <Activity className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>No data received yet</p>
-              <p className="text-sm">Waiting for device connections...</p>
+              <p className="text-gray-500 mb-2">No health data available</p>
+              <p className="text-sm text-gray-400 mb-4">Record your real activities to see live data here</p>
+              <Button size="sm" onClick={() => setShowAddDataModal(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Real Health Data
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Health Data</DialogTitle>
+          </DialogHeader>
+          <HealthDataInput 
+            onDataSubmitted={() => {
+              setShowAddDataModal(false);
+              window.location.reload(); // Refresh to show new data
+            }} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

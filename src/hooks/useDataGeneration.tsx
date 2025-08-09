@@ -80,28 +80,11 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         }
 
         if (!healthData || healthData.length === 0) {
-          console.log('No staged health data found, generating sample data');
-          const sampleData = generateSampleData(currentBundle, 50);
-          setDataRecords(sampleData);
-          
-          const headers = [
-            'Activity Type',
-            'Steps Count',
-            'Date Processed',
-            'Device',
-            'Data Quality (%)'
-          ];
-          
-          const mapping = {
-            'Activity Type': 'activity_type',
-            'Steps Count': 'steps_count',
-            'Date Processed': 'processed_date',
-            'Device': 'device_type',
-            'Data Quality (%)': 'data_quality'
-          };
-          
-          setTableHeaders(headers);
-          setHeaderToKeyMapping(mapping);
+          console.log('No live health data available');
+          setError('No health data available. Please connect a real health data source to see your activity.');
+          setDataRecords([]);
+          setTableHeaders([]);
+          setHeaderToKeyMapping({});
           setLoading(false);
           return;
         }
@@ -167,40 +150,11 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
         console.error('Error in useDataGeneration:', err);
         setError(err.message || 'Failed to fetch data');
         
-        // Fallback: Generate sample data
-        if (bundle || bundleId) {
-          console.log('Generating sample data as fallback');
-          const fallbackBundle = bundle || { 
-            bundle_id: 'sample', 
-            id: 'sample', 
-            name: 'Sample Data', 
-            category: 'Health', 
-            tier: 'Standard',
-            contacts: 100,
-            features: []
-          } as Bundle;
-          const sampleData = generateSampleData(fallbackBundle, 25);
-          setDataRecords(sampleData);
-          
-          const headers = [
-            'Activity Type',
-            'Steps Count',
-            'Date Processed',
-            'Device',
-            'Data Quality (%)'
-          ];
-          
-          const mapping = {
-            'Activity Type': 'activity_type',
-            'Steps Count': 'steps_count',
-            'Date Processed': 'processed_date',
-            'Device': 'device_type',
-            'Data Quality (%)': 'data_quality'
-          };
-          
-          setTableHeaders(headers);
-          setHeaderToKeyMapping(mapping);
-        }
+        // No fallback data generation - show error state
+        console.log('Error loading health data - no live data available');
+        setDataRecords([]);
+        setTableHeaders([]);
+        setHeaderToKeyMapping({});
       } finally {
         setLoading(false);
       }
@@ -212,23 +166,4 @@ export const useDataGeneration = (bundle: Bundle | null, bundleId?: string): Use
   return { dataRecords, tableHeaders, headerToKeyMapping, loading, error };
 };
 
-// Generate sample data when no real data exists (for demo purposes)
-const generateSampleData = (bundle: Bundle, limit: number): DataRecord[] => {
-  const activities = getRealisticActivityTypes();
-  const devices = getRealisticDeviceTypes();
-  const zones = ['ZONE_A1B2C3D4', 'ZONE_E5F6G7H8', 'ZONE_I9J0K1L2'];
-  
-  return Array.from({ length: Math.min(limit, 25) }, (_, i) => ({
-    id: `sample-${i + 1}`,
-    activity_type: activities[Math.floor(Math.random() * activities.length)],
-    duration_minutes: Math.floor(Math.random() * 120) + 15,
-    distance_km: (Math.random() * 15 + 1).toFixed(2),
-    avg_heart_rate: Math.floor(Math.random() * 60) + 120,
-    max_heart_rate: Math.floor(Math.random() * 40) + 160,
-    calories_burned: Math.floor(Math.random() * 800) + 200,
-    location_zone: zones[Math.floor(Math.random() * zones.length)],
-    device_type: devices[Math.floor(Math.random() * devices.length)],
-    data_quality: Math.floor(Math.random() * 30) + 70,
-    processed_date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString()
-  }));
-};
+// REMOVED: No sample data generation - only live data is allowed

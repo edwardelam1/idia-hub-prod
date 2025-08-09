@@ -12,6 +12,9 @@ import MarketplaceFilters from './MarketplaceFilters';
 import ResultsHeader from './ResultsHeader';
 import BundleCard from './BundleCard';
 import ShoppingCartComponent from './ShoppingCart';
+import NoDataState from '@/components/health/NoDataState';
+import HealthDataInput from '@/components/health/HealthDataInput';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CartItem } from '@/types/marketplace';
 
 interface DataMarketplaceProps {
@@ -28,6 +31,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [userCredits, setUserCredits] = useState(12500);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [showAddDataModal, setShowAddDataModal] = useState(false);
 
   // Use real database bundles directly (no ID conversion needed)
   const convertedBundles = bundles.map(bundle => ({
@@ -213,22 +217,24 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           </div>
 
           {filteredBundles.length === 0 && !isLoading && (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No datasets found matching your criteria.</p>
-              <Button 
-                variant="outline" 
-                className="mt-3"
-                onClick={() => {
-                  setSearchQuery('');
-                  setAppliedFilters({});
-                }}
-              >
-                Clear Filters
-              </Button>
-            </div>
+            <NoDataState onAddData={() => setShowAddDataModal(true)} />
           )}
         </>
       )}
+
+      <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Health Data</DialogTitle>
+          </DialogHeader>
+          <HealthDataInput 
+            onDataSubmitted={() => {
+              setShowAddDataModal(false);
+              window.location.reload(); // Refresh to show new data
+            }} 
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Privacy Notice */}
       <Card className="border-purple-200 bg-purple-50">

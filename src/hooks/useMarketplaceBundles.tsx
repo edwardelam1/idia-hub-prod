@@ -29,27 +29,8 @@ export const useMarketplaceBundles = () => {
     queryFn: async () => {
       console.log('Fetching marketplace bundles and triggering comprehensive processing...');
       
-      // First, trigger comprehensive health data processing
-      try {
-        const processResponse = await supabase.functions.invoke('process-health-streams', {
-          body: { trigger: 'comprehensive_healthkit_processing' }
-        });
-        console.log('Health processing triggered:', processResponse);
-        
-        // Wait a moment for processing to complete
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Then trigger comprehensive bundle generation
-        const bundleResponse = await supabase.functions.invoke('trigger-comprehensive-bundle-generation', {
-          body: { trigger: 'live_healthkit_data', force_generation: true }
-        });
-        console.log('Bundle generation triggered:', bundleResponse);
-        
-        // Wait for bundle generation to complete
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      } catch (processError) {
-        console.log('Processing trigger completed or already running:', processError);
-      }
+      // REMOVED: No automatic data generation - only process live data when available
+      console.log('Fetching marketplace bundles from live data only...');
       
       const { data, error } = await supabase
         .from('marketplace_bundles')

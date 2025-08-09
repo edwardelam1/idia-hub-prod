@@ -16,6 +16,9 @@ import DataViewerTable from './DataViewerTable';
 import DataViewerSidebar from './DataViewerSidebar';
 import SavedSearches from './SavedSearches';
 import ContactLists from './ContactLists';
+import NoDataState from '@/components/health/NoDataState';
+import HealthDataInput from '@/components/health/HealthDataInput';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DataRecord } from '@/types/marketplace';
 
 // Error Boundary Component
@@ -46,6 +49,7 @@ const DataViewer = () => {
   const [showSavedSearches, setShowSavedSearches] = useState(false);
   const [showContactLists, setShowContactLists] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showAddDataModal, setShowAddDataModal] = useState(false);
   const [filteredRecords, setFilteredRecords] = useState<DataRecord[]>([]);
   
   const { healthStats } = useHealthMetrics();
@@ -145,13 +149,24 @@ const DataViewer = () => {
     );
   }
 
-  if (error) {
+  if (error || (!loading && dataRecords.length === 0)) {
     return (
       <div className="container mx-auto p-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Data</h1>
-          <p className="text-gray-600">{error}</p>
-        </div>
+        <NoDataState onAddData={() => setShowAddDataModal(true)} />
+        
+        <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add Health Data</DialogTitle>
+            </DialogHeader>
+            <HealthDataInput 
+              onDataSubmitted={() => {
+                setShowAddDataModal(false);
+                window.location.reload(); // Refresh to show new data
+              }} 
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
