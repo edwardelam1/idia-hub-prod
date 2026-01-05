@@ -23,7 +23,7 @@ interface DataMarketplaceProps {
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
-  const { isMobile } = useResponsive();
+  const { isMobile, isTablet, isSmallTablet } = useResponsive();
   const { addPurchase } = usePurchaseHistory();
   const { bundles, isLoading, error } = useMarketplaceBundles();
   
@@ -32,6 +32,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [userCredits, setUserCredits] = useState(12500);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [showAddDataModal, setShowAddDataModal] = useState(false);
+
+  // Responsive padding and sizing
+  const containerPadding = isMobile ? 'p-2' : isTablet ? 'p-4' : 'p-6';
+  const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-3' : 'p-4';
 
   // Use real database bundles directly (no ID conversion needed)
   const convertedBundles = bundles.map(bundle => ({
@@ -156,9 +160,9 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
   if (error) {
     return (
-      <div className={`space-y-4 ${isMobile ? 'p-2' : 'p-6'} bg-gray-50 min-h-screen`}>
+      <div className={`space-y-4 ${containerPadding} bg-gray-50 min-h-screen`}>
         <Card className="border-red-200 bg-red-50">
-          <CardContent className={isMobile ? 'p-3' : 'p-4'}>
+          <CardContent className={cardPadding}>
             <p className="text-red-700 text-center">
               Error loading marketplace data. Please try again later.
             </p>
@@ -172,9 +176,9 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   }
 
   return (
-    <div className={`space-y-4 ${isMobile ? 'p-2' : 'p-6'} bg-gray-50 min-h-screen`}>
-      <div className="flex items-center justify-between">
-        <MarketplaceHeader userCredits={userCredits} isMobile={isMobile} />
+    <div className={`space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
+      <div className="flex items-center justify-between gap-2">
+        <MarketplaceHeader userCredits={userCredits} isMobile={isMobile} isTablet={isTablet} />
         <ShoppingCartComponent
           cartItems={cartItems}
           onUpdateCart={handleUpdateCart}
@@ -190,25 +194,27 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         setAppliedFilters={setAppliedFilters}
         userRole={userRole}
         isMobile={isMobile}
+        isTablet={isTablet}
         bundleCategory={bundleCategory}
       />
 
-      <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} />
+      <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <span className="ml-2 text-gray-600">Loading marketplace bundles...</span>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className={`${isTablet ? 'h-6 w-6' : 'h-8 w-8'} animate-spin text-blue-600`} />
+          <span className={`ml-2 text-gray-600 ${isTablet ? 'text-sm' : ''}`}>Loading marketplace bundles...</span>
         </div>
       ) : (
         <>
-          {/* Bundle Grid */}
-          <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2'}`}>
+          {/* Bundle Grid - Single column on tablet for less crowding */}
+          <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : isTablet ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
             {filteredBundles.map((bundle) => (
               <BundleCard
                 key={bundle.id}
                 bundle={bundle}
                 isMobile={isMobile}
+                isTablet={isTablet}
                 userCredits={userCredits}
                 onDownload={handleDownloadBundle}
                 onAddToCart={handleAddToCart}
@@ -223,7 +229,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       )}
 
       <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={`${isTablet ? 'max-w-2xl' : 'max-w-4xl'} max-h-[90vh] overflow-y-auto`}>
           <DialogHeader>
             <DialogTitle>Add Health Data</DialogTitle>
           </DialogHeader>
@@ -238,9 +244,9 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
       {/* Privacy Notice */}
       <Card className="border-purple-200 bg-purple-50">
-        <CardContent className={isMobile ? 'p-3' : 'p-4'}>
-          <p className={`text-purple-700 ${isMobile ? 'text-xs' : 'text-sm'} text-center`}>
-            🔒 All datasets are fully anonymized and aggregated to protect individual privacy. Enterprise-grade data with zero personal identifiable information.
+        <CardContent className={cardPadding}>
+          <p className={`text-purple-700 ${isMobile || isTablet ? 'text-xs' : 'text-sm'} text-center`}>
+            🔒 All datasets are fully anonymized and aggregated to protect individual privacy.
           </p>
         </CardContent>
       </Card>
@@ -248,9 +254,9 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       {/* Real-time Data Notice */}
       {bundles.length > 0 && (
         <Card className="border-green-200 bg-green-50">
-          <CardContent className={isMobile ? 'p-3' : 'p-4'}>
-            <p className={`text-green-700 ${isMobile ? 'text-xs' : 'text-sm'} text-center`}>
-              📊 Showing {bundles.length} dynamically generated health data bundles. Data refreshes every 5 minutes with new insights.
+          <CardContent className={cardPadding}>
+            <p className={`text-green-700 ${isMobile || isTablet ? 'text-xs' : 'text-sm'} text-center`}>
+              📊 {bundles.length} health data bundles. Refreshes every 5 minutes.
             </p>
           </CardContent>
         </Card>
