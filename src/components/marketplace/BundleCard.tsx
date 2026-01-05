@@ -9,12 +9,13 @@ import AlaCarteModal from './AlaCarteModal';
 interface BundleCardProps {
   bundle: any;
   isMobile: boolean;
+  isTablet?: boolean;
   userCredits: number;
   onDownload: (bundle: any) => void;
   onAddToCart?: (items: any[]) => void;
 }
 
-const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
+const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
   const navigate = useNavigate();
   
   const getTierColor = (tier: string) => {
@@ -36,27 +37,34 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: 
     navigate(`/data-viewer/${bundle.bundle_id}`);
   };
 
+  // Responsive sizing
+  const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-4' : 'p-6';
+  const titleSize = isMobile ? 'text-sm' : isTablet ? 'text-sm' : 'text-base';
+  const descSize = isMobile ? 'text-xs' : isTablet ? 'text-xs' : 'text-sm';
+  const maxDataPoints = isMobile ? 2 : isTablet ? 3 : 4;
+  const maxFeatures = isMobile ? 2 : isTablet ? 2 : 3;
+
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className={isMobile ? 'p-4' : 'p-6'}>
-        <div className="space-y-4">
+      <CardContent className={cardPadding}>
+        <div className={`space-y-3`}>
           {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex-1 space-y-2">
-              <h3 className={`font-medium text-gray-900 ${isMobile ? 'text-sm' : 'text-base'}`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <h3 className={`font-medium text-gray-900 ${titleSize} line-clamp-2`}>
                 {bundle.name}
               </h3>
-              <div className="flex items-center space-x-2">
-                <Badge className={`${getTierColor(bundle.tier)} text-xs`} variant="outline">
+              <div className="flex items-center flex-wrap gap-1">
+                <Badge className={`${getTierColor(bundle.tier)} ${isTablet ? 'text-[10px] px-1.5' : 'text-xs'}`} variant="outline">
                   {bundle.tier}
                 </Badge>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs'}`}>
                   {bundle.category}
                 </Badge>
               </div>
             </div>
-            <div className="text-right">
-              <div className={`flex items-center text-purple-600 font-semibold ${isMobile ? 'text-sm' : ''}`}>
+            <div className="text-right shrink-0">
+              <div className={`flex items-center text-purple-600 font-semibold ${isMobile || isTablet ? 'text-sm' : ''}`}>
                 <Coins className="mr-1 h-3 w-3" />
                 {bundle.price}
               </div>
@@ -64,70 +72,70 @@ const BundleCard = ({ bundle, isMobile, userCredits, onDownload, onAddToCart }: 
           </div>
 
           {/* Description */}
-          <p className={`text-gray-600 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+          <p className={`text-gray-600 ${descSize} line-clamp-2`}>
             {bundle.description}
           </p>
 
           {/* Key Insights */}
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <h4 className="font-medium text-blue-900 text-xs mb-2">Key Insights</h4>
-            <ul className="space-y-1">
-              {bundle.keyInsights?.map((insight: string, index: number) => (
-                <li key={index} className="text-blue-700 text-xs flex items-center">
-                  <div className="w-1 h-1 bg-blue-400 rounded-full mr-2"></div>
-                  {insight}
+          <div className={`bg-blue-50 ${isTablet ? 'p-2' : 'p-3'} rounded-lg`}>
+            <h4 className={`font-medium text-blue-900 ${isTablet ? 'text-[10px]' : 'text-xs'} mb-1.5`}>Key Insights</h4>
+            <ul className="space-y-0.5">
+              {bundle.keyInsights?.slice(0, isTablet ? 2 : 3).map((insight: string, index: number) => (
+                <li key={index} className={`text-blue-700 ${isTablet ? 'text-[10px]' : 'text-xs'} flex items-center`}>
+                  <div className="w-1 h-1 bg-blue-400 rounded-full mr-1.5 shrink-0"></div>
+                  <span className="line-clamp-1">{insight}</span>
                 </li>
               ))}
             </ul>
           </div>
 
           {/* Data Points */}
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <h4 className="font-medium text-gray-900 text-xs mb-2">Data Points Included</h4>
+          <div className={`bg-gray-50 ${isTablet ? 'p-2' : 'p-3'} rounded-lg`}>
+            <h4 className={`font-medium text-gray-900 ${isTablet ? 'text-[10px]' : 'text-xs'} mb-1.5`}>Data Points</h4>
             <div className="flex flex-wrap gap-1">
-              {bundle.dataPoints?.slice(0, isMobile ? 2 : 4).map((point: string, index: number) => (
-                <Badge key={index} variant="outline" className="text-xs px-2 py-0">
+              {bundle.dataPoints?.slice(0, maxDataPoints).map((point: string, index: number) => (
+                <Badge key={index} variant="outline" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
                   {point}
                 </Badge>
               ))}
-              {bundle.dataPoints && bundle.dataPoints.length > (isMobile ? 2 : 4) && (
-                <Badge variant="outline" className="text-xs px-2 py-0">
-                  +{bundle.dataPoints.length - (isMobile ? 2 : 4)} more
+              {bundle.dataPoints && bundle.dataPoints.length > maxDataPoints && (
+                <Badge variant="outline" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
+                  +{bundle.dataPoints.length - maxDataPoints}
                 </Badge>
               )}
             </div>
           </div>
 
           {/* Stats */}
-          <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className={`flex items-center justify-between ${isTablet ? 'text-[10px]' : 'text-xs'} text-gray-500`}>
             <div className="flex items-center">
-              <Users className="mr-1 h-3 w-3" />
+              <Users className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
               {bundle.contacts.toLocaleString()} records
             </div>
             <div className="flex items-center text-green-600">
-              <TrendingUp className="mr-1 h-3 w-3" />
+              <TrendingUp className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
               {bundle.match}% relevance
             </div>
           </div>
 
           {/* Features */}
           <div className="flex flex-wrap gap-1">
-            {bundle.features.slice(0, isMobile ? 2 : 3).map((feature: string, index: number) => (
-              <Badge key={index} variant="secondary" className="text-xs px-2 py-0">
+            {bundle.features.slice(0, maxFeatures).map((feature: string, index: number) => (
+              <Badge key={index} variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
                 {feature}
               </Badge>
             ))}
-            {bundle.features.length > (isMobile ? 2 : 3) && (
-              <Badge variant="secondary" className="text-xs px-2 py-0">
-                +{bundle.features.length - (isMobile ? 2 : 3)}
+            {bundle.features.length > maxFeatures && (
+              <Badge variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
+                +{bundle.features.length - maxFeatures}
               </Badge>
             )}
           </div>
 
           {/* Actions */}
-          <div className="space-y-2">
+          <div className={`space-y-1.5 ${isTablet ? 'pt-1' : ''}`}>
             <Button 
-              className={`w-full ${isMobile ? 'text-sm py-2' : ''}`}
+              className={`w-full ${isMobile || isTablet ? 'text-xs py-1.5 h-8' : ''}`}
               onClick={handleFullDatasetAccess}
               disabled={userCredits < bundle.price}
             >
