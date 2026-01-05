@@ -6,8 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Shield, AlertTriangle, CheckCircle, Clock, FileText, Eye, Download, Calendar } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Clock, FileText, Eye, Download, Calendar, Database } from 'lucide-react';
 import { useComplianceData } from '@/hooks/useComplianceData';
+import APICleanroom from './APICleanroom';
 
 const ComplianceDashboard = () => {
   const { 
@@ -147,11 +148,15 @@ const ComplianceDashboard = () => {
       </div>
 
       <Tabs defaultValue="regulations" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="regulations">Regulations</TabsTrigger>
           <TabsTrigger value="risks">Risk Assessment</TabsTrigger>
           <TabsTrigger value="audits">Audit Logs</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="api-cleanroom" className="flex items-center gap-1">
+            <Database className="h-3 w-3" />
+            API Cleanroom
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="regulations" className="space-y-4">
@@ -345,6 +350,10 @@ const ComplianceDashboard = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="api-cleanroom" className="space-y-4">
+          <APICleanroom />
         </TabsContent>
       </Tabs>
     </div>
