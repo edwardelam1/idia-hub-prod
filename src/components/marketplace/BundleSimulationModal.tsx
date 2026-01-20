@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,9 @@ import {
 
 interface BundleSimulationModalProps {
   bundle: any;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  autoRun?: boolean;
 }
 
 interface SimulatedDataRecord {
@@ -49,12 +52,18 @@ interface SimulationResult {
   }[];
 }
 
-const BundleSimulationModal = ({ bundle }: BundleSimulationModalProps) => {
-  const [open, setOpen] = useState(false);
+const BundleSimulationModal = ({ bundle, open: controlledOpen, onOpenChange, autoRun = false }: BundleSimulationModalProps) => {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationComplete, setSimulationComplete] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [hasAutoRun, setHasAutoRun] = useState(false);
+
+  // Use controlled or uncontrolled mode
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? (onOpenChange || (() => {})) : setInternalOpen;
 
   const generateHash = (length: number = 16) => {
     const chars = '0123456789abcdef';
@@ -113,16 +122,37 @@ const BundleSimulationModal = ({ bundle }: BundleSimulationModalProps) => {
     setSimulationComplete(false);
     setProgress(0);
     setResult(null);
+    setHasAutoRun(false);
   };
+
+  // Auto-run simulation when modal opens in controlled mode
+  useEffect(() => {
+    if (open && autoRun && !hasAutoRun && !isSimulating && !simulationComplete) {
+      setHasAutoRun(true);
+      runSimulation();
+    }
+  }, [open, autoRun, hasAutoRun, isSimulating, simulationComplete]);
+
+  // Reset hasAutoRun when modal closes
+  useEffect(() => {
+    if (!open) {
+      setHasAutoRun(false);
+    }
+  }, [open]);
+
+  // In controlled mode, don't render a trigger button
+  const renderTrigger = !isControlled;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
-          <PlayCircle className="h-3 w-3" />
-          Run Simulation
-        </Button>
-      </DialogTrigger>
+      {renderTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="sm" className="text-xs gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+            <PlayCircle className="h-3 w-3" />
+            Run Simulation
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

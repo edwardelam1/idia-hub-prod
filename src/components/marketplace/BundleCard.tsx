@@ -1,8 +1,8 @@
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, TrendingUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Coins, Users, TrendingUp, PlayCircle } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
 import BundleSimulationModal from './BundleSimulationModal';
 
@@ -16,7 +16,7 @@ interface BundleCardProps {
 }
 
 const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
-  const navigate = useNavigate();
+  const [simulationOpen, setSimulationOpen] = useState(false);
   
   const getTierColor = (tier: string) => {
     switch (tier) {
@@ -34,7 +34,7 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
   };
 
   const handleFullDatasetAccess = () => {
-    navigate(`/data-viewer/${bundle.bundle_id}`);
+    setSimulationOpen(true);
   };
 
   // Responsive sizing
@@ -139,19 +139,33 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
               onClick={handleFullDatasetAccess}
               disabled={userCredits < bundle.price}
             >
-              {userCredits < bundle.price ? 'Insufficient Credits' : 'Access Full Dataset'}
+              {userCredits < bundle.price ? (
+                'Insufficient Credits'
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Access Full Dataset
+                </>
+              )}
             </Button>
             
-            {/* À La Carte and Simulation Options */}
-            <div className="flex items-center justify-center gap-2">
+            {/* À La Carte Option */}
+            <div className="flex items-center justify-center">
               <AlaCarteModal
                 bundle={bundle}
                 onAddToCart={handleAddToCart}
                 userCredits={userCredits}
               />
-              <BundleSimulationModal bundle={bundle} />
             </div>
           </div>
+
+          {/* Simulation Modal - controlled externally */}
+          <BundleSimulationModal 
+            bundle={bundle} 
+            open={simulationOpen} 
+            onOpenChange={setSimulationOpen}
+            autoRun={true}
+          />
         </div>
       </CardContent>
     </Card>
