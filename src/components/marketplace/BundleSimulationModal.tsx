@@ -372,7 +372,7 @@ const BundleSimulationModal = ({ bundle, open: controlledOpen, onOpenChange, aut
                         Anonymized Dataset Preview
                       </CardTitle>
                       <Badge variant="secondary" className="text-xs">
-                        Showing {result.rawDataRecords.length} of {result.totalRecords.toLocaleString()} records
+                        Showing {result.rawDataRecords?.length || 0} of {result.totalRecords.toLocaleString()} records
                       </Badge>
                     </div>
                   </CardHeader>
@@ -397,7 +397,7 @@ const BundleSimulationModal = ({ bundle, open: controlledOpen, onOpenChange, aut
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {result.rawDataRecords.map((record, idx) => (
+                            {(result.rawDataRecords || []).map((record, idx) => (
                               <TableRow key={idx} className="text-xs hover:bg-muted/30">
                                 <TableCell className="font-mono text-muted-foreground">{record.id}</TableCell>
                                 <TableCell className="font-mono text-xs">{record.anonymizedId}</TableCell>
