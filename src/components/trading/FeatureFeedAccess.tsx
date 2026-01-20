@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Database, Lock, Zap, TrendingUp, Activity, Shield, Download } from "lucide-react";
+import { Database, Lock, Zap, TrendingUp, Activity, Shield, Download, PlayCircle } from "lucide-react";
+import { DELTSimulationModal } from "./DELTSimulationModal";
 
 export const FeatureFeedAccess = () => {
+  const [selectedFeed, setSelectedFeed] = useState<{ id: string; name: string } | null>(null);
+  const [showDELTModal, setShowDELTModal] = useState(false);
   const featureFeeds = [
     {
       id: "market-data-feed",
@@ -165,9 +169,13 @@ export const FeatureFeedAccess = () => {
                     size="sm" 
                     className="gap-2"
                     disabled={feed.status !== "active"}
+                    onClick={() => {
+                      setSelectedFeed({ id: feed.id, name: feed.name });
+                      setShowDELTModal(true);
+                    }}
                   >
-                    <Shield className="h-4 w-4" />
-                    Access Feed
+                    <PlayCircle className="h-4 w-4" />
+                    Run Simulation
                   </Button>
                 </div>
               </div>
@@ -264,6 +272,14 @@ export const FeatureFeedAccess = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* DELT Simulation Modal */}
+      <DELTSimulationModal
+        open={showDELTModal}
+        onOpenChange={setShowDELTModal}
+        feedName={selectedFeed?.name || ""}
+        feedId={selectedFeed?.id || ""}
+      />
     </div>
   );
 };

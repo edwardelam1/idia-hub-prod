@@ -1,10 +1,10 @@
-
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Coins, Users, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AlaCarteModal from './AlaCarteModal';
+import BundleSimulationModal from './BundleSimulationModal';
 
 interface BundleCardProps {
   bundle: any;
@@ -142,13 +142,14 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
               {userCredits < bundle.price ? 'Insufficient Credits' : 'Access Full Dataset'}
             </Button>
             
-            {/* À La Carte Option */}
-            <div className="flex justify-center">
+            {/* À La Carte and Simulation Options */}
+            <div className="flex items-center justify-center gap-2">
               <AlaCarteModal
                 bundle={bundle}
                 onAddToCart={handleAddToCart}
                 userCredits={userCredits}
               />
+              <BundleSimulationModal bundle={bundle} />
             </div>
           </div>
         </div>
