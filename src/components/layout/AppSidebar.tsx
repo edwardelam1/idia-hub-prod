@@ -15,7 +15,8 @@ import {
   TrendingUp,
   ShieldCheck,
   Globe,
-  Package
+  Package,
+  Smartphone
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
@@ -57,6 +58,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           { title: 'Audit Logs', url: '/audit-logs', icon: FileText },
           // Add Trading and Liquidity for super-admin too
           { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+          { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
           { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
         ];
       case 'organization-admin':

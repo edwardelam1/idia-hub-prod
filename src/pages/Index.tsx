@@ -17,6 +17,7 @@ import SecurityPage from './SecurityPage';
 import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
 import TradingInterface from '@/components/trading/TradingInterface';
 import { TradingDeskDashboard } from '@/components/trading/TradingDeskDashboard';
+import PayAppBlueprint from '@/components/trading/PayAppBlueprint';
 import LiquidityPools from '@/components/liquidity/LiquidityPools';
 import BillingCredits from '@/components/billing/BillingCredits';
 import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
@@ -87,6 +88,7 @@ const Index = () => {
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
         {/* Ensure Trading and Liquidity routes are properly defined */}
         <Route path="/trading" element={<TradingDeskDashboard />} />
+        <Route path="/pay-blueprint" element={<PayAppBlueprint />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
       </Routes>
     </AppLayout>
