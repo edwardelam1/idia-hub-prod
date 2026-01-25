@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
@@ -11,9 +12,8 @@ import {
   Download,
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
-  GripVertical,
+  X,
+  ChevronLeft,
   Trash2,
   Sparkles,
   ShoppingCart,
@@ -24,10 +24,7 @@ import {
   GraduationCap,
   Factory,
   Plane,
-  Home,
   Gamepad2,
-  Palette,
-  Music,
   Dumbbell,
   Car,
   Stethoscope,
@@ -42,7 +39,26 @@ import {
   BookOpen,
   Glasses,
   Handshake,
-  LucideIcon
+  Leaf,
+  Hammer,
+  Zap,
+  Landmark,
+  Building,
+  Tv,
+  Radio,
+  Home,
+  TreePine,
+  Ship,
+  Pickaxe,
+  Lock,
+  Calendar,
+  Scissors,
+  PawPrint,
+  Flower2,
+  Cannabis,
+  Globe,
+  Beer,
+  type LucideIcon
 } from 'lucide-react';
 
 // Types
@@ -67,9 +83,10 @@ interface SelectedModule {
   parentName?: string;
   isDefault?: boolean;
   icon?: LucideIcon;
+  color?: string;
 }
 
-// Vertical Categories with Sub-modules
+// Complete Vertical Categories - 32+ industries
 const verticalCategories: VerticalCategory[] = [
   {
     id: 'grocer',
@@ -127,6 +144,8 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'health-dental', name: 'Dental', description: 'Oral healthcare' },
       { id: 'health-optometry', name: 'Optometry', description: 'Vision care' },
       { id: 'health-veterinary', name: 'Veterinary', description: 'Animal care' },
+      { id: 'health-mental', name: 'Mental Health', description: 'Counseling & therapy' },
+      { id: 'health-rehab', name: 'Rehabilitation', description: 'Recovery services' },
     ]
   },
   {
@@ -154,6 +173,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'auto-parts', name: 'Parts Store', description: 'Auto parts retail' },
       { id: 'auto-rental', name: 'Rental', description: 'Vehicle rentals' },
       { id: 'auto-wash', name: 'Car Wash', description: 'Cleaning services' },
+      { id: 'auto-fleet', name: 'Fleet Management', description: 'Corporate vehicles' },
     ]
   },
   {
@@ -167,6 +187,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'fit-spa', name: 'Spa', description: 'Relaxation services' },
       { id: 'fit-martial-arts', name: 'Martial Arts', description: 'Combat training' },
       { id: 'fit-swimming', name: 'Swimming', description: 'Aquatic center' },
+      { id: 'fit-crossfit', name: 'CrossFit', description: 'High-intensity training' },
     ]
   },
   {
@@ -180,6 +201,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'edu-tutoring', name: 'Tutoring Center', description: 'Academic support' },
       { id: 'edu-vocational', name: 'Vocational', description: 'Trade schools' },
       { id: 'edu-daycare', name: 'Daycare', description: 'Early childhood' },
+      { id: 'edu-online', name: 'Online Learning', description: 'E-learning platforms' },
     ]
   },
   {
@@ -193,6 +215,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'ent-bowling', name: 'Bowling', description: 'Recreation center' },
       { id: 'ent-concert', name: 'Concert Venue', description: 'Live performances' },
       { id: 'ent-museum', name: 'Museum', description: 'Cultural exhibits' },
+      { id: 'ent-casino', name: 'Casino', description: 'Gaming entertainment' },
     ]
   },
   {
@@ -204,8 +227,8 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'prof-legal', name: 'Legal', description: 'Law offices' },
       { id: 'prof-accounting', name: 'Accounting', description: 'Financial services' },
       { id: 'prof-consulting', name: 'Consulting', description: 'Business advisory' },
-      { id: 'prof-real-estate', name: 'Real Estate', description: 'Property services' },
-      { id: 'prof-insurance', name: 'Insurance', description: 'Coverage services' },
+      { id: 'prof-marketing', name: 'Marketing Agency', description: 'Advertising services' },
+      { id: 'prof-architecture', name: 'Architecture', description: 'Design services' },
     ]
   },
   {
@@ -218,6 +241,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'mfg-processing', name: 'Processing', description: 'Raw materials' },
       { id: 'mfg-packaging', name: 'Packaging', description: 'Product packaging' },
       { id: 'mfg-quality', name: 'Quality Control', description: 'QA operations' },
+      { id: 'mfg-textile', name: 'Textile', description: 'Fabric production' },
     ]
   },
   {
@@ -230,6 +254,264 @@ const verticalCategories: VerticalCategory[] = [
       { id: 'travel-airline', name: 'Airline', description: 'Air travel' },
       { id: 'travel-cruise', name: 'Cruise', description: 'Sea travel' },
       { id: 'travel-tour', name: 'Tour Operator', description: 'Guided tours' },
+      { id: 'travel-resort', name: 'Resort', description: 'Vacation destinations' },
+    ]
+  },
+  {
+    id: 'agriculture',
+    name: 'Agriculture',
+    icon: Leaf,
+    color: 'bg-lime-600',
+    subModules: [
+      { id: 'agri-farming', name: 'Farming', description: 'Crop production' },
+      { id: 'agri-ranching', name: 'Ranching', description: 'Livestock management' },
+      { id: 'agri-aquaculture', name: 'Aquaculture', description: 'Fish farming' },
+      { id: 'agri-greenhouse', name: 'Greenhouse', description: 'Controlled environment' },
+      { id: 'agri-equipment', name: 'Equipment Rental', description: 'Farm machinery' },
+    ]
+  },
+  {
+    id: 'construction',
+    name: 'Construction',
+    icon: Hammer,
+    color: 'bg-orange-600',
+    subModules: [
+      { id: 'const-general', name: 'General Contractor', description: 'Building services' },
+      { id: 'const-electrical', name: 'Electrical', description: 'Wiring & power' },
+      { id: 'const-plumbing', name: 'Plumbing', description: 'Water systems' },
+      { id: 'const-hvac', name: 'HVAC', description: 'Climate control' },
+      { id: 'const-landscaping', name: 'Landscaping', description: 'Outdoor spaces' },
+      { id: 'const-roofing', name: 'Roofing', description: 'Roof installation' },
+    ]
+  },
+  {
+    id: 'energy',
+    name: 'Energy & Utilities',
+    icon: Zap,
+    color: 'bg-yellow-600',
+    subModules: [
+      { id: 'energy-solar', name: 'Solar', description: 'Solar power' },
+      { id: 'energy-wind', name: 'Wind', description: 'Wind energy' },
+      { id: 'energy-oil-gas', name: 'Oil & Gas', description: 'Petroleum services' },
+      { id: 'energy-electric', name: 'Electric Utility', description: 'Power distribution' },
+      { id: 'energy-water', name: 'Water Treatment', description: 'Water services' },
+    ]
+  },
+  {
+    id: 'financial',
+    name: 'Financial Services',
+    icon: Landmark,
+    color: 'bg-emerald-600',
+    subModules: [
+      { id: 'fin-banking', name: 'Banking', description: 'Bank services' },
+      { id: 'fin-credit-union', name: 'Credit Union', description: 'Member banking' },
+      { id: 'fin-investment', name: 'Investment', description: 'Wealth management' },
+      { id: 'fin-mortgage', name: 'Mortgage', description: 'Home lending' },
+      { id: 'fin-fintech', name: 'Fintech', description: 'Digital finance' },
+      { id: 'fin-insurance', name: 'Insurance', description: 'Coverage services' },
+    ]
+  },
+  {
+    id: 'government',
+    name: 'Government & Public',
+    icon: Building,
+    color: 'bg-blue-700',
+    subModules: [
+      { id: 'gov-municipal', name: 'Municipal', description: 'City services' },
+      { id: 'gov-federal', name: 'Federal', description: 'National agencies' },
+      { id: 'gov-courts', name: 'Courts', description: 'Legal system' },
+      { id: 'gov-dmv', name: 'DMV', description: 'Vehicle registration' },
+      { id: 'gov-parks', name: 'Parks & Recreation', description: 'Public spaces' },
+    ]
+  },
+  {
+    id: 'media',
+    name: 'Media & Publishing',
+    icon: Tv,
+    color: 'bg-rose-500',
+    subModules: [
+      { id: 'media-print', name: 'Print Media', description: 'Newspapers & magazines' },
+      { id: 'media-broadcast', name: 'Broadcasting', description: 'TV & radio' },
+      { id: 'media-streaming', name: 'Streaming', description: 'Digital content' },
+      { id: 'media-podcast', name: 'Podcasting', description: 'Audio content' },
+      { id: 'media-news', name: 'News', description: 'News outlets' },
+    ]
+  },
+  {
+    id: 'telecom',
+    name: 'Telecommunications',
+    icon: Radio,
+    color: 'bg-violet-500',
+    subModules: [
+      { id: 'tel-isp', name: 'ISP', description: 'Internet service' },
+      { id: 'tel-mobile', name: 'Mobile Carrier', description: 'Cellular service' },
+      { id: 'tel-cable', name: 'Cable', description: 'Cable TV & internet' },
+      { id: 'tel-satellite', name: 'Satellite', description: 'Satellite communications' },
+      { id: 'tel-datacenter', name: 'Data Centers', description: 'Server facilities' },
+    ]
+  },
+  {
+    id: 'realestate',
+    name: 'Real Estate',
+    icon: Home,
+    color: 'bg-amber-500',
+    subModules: [
+      { id: 're-property', name: 'Property Management', description: 'Building management' },
+      { id: 're-leasing', name: 'Leasing', description: 'Rental services' },
+      { id: 're-brokerage', name: 'Brokerage', description: 'Sales agents' },
+      { id: 're-appraisal', name: 'Appraisal', description: 'Property valuation' },
+      { id: 're-title', name: 'Title', description: 'Title services' },
+    ]
+  },
+  {
+    id: 'nonprofit',
+    name: 'Non-Profit',
+    icon: Heart,
+    color: 'bg-red-400',
+    subModules: [
+      { id: 'np-charity', name: 'Charity', description: 'Charitable organization' },
+      { id: 'np-foundation', name: 'Foundation', description: 'Grant-making' },
+      { id: 'np-ngo', name: 'NGO', description: 'Non-governmental org' },
+      { id: 'np-religious', name: 'Religious', description: 'Faith-based org' },
+      { id: 'np-community', name: 'Community Org', description: 'Local groups' },
+    ]
+  },
+  {
+    id: 'marine',
+    name: 'Marine & Maritime',
+    icon: Ship,
+    color: 'bg-sky-600',
+    subModules: [
+      { id: 'mar-shipping', name: 'Shipping', description: 'Cargo transport' },
+      { id: 'mar-port', name: 'Port Operations', description: 'Harbor services' },
+      { id: 'mar-boat-sales', name: 'Boat Sales', description: 'Vessel retail' },
+      { id: 'mar-marina', name: 'Marina', description: 'Docking services' },
+      { id: 'mar-fishing', name: 'Commercial Fishing', description: 'Fishing operations' },
+    ]
+  },
+  {
+    id: 'aviation',
+    name: 'Aviation',
+    icon: Plane,
+    color: 'bg-sky-500',
+    subModules: [
+      { id: 'avi-airport', name: 'Airport', description: 'Airport operations' },
+      { id: 'avi-flight-school', name: 'Flight School', description: 'Pilot training' },
+      { id: 'avi-charter', name: 'Charter', description: 'Private flights' },
+      { id: 'avi-maintenance', name: 'Maintenance', description: 'Aircraft service' },
+      { id: 'avi-cargo', name: 'Air Cargo', description: 'Freight transport' },
+    ]
+  },
+  {
+    id: 'mining',
+    name: 'Mining & Extraction',
+    icon: Pickaxe,
+    color: 'bg-stone-600',
+    subModules: [
+      { id: 'min-mining', name: 'Mining', description: 'Mineral extraction' },
+      { id: 'min-quarrying', name: 'Quarrying', description: 'Stone extraction' },
+      { id: 'min-drilling', name: 'Drilling', description: 'Well drilling' },
+      { id: 'min-refining', name: 'Refining', description: 'Material processing' },
+    ]
+  },
+  {
+    id: 'security',
+    name: 'Security Services',
+    icon: Lock,
+    color: 'bg-gray-700',
+    subModules: [
+      { id: 'sec-private', name: 'Private Security', description: 'Guard services' },
+      { id: 'sec-alarm', name: 'Alarm Systems', description: 'Monitoring services' },
+      { id: 'sec-surveillance', name: 'Surveillance', description: 'Camera systems' },
+      { id: 'sec-cyber', name: 'Cybersecurity', description: 'Digital protection' },
+    ]
+  },
+  {
+    id: 'events',
+    name: 'Event Services',
+    icon: Calendar,
+    color: 'bg-fuchsia-500',
+    subModules: [
+      { id: 'evt-wedding', name: 'Wedding Planning', description: 'Wedding events' },
+      { id: 'evt-corporate', name: 'Corporate Events', description: 'Business functions' },
+      { id: 'evt-concerts', name: 'Concerts', description: 'Music events' },
+      { id: 'evt-festivals', name: 'Festivals', description: 'Public celebrations' },
+      { id: 'evt-convention', name: 'Conventions', description: 'Trade shows' },
+    ]
+  },
+  {
+    id: 'personal',
+    name: 'Personal Services',
+    icon: Scissors,
+    color: 'bg-pink-400',
+    subModules: [
+      { id: 'pers-salon', name: 'Salon', description: 'Hair styling' },
+      { id: 'pers-barbershop', name: 'Barbershop', description: 'Men\'s grooming' },
+      { id: 'pers-tattoo', name: 'Tattoo', description: 'Body art' },
+      { id: 'pers-dry-cleaning', name: 'Dry Cleaning', description: 'Garment care' },
+      { id: 'pers-tailoring', name: 'Tailoring', description: 'Custom clothing' },
+    ]
+  },
+  {
+    id: 'pet',
+    name: 'Pet Services',
+    icon: PawPrint,
+    color: 'bg-orange-400',
+    subModules: [
+      { id: 'pet-store', name: 'Pet Store', description: 'Pet supplies' },
+      { id: 'pet-grooming', name: 'Grooming', description: 'Pet grooming' },
+      { id: 'pet-boarding', name: 'Boarding', description: 'Pet hotel' },
+      { id: 'pet-training', name: 'Training', description: 'Obedience training' },
+      { id: 'pet-daycare', name: 'Pet Daycare', description: 'Day services' },
+    ]
+  },
+  {
+    id: 'funeral',
+    name: 'Funeral Services',
+    icon: Flower2,
+    color: 'bg-gray-500',
+    subModules: [
+      { id: 'fun-home', name: 'Funeral Home', description: 'Funeral services' },
+      { id: 'fun-cemetery', name: 'Cemetery', description: 'Burial grounds' },
+      { id: 'fun-cremation', name: 'Cremation', description: 'Cremation services' },
+      { id: 'fun-memorial', name: 'Memorial', description: 'Memorial services' },
+    ]
+  },
+  {
+    id: 'cannabis',
+    name: 'Cannabis',
+    icon: Cannabis,
+    color: 'bg-green-600',
+    subModules: [
+      { id: 'can-dispensary', name: 'Dispensary', description: 'Retail cannabis' },
+      { id: 'can-cultivation', name: 'Cultivation', description: 'Growing operations' },
+      { id: 'can-processing', name: 'Processing', description: 'Product manufacturing' },
+      { id: 'can-testing', name: 'Testing Lab', description: 'Quality testing' },
+    ]
+  },
+  {
+    id: 'ecommerce',
+    name: 'E-Commerce',
+    icon: Globe,
+    color: 'bg-blue-400',
+    subModules: [
+      { id: 'ecom-dropship', name: 'Dropshipping', description: 'Drop ship model' },
+      { id: 'ecom-marketplace', name: 'Marketplace Seller', description: 'Multi-channel' },
+      { id: 'ecom-subscription', name: 'Subscription Box', description: 'Recurring delivery' },
+      { id: 'ecom-digital', name: 'Digital Goods', description: 'Digital products' },
+    ]
+  },
+  {
+    id: 'foodbev',
+    name: 'Food & Beverage Production',
+    icon: Beer,
+    color: 'bg-amber-500',
+    subModules: [
+      { id: 'fb-brewery', name: 'Brewery', description: 'Beer production' },
+      { id: 'fb-winery', name: 'Winery', description: 'Wine production' },
+      { id: 'fb-distillery', name: 'Distillery', description: 'Spirits production' },
+      { id: 'fb-bakery-prod', name: 'Bakery Production', description: 'Baked goods' },
+      { id: 'fb-food-truck', name: 'Food Truck', description: 'Mobile food' },
     ]
   },
 ];
@@ -261,138 +543,105 @@ const generateProvisioningCode = (): string => {
   return code;
 };
 
-// Module Icon Component with gravity animation
-const ModuleIcon = ({ 
-  module, 
-  isExpanded,
-  onSelect,
-  onToggleExpand,
-  isVertical = false,
-  color = 'bg-primary'
-}: { 
-  module: VerticalCategory | SubModule;
-  isExpanded?: boolean;
-  onSelect?: () => void;
-  onToggleExpand?: () => void;
-  isVertical?: boolean;
-  color?: string;
-}) => {
-  const isVerticalCat = 'subModules' in module;
-  const Icon = isVerticalCat ? (module as VerticalCategory).icon : Package;
-  const bgColor = isVerticalCat ? (module as VerticalCategory).color : color;
-
-  return (
-    <div 
-      className={`
-        group relative flex flex-col items-center justify-center p-3 rounded-xl
-        cursor-pointer transition-all duration-300 ease-out
-        hover:scale-105 hover:shadow-lg
-        animate-[fall_0.5s_ease-out_forwards]
-        ${isVerticalCat ? 'w-24 h-24' : 'w-20 h-20'}
-      `}
-      onClick={isVerticalCat ? onToggleExpand : onSelect}
-      style={{
-        animationDelay: `${Math.random() * 0.3}s`
-      }}
-    >
-      <div className={`
-        ${bgColor} p-3 rounded-xl shadow-md
-        transition-transform duration-200 group-hover:scale-110
-        ${isVerticalCat ? 'w-14 h-14' : 'w-12 h-12'}
-        flex items-center justify-center
-      `}>
-        <Icon className="w-6 h-6 text-white" />
-      </div>
-      <span className="mt-2 text-xs font-medium text-center text-foreground line-clamp-2">
-        {module.name}
-      </span>
-      {isVerticalCat && (
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Selected Module Card
-const SelectedModuleCard = ({ 
-  module, 
-  onRemove,
-  isDragging
-}: { 
-  module: SelectedModule;
-  onRemove?: () => void;
-  isDragging?: boolean;
-}) => {
-  const Icon = module.icon || Package;
-  
-  return (
-    <div 
-      className={`
-        flex items-center gap-3 p-3 rounded-lg border bg-card
-        transition-all duration-200
-        ${isDragging ? 'shadow-lg scale-105 opacity-80' : 'hover:shadow-md'}
-        ${module.isDefault ? 'border-primary/30 bg-primary/5' : 'border-border'}
-      `}
-      draggable={!module.isDefault}
-    >
-      <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
-      <div className={`p-2 rounded-lg ${module.isDefault ? 'bg-primary/10' : 'bg-muted'}`}>
-        <Icon className={`w-4 h-4 ${module.isDefault ? 'text-primary' : 'text-foreground'}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{module.name}</p>
-        {module.parentName && (
-          <p className="text-xs text-muted-foreground">{module.parentName}</p>
-        )}
-      </div>
-      {module.isDefault ? (
-        <Badge variant="secondary" className="text-xs">Default</Badge>
-      ) : (
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-7 w-7 opacity-0 group-hover:opacity-100"
-          onClick={onRemove}
-        >
-          <Trash2 className="w-4 h-4 text-destructive" />
-        </Button>
-      )}
-    </div>
-  );
-};
-
 export const PayAppBlueprint = () => {
   const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
   const [selectedModules, setSelectedModules] = useState<SelectedModule[]>([...defaultModules]);
+  const [selectedSubModules, setSelectedSubModules] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [provisioningCode] = useState(generateProvisioningCode());
   const [dragOverZone, setDragOverZone] = useState(false);
+  const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
+  const dragDataRef = useRef<{ id: string; name: string; parentId?: string; parentName?: string; color?: string } | null>(null);
 
-  const handleToggleExpand = useCallback((verticalId: string) => {
-    setExpandedVertical(prev => prev === verticalId ? null : verticalId);
+  const handleVerticalClick = useCallback((verticalId: string) => {
+    if (expandedVertical === verticalId) {
+      setExpandedVertical(null);
+      setSelectedSubModules(new Set());
+    } else {
+      // Animate the explosion
+      setAnimatingModules(new Set([verticalId]));
+      setTimeout(() => {
+        setExpandedVertical(verticalId);
+        setSelectedSubModules(new Set());
+        setAnimatingModules(new Set());
+      }, 300);
+    }
+  }, [expandedVertical]);
+
+  const handleSubModuleToggle = useCallback((subModuleId: string) => {
+    setSelectedSubModules(prev => {
+      const next = new Set(prev);
+      if (next.has(subModuleId)) {
+        next.delete(subModuleId);
+      } else {
+        next.add(subModuleId);
+      }
+      return next;
+    });
   }, []);
 
-  const handleSelectSubModule = useCallback((subModule: SubModule, parent: VerticalCategory) => {
-    const exists = selectedModules.find(m => m.id === subModule.id);
-    if (!exists) {
-      setSelectedModules(prev => [
-        ...prev,
-        {
-          id: subModule.id,
-          name: subModule.name,
-          parentId: parent.id,
-          parentName: parent.name,
-          icon: parent.icon
-        }
-      ]);
-      toast.success(`Added ${subModule.name} module`);
+  const handleAddSelectedModules = useCallback(() => {
+    if (!expandedVertical || selectedSubModules.size === 0) return;
+    
+    const vertical = verticalCategories.find(v => v.id === expandedVertical);
+    if (!vertical) return;
+
+    const newModules = vertical.subModules
+      .filter(sub => selectedSubModules.has(sub.id))
+      .filter(sub => !selectedModules.some(m => m.id === sub.id))
+      .map(sub => ({
+        id: sub.id,
+        name: sub.name,
+        parentId: vertical.id,
+        parentName: vertical.name,
+        icon: vertical.icon,
+        color: vertical.color,
+      }));
+
+    if (newModules.length > 0) {
+      setSelectedModules(prev => [...prev, ...newModules]);
+      toast.success(`Added ${newModules.length} module(s) to blueprint`);
+    }
+    setSelectedSubModules(new Set());
+  }, [expandedVertical, selectedSubModules, selectedModules]);
+
+  const handleDragStart = useCallback((e: React.DragEvent, module: { id: string; name: string; parentId?: string; parentName?: string; color?: string }) => {
+    dragDataRef.current = module;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', module.id);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverZone(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverZone(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverZone(false);
+    
+    if (dragDataRef.current) {
+      const exists = selectedModules.some(m => m.id === dragDataRef.current!.id);
+      if (!exists) {
+        const vertical = verticalCategories.find(v => v.id === dragDataRef.current!.parentId);
+        setSelectedModules(prev => [...prev, {
+          id: dragDataRef.current!.id,
+          name: dragDataRef.current!.name,
+          parentId: dragDataRef.current!.parentId,
+          parentName: dragDataRef.current!.parentName,
+          icon: vertical?.icon,
+          color: dragDataRef.current!.color,
+        }]);
+        toast.success(`Added ${dragDataRef.current!.name} module`);
+      }
+      dragDataRef.current = null;
     }
   }, [selectedModules]);
 
@@ -401,25 +650,10 @@ export const PayAppBlueprint = () => {
     toast.info('Module removed');
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverZone(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setDragOverZone(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverZone(false);
-    // Handle drop logic here
-  }, []);
-
   const handleCopyCode = () => {
     navigator.clipboard.writeText(provisioningCode);
     setCopied(true);
-    toast.success('Provisioning code copied to clipboard');
+    toast.success('Provisioning code copied');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -430,7 +664,7 @@ export const PayAppBlueprint = () => {
       createdAt: new Date().toISOString(),
       modules: {
         default: defaultModules.map(m => ({ id: m.id, name: m.name })),
-        selected: selectedModules.filter(m => !m.isDefault).map(m => ({
+        custom: selectedModules.filter(m => !m.isDefault).map(m => ({
           id: m.id,
           name: m.name,
           vertical: m.parentName || null
@@ -456,7 +690,7 @@ export const PayAppBlueprint = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Blueprint downloaded successfully');
+    toast.success('Blueprint downloaded');
   };
 
   const handleSendToDevice = () => {
@@ -467,56 +701,93 @@ export const PayAppBlueprint = () => {
   };
 
   const customModulesCount = selectedModules.filter(m => !m.isDefault).length;
+  const currentVertical = verticalCategories.find(v => v.id === expandedVertical);
 
   return (
     <div className="space-y-6">
       {/* CSS for animations */}
       <style>{`
-        @keyframes fall {
-          0% {
-            opacity: 0;
-            transform: translateY(-20px);
+        @keyframes gravity-fall {
+          0% { 
+            opacity: 0; 
+            transform: translateY(-80px) scale(0.7); 
           }
-          60% {
-            transform: translateY(5px);
-          }
-          80% {
-            transform: translateY(-2px);
-          }
-          100% {
+          50% { 
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(15px) scale(1.02); 
+          }
+          70% { 
+            transform: translateY(-8px) scale(0.98); 
+          }
+          85% { 
+            transform: translateY(4px); 
+          }
+          100% { 
+            opacity: 1; 
+            transform: translateY(0) scale(1); 
           }
         }
         
-        @keyframes explode {
-          0% {
-            opacity: 0;
-            transform: scale(0.5);
+        @keyframes explode-out {
+          0% { 
+            transform: scale(1); 
+            opacity: 1; 
           }
-          50% {
-            transform: scale(1.1);
+          50% { 
+            transform: scale(1.3); 
+            opacity: 0.6; 
           }
-          100% {
-            opacity: 1;
-            transform: scale(1);
+          100% { 
+            transform: scale(0); 
+            opacity: 0; 
           }
         }
         
-        .explode-in {
-          animation: explode 0.4s ease-out forwards;
+        @keyframes sub-module-appear {
+          0% { 
+            transform: scale(0) rotate(-15deg); 
+            opacity: 0; 
+          }
+          60% { 
+            transform: scale(1.15) rotate(3deg); 
+          }
+          100% { 
+            transform: scale(1) rotate(0); 
+            opacity: 1; 
+          }
+        }
+        
+        @keyframes float-settle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        
+        .gravity-fall {
+          animation: gravity-fall 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        
+        .explode-out {
+          animation: explode-out 0.3s ease-out forwards;
+        }
+        
+        .sub-appear {
+          animation: sub-module-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        
+        .module-icon:hover {
+          animation: float-settle 1s ease-in-out infinite;
         }
       `}</style>
 
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Package className="h-6 w-6 text-primary" />
             IDIA Pay Blueprint Builder
           </h2>
           <p className="text-muted-foreground mt-1">
-            Build custom merchant blueprints by selecting verticals and modules
+            Drag & drop modules to build custom merchant blueprints
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -573,85 +844,159 @@ export const PayAppBlueprint = () => {
         </Card>
       </div>
 
-      {/* Main Builder Interface */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main Builder Interface - Horizontal Layout */}
+      <div className="grid grid-cols-2 gap-6">
         {/* Left Pane - Available Modules */}
         <Card className="overflow-hidden">
-          <CardHeader className="bg-muted/30">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Available Verticals & Modules
-            </CardTitle>
-            <CardDescription>
-              Click a vertical to expand, then select modules to add
-            </CardDescription>
+          <CardHeader className="bg-muted/30 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Available Modules
+                </CardTitle>
+                <CardDescription>
+                  {expandedVertical ? 'Select sub-modules or drag to blueprint' : 'Click a vertical to expand'}
+                </CardDescription>
+              </div>
+              {expandedVertical && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setExpandedVertical(null);
+                    setSelectedSubModules(new Set());
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back to Verticals
+                </Button>
+              )}
+            </div>
           </CardHeader>
-          <CardContent className="p-4">
-            <ScrollArea className="h-[500px] pr-4">
-              <div className="space-y-6">
-                {/* Verticals Grid */}
-                <div className="flex flex-wrap gap-3 justify-center p-4 bg-muted/20 rounded-xl min-h-[200px]">
-                  {verticalCategories.map((vertical) => (
-                    <ModuleIcon
-                      key={vertical.id}
-                      module={vertical}
-                      isExpanded={expandedVertical === vertical.id}
-                      onToggleExpand={() => handleToggleExpand(vertical.id)}
-                      isVertical
-                    />
-                  ))}
-                </div>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[520px]">
+              <div className="p-4">
+                {!expandedVertical ? (
+                  /* Verticals Grid with gravity animation */
+                  <div className="flex flex-wrap gap-3 content-end min-h-[480px] p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
+                    {verticalCategories.map((vertical, index) => {
+                      const Icon = vertical.icon;
+                      const isExploding = animatingModules.has(vertical.id);
+                      
+                      return (
+                        <div
+                          key={vertical.id}
+                          className={`
+                            module-icon relative flex flex-col items-center justify-center p-2 rounded-xl
+                            cursor-pointer transition-all duration-200
+                            hover:scale-105 hover:shadow-lg hover:z-10
+                            ${isExploding ? 'explode-out' : 'gravity-fall'}
+                          `}
+                          style={{ 
+                            animationDelay: `${index * 0.03}s`,
+                            width: '90px'
+                          }}
+                          onClick={() => handleVerticalClick(vertical.id)}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, { 
+                            id: vertical.id, 
+                            name: vertical.name,
+                            color: vertical.color 
+                          })}
+                        >
+                          <div className={`
+                            ${vertical.color} p-3 rounded-xl shadow-md
+                            transition-transform duration-200 group-hover:scale-110
+                            w-12 h-12 flex items-center justify-center
+                          `}>
+                            <Icon className="w-6 h-6 text-white" />
+                          </div>
+                          <span className="mt-2 text-xs font-medium text-center text-foreground line-clamp-2">
+                            {vertical.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Sub-modules View */
+                  <div className="space-y-4">
+                    {/* Vertical Header */}
+                    {currentVertical && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <div className={`${currentVertical.color} p-2 rounded-lg`}>
+                          <currentVertical.icon className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold">{currentVertical.name}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {currentVertical.subModules.length} modules available
+                          </p>
+                        </div>
+                        {selectedSubModules.size > 0 && (
+                          <Button size="sm" onClick={handleAddSelectedModules}>
+                            Add Selected ({selectedSubModules.size})
+                          </Button>
+                        )}
+                      </div>
+                    )}
 
-                {/* Expanded Sub-modules */}
-                {expandedVertical && (
-                  <div className="border-t pt-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      {(() => {
-                        const vertical = verticalCategories.find(v => v.id === expandedVertical);
-                        if (!vertical) return null;
-                        const Icon = vertical.icon;
+                    {/* Sub-modules Grid with gravity */}
+                    <div className="flex flex-wrap gap-3 content-end min-h-[380px] p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
+                      {currentVertical?.subModules.map((sub, index) => {
+                        const isSelected = selectedSubModules.has(sub.id);
+                        const isAlreadyAdded = selectedModules.some(m => m.id === sub.id);
+                        
                         return (
-                          <>
-                            <div className={`${vertical.color} p-2 rounded-lg`}>
-                              <Icon className="w-4 h-4 text-white" />
-                            </div>
-                            <h4 className="font-semibold">{vertical.name} Modules</h4>
-                          </>
-                        );
-                      })()}
-                    </div>
-                    <div className="flex flex-wrap gap-3 p-4 bg-muted/20 rounded-xl">
-                      {verticalCategories
-                        .find(v => v.id === expandedVertical)
-                        ?.subModules.map((sub, index) => {
-                          const parent = verticalCategories.find(v => v.id === expandedVertical)!;
-                          const isSelected = selectedModules.some(m => m.id === sub.id);
-                          return (
-                            <div
-                              key={sub.id}
-                              className={`
-                                explode-in flex flex-col items-center justify-center p-3 rounded-xl
-                                cursor-pointer transition-all duration-200 w-24
-                                ${isSelected 
-                                  ? 'opacity-50 cursor-not-allowed' 
-                                  : 'hover:scale-105 hover:shadow-lg'
-                                }
-                              `}
-                              style={{ animationDelay: `${index * 0.05}s` }}
-                              onClick={() => !isSelected && handleSelectSubModule(sub, parent)}
-                            >
-                              <div className={`${parent.color} p-3 rounded-xl shadow-md`}>
-                                <Package className="w-5 h-5 text-white" />
+                          <div
+                            key={sub.id}
+                            className={`
+                              sub-appear relative flex flex-col items-center justify-center p-2 rounded-xl
+                              transition-all duration-200 cursor-pointer
+                              ${isAlreadyAdded ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105 hover:shadow-lg'}
+                              ${isSelected && !isAlreadyAdded ? 'ring-2 ring-primary ring-offset-2' : ''}
+                            `}
+                            style={{ 
+                              animationDelay: `${index * 0.05}s`,
+                              width: '100px'
+                            }}
+                            onClick={() => !isAlreadyAdded && handleSubModuleToggle(sub.id)}
+                            draggable={!isAlreadyAdded}
+                            onDragStart={(e) => !isAlreadyAdded && handleDragStart(e, {
+                              id: sub.id,
+                              name: sub.name,
+                              parentId: currentVertical.id,
+                              parentName: currentVertical.name,
+                              color: currentVertical.color,
+                            })}
+                          >
+                            {/* Checkbox overlay */}
+                            {!isAlreadyAdded && (
+                              <div className="absolute top-1 right-1 z-10">
+                                <Checkbox 
+                                  checked={isSelected}
+                                  onCheckedChange={() => handleSubModuleToggle(sub.id)}
+                                  className="h-4 w-4"
+                                />
                               </div>
-                              <span className="mt-2 text-xs font-medium text-center line-clamp-2">
-                                {sub.name}
-                              </span>
-                              {isSelected && (
-                                <Badge variant="secondary" className="mt-1 text-[10px]">Added</Badge>
-                              )}
+                            )}
+                            
+                            <div className={`
+                              ${currentVertical.color} p-3 rounded-xl shadow-md
+                              w-12 h-12 flex items-center justify-center
+                            `}>
+                              <Package className="w-5 h-5 text-white" />
                             </div>
-                          );
-                        })}
+                            <span className="mt-2 text-xs font-medium text-center line-clamp-2">
+                              {sub.name}
+                            </span>
+                            {isAlreadyAdded && (
+                              <Badge variant="secondary" className="mt-1 text-[10px]">Added</Badge>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -660,75 +1005,112 @@ export const PayAppBlueprint = () => {
           </CardContent>
         </Card>
 
-        {/* Right Pane - Selected Modules (Drop Zone) */}
+        {/* Right Pane - Blueprint Zone */}
         <Card className="overflow-hidden">
-          <CardHeader className="bg-primary/5">
+          <CardHeader className="bg-primary/5 py-4">
             <CardTitle className="text-lg flex items-center gap-2">
               <Check className="h-5 w-5 text-primary" />
-              Blueprint Modules
+              Blueprint Zone
             </CardTitle>
             <CardDescription>
-              Default modules + your selected modules
+              Drop modules here • Default + custom modules
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4">
             <div
               className={`
-                min-h-[500px] rounded-xl border-2 border-dashed p-4 transition-colors
-                ${dragOverZone ? 'border-primary bg-primary/5' : 'border-muted'}
+                min-h-[480px] rounded-xl border-2 border-dashed p-4 transition-all duration-200
+                ${dragOverZone 
+                  ? 'border-primary bg-primary/10 shadow-lg shadow-primary/20' 
+                  : 'border-muted-foreground/30'
+                }
               `}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <ScrollArea className="h-[470px] pr-2">
-                <div className="space-y-2">
+              <ScrollArea className="h-[450px] pr-2">
+                <div className="space-y-4">
                   {/* Default Modules Section */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
                       <Shield className="w-4 h-4" />
                       Default Modules (Always Included)
                     </h4>
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {selectedModules
                         .filter(m => m.isDefault)
-                        .map(module => (
-                          <SelectedModuleCard
-                            key={module.id}
-                            module={module}
-                          />
-                        ))}
+                        .map(module => {
+                          const Icon = module.icon || Package;
+                          return (
+                            <div
+                              key={module.id}
+                              className="flex flex-col items-center p-2 rounded-lg bg-primary/5 border border-primary/20"
+                            >
+                              <div className="p-2 rounded-lg bg-primary/10">
+                                <Icon className="w-4 h-4 text-primary" />
+                              </div>
+                              <span className="mt-1 text-[10px] font-medium text-center line-clamp-1">
+                                {module.name}
+                              </span>
+                              <Badge variant="outline" className="mt-1 text-[8px] px-1 py-0">
+                                Default
+                              </Badge>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
 
                   {/* Custom Modules Section */}
-                  {customModulesCount > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4" />
-                        Selected Modules ({customModulesCount})
-                      </h4>
-                      <div className="space-y-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      Custom Modules ({customModulesCount})
+                    </h4>
+                    
+                    {customModulesCount > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
                         {selectedModules
                           .filter(m => !m.isDefault)
-                          .map(module => (
-                            <SelectedModuleCard
-                              key={module.id}
-                              module={module}
-                              onRemove={() => handleRemoveModule(module.id)}
-                            />
-                          ))}
+                          .map(module => {
+                            const Icon = module.icon || Package;
+                            return (
+                              <div
+                                key={module.id}
+                                className="group relative flex flex-col items-center p-2 rounded-lg bg-muted/50 border hover:border-destructive/50 transition-colors"
+                              >
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive/80 hover:bg-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => handleRemoveModule(module.id)}
+                                >
+                                  <X className="h-3 w-3 text-white" />
+                                </Button>
+                                <div className={`p-2 rounded-lg ${module.color || 'bg-muted'}`}>
+                                  <Icon className="w-4 h-4 text-white" />
+                                </div>
+                                <span className="mt-1 text-[10px] font-medium text-center line-clamp-1">
+                                  {module.name}
+                                </span>
+                                {module.parentName && (
+                                  <span className="text-[8px] text-muted-foreground line-clamp-1">
+                                    {module.parentName}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
-                    </div>
-                  )}
-
-                  {customModulesCount === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                      <p>Select modules from the left pane</p>
-                      <p className="text-sm">Click on a vertical to see available modules</p>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <Package className="w-12 h-12 mb-3 opacity-30" />
+                        <p className="text-sm font-medium">Drop modules here</p>
+                        <p className="text-xs mt-1">Select from verticals on the left</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </ScrollArea>
             </div>
@@ -738,12 +1120,12 @@ export const PayAppBlueprint = () => {
 
       {/* Actions */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
-            <div className="text-center lg:text-left">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div>
               <h4 className="font-semibold">Ready to Deploy?</h4>
               <p className="text-sm text-muted-foreground">
-                Review your blueprint and send to edge device
+                {selectedModules.length} modules configured
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -762,11 +1144,11 @@ export const PayAppBlueprint = () => {
 
       {/* JSON Preview */}
       <Card>
-        <CardHeader>
+        <CardHeader className="py-3">
           <CardTitle className="text-lg">Blueprint Preview</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs">
+          <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-xs max-h-[300px]">
             {JSON.stringify(generateBlueprintJSON(), null, 2)}
           </pre>
         </CardContent>
@@ -778,8 +1160,7 @@ export const PayAppBlueprint = () => {
           <DialogHeader>
             <DialogTitle>Confirm Deployment</DialogTitle>
             <DialogDescription>
-              You are about to deploy this blueprint to an edge device. This will configure
-              the IDIA Pay system with {selectedModules.length} modules.
+              Deploy this blueprint to an edge device with {selectedModules.length} modules.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -795,6 +1176,12 @@ export const PayAppBlueprint = () => {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Custom Modules:</span>
                 <span className="font-semibold">{customModulesCount}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Verticals:</span>
+                <span className="font-semibold">
+                  {[...new Set(selectedModules.filter(m => m.parentName).map(m => m.parentName))].length}
+                </span>
               </div>
             </div>
           </div>
