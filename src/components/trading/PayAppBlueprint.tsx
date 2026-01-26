@@ -627,22 +627,23 @@ export const PayAppBlueprint = () => {
     e.preventDefault();
     setDragOverZone(false);
     
-    if (dragDataRef.current) {
-      const exists = selectedModules.some(m => m.id === dragDataRef.current!.id);
-      if (!exists) {
-        const vertical = verticalCategories.find(v => v.id === dragDataRef.current!.parentId);
-        setSelectedModules(prev => [...prev, {
-          id: dragDataRef.current!.id,
-          name: dragDataRef.current!.name,
-          parentId: dragDataRef.current!.parentId,
-          parentName: dragDataRef.current!.parentName,
-          icon: vertical?.icon,
-          color: dragDataRef.current!.color,
-        }]);
-        toast.success(`Added ${dragDataRef.current!.name} module`);
-      }
-      dragDataRef.current = null;
+    const dragData = dragDataRef.current;
+    if (!dragData) return;
+    
+    const exists = selectedModules.some(m => m.id === dragData.id);
+    if (!exists) {
+      const vertical = verticalCategories.find(v => v.id === dragData.parentId);
+      setSelectedModules(prev => [...prev, {
+        id: dragData.id,
+        name: dragData.name,
+        parentId: dragData.parentId,
+        parentName: dragData.parentName,
+        icon: vertical?.icon,
+        color: dragData.color,
+      }]);
+      toast.success(`Added ${dragData.name} module`);
     }
+    dragDataRef.current = null;
   }, [selectedModules]);
 
   const handleRemoveModule = useCallback((moduleId: string) => {
