@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -875,7 +875,7 @@ export const PayAppBlueprint = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[520px]">
+            <div className="h-[520px] overflow-y-auto">
               <div className="p-4">
                 {!expandedVertical ? (
                   /* Verticals Grid with gravity animation */
@@ -1001,7 +1001,7 @@ export const PayAppBlueprint = () => {
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
 
@@ -1029,7 +1029,7 @@ export const PayAppBlueprint = () => {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <ScrollArea className="h-[450px] pr-2">
+              <div className="h-[450px] overflow-y-auto pr-2">
                 <div className="space-y-4">
                   {/* Default Modules Section */}
                   <div>
@@ -1112,7 +1112,7 @@ export const PayAppBlueprint = () => {
                     )}
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           </CardContent>
         </Card>
