@@ -31,6 +31,8 @@ import {
   Briefcase,
   MessageSquare,
   FileText,
+  ClipboardList,
+  Library,
   Receipt,
   Users,
   Settings,
@@ -520,6 +522,8 @@ const verticalCategories: VerticalCategory[] = [
 const defaultModules: SelectedModule[] = [
   { id: 'default-communications', name: 'Communications', isDefault: true, icon: MessageSquare },
   { id: 'default-reports', name: 'Reports', isDefault: true, icon: FileText },
+  { id: 'default-forms', name: 'Forms', isDefault: true, icon: ClipboardList },
+  { id: 'default-knowledge-base', name: 'Knowledge Base', isDefault: true, icon: Library },
   { id: 'default-taxes', name: 'Taxes', isDefault: true, icon: Receipt },
   { id: 'default-affiliates', name: 'Affiliates', isDefault: true, icon: Users },
   { id: 'default-settings', name: 'Settings', isDefault: true, icon: Settings },
