@@ -24,6 +24,7 @@ import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
 import TeamManagement from '@/components/teams/TeamManagement';
 import ProvenanceAuditLog from '@/components/trading/ProvenanceAuditLog';
 import SynapseTopUp from '@/components/billing/SynapseTopUp';
+import EcosystemOnboarding from '@/components/onboarding/EcosystemOnboarding';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -95,6 +96,7 @@ const Index = () => {
         <Route path="/egress-logs" element={<ProvenanceAuditLog clientId="ENT-MOCK" />} />
         <Route path="/top-up" element={<SynapseTopUp />} />
         <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
+        <Route path="/onboarding" element={<EcosystemOnboarding isLifeAppVerified={true} />} />
       </Routes>
     </AppLayout>
   );

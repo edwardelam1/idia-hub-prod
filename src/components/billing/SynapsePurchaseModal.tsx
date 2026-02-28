@@ -3,16 +3,18 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Coins, Zap, Star, Rocket, CreditCard, Check } from 'lucide-react';
+import { Coins, Zap, Check, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { fetchApi } from '@/lib/api';
 import { toast } from 'sonner';
 import SynapseGasGauge from './SynapseGasGauge';
 
+const BASE_RATE = 0.75;
+
 const creditTiers = [
-  { id: 'starter', name: 'Starter', credits: 500, price: 49, icon: Zap, popular: false, perCredit: '0.098' },
-  { id: 'pro', name: 'Professional', credits: 2500, price: 199, icon: Star, popular: true, perCredit: '0.080' },
-  { id: 'enterprise', name: 'Enterprise', credits: 10000, price: 649, icon: Rocket, popular: false, perCredit: '0.065' },
+  { id: 'tier1', name: 'Tier 1', credits: 1000, rate: 0.70, popular: false, description: 'Minimum bulk entry' },
+  { id: 'tier2', name: 'Tier 2', credits: 5000, rate: 0.65, popular: true, description: 'Standard operational capacity' },
+  { id: 'tier3', name: 'Tier 3', credits: 20000, rate: 0.60, popular: false, description: 'Maximum volume discount' },
 ];
 
 interface SynapsePurchaseModalProps {
@@ -21,27 +23,44 @@ interface SynapsePurchaseModalProps {
 
 const SynapsePurchaseModal = ({ trigger }: SynapsePurchaseModalProps) => {
   const { balanceData, refreshBalance } = useSynapseCredits();
-  const [selectedTier, setSelectedTier] = useState<string | null>(null);
-  const [customAmount, setCustomAmount] = useState('');
+  const currentBalance = balanceData?.available_credits ?? 0;
+  const [selectedTier, setSelectedTier] = useState<string>('tier2');
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [open, setOpen] = useState(false);
 
+  const currentSelection = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
+  const usdAmount = currentSelection.credits * currentSelection.rate;
+  const baseRateCost = currentSelection.credits * BASE_RATE;
+  const savings = baseRateCost - usdAmount;
+
   const handlePurchase = async () => {
     setIsPurchasing(true);
-    // Mock purchase flow
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast.success('Synapse Credits purchased successfully!', {
-      description: `Credits will be available in your wallet shortly.`
-    });
-    setIsPurchasing(false);
-    setSelectedTier(null);
-    setCustomAmount('');
-    await refreshBalance();
-    setOpen(false);
-  };
+    try {
+      const response = await fetchApi('/api/v1/billing/worldpay/initiate', {
+        method: 'POST',
+        body: JSON.stringify({
+          credit_amount: currentSelection.credits,
+          usd_amount: usdAmount,
+          rate_applied: currentSelection.rate,
+          currency: 'USD',
+        }),
+      });
 
-  const customCredits = customAmount ? parseFloat(customAmount) : 0;
-  const customPrice = customCredits > 0 ? (customCredits * 0.085).toFixed(2) : '0.00';
+      if (response.payment_url && response.payment_url !== '#worldpay-mock') {
+        window.location.href = response.payment_url;
+      } else {
+        toast.success('Worldpay Session Initialized (Mock)', {
+          description: `Session ${response.session_id} created for ${currentSelection.credits.toLocaleString()} CRD ($${usdAmount.toLocaleString()}).`
+        });
+      }
+      await refreshBalance();
+      setOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to initialize Worldpay secure checkout.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -72,11 +91,11 @@ const SynapsePurchaseModal = ({ trigger }: SynapsePurchaseModalProps) => {
 
           {/* Credit Tiers */}
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-foreground">Select a Credit Package</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Select Volume Tranche</h4>
+            <div className="grid grid-cols-1 gap-3">
               {creditTiers.map((tier) => {
-                const Icon = tier.icon;
                 const isSelected = selectedTier === tier.id;
+                const usdCost = tier.credits * tier.rate;
                 return (
                   <Card
                     key={tier.id}
@@ -85,29 +104,34 @@ const SynapsePurchaseModal = ({ trigger }: SynapsePurchaseModalProps) => {
                         ? 'ring-2 ring-primary border-primary bg-primary/5'
                         : 'hover:border-primary/50'
                     }`}
-                    onClick={() => { setSelectedTier(tier.id); setCustomAmount(''); }}
+                    onClick={() => setSelectedTier(tier.id)}
                   >
                     {tier.popular && (
                       <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>
                     )}
-                    <div className="flex flex-col items-center text-center space-y-2">
-                      <div className={`p-2 rounded-full ${isSelected ? 'bg-primary/20' : 'bg-muted'}`}>
-                        <Icon className={`h-5 w-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                          {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-foreground">{tier.name}</span>
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
+                              ${tier.rate.toFixed(2)} / CRD
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h5 className="font-semibold text-sm">{tier.name}</h5>
-                        <p className="text-2xl font-bold text-foreground mt-1">
-                          {tier.credits.toLocaleString()}
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-foreground font-mono">
+                          {tier.credits.toLocaleString()} <span className="text-xs text-muted-foreground font-sans">CRD</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
                         </p>
-                        <p className="text-xs text-muted-foreground">credits</p>
                       </div>
-                      <div className="pt-2 border-t border-border w-full">
-                        <p className="text-lg font-bold text-foreground">${tier.price}</p>
-                        <p className="text-xs text-muted-foreground">${tier.perCredit}/credit</p>
-                      </div>
-                      {isSelected && (
-                        <Check className="h-4 w-4 text-primary absolute top-3 left-3" />
-                      )}
                     </div>
                   </Card>
                 );
@@ -115,45 +139,64 @@ const SynapsePurchaseModal = ({ trigger }: SynapsePurchaseModalProps) => {
             </div>
           </div>
 
-          {/* Custom Amount */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-foreground">Or Enter Custom Amount</h4>
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                placeholder="Enter credit amount"
-                value={customAmount}
-                onChange={(e) => { setCustomAmount(e.target.value); setSelectedTier(null); }}
-                className="flex-1"
-              />
-              <div className="text-sm text-muted-foreground whitespace-nowrap">
-                = <span className="font-semibold text-foreground">${customPrice}</span>
+          {/* Transaction Summary */}
+          <div className="bg-muted/50 border border-border rounded-xl p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Transaction Summary</h4>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Current Balance</span>
+              <span className="text-foreground font-mono">{currentBalance.toLocaleString()} CRD</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Credits to Add</span>
+              <span className="text-emerald-400 font-mono">+{currentSelection.credits.toLocaleString()} CRD</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Effective Rate</span>
+              <span className="text-foreground font-mono">${currentSelection.rate.toFixed(2)} / CRD</span>
+            </div>
+            {savings > 0 && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
+                <Tag className="w-4 h-4" />
+                Volume discount applied. You save ${savings.toLocaleString(undefined, { minimumFractionDigits: 2 })}.
+              </div>
+            )}
+            <div className="pt-3 border-t border-border flex justify-between items-end">
+              <span className="text-foreground font-medium">Total Due</span>
+              <div className="text-right">
+                <div className="text-xl font-bold text-foreground font-mono">
+                  ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-muted-foreground uppercase">USD</div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">$0.085 per credit for custom amounts</p>
           </div>
 
           {/* Purchase Button */}
           <Button
             className="w-full gap-2"
             size="lg"
-            disabled={!selectedTier && customCredits <= 0 || isPurchasing}
+            disabled={isPurchasing}
             onClick={handlePurchase}
           >
             {isPurchasing ? (
-              <>Processing...</>
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                <CreditCard className="h-4 w-4" />
-                {selectedTier
-                  ? `Purchase ${creditTiers.find(t => t.id === selectedTier)?.credits.toLocaleString()} Credits — $${creditTiers.find(t => t.id === selectedTier)?.price}`
-                  : customCredits > 0
-                    ? `Purchase ${customCredits.toLocaleString()} Credits — $${customPrice}`
-                    : 'Select a Package'
-                }
+                Continue to Worldpay <ArrowRight className="w-4 h-4" />
               </>
             )}
           </Button>
+
+          <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Encrypted & Secured by Worldpay</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4" />
+              <span>Corporate Cards & ACH Accepted</span>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

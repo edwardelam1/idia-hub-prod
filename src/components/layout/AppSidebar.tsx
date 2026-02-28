@@ -53,6 +53,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
       { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
       { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
+      { title: 'Hub Enrollment', url: '/onboarding', icon: ShieldCheck },
     ];
 
     switch (userRole) {
