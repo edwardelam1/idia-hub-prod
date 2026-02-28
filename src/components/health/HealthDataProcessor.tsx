@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Play, CheckCircle, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchApi } from '@/lib/api';
 
 interface ProcessingStats {
   processed_count: number;
@@ -23,13 +23,14 @@ export const HealthDataProcessor = () => {
     setProcessingResult(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('fix-health-pipeline', {
-        body: { trigger: 'manual' }
+      // Mock pipeline fix – awaiting AWS Lambda
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setProcessingResult({
+        processed_count: 0,
+        pending_queue_items: 0,
+        unprocessed_raw_items: 0,
+        message: 'Pipeline check complete. Awaiting AWS Lambda integration.'
       });
-
-      if (error) throw error;
-
-      setProcessingResult(data);
     } catch (err) {
       console.error('Pipeline fix error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fix pipeline');
@@ -45,27 +46,11 @@ export const HealthDataProcessor = () => {
           <Play className="h-5 w-5" />
           Health Data Pipeline Management
         </CardTitle>
-        <CardDescription>
-          Process pending health data and fix pipeline issues
-        </CardDescription>
+        <CardDescription>Process pending health data and fix pipeline issues</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button
-          onClick={triggerHealthPipelineFix}
-          disabled={isProcessing}
-          className="w-full"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing Pipeline...
-            </>
-          ) : (
-            <>
-              <Play className="mr-2 h-4 w-4" />
-              Fix Health Data Pipeline
-            </>
-          )}
+        <Button onClick={triggerHealthPipelineFix} disabled={isProcessing} className="w-full">
+          {isProcessing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing Pipeline...</>) : (<><Play className="mr-2 h-4 w-4" />Fix Health Data Pipeline</>)}
         </Button>
 
         {processingResult && (

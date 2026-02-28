@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchApi } from '@/lib/api';
 
 interface HealthMetric {
   id: string;
@@ -36,99 +36,17 @@ export const useHealthMetrics = () => {
   const fetchHealthMetrics = async () => {
     try {
       setIsLoading(true);
-      
-      // Get ALL health metrics from raw_health_data including raw_payload for analysis
-      // Include records with null step counts to show processing status
-      const { data: metrics, error: metricsError } = await supabase
-        .from('raw_health_data')
-        .select('id, step_count, recorded_at, created_at, user_id, raw_payload, device_type, processing_status, processed')
-        .order('created_at', { ascending: false })
-        .limit(200);
+      const data = await fetchApi('/api/v1/health/metrics');
 
-      if (metricsError) throw metricsError;
-
-      // Deduplicate records - keep only the one with most health data (non-zero heartRate)
-      const deduplicatedMetrics = metrics?.reduce((acc: any[], current) => {
-        const existing = acc.find(item => 
-          item.step_count === current.step_count && 
-          Math.abs(new Date(item.recorded_at || '').getTime() - new Date(current.recorded_at || '').getTime()) < 60000 // within 1 minute
-        );
-        
-        if (!existing) {
-          acc.push(current);
-        } else {
-          // Keep the record with more health data (non-zero heart rate or more complete payload)
-          const currentPayload = current.raw_payload as any || {};
-          const existingPayload = existing.raw_payload as any || {};
-          
-          if ((currentPayload?.heartRate || 0) > (existingPayload?.heartRate || 0)) {
-            const index = acc.indexOf(existing);
-            acc[index] = current;
-          }
-        }
-        return acc;
-      }, []) || [];
-
-      // Get total count of valid records
-      const { count: totalCount, error: countError } = await supabase
-        .from('raw_health_data')
-        .select('*', { count: 'exact', head: true })
-        .not('step_count', 'is', null)
-        .gt('step_count', 0);
-
-      if (countError) throw countError;
-
-      // Calculate today's records with valid step counts
-      const today = new Date().toISOString().split('T')[0];
-      const { count: todayCount, error: todayError } = await supabase
-        .from('raw_health_data')
-        .select('*', { count: 'exact', head: true })
-        .not('step_count', 'is', null)
-        .gt('step_count', 0)
-        .gte('created_at', `${today}T00:00:00.000Z`)
-        .lt('created_at', `${today}T23:59:59.999Z`);
-
-      if (todayError) throw todayError;
-
-      // Analyze data types and comprehensive score
-      const dataTypes = new Set<string>();
-      let totalQualityScore = 0;
-      let qualityScoreCount = 0;
-
-      deduplicatedMetrics?.forEach(metric => {
-        const payload = metric.raw_payload as any || {};
-        
-        // Track available data types with proper type checking
-        if (payload?.step_count || payload?.steps) dataTypes.add('Steps');
-        if (payload?.heartRate || payload?.averageHeartRate) dataTypes.add('Heart Rate');
-        if (payload?.calories || payload?.activeEnergyBurned) dataTypes.add('Calories');
-        if (payload?.sleepHours || payload?.timeAsleep) dataTypes.add('Sleep');
-        if (payload?.mindfulMinutes) dataTypes.add('Mindfulness');
-        if (payload?.weight) dataTypes.add('Weight');
-        if (payload?.bloodPressureSystolic) dataTypes.add('Blood Pressure');
-        if (payload?.oxygenSaturation) dataTypes.add('Oxygen Saturation');
-        if (payload?.vo2Max) dataTypes.add('VO2 Max');
-        if (payload?.walkingDistance || payload?.runningDistance) dataTypes.add('Distance');
-      });
-
-      // Calculate average steps from step-related metrics
-      const stepMetrics = deduplicatedMetrics?.filter(m => m.step_count !== null) || [];
-      const averageSteps = stepMetrics.length > 0 
-        ? Math.round(stepMetrics.reduce((sum, m) => sum + (m.step_count || 0), 0) / stepMetrics.length)
-        : 0;
-
-      const lastActivity = deduplicatedMetrics?.[0]?.created_at || null;
-      const comprehensiveScore = dataTypes.size > 1 ? Math.min(dataTypes.size * 0.15 + 0.25, 1.0) : 0.3;
-
-      setHealthMetrics(deduplicatedMetrics || []);
       setHealthStats({
-        totalRecords: totalCount || 0,
-        todayRecords: todayCount || 0,
-        averageSteps,
-        lastActivity,
-        dataTypes: Array.from(dataTypes),
-        comprehensiveScore
+        totalRecords: data.total_records || 0,
+        todayRecords: data.today_records || 0,
+        averageSteps: data.average_steps || 0,
+        lastActivity: data.last_activity || null,
+        dataTypes: data.data_types || [],
+        comprehensiveScore: data.comprehensive_score || 0
       });
+
       setError(null);
     } catch (err) {
       console.error('Error fetching health metrics:', err);
@@ -140,34 +58,9 @@ export const useHealthMetrics = () => {
 
   useEffect(() => {
     fetchHealthMetrics();
-
-    // Set up real-time subscription for raw_health_data
-    const channel = supabase
-      .channel('raw-health-data-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'raw_health_data'
-        },
-        () => {
-          console.log('Raw health data updated, refetching...');
-          fetchHealthMetrics(); // Refetch data when changes occur
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const interval = setInterval(fetchHealthMetrics, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  return {
-    healthMetrics,
-    healthStats,
-    isLoading,
-    error,
-    refetch: fetchHealthMetrics
-  };
+  return { healthMetrics, healthStats, isLoading, error, refetch: fetchHealthMetrics };
 };

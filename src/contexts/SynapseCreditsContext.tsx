@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { fetchApi } from '@/lib/api';
 
 interface BalanceData {
   wallet_address: string;
@@ -16,12 +17,12 @@ interface SynapseCreditsContextType {
 
 const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefined>(undefined);
 
-export const SynapseCreditsProvider = ({ 
-  children, 
-  walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d89A34" 
-}: { 
-  children: React.ReactNode; 
-  walletAddress?: string; 
+export const SynapseCreditsProvider = ({
+  children,
+  walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d89A34"
+}: {
+  children: React.ReactNode;
+  walletAddress?: string;
 }) => {
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,35 +33,21 @@ export const SynapseCreditsProvider = ({
     setError(null);
 
     try {
-      // MOCK API CALL - Swap with real fetch when Cati's API Gateway is live
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      const mockResponse: BalanceData = {
-        wallet_address: walletAddress,
-        available_credits: 1250.0000,
-        currency: "SYNAPSE_GAS",
-        last_updated: new Date().toISOString()
-      };
-
-      setBalanceData(mockResponse);
+      const data = await fetchApi('/api/v1/synapse/balance');
+      setBalanceData(data);
     } catch {
       setError("Failed to verify ledger balance. Synapse Engine unreachable.");
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress]);
+  }, []);
 
   useEffect(() => {
     fetchLedgerBalance();
   }, [fetchLedgerBalance]);
 
   return (
-    <SynapseCreditsContext.Provider value={{
-      balanceData,
-      isLoading,
-      error,
-      refreshBalance: fetchLedgerBalance
-    }}>
+    <SynapseCreditsContext.Provider value={{ balanceData, isLoading, error, refreshBalance: fetchLedgerBalance }}>
       {children}
     </SynapseCreditsContext.Provider>
   );

@@ -77,6 +77,7 @@ const Index = () => {
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<SecurityPage />} />
+        <Route path="/best-friend" element={<div className="p-6"><h1 className="text-2xl font-bold">Best Friend AI (Data Discovery)</h1><p className="text-muted-foreground mt-2">AI-powered data discovery assistant — use the floating Best Friend to chat.</p></div>} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<TeamManagement />} />
         <Route path="/billing" element={<BillingCredits />} />
@@ -86,10 +87,11 @@ const Index = () => {
         <Route path="/saved-searches" element={<div>Saved Searches - Available in Data Viewer</div>} />
         <Route path="/analytics" element={<div>Analytics (Coming Soon)</div>} />
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
-        {/* Ensure Trading and Liquidity routes are properly defined */}
         <Route path="/trading" element={<TradingDeskDashboard />} />
         <Route path="/pay-blueprint" element={<PayAppBlueprint />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
+        <Route path="/egress-logs" element={<div className="p-6"><h1 className="text-2xl font-bold">Egress Logs (Provenance)</h1><p className="text-muted-foreground mt-2">Data egress provenance tracking — awaiting AWS API integration.</p></div>} />
+        <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
       </Routes>
     </AppLayout>
   );
