@@ -1,70 +1,50 @@
 
 
-# Implement Provenance Audit Log and Synapse Top-Up Pages
+# Add Synapse Terminal to Data Marketplace
 
 ## Overview
-Replace the placeholder Egress Logs page with a full Provenance Audit Log component, and add a dedicated Synapse Wallet Top-Up page -- both using the user-provided component designs adapted to the existing codebase patterns (TypeScript, shadcn/ui, fetchApi wrapper).
+Create a new `MarketplaceTerminal` component and embed it at the top of the Data Marketplace page. This terminal lets any user run metadata queries against the Synapse Engine, costing 1 CRD per query. Also add the corresponding mock API handler.
 
 ---
 
-## 1. Add Mock API Endpoints
+## 1. Add Mock API Handler
 
 **File: `src/lib/api.ts`**
 
-Add two new mock handlers to the existing `mockHandlers` map:
+Add a new entry to `mockHandlers`:
 
-- **`/api/v1/delt/logs`** -- Returns an array of mock provenance log entries, each with: `provenance_id`, `egress_timestamp`, `liability_token_hash` (64-char hex), `aca_record_reference` (64-char hex), `hri_score_at_egress`, and `country_of_origin`. Include 4-5 sample entries with realistic data.
-
-- **`/api/v1/billing/worldpay/initiate`** -- Returns a mock response with `payment_url: "#worldpay-mock"` and a `session_id`. Instead of redirecting to Worldpay in mock mode, the UI will show a success toast.
-
-Also update the mock handler lookup to support query-string endpoints (currently `getMockResponse` does exact match; `/api/v1/delt/logs?client_id=X` won't match `/api/v1/delt/logs`). Fix by stripping query params before lookup.
+```text
+'/api/v1/synapse/query' -> returns mock query results with sample Iceberg Lakehouse metadata (e.g., a few anonymized records with fields like region, device_os, hri_score, record_count).
+```
 
 ---
 
-## 2. Create Provenance Audit Log Component
+## 2. Create MarketplaceTerminal Component
 
-**New file: `src/components/trading/ProvenanceAuditLog.tsx`**
+**New file: `src/components/marketplace/MarketplaceTerminal.tsx`**
 
-Adapt the user-provided `ProvenanceAuditLog` component to TypeScript with proper typing:
-- Accept `clientId` prop (default to `"ENT-MOCK"` for the mock context).
-- Fetch logs from `fetchApi('/api/v1/delt/logs?client_id=...')` on mount.
-- Display a table with columns: Egress Timestamp, Liability Token Hash (truncated, with copy-to-clipboard), ACA Reference (truncated, with copy), HRI Score (color-coded), Country of Origin.
-- Loading state: spinner with "Synchronizing with DigiRAMP Ledger..." message.
-- Error state: red alert banner.
-- Empty state: "No DELT transfers recorded" message.
-- Use shadcn `Table` components for consistency with the rest of the app, styled with the dark slate theme from the user's design.
+Adapt the provided component to TypeScript:
+- Props: `synapseBalance` (number, default 0) and `isBioKeyVerified` (boolean, default false)
+- Uses `fetchApi` to POST to `/api/v1/synapse/query`
+- Dark slate terminal UI with traffic-light header dots, CRD balance display, bio-key warning banner, textarea input, cost indicator (1.00 CRD / $0.75), Run Query button, and JSON results area
+- Wire the `useSynapseCredits` context to feed the real balance into the component from the parent
 
 ---
 
-## 3. Create Synapse Top-Up Component
+## 3. Integrate into DataMarketplace
 
-**New file: `src/components/billing/SynapseTopUp.tsx`**
+**File: `src/components/marketplace/DataMarketplace.tsx`**
 
-Adapt the user-provided `TopUp` component to TypeScript:
-- Read current balance from `useSynapseCredits()` context.
-- Display 4 pricing tiers: Scout Pack (1,000 CRD), Standard Acquisition (5,000 CRD), Enterprise Reserve (15,000 CRD, "Most Popular"), Volume Tranche (50,000 CRD).
-- Exchange rate: $0.75/CRD.
-- Right-side checkout summary card showing: current balance, selected credits, exchange rate, and total due in USD.
-- "Continue to Worldpay" button calls `fetchApi('/api/v1/billing/worldpay/initiate')`. In mock mode (no real URL returned), show a success toast instead of redirecting.
-- Security badges: "Encrypted & Secured by Worldpay" and "Corporate Cards & ACH Accepted".
-
----
-
-## 4. Update Routes and Navigation
-
-**File: `src/pages/Index.tsx`**
-- Import `ProvenanceAuditLog` and `SynapseTopUp`.
-- Replace the placeholder `/egress-logs` route with `<ProvenanceAuditLog clientId="ENT-MOCK" />`.
-- Add a new route `/top-up` rendering `<SynapseTopUp />`.
-
-**File: `src/components/layout/AppSidebar.tsx`**
-- Add a "Top Up Wallet" menu item (icon: `Zap`, url: `/top-up`) in the base navigation items, positioned after "Synapse Ledger".
+- Import `MarketplaceTerminal`
+- Import `useSynapseCredits` context
+- Read `balanceData?.available_credits` for the synapse balance
+- Place `<MarketplaceTerminal>` between the header/filters section and the bundle results grid
+- Pass `synapseBalance` from context and `isBioKeyVerified={true}` (defaulting to verified since all logged-in users pass the splash/login gate)
 
 ---
 
 ## Technical Notes
-
-- The `fetchApi` mock handler lookup needs to strip query parameters before matching, so endpoint URLs like `/api/v1/delt/logs?client_id=X` resolve correctly.
-- The Worldpay integration is mock-only for now; when the real AWS endpoint is configured via `VITE_API_BASE_URL`, the `payment_url` from the response will trigger a real redirect.
-- The `ProvenanceAuditLog` uses the `useAuth()` context's `user_id` as fallback `clientId` if none is passed.
+- The mock handler for `/api/v1/synapse/query` will return sample metadata rows so the terminal is functional in dev mode without a real backend.
+- The component uses native `textarea` styled with Tailwind (matching the provided design) rather than the shadcn Textarea, to preserve the monospace terminal aesthetic.
+- "DELT" will not appear in any user-facing text per the branding rule; the description references "Liability Shield" transfers.
 
