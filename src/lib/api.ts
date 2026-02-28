@@ -58,6 +58,20 @@ const mockHandlers: Record<string, (body?: any) => any> = {
     payment_url: '#worldpay-mock',
     session_id: `WP-${crypto.randomUUID()}`,
   }),
+  '/api/v1/settlement/balance': () => ({
+    available_balance: 2134.50,
+    pending_balance: 313.50,
+    lifetime_earnings: 4668.00,
+    bank_last4: '9921',
+    last_settlement_at: '2026-02-20T10:00:00Z',
+  }),
+  '/api/v1/settlement/egress': () => ({
+    success: true,
+    settlement_id: `STL-${crypto.randomUUID()}`,
+    amount: 2134.50,
+    method: 'ACH/RTP',
+    estimated_arrival: '2026-03-01T10:00:00Z',
+  }),
 };
 
 function getMockResponse(endpoint: string, body?: any): any | null {

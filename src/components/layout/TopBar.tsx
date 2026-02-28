@@ -15,6 +15,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Bell, ChevronDown, Coins, User, LogOut, Settings } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import SynapsePurchaseModal from '@/components/billing/SynapsePurchaseModal';
+import IdentityStatusPills from '@/components/layout/IdentityStatusPills';
 
 interface TopBarProps {
   userRole: string;
@@ -63,6 +64,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       </div>
 
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
+        <IdentityStatusPills />
         {/* Synapse Credits - shown for non-super-admin users */}
         {userRole !== 'super-admin' && (
           <div className="hidden sm:flex items-center space-x-2">
