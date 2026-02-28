@@ -13,6 +13,8 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Bell, ChevronDown, Coins, User, LogOut, Settings } from 'lucide-react';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import SynapsePurchaseModal from '@/components/billing/SynapsePurchaseModal';
 
 interface TopBarProps {
   userRole: string;
@@ -21,7 +23,8 @@ interface TopBarProps {
 
 const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const [notifications] = useState(3);
-  const [synapseCredits] = useState(12450);
+  const { balanceData, isLoading } = useSynapseCredits();
+  const synapseCredits = balanceData?.available_credits ?? 0;
 
   const getUserName = () => {
     switch (userRole) {
@@ -62,11 +65,18 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         {/* Synapse Credits - shown for non-super-admin users */}
         {userRole !== 'super-admin' && (
-          <div className="hidden sm:flex items-center space-x-2 bg-primary/10 px-2 md:px-3 py-1 rounded-full">
-            <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
-            <span className="text-xs md:text-sm font-medium text-primary">
-              {synapseCredits.toLocaleString()}
-            </span>
+          <div className="hidden sm:flex items-center space-x-2">
+            <SynapsePurchaseModal
+              trigger={
+                <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
+                  <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
+                  <span className="text-xs md:text-sm font-medium text-primary">
+                    {isLoading ? '...' : synapseCredits.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-primary/70">CRD</span>
+                </button>
+              }
+            />
           </div>
         )}
 
