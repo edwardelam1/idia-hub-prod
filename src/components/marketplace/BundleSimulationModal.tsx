@@ -204,7 +204,7 @@ const BundleSimulationModal = ({ bundle, open: controlledOpen, onOpenChange, aut
             Data Bundle Simulation
           </DialogTitle>
           <DialogDescription>
-            Simulate data egress with DELT protocol for "{bundle.name}"
+            Simulate data egress with Liability Shield protocol for "{bundle.name}"
           </DialogDescription>
         </DialogHeader>
 

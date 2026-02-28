@@ -66,7 +66,7 @@ const SynapseTopUp = () => {
           Fund Synapse Wallet
         </h1>
         <p className="text-muted-foreground mt-2">
-          Acquire Synapse Credits (CRD) to execute data queries and fund DELT Protocol liability transfers.
+          Acquire Synapse Credits (CRD) to execute data queries and fund Liability Shield protocol transfers.
         </p>
       </div>
 

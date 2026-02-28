@@ -174,10 +174,10 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            DELT Protocol Simulation
+            Liability Shield Protocol Simulation
           </DialogTitle>
           <DialogDescription>
-            Data Egress & Liability Transfer Protocol for {feedName}
+            Liability Shield &amp; Data Egress Transfer Protocol for {feedName}
           </DialogDescription>
         </DialogHeader>
 
@@ -188,7 +188,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-primary mt-0.5" />
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">DELT Protocol Purpose</p>
+                  <p className="text-sm font-medium text-foreground">Liability Shield Protocol Purpose</p>
                   <p className="text-xs text-muted-foreground">
                     Creates and logs a unique Liability Token for every API query, ensuring the client's 
                     Indemnification Moat is conditional upon preserving the data's lineage.
@@ -214,7 +214,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
             <CardHeader className="py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <FileCheck className="h-4 w-4" />
-                DELT Protocol Steps
+                Liability Shield Protocol Steps
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -369,7 +369,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
                 ) : (
                   <>
                     <Shield className="h-4 w-4 mr-2" />
-                    Run DELT Simulation
+                    Run Liability Shield Simulation
                   </>
                 )}
               </Button>

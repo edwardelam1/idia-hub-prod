@@ -88,7 +88,7 @@ const ProvenanceAuditLog = ({ clientId }: ProvenanceAuditLogProps) => {
               Provenance Audit Logs
             </h2>
             <p className="text-muted-foreground text-sm mt-1">
-              Immutable cryptographic receipts for all DELT Protocol liability transfers.
+              Immutable cryptographic receipts for all Liability Shield protocol transfers.
             </p>
           </div>
           <div className="bg-background px-4 py-2 rounded-lg border border-border flex items-center gap-2">
@@ -114,7 +114,7 @@ const ProvenanceAuditLog = ({ clientId }: ProvenanceAuditLogProps) => {
             {logs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
-                  No DELT transfers recorded for this organization.
+                  No Liability Shield transfers recorded for this organization.
                 </TableCell>
               </TableRow>
             ) : (
