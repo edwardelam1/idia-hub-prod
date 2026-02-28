@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CreditCard, Zap, ShieldCheck, Loader2, ArrowRight } from 'lucide-react';
+import { CreditCard, Zap, ShieldCheck, Loader2, ArrowRight, Tag } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { toast } from '@/hooks/use-toast';
@@ -7,17 +7,18 @@ import { toast } from '@/hooks/use-toast';
 interface PricingTier {
   crd: number;
   label: string;
+  rate: number;
+  description: string;
   popular?: boolean;
 }
 
-const CRD_RATE = 0.75;
-
 const pricingTiers: PricingTier[] = [
-  { crd: 1000, label: 'Scout Pack' },
-  { crd: 5000, label: 'Standard Acquisition' },
-  { crd: 15000, label: 'Enterprise Reserve', popular: true },
-  { crd: 50000, label: 'Volume Tranche' },
+  { crd: 1000, label: 'Tier 1', rate: 0.70, description: 'Minimum bulk entry' },
+  { crd: 5000, label: 'Tier 2', rate: 0.65, popular: true, description: 'Standard operational capacity' },
+  { crd: 20000, label: 'Tier 3', rate: 0.60, description: 'Maximum volume discount' },
 ];
+
+const BASE_RATE = 0.75;
 
 const SynapseTopUp = () => {
   const { balanceData } = useSynapseCredits();
@@ -27,17 +28,22 @@ const SynapseTopUp = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const currentSelection = pricingTiers.find(t => t.crd === selectedTier) || pricingTiers[1];
+  const usdAmount = currentSelection.crd * currentSelection.rate;
+  const baseRateCost = currentSelection.crd * BASE_RATE;
+  const savings = baseRateCost - usdAmount;
+
   const handleWorldpayCheckout = async () => {
     setIsProcessing(true);
     setError(null);
-    const usdAmount = selectedTier * CRD_RATE;
 
     try {
       const response = await fetchApi('/api/v1/billing/worldpay/initiate', {
         method: 'POST',
         body: JSON.stringify({
-          credit_amount: selectedTier,
+          credit_amount: currentSelection.crd,
           usd_amount: usdAmount,
+          rate_applied: currentSelection.rate,
           currency: 'USD',
         }),
       });
@@ -45,10 +51,9 @@ const SynapseTopUp = () => {
       if (response.payment_url && response.payment_url !== '#worldpay-mock') {
         window.location.href = response.payment_url;
       } else {
-        // Mock mode — show success toast
         toast({
           title: 'Worldpay Session Initialized (Mock)',
-          description: `Session ${response.session_id} created for ${selectedTier.toLocaleString()} CRD ($${usdAmount.toLocaleString()}).`,
+          description: `Session ${response.session_id} created for ${currentSelection.crd.toLocaleString()} CRD ($${usdAmount.toLocaleString()}).`,
         });
       }
     } catch (err: any) {
@@ -66,44 +71,54 @@ const SynapseTopUp = () => {
           Fund Synapse Wallet
         </h1>
         <p className="text-muted-foreground mt-2">
-          Acquire Synapse Credits (CRD) to execute data queries and fund Liability Shield protocol transfers.
+          Purchase bulk Synapse Credits (CRD) to execute data queries and fund Liability Shield protocol transfers. Larger tranches unlock lower per-credit rates.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Left: Tiers */}
         <div className="md:col-span-2 space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Select Capacity</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Select Volume Tranche</h2>
+          <div className="grid grid-cols-1 gap-4">
             {pricingTiers.map((tier) => {
-              const usdCost = tier.crd * CRD_RATE;
+              const usdCost = tier.crd * tier.rate;
               const isSelected = selectedTier === tier.crd;
               return (
                 <div
                   key={tier.crd}
                   onClick={() => setSelectedTier(tier.crd)}
-                  className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                  className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                     isSelected
                       ? 'border-primary bg-primary/10'
                       : 'border-border bg-card hover:border-muted-foreground/30'
                   }`}
                 >
                   {tier.popular && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+                    <span className="absolute -top-3 left-6 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
                       Most Popular
                     </span>
                   )}
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-foreground text-sm font-medium">{tier.label}</span>
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
-                      {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
+
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                        {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
+                      </div>
+                      <span className="text-foreground font-semibold">{tier.label}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
+                        ${tier.rate.toFixed(2)} / CRD
+                      </span>
                     </div>
+                    <p className="text-sm text-muted-foreground ml-7">{tier.description}</p>
                   </div>
-                  <div className="text-2xl font-bold text-foreground font-mono mb-1">
-                    {tier.crd.toLocaleString()} <span className="text-sm text-muted-foreground font-sans">CRD</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+
+                  <div className="text-left sm:text-right ml-7 sm:ml-0">
+                    <div className="text-2xl font-bold text-foreground font-mono">
+                      {tier.crd.toLocaleString()} <span className="text-sm text-muted-foreground font-sans">CRD</span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                    </div>
                   </div>
                 </div>
               );
@@ -121,20 +136,27 @@ const SynapseTopUp = () => {
           </div>
 
           <div className="flex justify-between text-sm mb-4">
-            <span className="text-muted-foreground">Synapse Credits</span>
-            <span className="text-emerald-400 font-mono">+{selectedTier.toLocaleString()} CRD</span>
+            <span className="text-muted-foreground">Credits to Add</span>
+            <span className="text-emerald-400 font-mono">+{currentSelection.crd.toLocaleString()} CRD</span>
           </div>
 
-          <div className="flex justify-between text-sm mb-6 pb-6 border-b border-border">
-            <span className="text-muted-foreground">Exchange Rate</span>
-            <span className="text-foreground font-mono">$0.75 / CRD</span>
+          <div className="flex justify-between text-sm mb-4">
+            <span className="text-muted-foreground">Effective Rate</span>
+            <span className="text-foreground font-mono">${currentSelection.rate.toFixed(2)} / CRD</span>
           </div>
 
-          <div className="flex justify-between items-end mb-8">
+          {savings > 0 && (
+            <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg mb-6">
+              <Tag className="w-4 h-4" />
+              Volume discount applied. You save ${savings.toLocaleString(undefined, { minimumFractionDigits: 2 })}.
+            </div>
+          )}
+
+          <div className="pt-6 border-t border-border flex justify-between items-end mb-8">
             <span className="text-foreground font-medium">Total Due</span>
             <div className="text-right">
               <div className="text-2xl font-bold text-foreground font-mono">
-                ${(selectedTier * CRD_RATE).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
               <div className="text-xs text-muted-foreground uppercase">USD</div>
             </div>
