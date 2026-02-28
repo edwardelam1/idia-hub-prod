@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Landmark, ArrowUpRight, History, Banknote, Loader2, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 
@@ -16,6 +17,7 @@ interface EarningsSettlementProps {
 }
 
 const EarningsSettlement = ({ businessId = 'ENT-MOCK' }: EarningsSettlementProps) => {
+  const navigate = useNavigate();
   const [earningsData, setEarningsData] = useState<SettlementData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSettling, setIsSettling] = useState(false);
@@ -129,7 +131,7 @@ const EarningsSettlement = ({ businessId = 'ENT-MOCK' }: EarningsSettlementProps
               Funds are pushed directly to your verified commercial account.
             </p>
           </div>
-          <button className="mt-4 text-[10px] text-primary hover:underline flex items-center gap-1">
+          <button onClick={() => navigate('/earnings/banking')} className="mt-4 text-[10px] text-primary hover:underline flex items-center gap-1">
             Update Banking Details <ArrowUpRight className="w-3 h-3" />
           </button>
         </div>
