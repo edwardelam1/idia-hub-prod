@@ -16,7 +16,10 @@ import {
   ShieldCheck,
   Globe,
   Package,
-  Smartphone
+  Smartphone,
+  Bot,
+  ScrollText,
+  KeyRound
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
@@ -45,6 +48,10 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
       { title: 'Data Marketplace', url: '/marketplace', icon: Database },
       { title: 'My Reports', url: '/my-reports', icon: Package },
+      { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
+      { title: 'Synapse Ledger', url: '/billing', icon: DollarSign },
+      { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
+      { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
     ];
 
     switch (userRole) {

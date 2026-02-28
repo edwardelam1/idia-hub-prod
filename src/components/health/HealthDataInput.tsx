@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchApi } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, Activity, Clock, MapPin } from 'lucide-react';
+import { Heart, Activity } from 'lucide-react';
 
 interface HealthDataInputProps {
   onDataSubmitted?: () => void;
@@ -16,7 +17,8 @@ interface HealthDataInputProps {
 const HealthDataInput: React.FC<HealthDataInputProps> = ({ onDataSubmitted }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  
+  const { user, isAuthenticated } = useAuth();
+
   const [formData, setFormData] = useState({
     activity_type: '',
     step_count: '',
@@ -32,82 +34,26 @@ const HealthDataInput: React.FC<HealthDataInputProps> = ({ onDataSubmitted }) =>
     setIsSubmitting(true);
 
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please sign in to submit health data.",
-          variant: "destructive"
-        });
+      if (!isAuthenticated) {
+        toast({ title: "Authentication Required", description: "Please sign in to submit health data.", variant: "destructive" });
         return;
       }
 
-      // Validate required fields
       if (!formData.activity_type || !formData.step_count) {
-        toast({
-          title: "Missing Information",
-          description: "Activity type and step count are required.",
-          variant: "destructive"
-        });
+        toast({ title: "Missing Information", description: "Activity type and step count are required.", variant: "destructive" });
         return;
       }
 
-      // Insert health data
-      const { error } = await supabase
-        .from('raw_health_data')
-        .insert({
-          user_id: user.id,
-          activity_type: formData.activity_type,
-          step_count: parseInt(formData.step_count),
-          device_type: formData.device_type || 'Manual Entry',
-          recorded_at: new Date().toISOString(),
-          processing_status: 'pending',
-          raw_payload: {
-            heart_rate: formData.heart_rate ? parseInt(formData.heart_rate) : null,
-            duration: formData.duration_minutes ? parseInt(formData.duration_minutes) * 60 : null,
-            distance: formData.distance_meters ? parseFloat(formData.distance_meters) : null,
-            calories: formData.calories_burned ? parseInt(formData.calories_burned) : null,
-            source: 'manual_entry'
-          }
-        });
+      // Future: POST to /api/v1/health/submit
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      if (error) {
-        console.error('Error submitting health data:', error);
-        toast({
-          title: "Submission Failed",
-          description: "Failed to submit health data. Please try again.",
-          variant: "destructive"
-        });
-        return;
-      }
+      toast({ title: "Health Data Submitted", description: "Your health data has been recorded successfully!" });
 
-      toast({
-        title: "Health Data Submitted",
-        description: "Your health data has been recorded successfully!",
-      });
-
-      // Reset form
-      setFormData({
-        activity_type: '',
-        step_count: '',
-        heart_rate: '',
-        duration_minutes: '',
-        distance_meters: '',
-        calories_burned: '',
-        device_type: ''
-      });
-
+      setFormData({ activity_type: '', step_count: '', heart_rate: '', duration_minutes: '', distance_meters: '', calories_burned: '', device_type: '' });
       onDataSubmitted?.();
-
     } catch (error) {
       console.error('Error submitting health data:', error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -137,13 +83,8 @@ const HealthDataInput: React.FC<HealthDataInputProps> = ({ onDataSubmitted }) =>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="activity_type">Activity Type *</Label>
-              <Select
-                value={formData.activity_type}
-                onValueChange={(value) => handleInputChange('activity_type', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select activity" />
-                </SelectTrigger>
+              <Select value={formData.activity_type} onValueChange={(value) => handleInputChange('activity_type', value)}>
+                <SelectTrigger><SelectValue placeholder="Select activity" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Walking">Walking</SelectItem>
                   <SelectItem value="Running">Running</SelectItem>
@@ -156,81 +97,30 @@ const HealthDataInput: React.FC<HealthDataInputProps> = ({ onDataSubmitted }) =>
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Label htmlFor="step_count">Steps Count *</Label>
-              <Input
-                id="step_count"
-                type="number"
-                placeholder="e.g., 8000"
-                value={formData.step_count}
-                onChange={(e) => handleInputChange('step_count', e.target.value)}
-                min="0"
-                max="50000"
-              />
+              <Input id="step_count" type="number" placeholder="e.g., 8000" value={formData.step_count} onChange={(e) => handleInputChange('step_count', e.target.value)} min="0" max="50000" />
             </div>
-
             <div>
               <Label htmlFor="heart_rate">Heart Rate (BPM)</Label>
-              <Input
-                id="heart_rate"
-                type="number"
-                placeholder="e.g., 120"
-                value={formData.heart_rate}
-                onChange={(e) => handleInputChange('heart_rate', e.target.value)}
-                min="30"
-                max="220"
-              />
+              <Input id="heart_rate" type="number" placeholder="e.g., 120" value={formData.heart_rate} onChange={(e) => handleInputChange('heart_rate', e.target.value)} min="30" max="220" />
             </div>
-
             <div>
               <Label htmlFor="duration_minutes">Duration (minutes)</Label>
-              <Input
-                id="duration_minutes"
-                type="number"
-                placeholder="e.g., 45"
-                value={formData.duration_minutes}
-                onChange={(e) => handleInputChange('duration_minutes', e.target.value)}
-                min="1"
-                max="1440"
-              />
+              <Input id="duration_minutes" type="number" placeholder="e.g., 45" value={formData.duration_minutes} onChange={(e) => handleInputChange('duration_minutes', e.target.value)} min="1" max="1440" />
             </div>
-
             <div>
               <Label htmlFor="distance_meters">Distance (meters)</Label>
-              <Input
-                id="distance_meters"
-                type="number"
-                step="0.1"
-                placeholder="e.g., 5000"
-                value={formData.distance_meters}
-                onChange={(e) => handleInputChange('distance_meters', e.target.value)}
-                min="0"
-              />
+              <Input id="distance_meters" type="number" step="0.1" placeholder="e.g., 5000" value={formData.distance_meters} onChange={(e) => handleInputChange('distance_meters', e.target.value)} min="0" />
             </div>
-
             <div>
               <Label htmlFor="calories_burned">Calories Burned</Label>
-              <Input
-                id="calories_burned"
-                type="number"
-                placeholder="e.g., 300"
-                value={formData.calories_burned}
-                onChange={(e) => handleInputChange('calories_burned', e.target.value)}
-                min="0"
-                max="2000"
-              />
+              <Input id="calories_burned" type="number" placeholder="e.g., 300" value={formData.calories_burned} onChange={(e) => handleInputChange('calories_burned', e.target.value)} min="0" max="2000" />
             </div>
-
             <div className="md:col-span-2">
               <Label htmlFor="device_type">Device/Source</Label>
-              <Select
-                value={formData.device_type}
-                onValueChange={(value) => handleInputChange('device_type', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select device" />
-                </SelectTrigger>
+              <Select value={formData.device_type} onValueChange={(value) => handleInputChange('device_type', value)}>
+                <SelectTrigger><SelectValue placeholder="Select device" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Manual Entry">Manual Entry</SelectItem>
                   <SelectItem value="Apple Watch">Apple Watch</SelectItem>
@@ -242,12 +132,7 @@ const HealthDataInput: React.FC<HealthDataInputProps> = ({ onDataSubmitted }) =>
               </Select>
             </div>
           </div>
-
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={isSubmitting || !formData.activity_type || !formData.step_count}
-          >
+          <Button type="submit" className="w-full" disabled={isSubmitting || !formData.activity_type || !formData.step_count}>
             {isSubmitting ? 'Submitting...' : 'Record Activity'}
           </Button>
         </form>

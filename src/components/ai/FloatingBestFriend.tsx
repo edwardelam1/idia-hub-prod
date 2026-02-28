@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import BestFriendAvatar from './BestFriendAvatar';
 import BestFriendChat from './BestFriendChat';
 import { useAudioCapabilities } from '@/hooks/useAudioCapabilities';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { AlertTriangle, Shield, Activity } from 'lucide-react';
 
@@ -30,136 +32,55 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
   const [feedbackText, setFeedbackText] = useState<string>('');
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  
+
   const location = useLocation();
   const navigate = useNavigate();
   const audio = useAudioCapabilities();
+  const { user } = useAuth();
   const moveIntervalRef = useRef<number | null>(null);
   const alertIntervalRef = useRef<number | null>(null);
 
-  // Helper function to check if position overlaps with text content
-  const isPositionOverText = (x: number, y: number, width = 200, height = 200) => {
-    const rect = { left: x, top: y, right: x + width, bottom: y + height };
-    
-    // Get all text elements and content areas to avoid
-    const textSelectors = [
-      'p', 'span', 'div[class*="text"]', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      '[class*="heading"]', '[class*="title"]', '[class*="content"]',
-      'td', 'th', 'label', 'button', '[role="button"]'
-    ];
-    
-    const elements = document.querySelectorAll(textSelectors.join(', '));
-    
-    for (const element of elements) {
-      const elementRect = element.getBoundingClientRect();
-      
-      // Skip very small elements (likely icons or decorative)
-      if (elementRect.width < 50 || elementRect.height < 20) continue;
-      
-      // Check for overlap
-      if (rect.left < elementRect.right && 
-          rect.right > elementRect.left && 
-          rect.top < elementRect.bottom && 
-          rect.bottom > elementRect.top) {
-        
-        // Additional check: ensure element has meaningful text content
-        const text = element.textContent?.trim() || '';
-        if (text.length > 10) { // Only avoid elements with substantial text
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  };
+  const isDeltAuthorized = user?.account_status === 'DELT_AUTHORIZED';
 
-  // Find safe position that doesn't overlap text
-  const findSafePosition = (attempts = 0): Position => {
-    if (attempts > 20) {
-      // Fallback to corners if no safe position found
-      const corners = [
-        { x: 20, y: 20 },
-        { x: window.innerWidth - 240, y: 20 },
-        { x: 20, y: window.innerHeight - 240 },
-        { x: window.innerWidth - 240, y: window.innerHeight - 240 }
-      ];
-      return corners[Math.floor(Math.random() * corners.length)];
-    }
+  const findSafePosition = (): Position => ({
+    x: Math.max(20, Math.min(window.innerWidth - 220, Math.random() * (window.innerWidth - 240))),
+    y: Math.max(20, Math.min(window.innerHeight - 220, Math.random() * (window.innerHeight - 240)))
+  });
 
-    const newPos = {
-      x: Math.max(20, Math.min(window.innerWidth - 220, Math.random() * (window.innerWidth - 240))),
-      y: Math.max(20, Math.min(window.innerHeight - 220, Math.random() * (window.innerHeight - 240)))
-    };
-
-    if (isPositionOverText(newPos.x, newPos.y)) {
-      return findSafePosition(attempts + 1);
-    }
-
-    return newPos;
-  };
-
-  // Autonomous movement system
+  // Autonomous movement
   useEffect(() => {
     if (!isDragging) {
       moveIntervalRef.current = window.setInterval(() => {
-        // Find a safe position that doesn't overlap text
-        const safePosition = findSafePosition();
-        setPosition(safePosition);
+        setPosition(findSafePosition());
         setIsMoving(true);
         setTimeout(() => setIsMoving(false), 1000);
-      }, 8000 + Math.random() * 7000); // Random interval between 8-15 seconds
+      }, 8000 + Math.random() * 7000);
     }
-
-    return () => {
-      if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-    };
+    return () => { if (moveIntervalRef.current) clearInterval(moveIntervalRef.current); };
   }, [isDragging]);
 
-  // Live data monitoring and real-time feedback
+  // Live data monitoring via fetchApi
   useEffect(() => {
     const checkLiveData = async () => {
       try {
-        // Check for new health data
-        const { data: healthData } = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/health_metrics?select=*&order=created_at.desc&limit=1', {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
-          }
-        }).then(r => r.json());
-
-        // Check for security events
-        const { data: securityData } = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/security_events?select=*&order=timestamp.desc&limit=1', {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
-          }
-        }).then(r => r.json());
-
-        // Provide contextual feedback based on live data
-        if (healthData && healthData.length > 0) {
-          const latestHealth = healthData[0];
-          const recordedRecently = new Date(latestHealth.created_at).getTime() > Date.now() - 300000; // 5 minutes
-          
-          if (recordedRecently && location.pathname === '/dashboard') {
-            setFeedbackText(`I just detected new health data: ${latestHealth.step_count} steps recorded!`);
-            setEmotion('excited');
-            setTimeout(() => {
-              setFeedbackText('');
-              setEmotion('neutral');
-            }, 4000);
-          }
+        const data = await fetchApi('/api/v1/health/metrics');
+        if (data.today_records > 0 && location.pathname === '/dashboard') {
+          setFeedbackText(`I've processed ${data.total_records} health records so far.`);
+          setEmotion('calm');
+          setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 4000);
         }
 
-        if (securityData && securityData.length > 0) {
-          const latestSecurity = securityData[0];
-          const isRecent = new Date(latestSecurity.timestamp).getTime() > Date.now() - 300000;
-          
-          if (isRecent && latestSecurity.severity === 'critical') {
+        // Only show DELT alerts if authorized
+        if (isDeltAuthorized) {
+          const secData = await fetchApi('/api/v1/security/events');
+          const critical = secData.events?.filter((e: any) => e.severity === 'critical') || [];
+          if (critical.length > 0) {
             showProactiveAlert({
               id: 'live-security',
               type: 'critical',
-              message: `Critical security event detected by ${latestSecurity.agent_name}. Immediate attention required.`,
+              message: `Critical security event detected. Immediate attention required.`,
               route: '/security'
             });
           }
@@ -171,111 +92,40 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
 
     if (userRole === 'super-admin') {
       checkLiveData();
-      alertIntervalRef.current = window.setInterval(checkLiveData, 60000); // Check every minute
+      alertIntervalRef.current = window.setInterval(checkLiveData, 60000);
     }
-
-    return () => {
-      if (alertIntervalRef.current) clearInterval(alertIntervalRef.current);
-    };
-  }, [userRole, navigate, location.pathname]);
+    return () => { if (alertIntervalRef.current) clearInterval(alertIntervalRef.current); };
+  }, [userRole, location.pathname, isDeltAuthorized]);
 
   const showProactiveAlert = (alert: SecurityAlert) => {
-    setEmotion(alert.type === 'critical' ? 'sad' : alert.type === 'warning' ? 'excited' : 'calm');
-    
-    // Move Best Friend to center-right to get attention
+    setEmotion(alert.type === 'critical' ? 'sad' : 'calm');
     setPosition({ x: window.innerWidth - 300, y: window.innerHeight / 2 - 100 });
     setIsMoving(true);
 
     toast(alert.message, {
       duration: 8000,
-      icon: alert.type === 'critical' ? <AlertTriangle className="h-4 w-4" /> : 
-            alert.type === 'warning' ? <Shield className="h-4 w-4" /> : 
-            <Activity className="h-4 w-4" />,
-      action: alert.route ? {
-        label: "Show me",
-        onClick: () => {
-          setEmotion('excited');
-          navigate(alert.route!);
-          toast.success("Let me show you what I found!");
-        }
-      } : undefined
+      icon: alert.type === 'critical' ? <AlertTriangle className="h-4 w-4" /> : <Shield className="h-4 w-4" />,
+      action: alert.route ? { label: "Show me", onClick: () => { setEmotion('excited'); navigate(alert.route!); } } : undefined
     });
 
-    setTimeout(() => {
-      setIsMoving(false);
-      setEmotion('neutral');
-    }, 3000);
+    setTimeout(() => { setIsMoving(false); setEmotion('neutral'); }, 3000);
   };
 
-  // Live contextual reactions based on real data
+  // Contextual reactions
   useEffect(() => {
-    const provideLiveContextualFeedback = async () => {
-      try {
-        // Get current page context and provide relevant live feedback
-        const routeReactions = {
-          '/dashboard': async () => {
-            setEmotion('calm');
-            const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/health_metrics?select=count', {
-              headers: {
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU',
-                'Prefer': 'count=exact'
-              }
-            });
-            if (response.ok) {
-              const count = response.headers.get('Content-Range')?.split('/')[1] || '0';
-              setFeedbackText(`Dashboard looking good! I've processed ${count} health records so far.`);
-              setTimeout(() => setFeedbackText(''), 4000);
-            }
-          },
-          '/system-health': async () => {
-            setEmotion('calm');
-            setFeedbackText("System Health Dashboard - Checking live metrics... All services operational!");
-            setTimeout(() => setFeedbackText(''), 5000);
-          },
-          '/security': async () => {
-            setEmotion('excited'); // Use 'excited' instead of 'alert'
-            const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/rest/v1/security_events?select=count&severity=eq.critical', {
-              headers: {
-                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU',
-                'Prefer': 'count=exact'
-              }
-            });
-            if (response.ok) {
-              const count = response.headers.get('Content-Range')?.split('/')[1] || '0';
-              setFeedbackText(`Security Command Center active. ${count} critical events require attention.`);
-              setTimeout(() => setFeedbackText(''), 5000);
-            }
-          },
-          '/marketplace': () => {
-            setEmotion('neutral');
-            setFeedbackText("Data Marketplace - I can help you find optimal health data bundles based on live market analysis.");
-            setTimeout(() => setFeedbackText(''), 5000);
-          },
-          '/data-viewer': () => {
-            setEmotion('excited');
-            setFeedbackText("Data Viewer - Processing real-time patterns... I'm detecting interesting correlations!");
-            setTimeout(() => setFeedbackText(''), 5000);
-          }
-        };
-
-        const reaction = routeReactions[location.pathname as keyof typeof routeReactions];
-        if (reaction) {
-          setTimeout(reaction, 1500);
-        }
-      } catch (error) {
-        console.error('Error providing contextual feedback:', error);
-      }
+    const reactions: Record<string, () => void> = {
+      '/dashboard': () => { setEmotion('calm'); setFeedbackText("Dashboard looking good!"); setTimeout(() => setFeedbackText(''), 4000); },
+      '/system-health': () => { setEmotion('calm'); setFeedbackText("System Health Dashboard - All services operational!"); setTimeout(() => setFeedbackText(''), 5000); },
+      '/security': () => { setEmotion('excited'); setFeedbackText("Security Command Center active."); setTimeout(() => setFeedbackText(''), 5000); },
+      '/marketplace': () => { setEmotion('neutral'); setFeedbackText("Data Marketplace - I can help find optimal bundles."); setTimeout(() => setFeedbackText(''), 5000); },
     };
-
-    provideLiveContextualFeedback();
+    const reaction = reactions[location.pathname];
+    if (reaction) setTimeout(reaction, 1500);
   }, [location.pathname]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    });
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
     setEmotion('excited');
   };
 
@@ -294,13 +144,11 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
     setTimeout(() => setEmotion('neutral'), 2000);
   };
 
-  // Global mouse events for dragging
   useEffect(() => {
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -317,7 +165,6 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
       setEmotion('neutral');
       setFeedbackText('Processing...');
       const transcribedText = await audio.stopRecording();
-      
       if (transcribedText) {
         setFeedbackText('Thinking...');
         await handleVoiceInput(transcribedText);
@@ -329,74 +176,31 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
 
   const handleVoiceInput = async (userInput: string) => {
     try {
-      // Send to Best Friend AI
-      const response = await fetch('https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/best-friend-ai', {
+      const data = await fetchApi('/api/v1/best-friend/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4eW5ncWNpaXBjdnZlaWdyenF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEzMjIwNzYsImV4cCI6MjA2Njg5ODA3Nn0.w-fUxBsH8wZ5ewzQkGAO6sEooqPEYbYJI_vL5F36HSU'
-        },
-        body: JSON.stringify({
-          message: userInput,
-          context: {
-            currentPage: location.pathname,
-            timestamp: new Date().toISOString(),
-            mode: 'voice'
-          }
-        }),
+        body: JSON.stringify({ message: userInput, context: { currentPage: location.pathname, timestamp: new Date().toISOString(), mode: 'voice' } }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
-      }
-
-      const data = await response.json();
-      const aiResponse = data.response;
-      
-      setFeedbackText(aiResponse);
+      setFeedbackText(data.response);
       setEmotion('calm');
-      
-      // Speak the response
-      await audio.speak(aiResponse);
-      
-      // Clear feedback after speaking
-      setTimeout(() => {
-        setFeedbackText('');
-        setEmotion('neutral');
-      }, 3000);
-
+      await audio.speak(data.response);
+      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 3000);
     } catch (error) {
       console.error('Voice interaction error:', error);
       setFeedbackText('Sorry, I had trouble understanding.');
       setEmotion('sad');
-      setTimeout(() => {
-        setFeedbackText('');
-        setEmotion('neutral');
-      }, 3000);
+      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 3000);
     }
-  };
-
-  const handleChatClick = () => {
-    setIsChatOpen(true);
-    setEmotion('excited');
   };
 
   return (
     <>
-      {/* Floating Best Friend Avatar */}
-      <div 
-        className={`fixed z-50 cursor-move transition-all duration-300 ${
-          isMoving ? 'animate-pulse' : ''
-        } ${isDragging ? 'scale-110' : 'hover:scale-105'}`}
-        style={{ 
-          left: `${position.x}px`, 
-          top: `${position.y}px`,
-          transform: isDragging ? 'rotate(5deg)' : 'rotate(0deg)'
-        }}
+      <div
+        className={`fixed z-50 cursor-move transition-all duration-300 ${isMoving ? 'animate-pulse' : ''} ${isDragging ? 'scale-110' : 'hover:scale-105'}`}
+        style={{ left: `${position.x}px`, top: `${position.y}px`, transform: isDragging ? 'rotate(5deg)' : 'rotate(0deg)' }}
         onMouseDown={handleMouseDown}
       >
         <BestFriendAvatar
-          onChatClick={handleChatClick}
+          onChatClick={() => { setIsChatOpen(true); setEmotion('excited'); }}
           onVoiceToggle={handleVoiceToggle}
           emotion={emotion}
           isListening={audio.isRecording}
@@ -404,21 +208,11 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
           feedbackText={feedbackText}
           className="drop-shadow-2xl"
         />
-        
-        {/* Glowing effect when active */}
         {(isMoving || emotion === 'excited') && (
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/30 via-pink-400/30 to-blue-400/30 blur-xl -z-10 animate-pulse" />
         )}
       </div>
-
-      {/* Chat Modal */}
-      <BestFriendChat 
-        isOpen={isChatOpen}
-        onClose={() => {
-          setIsChatOpen(false);
-          setEmotion('neutral');
-        }}
-      />
+      <BestFriendChat isOpen={isChatOpen} onClose={() => { setIsChatOpen(false); setEmotion('neutral'); }} />
     </>
   );
 };
