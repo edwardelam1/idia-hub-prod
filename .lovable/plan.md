@@ -1,107 +1,70 @@
 
 
-# IDIA Hub: Supabase to AWS Migration - Frontend Architecture Plan
+# Implement Provenance Audit Log and Synapse Top-Up Pages
 
 ## Overview
-Migrate the IDIA Hub React frontend away from Supabase by removing all Supabase client imports, creating a mock authentication context, building a standard API fetch wrapper, and updating navigation to reflect the new ecosystem routes.
+Replace the placeholder Egress Logs page with a full Provenance Audit Log component, and add a dedicated Synapse Wallet Top-Up page -- both using the user-provided component designs adapted to the existing codebase patterns (TypeScript, shadcn/ui, fetchApi wrapper).
 
 ---
 
-## 1. Create Mock Authentication Context
+## 1. Add Mock API Endpoints
 
-**New file: `src/contexts/AuthContext.tsx`**
+**File: `src/lib/api.ts`**
 
-- Create a React Context with a hardcoded enterprise user session:
-  - `user_id`: "mock-ent-9921"
-  - `role`: "enterprise_admin"
-  - `account_status`: "DELT_AUTHORIZED"
-- Expose a `useAuth()` hook for components to read user state (e.g., Best Friend AI, DELT modals can gate features on `account_status`).
-- Include `login()`, `logout()`, and `isAuthenticated` for future real auth integration.
-- Wrap the app with `<AuthProvider>` in `src/App.tsx`.
+Add two new mock handlers to the existing `mockHandlers` map:
 
----
+- **`/api/v1/delt/logs`** -- Returns an array of mock provenance log entries, each with: `provenance_id`, `egress_timestamp`, `liability_token_hash` (64-char hex), `aca_record_reference` (64-char hex), `hri_score_at_egress`, and `country_of_origin`. Include 4-5 sample entries with realistic data.
 
-## 2. Create Standard API Fetch Wrapper
+- **`/api/v1/billing/worldpay/initiate`** -- Returns a mock response with `payment_url: "#worldpay-mock"` and a `session_id`. Instead of redirecting to Worldpay in mock mode, the UI will show a success toast.
 
-**New file: `src/lib/api.ts`**
-
-- Build a `fetchApi()` wrapper around native `fetch()` that:
-  - Reads `VITE_API_BASE_URL` from environment (falls back to empty string).
-  - Attaches a Bearer token from `localStorage` (`idia_auth_token`).
-  - Returns JSON with proper error handling.
-- Add mock endpoint handlers with 800ms simulated latency for:
-  - `/api/v1/synapse/balance` -- returns Synapse credit balance (1250.00 CRD).
-  - `/api/v1/aca/verify` -- returns ACA verification status.
-  - `/api/v1/health/metrics` -- returns mock health metrics count.
-  - `/api/v1/security/events` -- returns mock security event data.
-  - `/api/v1/delt/transfer` -- returns mock liability token response.
-  - `/api/v1/best-friend/chat` -- returns mock AI chat response.
-- When `API_BASE_URL` is empty (current state), the wrapper intercepts calls and returns mock data. When a real URL is configured, it passes through to the real backend.
+Also update the mock handler lookup to support query-string endpoints (currently `getMockResponse` does exact match; `/api/v1/delt/logs?client_id=X` won't match `/api/v1/delt/logs`). Fix by stripping query params before lookup.
 
 ---
 
-## 3. Remove Supabase Dependencies from Components
+## 2. Create Provenance Audit Log Component
 
-**Files to update** (12 files with direct Supabase imports):
+**New file: `src/components/trading/ProvenanceAuditLog.tsx`**
 
-| File | Change |
-|------|--------|
-| `src/integrations/supabase/client.ts` | Delete or empty out |
-| `src/hooks/useSystemHealth.tsx` | Replace `supabase` calls with `fetchApi()` |
-| `src/hooks/useBundleData.tsx` | Replace with `fetchApi()` |
-| `src/hooks/usePipelineActivity.tsx` | Replace with `fetchApi()` |
-| `src/hooks/useSecurityEvents.tsx` | Replace with `fetchApi()` |
-| `src/hooks/useHealthMetrics.tsx` | Replace with `fetchApi()` |
-| `src/hooks/useMarketplaceBundles.tsx` | Replace with `fetchApi()` |
-| `src/hooks/useDataGeneration.tsx` | Replace with `fetchApi()` |
-| `src/components/health/HealthDataInput.tsx` | Replace with `fetchApi()` |
-| `src/components/health/PipelineMonitor.tsx` | Replace with `fetchApi()` |
-| `src/components/health/HealthDataProcessor.tsx` | Replace with `fetchApi()` |
-| `src/components/health/PipelineRecovery.tsx` | Replace with `fetchApi()` |
-| `src/components/dashboards/SuperAdminDashboard.tsx` | Replace with `fetchApi()` |
-
-**Components with hardcoded Supabase REST URLs** (inline `fetch()` calls):
-
-| File | Change |
-|------|--------|
-| `src/components/ai/FloatingBestFriend.tsx` | Replace all `fetch('https://zxyngqciipcvveigrzqt.supabase.co/...')` calls with `fetchApi()` |
-| `src/components/ai/BestFriendChat.tsx` | Replace Supabase edge function URL with `fetchApi('/api/v1/best-friend/chat')` |
-
-**Update `src/contexts/SynapseCreditsContext.tsx`**:
-- Replace the mock fetch with `fetchApi('/api/v1/synapse/balance')` to centralize all API calls through the new wrapper.
+Adapt the user-provided `ProvenanceAuditLog` component to TypeScript with proper typing:
+- Accept `clientId` prop (default to `"ENT-MOCK"` for the mock context).
+- Fetch logs from `fetchApi('/api/v1/delt/logs?client_id=...')` on mount.
+- Display a table with columns: Egress Timestamp, Liability Token Hash (truncated, with copy-to-clipboard), ACA Reference (truncated, with copy), HRI Score (color-coded), Country of Origin.
+- Loading state: spinner with "Synchronizing with DigiRAMP Ledger..." message.
+- Error state: red alert banner.
+- Empty state: "No DELT transfers recorded" message.
+- Use shadcn `Table` components for consistency with the rest of the app, styled with the dark slate theme from the user's design.
 
 ---
 
-## 4. Update Navigation and Layout
+## 3. Create Synapse Top-Up Component
 
-**Update `src/components/layout/AppSidebar.tsx`**:
-- Add four new navigation routes to the sidebar (for all roles, or enterprise_admin at minimum):
-  - "Best Friend AI (Data Discovery)" -> `/best-friend`
-  - "Synapse Ledger (Billing/Top-Up)" -> `/billing` (existing route, rename label)
-  - "Egress Logs (Provenance)" -> `/egress-logs`
-  - "Ecosystem Auth Settings" -> `/auth-settings`
+**New file: `src/components/billing/SynapseTopUp.tsx`**
 
-**Update `src/pages/Index.tsx`**:
-- Add route entries for `/egress-logs` and `/auth-settings` (placeholder pages).
-- Wrap with `AuthProvider`.
-- Inject `useAuth()` into the layout to conditionally render features based on `account_status`.
-
-**Update `src/components/layout/AppLayout.tsx`**:
-- Consume `useAuth()` and pass `account_status` down to child components that need gating.
+Adapt the user-provided `TopUp` component to TypeScript:
+- Read current balance from `useSynapseCredits()` context.
+- Display 4 pricing tiers: Scout Pack (1,000 CRD), Standard Acquisition (5,000 CRD), Enterprise Reserve (15,000 CRD, "Most Popular"), Volume Tranche (50,000 CRD).
+- Exchange rate: $0.75/CRD.
+- Right-side checkout summary card showing: current balance, selected credits, exchange rate, and total due in USD.
+- "Continue to Worldpay" button calls `fetchApi('/api/v1/billing/worldpay/initiate')`. In mock mode (no real URL returned), show a success toast instead of redirecting.
+- Security badges: "Encrypted & Secured by Worldpay" and "Corporate Cards & ACH Accepted".
 
 ---
 
-## 5. Wire Up AuthContext for UI Gating
+## 4. Update Routes and Navigation
 
-- In `FloatingBestFriend.tsx`: use `useAuth()` to check `account_status === 'DELT_AUTHORIZED'` before showing DELT-related alerts.
-- In `DELTSimulationModal.tsx`: use `useAuth()` to conditionally enable the "Run DELT Simulation" button only when `account_status` is `DELT_AUTHORIZED`.
+**File: `src/pages/Index.tsx`**
+- Import `ProvenanceAuditLog` and `SynapseTopUp`.
+- Replace the placeholder `/egress-logs` route with `<ProvenanceAuditLog clientId="ENT-MOCK" />`.
+- Add a new route `/top-up` rendering `<SynapseTopUp />`.
+
+**File: `src/components/layout/AppSidebar.tsx`**
+- Add a "Top Up Wallet" menu item (icon: `Zap`, url: `/top-up`) in the base navigation items, positioned after "Synapse Ledger".
 
 ---
 
 ## Technical Notes
 
-- The `@supabase/supabase-js` package will remain in `package.json` for now (no breaking removal) but will no longer be imported anywhere. It can be uninstalled in a follow-up.
-- All mock responses in `api.ts` are designed to be swapped with real AWS API Gateway endpoints by simply setting `VITE_API_BASE_URL` in the environment.
-- The `SynapseCreditsContext` continues to function identically but routes through the centralized `fetchApi` wrapper.
-- Edge functions (`supabase/functions/`) are untouched in this frontend migration -- they will be migrated separately to AWS Lambda.
+- The `fetchApi` mock handler lookup needs to strip query parameters before matching, so endpoint URLs like `/api/v1/delt/logs?client_id=X` resolve correctly.
+- The Worldpay integration is mock-only for now; when the real AWS endpoint is configured via `VITE_API_BASE_URL`, the `payment_url` from the response will trigger a real redirect.
+- The `ProvenanceAuditLog` uses the `useAuth()` context's `user_id` as fallback `clientId` if none is passed.
 
