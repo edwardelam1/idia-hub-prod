@@ -12,8 +12,10 @@ import MarketplaceFilters from './MarketplaceFilters';
 import ResultsHeader from './ResultsHeader';
 import BundleCard from './BundleCard';
 import ShoppingCartComponent from './ShoppingCart';
+import MarketplaceTerminal from './MarketplaceTerminal';
 import NoDataState from '@/components/health/NoDataState';
 import HealthDataInput from '@/components/health/HealthDataInput';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CartItem } from '@/types/marketplace';
 
@@ -26,6 +28,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const { isMobile, isTablet, isSmallTablet } = useResponsive();
   const { addPurchase } = usePurchaseHistory();
   const { bundles, isLoading, error } = useMarketplaceBundles();
+  const { balanceData } = useSynapseCredits();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<any>({});
@@ -196,6 +199,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         isMobile={isMobile}
         isTablet={isTablet}
         bundleCategory={bundleCategory}
+      />
+
+      <MarketplaceTerminal
+        synapseBalance={balanceData?.available_credits ?? 0}
+        isBioKeyVerified={true}
       />
 
       <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />

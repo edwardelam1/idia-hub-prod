@@ -46,6 +46,14 @@ const mockHandlers: Record<string, (body?: any) => any> = {
       { provenance_id: 'prov-004', egress_timestamp: '2026-02-24T11:03:00Z', liability_token_hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', aca_record_reference: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4', hri_score_at_egress: 95.88, country_of_origin: 'US' },
     ],
   }),
+  '/api/v1/synapse/query': () => ({
+    data: [
+      { region: 'US-KY', device_os: 'iOS 18.2', hri_score: 91.4, record_count: 1243, anonymization_level: 'k-anon-5', last_updated: '2026-02-27T08:00:00Z' },
+      { region: 'US-CA', device_os: 'Android 16', hri_score: 87.2, record_count: 3891, anonymization_level: 'k-anon-10', last_updated: '2026-02-27T07:45:00Z' },
+      { region: 'GB-LND', device_os: 'iOS 18.2', hri_score: 78.9, record_count: 672, anonymization_level: 'k-anon-5', last_updated: '2026-02-26T22:30:00Z' },
+      { region: 'DE-BY', device_os: 'Android 15', hri_score: 93.1, record_count: 418, anonymization_level: 'k-anon-8', last_updated: '2026-02-27T06:15:00Z' },
+    ],
+  }),
   '/api/v1/billing/worldpay/initiate': () => ({
     payment_url: '#worldpay-mock',
     session_id: `WP-${crypto.randomUUID()}`,
