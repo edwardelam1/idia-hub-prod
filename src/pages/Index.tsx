@@ -22,6 +22,8 @@ import LiquidityPools from '@/components/liquidity/LiquidityPools';
 import BillingCredits from '@/components/billing/BillingCredits';
 import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
 import TeamManagement from '@/components/teams/TeamManagement';
+import ProvenanceAuditLog from '@/components/trading/ProvenanceAuditLog';
+import SynapseTopUp from '@/components/billing/SynapseTopUp';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -90,7 +92,8 @@ const Index = () => {
         <Route path="/trading" element={<TradingDeskDashboard />} />
         <Route path="/pay-blueprint" element={<PayAppBlueprint />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
-        <Route path="/egress-logs" element={<div className="p-6"><h1 className="text-2xl font-bold">Egress Logs (Provenance)</h1><p className="text-muted-foreground mt-2">Data egress provenance tracking — awaiting AWS API integration.</p></div>} />
+        <Route path="/egress-logs" element={<ProvenanceAuditLog clientId="ENT-MOCK" />} />
+        <Route path="/top-up" element={<SynapseTopUp />} />
         <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
       </Routes>
     </AppLayout>
