@@ -26,6 +26,7 @@ import ProvenanceAuditLog from '@/components/trading/ProvenanceAuditLog';
 import SynapseTopUp from '@/components/billing/SynapseTopUp';
 import EcosystemOnboarding from '@/components/onboarding/EcosystemOnboarding';
 import EarningsSettlement from '@/components/billing/EarningsSettlement';
+import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -99,6 +100,7 @@ const Index = () => {
         <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
         <Route path="/onboarding" element={<EcosystemOnboarding isLifeAppVerified={true} />} />
         <Route path="/earnings" element={<EarningsSettlement />} />
+        <Route path="/earnings/banking" element={<UpdateBankingDetails />} />
       </Routes>
     </AppLayout>
   );
