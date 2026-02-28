@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { 
+import {
   BarChart3, 
   Building2, 
   Database, 
@@ -19,7 +19,8 @@ import {
   Smartphone,
   Bot,
   ScrollText,
-  KeyRound
+  KeyRound,
+  Landmark
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
@@ -53,6 +54,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
       { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
       { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
+      { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
       { title: 'Hub Enrollment', url: '/onboarding', icon: ShieldCheck },
     ];
 
