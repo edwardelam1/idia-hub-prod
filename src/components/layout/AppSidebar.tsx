@@ -50,6 +50,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       { title: 'My Reports', url: '/my-reports', icon: Package },
       { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
       { title: 'Synapse Ledger', url: '/billing', icon: DollarSign },
+      { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
       { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
       { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
     ];

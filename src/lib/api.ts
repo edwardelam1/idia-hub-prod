@@ -38,10 +38,23 @@ const mockHandlers: Record<string, (body?: any) => any> = {
   '/api/v1/best-friend/chat': (body?: any) => ({
     response: `I've analyzed your request: "${body?.message || ''}". Based on the current system state, all services are operational. How else can I help?`,
   }),
+  '/api/v1/delt/logs': () => ({
+    logs: [
+      { provenance_id: 'prov-001', egress_timestamp: '2026-02-27T14:32:00Z', liability_token_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', aca_record_reference: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', hri_score_at_egress: 92.45, country_of_origin: 'US' },
+      { provenance_id: 'prov-002', egress_timestamp: '2026-02-26T09:15:00Z', liability_token_hash: '7d793037a076817bc004234e4d0876cb5a305e5e5d9a37e4e76e02e26eab615f', aca_record_reference: 'f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e1', hri_score_at_egress: 88.12, country_of_origin: 'GB' },
+      { provenance_id: 'prov-003', egress_timestamp: '2026-02-25T18:47:00Z', liability_token_hash: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824', aca_record_reference: 'b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3', hri_score_at_egress: 74.30, country_of_origin: 'DE' },
+      { provenance_id: 'prov-004', egress_timestamp: '2026-02-24T11:03:00Z', liability_token_hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', aca_record_reference: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4', hri_score_at_egress: 95.88, country_of_origin: 'US' },
+    ],
+  }),
+  '/api/v1/billing/worldpay/initiate': () => ({
+    payment_url: '#worldpay-mock',
+    session_id: `WP-${crypto.randomUUID()}`,
+  }),
 };
 
 function getMockResponse(endpoint: string, body?: any): any | null {
-  const handler = mockHandlers[endpoint];
+  const strippedEndpoint = endpoint.split('?')[0];
+  const handler = mockHandlers[strippedEndpoint];
   return handler ? handler(body) : null;
 }
 
