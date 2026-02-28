@@ -273,7 +273,7 @@ export const FeatureFeedAccess = () => {
         </CardContent>
       </Card>
 
-      {/* DELT Simulation Modal */}
+      {/* Liability Shield Simulation Modal */}
       <DELTSimulationModal
         open={showDELTModal}
         onOpenChange={setShowDELTModal}
