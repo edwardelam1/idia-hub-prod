@@ -22,8 +22,12 @@ import { APIEndpoints } from "./APIEndpoints";
 import { APIMonitoring } from "./APIMonitoring";
 import { APIBilling } from "./APIBilling";
 import { FeatureFeedAccess } from "./FeatureFeedAccess";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const TradingDeskDashboard = () => {
+  const { pipelineHealth, activeBundlesCount, stagedDataCount, isLoading } = useDashboardStats();
+
   return (
     <div className="space-y-6 p-6">
       {/* Header Section */}
@@ -38,52 +42,66 @@ export const TradingDeskDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">API Response Time</CardTitle>
-            <Zap className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">Records Processed</CardTitle>
+            <Database className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">47ms</div>
+            {isLoading ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-foreground">
+                {(pipelineHealth?.processed_raw_data ?? 0).toLocaleString()}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              p95 latency <Badge variant="outline" className="ml-2">Target: &lt;100ms</Badge>
+              {pipelineHealth?.total_raw_data ?? 0} total raw records
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">API Calls Today</CardTitle>
+            <CardTitle className="text-sm font-medium">Staged Data</CardTitle>
             <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">127,453</div>
+            {isLoading ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-foreground">
+                {stagedDataCount.toLocaleString()}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              <span className="text-green-500">↑ 12.4%</span> from yesterday
+              {pipelineHealth?.unrewarded_staged_data ?? 0} pending rewards
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Credits Consumed</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Bundles</CardTitle>
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">8,456</div>
+            {isLoading ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-foreground">{activeBundlesCount}</div>
+            )}
             <p className="text-xs text-muted-foreground">
-              12,544 remaining
+              Marketplace listings
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Keys</CardTitle>
+            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
             <Key className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">3</div>
+            {isLoading ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-foreground">
+                {(pipelineHealth?.total_transactions ?? 0).toLocaleString()}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">Professional Tier</Badge>
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">Live</Badge>
             </p>
           </CardContent>
         </Card>

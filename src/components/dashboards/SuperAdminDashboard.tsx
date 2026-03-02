@@ -9,20 +9,20 @@ import SynapseVisualizer from '@/components/visualizer/SynapseVisualizer';
 import HealthDataDashboard from '@/components/health/HealthDataDashboard';
 import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
 import AuditLogs from '@/components/audit/AuditLogs';
-import { useHealthMetrics } from '@/hooks/useHealthMetrics';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { toast } from 'sonner';
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
-  const { healthStats } = useHealthMetrics();
+  const { pipelineHealth, activeBundlesCount, stagedDataCount } = useDashboardStats();
 
   const overviewStats = {
     totalOrganizations: 0,
-    activeUsers: healthStats.totalRecords,
+    activeUsers: pipelineHealth?.total_raw_data ?? 0,
     monthlyRevenue: 0,
-    systemUptime: 0,
-    pendingRequests: 0,
-    aiGeneratedBundles: 0
+    systemUptime: pipelineHealth ? Math.round(((pipelineHealth.processed_raw_data / Math.max(pipelineHealth.total_raw_data, 1)) * 100)) : 0,
+    pendingRequests: pipelineHealth?.unprocessed_raw_data ?? 0,
+    aiGeneratedBundles: activeBundlesCount
   };
 
   const recentActivity: Array<{ id: number; action: string; details: string; timestamp: string; type: string }> = [];
@@ -82,7 +82,7 @@ const SuperAdminDashboard = () => {
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Organizations</CardTitle><Building2 className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{overviewStats.totalOrganizations}</div><p className="text-xs text-muted-foreground">Awaiting live data</p></CardContent></Card>
-            <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Records</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{overviewStats.activeUsers.toLocaleString()}</div><p className="text-xs text-muted-foreground">Live data records</p></CardContent></Card>
+            <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Records</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{overviewStats.activeUsers.toLocaleString()}</div><p className="text-xs text-muted-foreground">Total raw data records</p></CardContent></Card>
             <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle><DollarSign className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">${overviewStats.monthlyRevenue.toLocaleString()}</div><p className="text-xs text-muted-foreground">+8% from last month</p></CardContent></Card>
             <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">System Uptime</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{overviewStats.systemUptime}%</div><p className="text-xs text-muted-foreground">Last 30 days</p></CardContent></Card>
           </div>
