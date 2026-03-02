@@ -1,67 +1,77 @@
 
 
-# Align Synapse Ledger with Egress Logs + Add Identity Pills & Earnings Settlement
+# Plan: Connect Trading & Dashboard UI to Supabase Data
 
-## Overview
+## Problem
+The Trading Interface and Trading Desk Dashboard display only hardcoded mock data. The `useTradingData` hook uses static `useState` values with no database queries. Dashboard metrics (API calls, latency, credits) are also hardcoded HTML.
 
-Three additions: (1) create the IdentityStatusPills component for the TopBar, (2) create the EarningsSettlement page with routing/nav, and (3) align all mock data so the provenance egress logs and settlement ledger tell a coherent financial story.
+Supabase already contains live data:
+- 221 health_metrics records
+- 131 staged_data records  
+- 2 active marketplace_bundles
 
----
+## Approach
 
-## 1. Align Mock Data in `src/lib/api.ts`
+### 1. Create a `useDashboardStats` hook with Supabase queries
+- Query `health_metrics` for record counts, recent activity, and aggregated stats
+- Query `marketplace_bundles` for active bundle count and category breakdown
+- Query `staged_data` for processing pipeline stats
+- Use the existing `check_pipeline_health` RPC function for pipeline summary
+- Wire stats into the SuperAdmin overview cards (replacing hardcoded 0 values)
 
-The current `/api/v1/delt/logs` mock returns 4 provenance records. The new settlement mock must derive from those same records so totals are consistent.
+### 2. Update `useTradingData` hook to pull from Supabase
+- Query `marketplace_bundles` to derive "token" data from real bundles (each bundle category becomes a tradeable data token with price/quality as its value)
+- Query `staged_data` for volume and activity metrics
+- Keep the order/trade execution as local state (no trading table exists yet), but base market data on real bundle/health records
+- Add `useQuery` from TanStack React Query for caching and auto-refresh
 
-**Approach**: Each provenance log represents a Liability Shield transfer. Assign a revenue value per record based on `record_count * rate` (e.g., $0.75/record). The settlement balance will be the sum of completed transfers minus any already-settled amounts.
+### 3. Update `TradingDeskDashboard` metrics cards
+- Replace hardcoded "47ms", "127,453 calls", "8,456 credits" with data from Supabase:
+  - **Records processed**: from `check_pipeline_health` RPC
+  - **Active bundles**: count from `marketplace_bundles`
+  - **Credits**: from the mock API `/api/v1/synapse/balance` (already in `fetchApi`)
+- Show loading skeletons while data loads
 
-Add two new mock handlers:
+### 4. Update `SuperAdminDashboard` overview
+- The overview cards already reference `healthStats.totalRecords` -- verify this is pulling correctly
+- Wire `marketplace_bundles` count into `aiGeneratedBundles`
+- Wire `staged_data` count into processing metrics
 
-- **`/api/v1/settlement/balance`** -- returns `available_balance`, `pending_balance`, `lifetime_earnings`, and `bank_last4` derived from the 4 egress log entries
-- **`/api/v1/settlement/egress`** -- returns a success confirmation for ACH/RTP initiation
+## Technical Details
 
-Example coherent numbers (based on 4 provenance logs totalling ~6,224 records at $0.75/record = ~$4,668 lifetime earnings, with some already settled):
-- `lifetime_earnings`: 4,668.00
-- `available_balance`: 2,134.50
-- `pending_balance`: 313.50
+### Files to modify:
+- **`src/hooks/useTradingData.tsx`** -- Replace static arrays with Supabase queries using `useQuery`. Map `marketplace_bundles` rows into the `Token` interface (bundle title as name, price as token price, quality_score as change metric, record count as volume).
+- **`src/components/trading/TradingDeskDashboard.tsx`** -- Import the updated hook data for metric cards. Replace hardcoded values with live counts.
+- **`src/components/dashboards/SuperAdminDashboard.tsx`** -- Query `marketplace_bundles` count and `staged_data` count for overview stats.
 
----
+### Files to create:
+- **`src/hooks/useDashboardStats.tsx`** -- New hook that calls `check_pipeline_health` RPC and queries `marketplace_bundles` count, returning aggregated platform stats for dashboard consumption.
 
-## 2. Create IdentityStatusPills Component
+### Data mapping (marketplace_bundles to tokens):
+```text
+bundle.title       -> token.name
+bundle.category    -> token.symbol (uppercased)
+bundle.price       -> token.price
+bundle.quality_score -> derived change24h
+bundle.contacts_count -> token.volume24h
+```
 
-**New file: `src/components/layout/IdentityStatusPills.tsx`**
+### Query pattern:
+```typescript
+const { data: bundles } = useQuery({
+  queryKey: ['marketplace-bundles-active'],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from('marketplace_bundles')
+      .select('*')
+      .eq('is_active', true);
+    if (error) throw error;
+    return data;
+  }
+});
+```
 
-Adapt the provided component to TypeScript with proper type annotations for `bioKeyStatus` and `kycTier` props. Place it in the TopBar between the welcome text and the action buttons, giving logged-in users a persistent view of their Bio-Key and KYC status.
-
-**Edit: `src/components/layout/TopBar.tsx`**
-
-Import and render `<IdentityStatusPills />` with defaults (`bioKeyStatus="STABLE"`, `kycTier={1}`) in the header bar, positioned after the welcome greeting.
-
----
-
-## 3. Create EarningsSettlement Page
-
-**New file: `src/components/billing/EarningsSettlement.tsx`**
-
-Adapt the provided component to TypeScript:
-- Props: `businessId` (string, defaults to a mock ID)
-- Fetches from `/api/v1/settlement/balance` on mount
-- "Settle to Bank Account" button POSTs to `/api/v1/settlement/egress`
-- Displays available balance, pending clearing, lifetime earnings, and bank destination card
-- Includes the FBO compliance disclaimer
-
-**Edit: `src/pages/Index.tsx`**
-
-Add route: `<Route path="/earnings" element={<EarningsSettlement />} />`
-
-**Edit: `src/components/layout/AppSidebar.tsx`**
-
-Add "Earnings & Settlement" nav entry (icon: `Landmark`) in the billing/finance nav group.
-
----
-
-## Technical Notes
-
-- The 4 provenance log entries in `/api/v1/delt/logs` remain unchanged. The settlement mock references the same record counts (1,243 + 672 + 418 + estimated from the other entries) to produce matching lifetime earnings.
-- `IdentityStatusPills` defaults to `STABLE` / `kycTier=1` since all logged-in mock users pass the splash gate. These props can later be driven by a real identity context.
-- The EarningsSettlement component uses the same `fetchApi` pattern and Worldpay egress branding as the rest of the billing system.
-
+### Fallback behavior:
+- If Supabase returns empty results, fall back to existing mock data so the UI is never blank
+- Show skeleton loaders during fetch
+- Display "No live data" indicators when appropriate
