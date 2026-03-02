@@ -1,5 +1,6 @@
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Token {
   symbol: string;
@@ -33,152 +34,71 @@ interface PriceData {
   price: number;
 }
 
+// ── Fallback mock tokens (shown when Supabase returns nothing) ──
+const MOCK_TOKENS: Token[] = [
+  { symbol: 'IDIA', name: 'IDIA Hub Token', price: 24.67, change24h: 5.23, volume24h: 1240000, marketCap: 45600000 },
+  { symbol: 'HEALTH', name: 'Health Data Token', price: 18.45, change24h: -2.14, volume24h: 890000, marketCap: 32100000 },
+  { symbol: 'FITNESS', name: 'Fitness Analytics Token', price: 12.89, change24h: 7.56, volume24h: 650000, marketCap: 18900000 },
+  { symbol: 'BIOME', name: 'Biometric Data Token', price: 9.34, change24h: -1.23, volume24h: 420000, marketCap: 12500000 },
+];
+
 const generatePriceHistory = (basePrice: number): PriceData[] => {
   const data: PriceData[] = [];
   let currentPrice = basePrice;
-  
   for (let i = 24; i >= 0; i--) {
-    const volatility = (Math.random() - 0.5) * 0.1;
-    currentPrice = currentPrice * (1 + volatility);
-    data.push({
-      time: `${i}h`,
-      price: currentPrice
-    });
+    currentPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.1);
+    data.push({ time: `${i}h`, price: currentPrice });
   }
-  
   return data.reverse();
 };
 
 export const useTradingData = () => {
-  const [tokens] = useState<Token[]>([
-    {
-      symbol: 'IDIA',
-      name: 'IDIA Hub Token',
-      price: 24.67,
-      change24h: 5.23,
-      volume24h: 1240000,
-      marketCap: 45600000
+  // ── Fetch active marketplace bundles & map to tokens ──
+  const { data: liveBundles, isLoading: bundlesLoading } = useQuery({
+    queryKey: ['marketplace-bundles-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketplace_bundles')
+        .select('*')
+        .eq('is_active', true);
+      if (error) throw error;
+      return data;
     },
-    {
-      symbol: 'HEALTH',
-      name: 'Health Data Token',
-      price: 18.45,
-      change24h: -2.14,
-      volume24h: 890000,
-      marketCap: 32100000
-    },
-    {
-      symbol: 'FITNESS',
-      name: 'Fitness Analytics Token',
-      price: 12.89,
-      change24h: 7.56,
-      volume24h: 650000,
-      marketCap: 18900000
-    },
-    {
-      symbol: 'BIOME',
-      name: 'Biometric Data Token',
-      price: 9.34,
-      change24h: -1.23,
-      volume24h: 420000,
-      marketCap: 12500000
-    },
-    {
-      symbol: 'VITALS',
-      name: 'Vital Signs Token',
-      price: 15.67,
-      change24h: 3.45,
-      volume24h: 780000,
-      marketCap: 28400000
-    },
-    {
-      symbol: 'GENOME',
-      name: 'Genomic Data Token',
-      price: 45.23,
-      change24h: 12.67,
-      volume24h: 1560000,
-      marketCap: 67800000
-    },
-    {
-      symbol: 'SLEEP',
-      name: 'Sleep Analytics Token',
-      price: 7.89,
-      change24h: -0.78,
-      volume24h: 340000,
-      marketCap: 8900000
-    },
-    {
-      symbol: 'NEURO',
-      name: 'Neural Data Token',
-      price: 78.45,
-      change24h: 18.23,
-      volume24h: 2340000,
-      marketCap: 145600000
-    }
-  ]);
+    refetchInterval: 30_000,
+  });
 
-  const [portfolio] = useState<PortfolioAsset[]>([
-    {
-      symbol: 'IDIA',
-      amount: 145.67,
-      value: 3593.18,
-      unrealizedPnL: 234.56,
-      avgCost: 23.45
-    },
-    {
-      symbol: 'HEALTH',
-      amount: 89.23,
-      value: 1646.19,
-      unrealizedPnL: -45.67,
-      avgCost: 18.96
-    },
-    {
-      symbol: 'FITNESS',
-      amount: 234.56,
-      value: 3022.46,
-      unrealizedPnL: 567.89,
-      avgCost: 10.46
-    },
-    {
-      symbol: 'GENOME',
-      amount: 23.45,
-      value: 1060.64,
-      unrealizedPnL: 123.45,
-      avgCost: 39.98
-    }
-  ]);
+  const tokens: Token[] = useMemo(() => {
+    if (!liveBundles || liveBundles.length === 0) return MOCK_TOKENS;
+    return liveBundles.map((b) => ({
+      symbol: (b.category || 'DATA').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6),
+      name: b.title || b.category || 'Data Bundle',
+      price: (b.price ?? 0) / 100, // cents → dollars for display
+      change24h: ((b.bundle_version ?? 1) % 20) - 5, // derive a pseudo-change from version
+      volume24h: b.contacts_count ?? 0,
+      marketCap: ((b.price ?? 0) / 100) * (b.contacts_count ?? 1) * 100,
+    }));
+  }, [liveBundles]);
 
-  const [orders, setOrders] = useState<Order[]>([
-    {
-      id: '1',
-      token: 'IDIA',
-      type: 'buy',
-      amount: 50,
-      price: 24.50,
-      status: 'open',
-      createdAt: new Date(Date.now() - 3600000)
-    },
-    {
-      id: '2',
-      token: 'HEALTH',
-      type: 'sell',
-      amount: 25,
-      price: 19.00,
-      status: 'open',
-      createdAt: new Date(Date.now() - 7200000)
-    },
-    {
-      id: '3',
-      token: 'FITNESS',
-      type: 'buy',
-      amount: 100,
-      price: 12.75,
-      status: 'filled',
-      createdAt: new Date(Date.now() - 86400000)
-    }
-  ]);
+  // ── Portfolio derived from tokens ──
+  const portfolio: PortfolioAsset[] = useMemo(() => {
+    return tokens.slice(0, 4).map((t) => ({
+      symbol: t.symbol,
+      amount: Math.round(Math.random() * 200 + 20),
+      value: t.price * (Math.random() * 200 + 20),
+      unrealizedPnL: t.change24h * (Math.random() * 50),
+      avgCost: t.price * (1 - t.change24h / 200),
+    }));
+  }, [tokens]);
 
+  // ── Orders (local state – no DB table yet) ──
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // ── Price history ──
   const [priceHistory, setPriceHistory] = useState<PriceData[]>([]);
+  useEffect(() => {
+    if (tokens.length > 0) setPriceHistory(generatePriceHistory(tokens[0].price));
+  }, [tokens]);
+
   const [marketDepth] = useState({
     bids: [
       { price: 24.65, amount: 145.67 },
@@ -189,39 +109,28 @@ export const useTradingData = () => {
       { price: 24.68, amount: 198.45 },
       { price: 24.69, amount: 345.67 },
       { price: 24.70, amount: 789.12 },
-    ]
+    ],
   });
-
-  useEffect(() => {
-    setPriceHistory(generatePriceHistory(24.67));
-  }, []);
 
   const executeOrder = (orderData: Omit<Order, 'id' | 'status' | 'createdAt'>) => {
     const newOrder: Order = {
       ...orderData,
       id: Math.random().toString(36).substr(2, 9),
       status: 'open',
-      createdAt: new Date()
+      createdAt: new Date(),
     };
-    
-    setOrders(prev => [newOrder, ...prev]);
-    
-    // Simulate order execution after 2-5 seconds
+    setOrders((prev) => [newOrder, ...prev]);
     setTimeout(() => {
-      setOrders(prev => prev.map(order => 
-        order.id === newOrder.id 
-          ? { ...order, status: 'filled' as const }
-          : order
-      ));
+      setOrders((prev) =>
+        prev.map((o) => (o.id === newOrder.id ? { ...o, status: 'filled' as const } : o))
+      );
     }, Math.random() * 3000 + 2000);
   };
 
   const cancelOrder = (orderId: string) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { ...order, status: 'cancelled' as const }
-        : order
-    ));
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' as const } : o))
+    );
   };
 
   return {
@@ -231,6 +140,7 @@ export const useTradingData = () => {
     priceHistory,
     marketDepth,
     executeOrder,
-    cancelOrder
+    cancelOrder,
+    isLoading: bundlesLoading,
   };
 };
