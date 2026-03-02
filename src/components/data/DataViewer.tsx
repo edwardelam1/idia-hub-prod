@@ -1,25 +1,24 @@
-
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Filter, X } from 'lucide-react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useResponsive } from '@/hooks/useResponsive';
-import { getMaskedDataWarning } from '@/utils/dataAnonymizer';
-import { useBundleData } from '@/hooks/useBundleData';
-import { useDataGeneration } from '@/hooks/useDataGeneration';
-import { useHealthMetrics } from '@/hooks/useHealthMetrics';
-import DataViewerHeader from './DataViewerHeader';
-import DataViewerSearch from './DataViewerSearch';
-import DataViewerTable from './DataViewerTable';
-import DataViewerSidebar from './DataViewerSidebar';
-import SavedSearches from './SavedSearches';
-import ContactLists from './ContactLists';
-import NoDataState from '@/components/health/NoDataState';
-import HealthDataInput from '@/components/health/HealthDataInput';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DataRecord } from '@/types/marketplace';
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Filter, X } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useResponsive } from "@/hooks/useResponsive";
+import { getMaskedDataWarning } from "@/utils/dataAnonymizer";
+import { useBundleData } from "@/hooks/useBundleData";
+import { useDataGeneration } from "@/hooks/useDataGeneration";
+import { useHealthMetrics } from "@/hooks/useHealthMetrics";
+import DataViewerHeader from "./DataViewerHeader";
+import DataViewerSearch from "./DataViewerSearch";
+import DataViewerTable from "./DataViewerTable";
+import DataViewerSidebar from "./DataViewerSidebar";
+import SavedSearches from "./SavedSearches";
+import ContactLists from "./ContactLists";
+import NoDataState from "@/components/health/NoDataState";
+import HealthDataInput from "@/components/health/HealthDataInput";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DataRecord } from "@/types/marketplace";
 
 // Error Boundary Component
 const ErrorBoundary = ({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) => {
@@ -27,8 +26,8 @@ const ErrorBoundary = ({ children, fallback }: { children: React.ReactNode; fall
 
   useEffect(() => {
     const handleError = () => setHasError(true);
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    window.addEventListener("error", handleError);
+    return () => window.removeEventListener("error", handleError);
   }, []);
 
   if (hasError) {
@@ -42,7 +41,7 @@ const DataViewer = () => {
   const { bundleId, purchaseId } = useParams();
   const navigate = useNavigate();
   const { isMobile } = useResponsive();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState<any>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecords, setSelectedRecords] = useState<string[]>([]);
@@ -51,12 +50,18 @@ const DataViewer = () => {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showAddDataModal, setShowAddDataModal] = useState(false);
   const [filteredRecords, setFilteredRecords] = useState<DataRecord[]>([]);
-  
+
   const { healthStats } = useHealthMetrics();
 
   const { bundle, loading: bundleLoading, error: bundleError } = useBundleData(bundleId);
-  const { dataRecords, tableHeaders, headerToKeyMapping, loading: dataLoading, error: dataError } = useDataGeneration(bundle, bundleId);
-  
+  const {
+    dataRecords,
+    tableHeaders,
+    headerToKeyMapping,
+    loading: dataLoading,
+    error: dataError,
+  } = useDataGeneration(bundle, bundleId);
+
   const loading = bundleLoading || dataLoading;
   const error = bundleError || dataError;
 
@@ -70,60 +75,60 @@ const DataViewer = () => {
     let filtered = [...dataRecords];
 
     if (searchTerm) {
-      filtered = filtered.filter(record =>
-        Object.values(record).some(value =>
-          String(value).toLowerCase().includes(searchTerm.toLowerCase())
-        )
+      filtered = filtered.filter((record) =>
+        Object.values(record).some((value) => String(value).toLowerCase().includes(searchTerm.toLowerCase())),
       );
     }
 
     // Apply activity type filter
     if (filters.activity_type) {
-      filtered = filtered.filter(record => 
-        record.activity_type === filters.activity_type
+      filtered = filtered.filter(
+        (record) => record.activity_type === filters.activity_type || record.type === filters.activity_type,
       );
     }
-    
+
     // Apply device type filter
     if (filters.device_type) {
-      filtered = filtered.filter(record => 
-        record.device_type === filters.device_type
-      );
+      filtered = filtered.filter((record) => record.device_type === filters.device_type);
     }
-    
-    // Apply minimum duration filter
+
+    // Apply minimum duration filter (Handling both minutes and raw seconds)
     if (filters.min_duration) {
-      filtered = filtered.filter(record => 
-        record.duration_minutes && record.duration_minutes >= parseInt(filters.min_duration)
-      );
+      filtered = filtered.filter((record) => {
+        const durationMins = record.duration_minutes || (record.duration_seconds ? record.duration_seconds / 60 : 0);
+        return durationMins >= parseInt(filters.min_duration);
+      });
     }
-    
-    // Apply minimum distance filter
+
+    // Apply minimum distance filter (Handling both KM and Meters)
     if (filters.min_distance) {
-      filtered = filtered.filter(record => 
-        record.distance_km && parseFloat(record.distance_km) >= parseFloat(filters.min_distance)
-      );
+      filtered = filtered.filter((record) => {
+        const distanceKm = record.distance_km
+          ? parseFloat(record.distance_km)
+          : record.distance_meters
+            ? parseFloat(record.distance_meters) / 1000
+            : 0;
+        return distanceKm >= parseFloat(filters.min_distance);
+      });
     }
-    
-    // Apply minimum steps filter
+
+    // Apply minimum steps filter (Handling strict mapping and swift mapping)
     if (filters.min_steps) {
-      filtered = filtered.filter(record => 
-        record.steps_count && record.steps_count >= parseInt(filters.min_steps)
-      );
+      filtered = filtered.filter((record) => {
+        const steps = record.steps_count || record.steps || 0;
+        return steps >= parseInt(filters.min_steps);
+      });
     }
 
     setFilteredRecords(filtered);
     setCurrentPage(1);
   };
 
-  const handleExport = (format: 'csv' | 'excel') => {
+  const handleExport = (format: "csv" | "excel") => {
     console.log(`Exporting ${selectedRecords.length || filteredRecords.length} records as ${format}`);
   };
 
-  const paginatedRecords = filteredRecords.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const paginatedRecords = filteredRecords.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
 
@@ -142,6 +147,7 @@ const DataViewer = () => {
     return (
       <div className="container mx-auto p-6">
         <div className="text-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading Data...</h1>
           <p className="text-gray-600">Please wait while we fetch your data.</p>
         </div>
@@ -153,17 +159,17 @@ const DataViewer = () => {
     return (
       <div className="container mx-auto p-6">
         <NoDataState onAddData={() => setShowAddDataModal(true)} />
-        
+
         <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Health Data</DialogTitle>
             </DialogHeader>
-            <HealthDataInput 
+            <HealthDataInput
               onDataSubmitted={() => {
                 setShowAddDataModal(false);
                 window.location.reload(); // Refresh to show new data
-              }} 
+              }}
             />
           </DialogContent>
         </Dialog>
@@ -172,33 +178,28 @@ const DataViewer = () => {
   }
 
   const FilterSidebar = () => (
-    <DataViewerSidebar
-      filters={filters}
-      onFiltersChange={setFilters}
-      bundle={bundle}
-      isMobile={isMobile}
-    />
+    <DataViewerSidebar filters={filters} onFiltersChange={setFilters} bundle={bundle} isMobile={isMobile} />
   );
 
   return (
-    <ErrorBoundary 
+    <ErrorBoundary
       fallback={
         <div className="p-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
             <p className="text-gray-600">Please try refreshing the page or go back to the marketplace.</p>
-            <Button onClick={() => navigate('/marketplace')} className="mt-4">
+            <Button onClick={() => navigate("/marketplace")} className="mt-4">
               Back to Marketplace
             </Button>
           </div>
         </div>
       }
     >
-      <div className={`h-full bg-background ${isMobile ? 'p-4' : 'p-6'}`}>
+      <div className={`h-full bg-background ${isMobile ? "p-4" : "p-6"}`}>
         {/* Mobile Header */}
         {isMobile && (
           <div className="flex items-center justify-between mb-4 bg-card p-3 rounded-lg border">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/marketplace')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/marketplace")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="font-semibold text-sm truncate mx-2">{bundle.name}</h1>
@@ -223,7 +224,7 @@ const DataViewer = () => {
           </div>
         )}
 
-        <div className={`flex ${isMobile ? 'flex-col' : 'gap-6'} h-full`}>
+        <div className={`flex ${isMobile ? "flex-col" : "gap-6"} h-full`}>
           {/* Desktop Sidebar */}
           {!isMobile && (
             <div className="w-80 flex-shrink-0">
@@ -241,20 +242,18 @@ const DataViewer = () => {
                 totalCount={dataRecords.length}
                 onShare={() => setShowSavedSearches(true)}
                 onSave={() => setShowContactLists(true)}
-                onExport={() => handleExport('csv')}
+                onExport={() => handleExport("csv")}
                 pipelineStats={{
                   processedCount: healthStats.totalRecords,
-                  bundleCount: dataRecords.length
+                  bundleCount: dataRecords.length,
                 }}
               />
             )}
 
             {/* Data Privacy Warning */}
             <Card className="border-purple-200 bg-purple-50">
-              <CardContent className={`${isMobile ? 'p-3' : 'pt-6'}`}>
-                <p className={`text-purple-700 ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                  {getMaskedDataWarning()}
-                </p>
+              <CardContent className={`${isMobile ? "p-3" : "pt-6"}`}>
+                <p className={`text-purple-700 ${isMobile ? "text-xs" : "text-sm"}`}>{getMaskedDataWarning()}</p>
               </CardContent>
             </Card>
 
@@ -264,7 +263,7 @@ const DataViewer = () => {
               onSearchChange={setSearchTerm}
               filteredCount={filteredRecords.length}
               onSavedSearches={() => setShowSavedSearches(true)}
-              onExport={() => handleExport('csv')}
+              onExport={() => handleExport("csv")}
               isMobile={isMobile}
             />
 
