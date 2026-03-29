@@ -28,6 +28,7 @@ async function hashKey(key: string): Promise<string> {
 
 export const APIKeyManagement = () => {
   const { user } = useAuth();
+  const userId = user?.user_id;
   const queryClient = useQueryClient();
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [newKeyName, setNewKeyName] = useState('');
