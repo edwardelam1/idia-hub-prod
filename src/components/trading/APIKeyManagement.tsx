@@ -47,7 +47,7 @@ export const APIKeyManagement = () => {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!user?.id,
+    enabled: !!userId,
   });
 
   const createKey = useMutation({
