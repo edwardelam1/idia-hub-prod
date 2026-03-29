@@ -108,7 +108,14 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       ],
     };
 
-    // Role-specific sections
+    // Settings always visible at end
+    const settingsSection: NavSection = {
+      label: 'Account',
+      items: [
+        { title: 'Settings', url: '/settings', icon: Settings },
+      ],
+    };
+
     const sections: NavSection[] = [core, data, finance, compliance, trading];
 
     switch (userRole) {
