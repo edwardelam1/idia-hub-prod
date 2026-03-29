@@ -15,7 +15,8 @@ import { useDashboardStats } from '@/hooks/useDashboardStats';
 
 const TradingInterface = () => {
   const { tokens, portfolio, orders, priceHistory, executeOrder, cancelOrder } = useTradingData();
-  const { credits } = useSynapseCredits();
+  const { balanceData } = useSynapseCredits();
+  const credits = balanceData?.available_credits ?? 0;
   const { pipelineHealth } = useDashboardStats();
 
   const [selectedToken, setSelectedToken] = useState(tokens[0]);

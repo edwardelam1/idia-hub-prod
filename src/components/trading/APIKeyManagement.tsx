@@ -89,7 +89,7 @@ export const APIKeyManagement = () => {
 
   const regenerateKey = useMutation({
     mutationFn: async (keyId: string) => {
-      if (!user?.id) throw new Error('Not authenticated');
+      if (!userId) throw new Error('Not authenticated');
       const fullKey = generateApiKey();
       const keyHash = await hashKey(fullKey);
       const keyPrefix = fullKey.slice(0, 13);

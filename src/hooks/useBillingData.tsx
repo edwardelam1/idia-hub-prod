@@ -113,13 +113,13 @@ export const useBillingData = () => {
   const addPaymentMethod = useMutation({
     mutationFn: async (pm: { method_type: string; display_label: string; identifier: string; metadata?: Record<string, unknown> }) => {
       if (!userId) throw new Error('Not authenticated');
-      const { error } = await supabase.from('user_payment_methods').insert({
+      const { error } = await supabase.from('user_payment_methods').insert([{
         user_id: userId,
         method_type: pm.method_type,
         display_label: pm.display_label,
         identifier: pm.identifier,
-        metadata: pm.metadata ?? {},
-      });
+        metadata: (pm.metadata ?? {}) as any,
+      }]);
       if (error) throw error;
     },
     onSuccess: () => {
