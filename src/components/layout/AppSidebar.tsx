@@ -139,7 +139,6 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           items: [
             { title: 'Team Management', url: '/teams', icon: Users },
             { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
-            { title: 'Settings', url: '/settings', icon: Settings },
           ],
         });
         break;
