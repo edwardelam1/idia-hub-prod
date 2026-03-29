@@ -27,6 +27,7 @@ import EcosystemOnboarding from '@/components/onboarding/EcosystemOnboarding';
 import EarningsSettlement from '@/components/billing/EarningsSettlement';
 import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
 import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
+import SettingsPage from './SettingsPage';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
