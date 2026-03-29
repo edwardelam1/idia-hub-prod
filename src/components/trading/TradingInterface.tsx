@@ -10,6 +10,7 @@ import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Eye, Settings } from 'lucide-react';
 import { useTradingData } from '@/hooks/useTradingData';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 
 const TradingInterface = () => {
