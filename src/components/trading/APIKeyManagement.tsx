@@ -52,12 +52,12 @@ export const APIKeyManagement = () => {
 
   const createKey = useMutation({
     mutationFn: async (keyName: string) => {
-      if (!user?.id) throw new Error('Not authenticated');
+      if (!userId) throw new Error('Not authenticated');
       const fullKey = generateApiKey();
       const keyHash = await hashKey(fullKey);
       const keyPrefix = fullKey.slice(0, 13);
-      const { error } = await supabase.from('user_api_keys').insert({
-        user_id: user.id,
+      const { error } = await supabase.from('user_api_keys').insert([{
+        user_id: userId,
         key_name: keyName,
         key_prefix: keyPrefix,
         key_hash: keyHash,
