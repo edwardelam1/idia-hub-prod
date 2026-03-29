@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 export const useBillingData = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const userId = user?.id;
+  const userId = user?.user_id;
 
   // Fetch subscription
   const { data: subscription, isLoading: subLoading } = useQuery({
