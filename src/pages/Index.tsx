@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
@@ -27,47 +26,28 @@ import SynapseTopUp from '@/components/billing/SynapseTopUp';
 import EcosystemOnboarding from '@/components/onboarding/EcosystemOnboarding';
 import EarningsSettlement from '@/components/billing/EarningsSettlement';
 import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
+import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
   const [userRole, setUserRole] = useState<string>('');
 
-  const handleSplashComplete = () => {
-    setCurrentView('login');
-  };
-
-  const handleLogin = (role: string) => {
-    setUserRole(role);
-    setCurrentView('app');
-  };
-
-  const handleLogout = () => {
-    setUserRole('');
-    setCurrentView('login');
-  };
+  const handleSplashComplete = () => setCurrentView('login');
+  const handleLogin = (role: string) => { setUserRole(role); setCurrentView('app'); };
+  const handleLogout = () => { setUserRole(''); setCurrentView('login'); };
 
   const renderDashboard = () => {
     switch (userRole) {
-      case 'super-admin':
-        return <SuperAdminDashboard />;
-      case 'organization-admin':
-        return <OrganizationAdminDashboard />;
-      case 'team-lead':
-        return <TeamLeadDashboard />;
-      case 'team-member':
-        return <TeamMemberDashboard />;
-      default:
-        return <TeamMemberDashboard />;
+      case 'super-admin': return <SuperAdminDashboard />;
+      case 'organization-admin': return <OrganizationAdminDashboard />;
+      case 'team-lead': return <TeamLeadDashboard />;
+      case 'team-member': return <TeamMemberDashboard />;
+      default: return <TeamMemberDashboard />;
     }
   };
 
-  if (currentView === 'splash') {
-    return <SplashScreen onComplete={handleSplashComplete} />;
-  }
-
-  if (currentView === 'login') {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
+  if (currentView === 'splash') return <SplashScreen onComplete={handleSplashComplete} />;
+  if (currentView === 'login') return <LoginScreen onLogin={handleLogin} />;
 
   return (
     <AppLayout userRole={userRole} onLogout={handleLogout}>
@@ -95,12 +75,13 @@ const Index = () => {
         <Route path="/trading" element={<TradingDeskDashboard />} />
         <Route path="/pay-blueprint" element={<PayAppBlueprint />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
-        <Route path="/egress-logs" element={<ProvenanceAuditLog clientId="ENT-MOCK" />} />
+        <Route path="/egress-logs" element={<ProvenanceAuditLog />} />
         <Route path="/top-up" element={<SynapseTopUp />} />
         <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
         <Route path="/onboarding" element={<EcosystemOnboarding isLifeAppVerified={true} />} />
         <Route path="/earnings" element={<EarningsSettlement />} />
         <Route path="/earnings/banking" element={<UpdateBankingDetails />} />
+        <Route path="/purchase" element={<UniversalPurchaseScreen />} />
       </Routes>
     </AppLayout>
   );

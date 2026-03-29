@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, User, Search, Users, Building2, Lock, ArrowRight, ExternalLink, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ interface Role {
 }
 
 const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false }: EcosystemOnboardingProps) => {
+  const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
   const automaticRoles: Role[] = [
@@ -47,7 +49,7 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
       id: 'professional',
       name: 'Professional Enrollment',
       price: '$24,995/yr',
-      icon: <Users className="w-4 h-4 text-emerald-400" />,
+      icon: <Users className="w-4 h-4 text-emerald-500" />,
       description: 'Unlock 20,000 CRD and Merchant Integrations.',
       available: true,
     },
@@ -58,12 +60,18 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
       id: 'enterprise',
       name: 'Enterprise Client',
       price: '$49,995+/yr',
-      icon: <Building2 className="w-4 h-4 text-amber-400" />,
+      icon: <Building2 className="w-4 h-4 text-amber-500" />,
       description: 'Unlock 50,000 CRD and T-1-P Verification.',
       available: hasBusinessTag,
       requiresBusiness: true,
     },
   ];
+
+  const handleConfirm = () => {
+    if (selectedRole) {
+      navigate(`/purchase?plan=${selectedRole}`);
+    }
+  };
 
   if (!isLifeAppVerified) {
     return (
@@ -87,14 +95,10 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
         <p className="text-muted-foreground text-sm mt-1">Elevate your individual account with professional data capabilities.</p>
       </div>
 
-      {/* Automatic tier - disabled/included */}
       <div className="mb-6">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Included With Verification</h2>
         {automaticRoles.map((role) => (
-          <div
-            key={role.id}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-muted/30 opacity-70"
-          >
+          <div key={role.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-muted/30 opacity-70">
             <div className="p-1.5 rounded-md bg-muted">{role.icon}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -103,14 +107,13 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
               </div>
               <p className="text-xs text-muted-foreground">{role.description}</p>
             </div>
-            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
           </div>
         ))}
       </div>
 
       <Separator className="mb-6" />
 
-      {/* Upgrade tiers */}
       <div className="mb-6">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Available Upgrades</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -121,18 +124,14 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
                 key={role.id}
                 onClick={() => setSelectedRole(role.id)}
                 className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-card hover:border-muted-foreground/30'
+                  isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-muted-foreground/30'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`p-1.5 rounded-md ${isSelected ? 'bg-primary/20' : 'bg-muted'}`}>
-                    {role.icon}
-                  </div>
+                  <div className={`p-1.5 rounded-md ${isSelected ? 'bg-primary/20' : 'bg-muted'}`}>{role.icon}</div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">{role.name}</h3>
-                    {role.price && <div className="text-xs font-mono text-emerald-400 mt-0.5">{role.price}</div>}
+                    {role.price && <div className="text-xs font-mono text-emerald-500 mt-0.5">{role.price}</div>}
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{role.description}</p>
                   </div>
                   {isSelected && (
@@ -149,15 +148,11 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
 
       <Separator className="mb-6" />
 
-      {/* Restricted tiers */}
       <div className="mb-8">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Requires Business Tag</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {restrictedRoles.map((role) => (
-            <div
-              key={role.id}
-              className="relative p-4 rounded-xl border-2 border-border bg-card opacity-50 cursor-not-allowed"
-            >
+            <div key={role.id} className="relative p-4 rounded-xl border-2 border-border bg-card opacity-50 cursor-not-allowed">
               <div className="flex items-start gap-3">
                 <div className="p-1.5 rounded-md bg-muted">{role.icon}</div>
                 <div className="flex-1 min-w-0">
@@ -177,14 +172,9 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
         </div>
       </div>
 
-      {/* CTA */}
       <div className="flex justify-end">
-        <Button
-          disabled={!selectedRole}
-          className="gap-2"
-        >
-          {selectedRole === 'enterprise' ? 'Begin T-1-P Enrollment' : 'Confirm & Continue'}
-          <ArrowRight className="w-4 h-4" />
+        <Button disabled={!selectedRole} className="gap-2" onClick={handleConfirm}>
+          Confirm & Continue <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
     </div>

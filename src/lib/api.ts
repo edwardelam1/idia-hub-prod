@@ -1,13 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-// Mock response handlers – used when no real API_BASE_URL is configured
+// Mock response handlers – only for endpoints not yet migrated to Supabase
 const mockHandlers: Record<string, (body?: any) => any> = {
-  '/api/v1/synapse/balance': () => ({
-    wallet_address: '0x71C7656EC7ab88b098defB751B7401B5f6d89A34',
-    available_credits: 1250.0,
-    currency: 'SYNAPSE_GAS',
-    last_updated: new Date().toISOString(),
-  }),
   '/api/v1/aca/verify': () => ({
     status: 'verified',
     aca_reference: 'ACA-REF-2024-001',
@@ -38,14 +32,6 @@ const mockHandlers: Record<string, (body?: any) => any> = {
   '/api/v1/best-friend/chat': (body?: any) => ({
     response: `I've analyzed your request: "${body?.message || ''}". Based on the current system state, all services are operational. How else can I help?`,
   }),
-  '/api/v1/delt/logs': () => ({
-    logs: [
-      { provenance_id: 'prov-001', egress_timestamp: '2026-02-27T14:32:00Z', liability_token_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', aca_record_reference: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', hri_score_at_egress: 92.45, country_of_origin: 'US' },
-      { provenance_id: 'prov-002', egress_timestamp: '2026-02-26T09:15:00Z', liability_token_hash: '7d793037a076817bc004234e4d0876cb5a305e5e5d9a37e4e76e02e26eab615f', aca_record_reference: 'f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e1', hri_score_at_egress: 88.12, country_of_origin: 'GB' },
-      { provenance_id: 'prov-003', egress_timestamp: '2026-02-25T18:47:00Z', liability_token_hash: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824', aca_record_reference: 'b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3', hri_score_at_egress: 74.30, country_of_origin: 'DE' },
-      { provenance_id: 'prov-004', egress_timestamp: '2026-02-24T11:03:00Z', liability_token_hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', aca_record_reference: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4', hri_score_at_egress: 95.88, country_of_origin: 'US' },
-    ],
-  }),
   '/api/v1/synapse/query': () => ({
     data: [
       { region: 'US-KY', device_os: 'iOS 18.2', hri_score: 91.4, record_count: 1243, anonymization_level: 'k-anon-5', last_updated: '2026-02-27T08:00:00Z' },
@@ -53,24 +39,6 @@ const mockHandlers: Record<string, (body?: any) => any> = {
       { region: 'GB-LND', device_os: 'iOS 18.2', hri_score: 78.9, record_count: 672, anonymization_level: 'k-anon-5', last_updated: '2026-02-26T22:30:00Z' },
       { region: 'DE-BY', device_os: 'Android 15', hri_score: 93.1, record_count: 418, anonymization_level: 'k-anon-8', last_updated: '2026-02-27T06:15:00Z' },
     ],
-  }),
-  '/api/v1/billing/worldpay/initiate': () => ({
-    payment_url: '#worldpay-mock',
-    session_id: `WP-${crypto.randomUUID()}`,
-  }),
-  '/api/v1/settlement/balance': () => ({
-    available_balance: 2134.50,
-    pending_balance: 313.50,
-    lifetime_earnings: 4668.00,
-    bank_last4: '9921',
-    last_settlement_at: '2026-02-20T10:00:00Z',
-  }),
-  '/api/v1/settlement/egress': () => ({
-    success: true,
-    settlement_id: `STL-${crypto.randomUUID()}`,
-    amount: 2134.50,
-    method: 'ACH/RTP',
-    estimated_arrival: '2026-03-01T10:00:00Z',
   }),
 };
 
@@ -81,7 +49,6 @@ function getMockResponse(endpoint: string, body?: any): any | null {
 }
 
 export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // If no real API base URL, return mock data
   if (!API_BASE_URL) {
     const bodyParsed = options.body ? JSON.parse(options.body as string) : undefined;
     const mock = getMockResponse(endpoint, bodyParsed);
@@ -89,7 +56,6 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
       await new Promise(resolve => setTimeout(resolve, 800));
       return mock as T;
     }
-    // Fall through – if no mock handler, throw
     throw new Error(`No mock handler for endpoint: ${endpoint}`);
   }
 

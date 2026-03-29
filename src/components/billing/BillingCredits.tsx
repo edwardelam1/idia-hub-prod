@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus } from 'lucide-react';
 import { useBillingData } from '@/hooks/useBillingData';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
@@ -22,11 +24,19 @@ const PAYMENT_TYPES = [
   { value: 'idia_life_wallet', label: 'IDIA Life Wallet', icon: Wallet },
 ];
 
+const PLANS = [
+  { name: 'Analyst', price: '$9,995/yr', credits: '5,000', calls: '10,000', id: 'analyst' },
+  { name: 'Professional', price: '$24,995/yr', credits: '20,000', calls: '100,000', id: 'professional' },
+  { name: 'Enterprise', price: '$49,995+/yr', credits: '50,000+', calls: 'Unlimited', id: 'enterprise' },
+];
+
 const BillingCredits = () => {
+  const navigate = useNavigate();
   const {
     currentUsage, subscriptionPlan, subscription, daysRemaining, paymentMethods, invoices,
     isLoading, addPaymentMethod, removePaymentMethod, setDefaultPaymentMethod, downloadInvoice,
   } = useBillingData();
+  const { balanceData } = useSynapseCredits();
 
   const [showAddPM, setShowAddPM] = useState(false);
   const [pmType, setPmType] = useState('credit_card');
@@ -34,8 +44,8 @@ const BillingCredits = () => {
   const [pmIdentifier, setPmIdentifier] = useState('');
   const [showPlans, setShowPlans] = useState(false);
 
+  const liveBalance = balanceData?.available_credits ?? 0;
   const usagePercentage = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
-  const remainingCredits = currentUsage.limit - currentUsage.used;
   const projectedUsage = new Date().getDate() > 0 ? Math.round(currentUsage.used * (30 / new Date().getDate())) : 0;
 
   const handleAddPM = () => {
@@ -73,8 +83,8 @@ const BillingCredits = () => {
           <p className="text-muted-foreground">Manage your subscription, credits, and billing</p>
         </div>
         <div className="flex items-center space-x-4">
-          <Badge variant={remainingCredits > 1000 ? "default" : "destructive"}>
-            {remainingCredits.toLocaleString()} Credits Remaining
+          <Badge variant={liveBalance > 1000 ? "default" : "destructive"}>
+            {liveBalance.toLocaleString()} Credits Remaining
           </Badge>
           <Dialog open={showAddPM} onOpenChange={setShowAddPM}>
             <DialogTrigger asChild>
@@ -114,7 +124,6 @@ const BillingCredits = () => {
         </div>
       </div>
 
-      {/* Credit Usage Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Current Usage</CardTitle></CardHeader>
@@ -125,9 +134,9 @@ const BillingCredits = () => {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Monthly Cost</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Plan</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${subscriptionPlan.cost}</div>
+            <div className="text-2xl font-bold">{subscriptionPlan.cost}</div>
             <div className="text-sm text-muted-foreground">{subscriptionPlan.name} Plan</div>
           </CardContent>
         </Card>
@@ -135,7 +144,7 @@ const BillingCredits = () => {
           <CardHeader className="pb-2"><CardTitle className="text-sm">Projected Usage</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{projectedUsage.toLocaleString()}</div>
-            <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-green-600'}`}>
+            <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-emerald-500'}`}>
               {projectedUsage > currentUsage.limit ? <><AlertTriangle className="h-4 w-4 mr-1" />Over limit</> : <><TrendingUp className="h-4 w-4 mr-1" />Within limit</>}
             </div>
           </CardContent>
@@ -166,16 +175,14 @@ const BillingCredits = () => {
               {invoices.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No invoices yet. Invoices will appear here after your first billing cycle.</p>
+                  <p>No invoices yet.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {invoices.map((invoice: any) => (
                     <div key={invoice.id} className="flex items-center justify-between p-4 rounded-lg border">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <FileText className="h-5 w-5" />
-                        </div>
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><FileText className="h-5 w-5" /></div>
                         <div>
                           <div className="font-medium">Invoice #{invoice.invoice_number}</div>
                           <div className="text-sm text-muted-foreground">{new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}</div>
@@ -183,7 +190,7 @@ const BillingCredits = () => {
                       </div>
                       <div className="flex items-center space-x-4">
                         <div className="text-right">
-                          <div className="font-medium">${Number(invoice.amount).toFixed(2)}</div>
+                          <div className="font-medium">${Number(invoice.amount).toLocaleString()}</div>
                           <Badge variant={invoice.status === 'paid' ? 'default' : 'destructive'}>{invoice.status}</Badge>
                         </div>
                         <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice.id)}>
@@ -222,8 +229,7 @@ const BillingCredits = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold">${subscriptionPlan.cost}</div>
-                      <div className="text-sm text-muted-foreground">per month</div>
+                      <div className="text-2xl font-bold">{subscriptionPlan.cost}</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -231,14 +237,14 @@ const BillingCredits = () => {
                       <h4 className="font-medium">Features Included:</h4>
                       <ul className="space-y-1 text-sm text-muted-foreground">
                         {subscriptionPlan.features.map((f: string, i: number) => (
-                          <li key={i} className="flex items-center"><div className="w-1.5 h-1.5 rounded-full bg-green-600 mr-2" />{f}</li>
+                          <li key={i} className="flex items-center"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2" />{f}</li>
                         ))}
                       </ul>
                     </div>
                     <div className="space-y-2">
                       <h4 className="font-medium">Usage Limits:</h4>
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <div>Credits: {subscriptionPlan.limits.credits.toLocaleString()}/month</div>
+                        <div>Credits: {subscriptionPlan.limits.credits.toLocaleString()}/year</div>
                         <div>API Calls: {subscriptionPlan.limits.apiCalls.toLocaleString()}/month</div>
                         <div>Data Export: {subscriptionPlan.limits.dataExport}GB/month</div>
                         <div>Team Members: {subscriptionPlan.limits.teamMembers}</div>
@@ -254,7 +260,6 @@ const BillingCredits = () => {
             </CardContent>
           </Card>
 
-          {/* Plan comparison dialog */}
           <Dialog open={showPlans} onOpenChange={setShowPlans}>
             <DialogContent className="max-w-3xl">
               <DialogHeader>
@@ -262,20 +267,24 @@ const BillingCredits = () => {
                 <DialogDescription>Choose the plan that fits your needs</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  { name: 'Analyst', cost: 99, credits: '5,000', calls: '10,000' },
-                  { name: 'Professional', cost: 299, credits: '15,000', calls: '100,000' },
-                  { name: 'Enterprise', cost: 999, credits: '100,000', calls: 'Unlimited' },
-                ].map(plan => (
-                  <div key={plan.name} className={`border rounded-lg p-4 space-y-3 ${subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'border-primary bg-primary/5' : ''}`}>
+                {PLANS.map(plan => (
+                  <div key={plan.name} className={`border rounded-lg p-4 space-y-3 ${subscription?.tier?.toLowerCase() === plan.id ? 'border-primary bg-primary/5' : ''}`}>
                     <h4 className="font-semibold">{plan.name}</h4>
-                    <div className="text-2xl font-bold">${plan.cost}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+                    <div className="text-2xl font-bold">{plan.price}</div>
                     <ul className="text-sm text-muted-foreground space-y-1">
-                      <li>• {plan.credits} credits/month</li>
+                      <li>• {plan.credits} credits included</li>
                       <li>• {plan.calls} API calls/month</li>
                     </ul>
-                    <Button variant={subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'outline' : 'default'} className="w-full" disabled={subscription?.tier?.toLowerCase() === plan.name.toLowerCase()}>
-                      {subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'Current Plan' : 'Select Plan'}
+                    <Button
+                      variant={subscription?.tier?.toLowerCase() === plan.id ? 'outline' : 'default'}
+                      className="w-full"
+                      disabled={subscription?.tier?.toLowerCase() === plan.id}
+                      onClick={() => {
+                        setShowPlans(false);
+                        navigate(`/purchase?plan=${plan.id}`);
+                      }}
+                    >
+                      {subscription?.tier?.toLowerCase() === plan.id ? 'Current Plan' : 'Select Plan'}
                     </Button>
                   </div>
                 ))}
@@ -304,9 +313,7 @@ const BillingCredits = () => {
                   {paymentMethods.map((method: any) => (
                     <div key={method.id} className="flex items-center justify-between p-4 rounded-lg border">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          {getMethodIcon(method.method_type)}
-                        </div>
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">{getMethodIcon(method.method_type)}</div>
                         <div>
                           <div className="font-medium">{method.display_label} •••• {method.identifier}</div>
                           <div className="text-sm text-muted-foreground">{getMethodLabel(method.method_type)}</div>
@@ -315,13 +322,9 @@ const BillingCredits = () => {
                       <div className="flex items-center space-x-2">
                         {method.is_default && <Badge variant="default">Default</Badge>}
                         {!method.is_default && (
-                          <Button size="sm" variant="outline" onClick={() => setDefaultPaymentMethod.mutate(method.id)}>
-                            Set Default
-                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDefaultPaymentMethod.mutate(method.id)}>Set Default</Button>
                         )}
-                        <Button size="sm" variant="outline" className="text-destructive" onClick={() => removePaymentMethod.mutate(method.id)} disabled={removePaymentMethod.isPending}>
-                          Remove
-                        </Button>
+                        <Button size="sm" variant="outline" className="text-destructive" onClick={() => removePaymentMethod.mutate(method.id)} disabled={removePaymentMethod.isPending}>Remove</Button>
                       </div>
                     </div>
                   ))}
