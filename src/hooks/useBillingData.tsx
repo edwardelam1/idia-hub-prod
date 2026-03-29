@@ -3,12 +3,38 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: number; description: string; features: string[]; limits: { credits: number; apiCalls: number; dataExport: number; teamMembers: number } }> = {
+  analyst: {
+    name: 'Analyst',
+    cost: '$9,995/yr',
+    costNumeric: 9995,
+    description: 'Entry-level API access for analysts',
+    features: ['Standard endpoints', 'Email support', 'Basic analytics', '5,000 CRD included'],
+    limits: { credits: 5000, apiCalls: 10000, dataExport: 10, teamMembers: 5 },
+  },
+  professional: {
+    name: 'Professional',
+    cost: '$24,995/yr',
+    costNumeric: 24995,
+    description: 'Advanced trading features and integrations',
+    features: ['Advanced AI analytics', 'Priority support', 'Custom integrations', 'Compliance reporting', 'API access', 'Team collaboration', '20,000 CRD included'],
+    limits: { credits: 20000, apiCalls: 100000, dataExport: 50, teamMembers: 25 },
+  },
+  enterprise: {
+    name: 'Enterprise',
+    cost: '$49,995+/yr',
+    costNumeric: 49995,
+    description: 'Unlimited scale and dedicated support',
+    features: ['Everything in Professional', 'Unlimited API calls', 'Custom SLAs', 'Dedicated support', 'Custom endpoints', 'White-label options', '50,000+ CRD included'],
+    limits: { credits: 50000, apiCalls: 1000000, dataExport: 500, teamMembers: 100 },
+  },
+};
+
 export const useBillingData = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const userId = user?.user_id;
 
-  // Fetch subscription
   const { data: subscription, isLoading: subLoading } = useQuery({
     queryKey: ['user-subscription', userId],
     queryFn: async () => {
@@ -27,7 +53,6 @@ export const useBillingData = () => {
     enabled: !!userId,
   });
 
-  // Fetch payment methods
   const { data: paymentMethods = [], isLoading: pmLoading } = useQuery({
     queryKey: ['user-payment-methods', userId],
     queryFn: async () => {
@@ -43,7 +68,6 @@ export const useBillingData = () => {
     enabled: !!userId,
   });
 
-  // Fetch invoices
   const { data: invoices = [], isLoading: invLoading } = useQuery({
     queryKey: ['user-invoices', userId],
     queryFn: async () => {
@@ -59,57 +83,42 @@ export const useBillingData = () => {
     enabled: !!userId,
   });
 
-  // Fetch usage from transactions
+  // Usage from ledger deductions in current billing period
   const { data: usageData } = useQuery({
-    queryKey: ['user-usage', userId],
+    queryKey: ['user-usage-ledger', userId, subscription?.started_at],
     queryFn: async () => {
-      if (!userId) return { used: 0, limit: 15000 };
-      const { count, error } = await supabase
-        .from('transactions')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      if (error) return { used: 0, limit: 15000 };
-      return { used: count ?? 0, limit: 15000 };
+      if (!userId) return { used: 0 };
+      let query = supabase
+        .from('synapse_credit_ledger')
+        .select('amount')
+        .eq('user_id', userId)
+        .eq('entry_type', 'deduction');
+      
+      if (subscription?.started_at) {
+        query = query.gte('created_at', subscription.started_at);
+      }
+      if (subscription?.expires_at) {
+        query = query.lte('created_at', subscription.expires_at);
+      }
+      
+      const { data } = await query;
+      const used = (data || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
+      return { used };
     },
     enabled: !!userId,
   });
 
-  const currentUsage = usageData ?? { used: 0, limit: 15000 };
-
-  // Derive subscription plan from DB data
-  const tierMap: Record<string, { name: string; cost: number; description: string; features: string[]; limits: { credits: number; apiCalls: number; dataExport: number; teamMembers: number } }> = {
-    professional: {
-      name: 'Professional',
-      cost: 299,
-      description: 'Perfect for growing teams and advanced data needs',
-      features: ['Advanced AI analytics', 'Priority support', 'Custom integrations', 'Advanced security features', 'Compliance reporting', 'API access', 'Team collaboration tools'],
-      limits: { credits: 15000, apiCalls: 100000, dataExport: 50, teamMembers: 25 },
-    },
-    enterprise: {
-      name: 'Enterprise',
-      cost: 999,
-      description: 'Unlimited scale and dedicated support',
-      features: ['Everything in Professional', 'Unlimited API calls', 'Custom SLAs', 'Dedicated support', 'Custom endpoints', 'White-label options'],
-      limits: { credits: 100000, apiCalls: 1000000, dataExport: 500, teamMembers: 100 },
-    },
-    analyst: {
-      name: 'Analyst',
-      cost: 99,
-      description: 'Entry-level API access for analysts',
-      features: ['Standard endpoints', 'Email support', 'Basic analytics'],
-      limits: { credits: 5000, apiCalls: 10000, dataExport: 10, teamMembers: 5 },
-    },
-  };
-
   const tier = subscription?.tier?.toLowerCase() ?? 'professional';
-  const subscriptionPlan = tierMap[tier] ?? tierMap.professional;
+  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.professional;
+  const creditLimit = planInfo.limits.credits;
+  const currentUsage = { used: usageData?.used ?? 0, limit: creditLimit };
 
-  // Days until period end
+  const subscriptionPlan = planInfo;
+
   const daysRemaining = subscription?.expires_at
     ? Math.max(0, Math.ceil((new Date(subscription.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
 
-  // Add payment method
   const addPaymentMethod = useMutation({
     mutationFn: async (pm: { method_type: string; display_label: string; identifier: string; metadata?: Record<string, unknown> }) => {
       if (!userId) throw new Error('Not authenticated');
@@ -129,7 +138,6 @@ export const useBillingData = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Remove payment method
   const removePaymentMethod = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('user_payment_methods').delete().eq('id', id);
@@ -142,11 +150,9 @@ export const useBillingData = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Set default payment method
   const setDefaultPaymentMethod = useMutation({
     mutationFn: async (id: string) => {
       if (!userId) throw new Error('Not authenticated');
-      // Unset all defaults first
       await supabase.from('user_payment_methods').update({ is_default: false }).eq('user_id', userId);
       const { error } = await supabase.from('user_payment_methods').update({ is_default: true }).eq('id', id);
       if (error) throw error;
@@ -158,7 +164,6 @@ export const useBillingData = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Download invoice
   const downloadInvoice = (invoiceId: string) => {
     const inv = invoices.find((i: any) => i.id === invoiceId);
     if (inv?.pdf_url) {
