@@ -177,20 +177,26 @@ export const TradingDeskDashboard = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Avg Response Time</span>
-                  <span className="text-sm font-semibold text-foreground">47ms</span>
+                  <span className="text-sm text-muted-foreground">Records Processed</span>
+                  <span className="text-sm font-semibold text-foreground">{(pipelineHealth?.processed_raw_data ?? 0).toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">p95 Latency</span>
-                  <span className="text-sm font-semibold text-foreground">89ms</span>
+                  <span className="text-sm text-muted-foreground">Processing Rate</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {pipelineHealth && pipelineHealth.total_raw_data > 0
+                      ? `${((pipelineHealth.processed_raw_data / pipelineHealth.total_raw_data) * 100).toFixed(2)}%`
+                      : '—'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Success Rate</span>
-                  <span className="text-sm font-semibold text-green-500">99.97%</span>
+                  <span className="text-sm text-muted-foreground">Pipeline Status</span>
+                  <span className="text-sm font-semibold text-green-500">
+                    {(pipelineHealth?.processing_raw_data ?? 0) === 0 ? 'Idle' : 'Active'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Uptime (30d)</span>
-                  <span className="text-sm font-semibold text-green-500">99.99%</span>
+                  <span className="text-sm text-muted-foreground">Staged Data</span>
+                  <span className="text-sm font-semibold text-foreground">{stagedDataCount.toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>
