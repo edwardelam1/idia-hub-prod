@@ -1,31 +1,69 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { CreditCard, Download, DollarSign, TrendingUp, AlertTriangle, Calendar, FileText } from 'lucide-react';
+import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus } from 'lucide-react';
 import { useBillingData } from '@/hooks/useBillingData';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+
+const PAYMENT_TYPES = [
+  { value: 'credit_card', label: 'Credit Card', icon: CreditCard },
+  { value: 'debit_card', label: 'Debit Card', icon: CreditCard },
+  { value: 'bank_ach', label: 'Bank (ACH)', icon: Landmark },
+  { value: 'bank_wire', label: 'Bank (Wire)', icon: Building },
+  { value: 'dex_wallet', label: 'DEX Wallet', icon: Wallet },
+  { value: 'idia_life_wallet', label: 'IDIA Life Wallet', icon: Wallet },
+];
 
 const BillingCredits = () => {
-  const { 
-    currentUsage, 
-    billingHistory, 
-    subscriptionPlan, 
-    paymentMethods, 
-    invoices,
-    usageBreakdown,
-    downloadInvoice,
-    updatePaymentMethod
+  const {
+    currentUsage, subscriptionPlan, subscription, daysRemaining, paymentMethods, invoices,
+    isLoading, addPaymentMethod, removePaymentMethod, setDefaultPaymentMethod, downloadInvoice,
   } = useBillingData();
 
-  const usagePercentage = (currentUsage.used / currentUsage.limit) * 100;
-  const remainingCredits = currentUsage.limit - currentUsage.used;
-  const projectedUsage = currentUsage.used * (30 / new Date().getDate());
+  const [showAddPM, setShowAddPM] = useState(false);
+  const [pmType, setPmType] = useState('credit_card');
+  const [pmLabel, setPmLabel] = useState('');
+  const [pmIdentifier, setPmIdentifier] = useState('');
+  const [showPlans, setShowPlans] = useState(false);
 
-  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1'];
+  const usagePercentage = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
+  const remainingCredits = currentUsage.limit - currentUsage.used;
+  const projectedUsage = new Date().getDate() > 0 ? Math.round(currentUsage.used * (30 / new Date().getDate())) : 0;
+
+  const handleAddPM = () => {
+    if (!pmLabel.trim() || !pmIdentifier.trim()) { toast.error('Fill in all fields'); return; }
+    addPaymentMethod.mutate({ method_type: pmType, display_label: pmLabel, identifier: pmIdentifier });
+    setPmLabel('');
+    setPmIdentifier('');
+    setShowAddPM(false);
+  };
+
+  const getMethodIcon = (type: string) => {
+    const found = PAYMENT_TYPES.find(p => p.value === type);
+    const Icon = found?.icon ?? CreditCard;
+    return <Icon className="h-5 w-5" />;
+  };
+
+  const getMethodLabel = (type: string) => PAYMENT_TYPES.find(p => p.value === type)?.label ?? type;
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -38,124 +76,75 @@ const BillingCredits = () => {
           <Badge variant={remainingCredits > 1000 ? "default" : "destructive"}>
             {remainingCredits.toLocaleString()} Credits Remaining
           </Badge>
-          <Button>
-            <CreditCard className="h-4 w-4 mr-2" />
-            Add Payment Method
-          </Button>
+          <Dialog open={showAddPM} onOpenChange={setShowAddPM}>
+            <DialogTrigger asChild>
+              <Button><CreditCard className="h-4 w-4 mr-2" /> Add Payment Method</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Payment Method</DialogTitle>
+                <DialogDescription>Choose your payment type and enter details.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Payment Type</Label>
+                  <Select value={pmType} onValueChange={setPmType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_TYPES.map(pt => (
+                        <SelectItem key={pt.value} value={pt.value}>{pt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{pmType.includes('wallet') ? 'Wallet Name' : pmType.includes('bank') ? 'Bank Name' : 'Card Brand'}</Label>
+                  <Input placeholder={pmType.includes('wallet') ? 'e.g. MetaMask' : pmType.includes('bank') ? 'e.g. Chase' : 'e.g. Visa'} value={pmLabel} onChange={e => setPmLabel(e.target.value)} />
+                </div>
+                <div>
+                  <Label>{pmType.includes('wallet') ? 'Wallet Address (prefix)' : pmType.includes('bank') ? 'Account Last 4' : 'Card Last 4'}</Label>
+                  <Input placeholder={pmType.includes('wallet') ? '0x71C7...' : '1234'} value={pmIdentifier} onChange={e => setPmIdentifier(e.target.value)} maxLength={pmType.includes('wallet') ? 42 : 4} />
+                </div>
+                <Button onClick={handleAddPM} disabled={addPaymentMethod.isPending} className="w-full">
+                  {addPaymentMethod.isPending ? 'Adding...' : 'Add Payment Method'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Credit Usage Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Current Usage</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Current Usage</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{currentUsage.used.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground">
-              of {currentUsage.limit.toLocaleString()} credits
-            </div>
+            <div className="text-sm text-muted-foreground">of {currentUsage.limit.toLocaleString()} credits</div>
             <Progress value={usagePercentage} className="mt-2" />
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Monthly Cost</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Monthly Cost</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${subscriptionPlan.cost}</div>
             <div className="text-sm text-muted-foreground">{subscriptionPlan.name} Plan</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Projected Usage</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Projected Usage</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{projectedUsage.toLocaleString()}</div>
-            <div className={`text-sm flex items-center ${
-              projectedUsage > currentUsage.limit ? 'text-red-600' : 'text-green-600'
-            }`}>
-              {projectedUsage > currentUsage.limit ? (
-                <>
-                  <AlertTriangle className="h-4 w-4 mr-1" />
-                  Over limit
-                </>
-              ) : (
-                <>
-                  <TrendingUp className="h-4 w-4 mr-1" />
-                  Within limit
-                </>
-              )}
+            <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-green-600'}`}>
+              {projectedUsage > currentUsage.limit ? <><AlertTriangle className="h-4 w-4 mr-1" />Over limit</> : <><TrendingUp className="h-4 w-4 mr-1" />Within limit</>}
             </div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Next Billing</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Next Billing</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <div className="text-sm text-muted-foreground">days remaining</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Usage Breakdown Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Credit Usage Breakdown</CardTitle>
-            <CardDescription>Current month usage by category</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={usageBreakdown}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {usageBreakdown.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Monthly Usage Trend */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Usage Trend</CardTitle>
-            <CardDescription>Credit consumption over the last 6 months</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={billingHistory}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="usage" fill="#8884d8" />
-                  <Bar dataKey="limit" fill="#82ca9d" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : '—'}</div>
+            <div className="text-sm text-muted-foreground">{daysRemaining > 0 ? 'days remaining' : 'No active period'}</div>
           </CardContent>
         </Card>
       </div>
@@ -174,39 +163,37 @@ const BillingCredits = () => {
               <CardDescription>Download and view your billing history</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {invoices.map(invoice => (
-                  <div key={invoice.id} className="flex items-center justify-between p-4 rounded-lg border">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="font-medium">Invoice #{invoice.number}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {invoice.date} • {invoice.period}
+              {invoices.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No invoices yet. Invoices will appear here after your first billing cycle.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {invoices.map((invoice: any) => (
+                    <div key={invoice.id} className="flex items-center justify-between p-4 rounded-lg border">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Invoice #{invoice.invoice_number}</div>
+                          <div className="text-sm text-muted-foreground">{new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}</div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <div className="font-medium">${invoice.amount}</div>
-                        <Badge variant={invoice.status === 'paid' ? 'default' : 'destructive'}>
-                          {invoice.status}
-                        </Badge>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <div className="font-medium">${Number(invoice.amount).toFixed(2)}</div>
+                          <Badge variant={invoice.status === 'paid' ? 'default' : 'destructive'}>{invoice.status}</Badge>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice.id)}>
+                          <Download className="h-4 w-4 mr-2" /> Download
+                        </Button>
                       </div>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => downloadInvoice(invoice.id)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -218,46 +205,83 @@ const BillingCredits = () => {
               <CardDescription>Manage your subscription plan and features</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg border">
-                <div>
-                  <div className="font-medium text-lg">{subscriptionPlan.name} Plan</div>
-                  <div className="text-muted-foreground">{subscriptionPlan.description}</div>
+              {!subscription ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="mb-4">No active subscription. Choose a plan to get started.</p>
+                  <Button onClick={() => setShowPlans(true)}>View Plans</Button>
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold">${subscriptionPlan.cost}</div>
-                  <div className="text-sm text-muted-foreground">per month</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <h4 className="font-medium">Features Included:</h4>
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    {subscriptionPlan.features.map((feature, index) => (
-                      <li key={index} className="flex items-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-600 mr-2"></div>
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">Usage Limits:</h4>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <div>Credits: {subscriptionPlan.limits.credits.toLocaleString()}/month</div>
-                    <div>API Calls: {subscriptionPlan.limits.apiCalls.toLocaleString()}/month</div>
-                    <div>Data Export: {subscriptionPlan.limits.dataExport}GB/month</div>
-                    <div>Team Members: {subscriptionPlan.limits.teamMembers}</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between p-4 rounded-lg border">
+                    <div>
+                      <div className="font-medium text-lg">{subscriptionPlan.name} Plan</div>
+                      <div className="text-muted-foreground">{subscriptionPlan.description}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Status: <Badge variant="outline">{subscription.status}</Badge>
+                        {subscription.expires_at && ` • Expires: ${new Date(subscription.expires_at).toLocaleDateString()}`}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold">${subscriptionPlan.cost}</div>
+                      <div className="text-sm text-muted-foreground">per month</div>
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-2">
-                <Button>Upgrade Plan</Button>
-                <Button variant="outline">View All Plans</Button>
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Features Included:</h4>
+                      <ul className="space-y-1 text-sm text-muted-foreground">
+                        {subscriptionPlan.features.map((f: string, i: number) => (
+                          <li key={i} className="flex items-center"><div className="w-1.5 h-1.5 rounded-full bg-green-600 mr-2" />{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Usage Limits:</h4>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div>Credits: {subscriptionPlan.limits.credits.toLocaleString()}/month</div>
+                        <div>API Calls: {subscriptionPlan.limits.apiCalls.toLocaleString()}/month</div>
+                        <div>Data Export: {subscriptionPlan.limits.dataExport}GB/month</div>
+                        <div>Team Members: {subscriptionPlan.limits.teamMembers}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button onClick={() => setShowPlans(true)}>Upgrade Plan</Button>
+                    <Button variant="outline" onClick={() => setShowPlans(true)}>View All Plans</Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
+
+          {/* Plan comparison dialog */}
+          <Dialog open={showPlans} onOpenChange={setShowPlans}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Available Plans</DialogTitle>
+                <DialogDescription>Choose the plan that fits your needs</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 md:grid-cols-3">
+                {[
+                  { name: 'Analyst', cost: 99, credits: '5,000', calls: '10,000' },
+                  { name: 'Professional', cost: 299, credits: '15,000', calls: '100,000' },
+                  { name: 'Enterprise', cost: 999, credits: '100,000', calls: 'Unlimited' },
+                ].map(plan => (
+                  <div key={plan.name} className={`border rounded-lg p-4 space-y-3 ${subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'border-primary bg-primary/5' : ''}`}>
+                    <h4 className="font-semibold">{plan.name}</h4>
+                    <div className="text-2xl font-bold">${plan.cost}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• {plan.credits} credits/month</li>
+                      <li>• {plan.calls} API calls/month</li>
+                    </ul>
+                    <Button variant={subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'outline' : 'default'} className="w-full" disabled={subscription?.tier?.toLowerCase() === plan.name.toLowerCase()}>
+                      {subscription?.tier?.toLowerCase() === plan.name.toLowerCase() ? 'Current Plan' : 'Select Plan'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="payment" className="space-y-4">
@@ -267,40 +291,45 @@ const BillingCredits = () => {
               <CardDescription>Manage your payment methods and billing preferences</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {paymentMethods.map(method => (
-                  <div key={method.id} className="flex items-center justify-between p-4 rounded-lg border">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <CreditCard className="h-5 w-5" />
+              {paymentMethods.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Wallet className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="mb-4">No payment methods added yet.</p>
+                  <Button variant="outline" onClick={() => setShowAddPM(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Payment Method
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {paymentMethods.map((method: any) => (
+                    <div key={method.id} className="flex items-center justify-between p-4 rounded-lg border">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          {getMethodIcon(method.method_type)}
+                        </div>
+                        <div>
+                          <div className="font-medium">{method.display_label} •••• {method.identifier}</div>
+                          <div className="text-sm text-muted-foreground">{getMethodLabel(method.method_type)}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-medium">
-                          •••• •••• •••• {method.last4}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {method.brand} • Expires {method.expiry}
-                        </div>
+                      <div className="flex items-center space-x-2">
+                        {method.is_default && <Badge variant="default">Default</Badge>}
+                        {!method.is_default && (
+                          <Button size="sm" variant="outline" onClick={() => setDefaultPaymentMethod.mutate(method.id)}>
+                            Set Default
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="text-destructive" onClick={() => removePaymentMethod.mutate(method.id)} disabled={removePaymentMethod.isPending}>
+                          Remove
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {method.isDefault && (
-                        <Badge variant="default">Default</Badge>
-                      )}
-                      <Button size="sm" variant="outline">
-                        Edit
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <Button variant="outline" className="w-full">
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Add New Payment Method
-                </Button>
-              </div>
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={() => setShowAddPM(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> Add New Payment Method
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,28 +1,22 @@
-
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, PieChart, Activity, Eye, Settings } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Eye, Settings } from 'lucide-react';
 import { useTradingData } from '@/hooks/useTradingData';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
 
 const TradingInterface = () => {
-  const { 
-    tokens, 
-    portfolio, 
-    orders, 
-    priceHistory, 
-    marketDepth,
-    executeOrder,
-    cancelOrder 
-  } = useTradingData();
-  
+  const { tokens, portfolio, orders, priceHistory, executeOrder, cancelOrder } = useTradingData();
+  const { credits } = useSynapseCredits();
+  const { pipelineHealth } = useDashboardStats();
+
   const [selectedToken, setSelectedToken] = useState(tokens[0]);
   const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
   const [orderAmount, setOrderAmount] = useState('');
@@ -30,21 +24,15 @@ const TradingInterface = () => {
 
   const handleTradeSubmit = () => {
     if (!orderAmount || !orderPrice) return;
-    
-    executeOrder({
-      token: selectedToken.symbol,
-      type: orderType,
-      amount: parseFloat(orderAmount),
-      price: parseFloat(orderPrice)
-    });
-    
+    executeOrder({ token: selectedToken.symbol, type: orderType, amount: parseFloat(orderAmount), price: parseFloat(orderPrice) });
     setOrderAmount('');
     setOrderPrice('');
   };
 
   const totalPortfolioValue = portfolio.reduce((sum, asset) => sum + asset.value, 0);
   const totalPnL = portfolio.reduce((sum, asset) => sum + asset.unrealizedPnL, 0);
-  const totalPnLPercent = (totalPnL / totalPortfolioValue) * 100;
+  const totalPnLPercent = totalPortfolioValue > 0 ? (totalPnL / totalPortfolioValue) * 100 : 0;
+  const totalTransactions = pipelineHealth?.total_transactions ?? 0;
 
   return (
     <div className="p-3 space-y-3">
@@ -58,53 +46,43 @@ const TradingInterface = () => {
         </Badge>
       </div>
 
-      {/* Compact Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-3">
           <div className="text-lg font-bold">${totalPortfolioValue.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground">Portfolio Value</div>
         </Card>
         <Card className="p-3">
-          <div className="text-lg font-bold">12,450</div>
-          <div className="text-xs text-muted-foreground">Credits</div>
+          <div className="text-lg font-bold">{credits.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">Synapse Credits</div>
         </Card>
         <Card className="p-3">
           <div className="text-lg font-bold">{orders.filter(o => o.status === 'open').length}</div>
           <div className="text-xs text-muted-foreground">Active Orders</div>
         </Card>
         <Card className="p-3">
-          <div className="text-lg font-bold">$847K</div>
-          <div className="text-xs text-muted-foreground">24h Volume</div>
+          <div className="text-lg font-bold">{totalTransactions.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">Total Transactions</div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        {/* Compact Chart */}
         <Card className="lg:col-span-2 p-3">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <h3 className="text-sm font-semibold">Price Chart - {selectedToken.name}</h3>
+              <h3 className="text-sm font-semibold">Price Chart - {selectedToken?.name}</h3>
               <p className="text-xs text-muted-foreground">24-hour price movement</p>
             </div>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Eye className="h-3 w-3" />
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-3 w-3" /></Button></DialogTrigger>
               <DialogContent className="max-w-4xl">
                 <DialogHeader>
-                  <DialogTitle>Detailed Price Chart - {selectedToken.name}</DialogTitle>
+                  <DialogTitle>Detailed Price Chart - {selectedToken?.name}</DialogTitle>
                   <DialogDescription>Advanced charting and technical analysis</DialogDescription>
                 </DialogHeader>
                 <div className="h-96">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={priceHistory}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="time" />
-                      <YAxis />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="price" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+                      <Area type="monotone" dataKey="price" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -114,71 +92,43 @@ const TradingInterface = () => {
           <div className="h-32">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={priceHistory}>
-                <Area type="monotone" dataKey="price" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="price" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        {/* Compact Trading Panel */}
         <Card className="p-3">
           <h3 className="text-sm font-semibold mb-2">Quick Trade</h3>
           <div className="space-y-2">
-            <select 
-              className="w-full p-1 text-xs border rounded"
-              value={selectedToken.symbol}
+            <select
+              className="w-full p-1 text-xs border rounded bg-background text-foreground"
+              value={selectedToken?.symbol}
               onChange={(e) => setSelectedToken(tokens.find(t => t.symbol === e.target.value) || tokens[0])}
             >
               {tokens.map(token => (
-                <option key={token.symbol} value={token.symbol}>
-                  {token.symbol} - ${token.price.toFixed(2)}
-                </option>
+                <option key={token.symbol} value={token.symbol}>{token.symbol} - ${token.price.toFixed(2)}</option>
               ))}
             </select>
-
-            <Tabs value={orderType} onValueChange={(value) => setOrderType(value as 'buy' | 'sell')}>
+            <Tabs value={orderType} onValueChange={(v) => setOrderType(v as 'buy' | 'sell')}>
               <TabsList className="grid w-full grid-cols-2 h-8">
                 <TabsTrigger value="buy" className="text-xs">Buy</TabsTrigger>
                 <TabsTrigger value="sell" className="text-xs">Sell</TabsTrigger>
               </TabsList>
             </Tabs>
-
-            <Input
-              type="number"
-              placeholder="Amount"
-              value={orderAmount}
-              onChange={(e) => setOrderAmount(e.target.value)}
-              className="h-8 text-xs"
-            />
-
-            <Input
-              type="number"
-              placeholder="Price"
-              value={orderPrice}
-              onChange={(e) => setOrderPrice(e.target.value)}
-              className="h-8 text-xs"
-            />
-
-            <Button 
-              onClick={handleTradeSubmit}
-              className="w-full h-8 text-xs"
-              variant={orderType === 'buy' ? 'default' : 'destructive'}
-            >
-              {orderType === 'buy' ? 'Buy' : 'Sell'} {selectedToken.symbol}
+            <Input type="number" placeholder="Amount" value={orderAmount} onChange={e => setOrderAmount(e.target.value)} className="h-8 text-xs" />
+            <Input type="number" placeholder="Price" value={orderPrice} onChange={e => setOrderPrice(e.target.value)} className="h-8 text-xs" />
+            <Button onClick={handleTradeSubmit} className="w-full h-8 text-xs" variant={orderType === 'buy' ? 'default' : 'destructive'}>
+              {orderType === 'buy' ? 'Buy' : 'Sell'} {selectedToken?.symbol}
             </Button>
           </div>
         </Card>
 
-        {/* Market Overview */}
         <Card className="p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">Market</h3>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Settings className="h-3 w-3" />
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Settings className="h-3 w-3" /></Button></DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Market Overview</DialogTitle>
@@ -190,10 +140,7 @@ const TradingInterface = () => {
                       <div>
                         <div className="font-medium">{token.name}</div>
                         <div className="text-sm text-muted-foreground">{token.symbol}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Vol: ${token.volume24h?.toLocaleString()} | 
-                          MCap: ${token.marketCap?.toLocaleString()}
-                        </div>
+                        <div className="text-xs text-muted-foreground">Vol: {token.volume24h?.toLocaleString()} | MCap: ${token.marketCap?.toLocaleString()}</div>
                       </div>
                       <div className="text-right">
                         <div className="font-medium">${token.price.toFixed(4)}</div>
@@ -209,11 +156,7 @@ const TradingInterface = () => {
           </div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {tokens.slice(0, 4).map(token => (
-              <div 
-                key={token.symbol}
-                className="flex items-center justify-between p-1 text-xs hover:bg-accent rounded cursor-pointer"
-                onClick={() => setSelectedToken(token)}
-              >
+              <div key={token.symbol} className="flex items-center justify-between p-1 text-xs hover:bg-accent rounded cursor-pointer" onClick={() => setSelectedToken(token)}>
                 <span>{token.symbol}</span>
                 <div className="text-right">
                   <div>${token.price.toFixed(2)}</div>
@@ -227,31 +170,19 @@ const TradingInterface = () => {
         </Card>
       </div>
 
-      {/* Compact Portfolio and Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Card className="p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">Portfolio</h3>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Eye className="h-3 w-3" />
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-3 w-3" /></Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Portfolio Details</DialogTitle>
                   <DialogDescription>Your complete portfolio breakdown</DialogDescription>
                 </DialogHeader>
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Token</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>P&L</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Token</TableHead><TableHead>Amount</TableHead><TableHead>Value</TableHead><TableHead>P&L</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {portfolio.map(asset => (
                       <TableRow key={asset.symbol}>
@@ -287,48 +218,23 @@ const TradingInterface = () => {
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">Open Orders</h3>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Eye className="h-3 w-3" />
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button size="sm" variant="outline"><Eye className="h-3 w-3" /></Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Order Management</DialogTitle>
                   <DialogDescription>View and manage all your trading orders</DialogDescription>
                 </DialogHeader>
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Token</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Token</TableHead><TableHead>Amount</TableHead><TableHead>Price</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {orders.map(order => (
                       <TableRow key={order.id}>
-                        <TableCell>
-                          <Badge variant={order.type === 'buy' ? 'default' : 'destructive'}>
-                            {order.type.toUpperCase()}
-                          </Badge>
-                        </TableCell>
+                        <TableCell><Badge variant={order.type === 'buy' ? 'default' : 'destructive'}>{order.type.toUpperCase()}</Badge></TableCell>
                         <TableCell>{order.token}</TableCell>
                         <TableCell>{order.amount}</TableCell>
                         <TableCell>${order.price}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{order.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {order.status === 'open' && (
-                            <Button size="sm" variant="outline" onClick={() => cancelOrder(order.id)}>
-                              Cancel
-                            </Button>
-                          )}
-                        </TableCell>
+                        <TableCell><Badge variant="outline">{order.status}</Badge></TableCell>
+                        <TableCell>{order.status === 'open' && <Button size="sm" variant="outline" onClick={() => cancelOrder(order.id)}>Cancel</Button>}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -337,23 +243,19 @@ const TradingInterface = () => {
             </Dialog>
           </div>
           <div className="space-y-1 max-h-24 overflow-y-auto">
-            {orders.filter(order => order.status === 'open').slice(0, 3).map(order => (
+            {orders.filter(o => o.status === 'open').slice(0, 3).map(order => (
               <div key={order.id} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
-                  <Badge variant={order.type === 'buy' ? 'default' : 'destructive'} className="text-xs">
-                    {order.type.toUpperCase()}
-                  </Badge>
+                  <Badge variant={order.type === 'buy' ? 'default' : 'destructive'} className="text-xs">{order.type.toUpperCase()}</Badge>
                   <span>{order.token}</span>
                 </div>
                 <div className="text-right">
                   <div>{order.amount} @ ${order.price}</div>
-                  <Button size="sm" variant="ghost" onClick={() => cancelOrder(order.id)} className="h-4 text-xs">
-                    Cancel
-                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => cancelOrder(order.id)} className="h-4 text-xs">Cancel</Button>
                 </div>
               </div>
             ))}
-            {orders.filter(order => order.status === 'open').length === 0 && (
+            {orders.filter(o => o.status === 'open').length === 0 && (
               <div className="text-xs text-muted-foreground text-center py-4">No open orders</div>
             )}
           </div>
