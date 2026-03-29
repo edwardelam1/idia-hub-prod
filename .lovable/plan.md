@@ -1,176 +1,206 @@
 
 
-# Plan: Remove All Mock Data from Trading Interface & Billing (Golden Rule Compliance)
+# Plan: Synapse Credit Pipeline Upgrade to Production-Ready Real-Time Economic Engine
 
-## Problem Summary
+## Summary
 
-After thorough review, the following components contain hardcoded mock data or non-functional buttons that violate the Golden Rule:
+This is a large, multi-phase upgrade touching ~15 files. The core change is replacing the mock `fetchApi` fallback system with live Supabase queries, creating a new `synapse_credit_ledger` table for real-time credit tracking, building edge functions for credit operations, and wiring all billing/trading/earnings UIs to live data.
 
-### Trading Interface & Trading Desk
+---
 
-| Component | Violations |
-|-----------|-----------|
-| **TradingDeskDashboard.tsx** (Overview tab) | Hardcoded "47ms", "89ms", "99.97%", "99.99%" performance metrics |
-| **TradingInterface.tsx** | Hardcoded "12,450" credits, "$847K" 24h volume |
-| **APIKeyManagement.tsx** | 3 hardcoded mock API keys with fake key strings, fake dates, fake call counts. "Generate", "Regenerate", "Revoke" buttons are non-functional |
-| **APIMonitoring.tsx** | All data is mock: latency arrays, throughput arrays, endpoint usage arrays, audit log entries, "2,847 req/min", "0.03% error rate", "47ms avg latency" |
-| **APIBilling.tsx** | Hardcoded "8,456 credits consumed", "12,544 remaining", "100,000 monthly allocation", "resets in 12 days" |
-| **FeatureFeedAccess.tsx** | Descriptive/static content (acceptable as product documentation), but "View Sample Data" buttons are disabled/non-functional |
-| **useTradingData.tsx** | Portfolio uses `Math.random()` for amounts/values (recalculates on every render); market depth is hardcoded |
+## Phase 1: Database — Create `synapse_credit_ledger` Table
 
-### Billing & Credits (Synapse Ledger)
+Create a new migration with a ledger table that records every credit event (deposits, deductions, refunds). This becomes the single source of truth for credit balances.
 
-| Component | Violations |
-|-----------|-----------|
-| **useBillingData.tsx** | Entirely hardcoded: usage (8450/15000), billing history, subscription plan, 2 fake payment methods (Visa 4242, MC 8888), 4 fake invoices, usage breakdown. `downloadInvoice` and `updatePaymentMethod` are console.log stubs |
-| **BillingCredits.tsx** | "Add Payment Method" button is non-functional. Invoice "Download" buttons call stub. Payment method "Edit"/"Remove" buttons are non-functional. "Upgrade Plan" and "View All Plans" buttons are non-functional |
-
-### No Supabase tables exist for:
-- User API keys
-- User payment methods (the existing `payment_methods` table is business/POS-scoped)
-- User subscriptions/billing
-- User invoices (the existing `invoices` table is business/supplier-scoped)
-
-## Approach
-
-### Phase 1: Create Supabase tables for user-level billing & API keys
-
-Create migrations for:
-
-1. **`user_api_keys`** -- stores API keys per authenticated user with name, hashed key, status, last_used_at, total_calls, created_at. RLS: users can only see/manage their own keys.
-
-2. **`user_payment_methods`** -- stores payment method type (credit_card, debit_card, bank_ach, bank_wire, dex_wallet, idia_life_wallet), display label, last4/identifier, is_default, metadata JSON. RLS: user-scoped.
-
-3. **`user_invoices`** -- stores invoice_number, period, amount, status (paid/pending/overdue), pdf_url, created_at. RLS: user-scoped.
-
-4. **`user_subscriptions`** -- stores plan_name, cost, features JSON, limits JSON, status, current_period_start/end. RLS: user-scoped.
-
-### Phase 2: Update Trading Desk components
-
-**APIKeyManagement.tsx:**
-- Query `user_api_keys` from Supabase
-- "Generate New Key" creates a key via crypto, stores hash in DB, shows full key once
-- "Regenerate" rotates the key
-- "Revoke" sets status to 'revoked'
-- Show real `total_calls` and `last_used_at`
-- Empty state when no keys exist
-
-**APIMonitoring.tsx:**
-- Replace all hardcoded arrays with live data derived from `transactions` table (aggregated by time bucket) and `check_pipeline_health` RPC
-- Audit log: query recent `transactions` for the authenticated user
-- Status cards: derive from real pipeline health data
-
-**APIBilling.tsx:**
-- Pull credits consumed from `transactions` table (sum of amounts for current period)
-- Pull allocation from `user_subscriptions`
-- Calculate days until period end from subscription data
-
-**TradingDeskDashboard.tsx (Overview):**
-- Replace hardcoded performance metrics ("47ms", "99.97%") with either live Supabase Edge Function latency stats or a clear "No live telemetry" indicator with a note that these will populate from production API gateway metrics
-
-**TradingInterface.tsx:**
-- Replace "12,450" credits with Synapse balance from `useSynapseCredits` context (already exists)
-- Replace "$847K" volume with aggregated `transactions` sum
-- Stabilize portfolio by using deterministic seed instead of `Math.random()`
-- Remove hardcoded market depth; show "No order book data" when empty
-
-### Phase 3: Update Billing & Credits (Synapse Ledger)
-
-**useBillingData.tsx:**
-- Rewrite to query Supabase tables: `user_subscriptions`, `user_payment_methods`, `user_invoices`, `transactions`
-- Derive `currentUsage` from transaction sums in current billing period
-- Derive `billingHistory` from transaction sums grouped by month
-- Derive `usageBreakdown` from transactions grouped by `transaction_type`
-
-**BillingCredits.tsx -- Add Payment Method modal:**
-- Create a dialog with payment method type selector offering: Credit/Debit Card, Bank (ACH), Bank (Wire), DEX Wallet, IDIA Life Wallet
-- For cards: collect last4, brand, expiry (no real payment processing -- stores reference)
-- For bank: collect routing/account last4, bank name
-- For DEX/IDIA wallet: collect wallet address
-- Insert into `user_payment_methods`
-- "Edit" and "Remove" buttons become functional (update/delete from DB)
-- "Set as Default" functionality
-
-**Invoices:**
-- Query `user_invoices` from Supabase
-- "Download" generates a simple receipt view (or shows toast "Invoice PDF not yet available" if no pdf_url)
-- Empty state when no invoices
-
-**Subscription:**
-- Query `user_subscriptions`
-- "Upgrade Plan" / "View All Plans" show a plan comparison dialog
-- If no subscription exists, show "No active subscription" with option to select a plan
-
-### Phase 4: Remove market depth mock, stabilize portfolio
-
-- Replace hardcoded `marketDepth` with empty state
-- Use deterministic portfolio derivation (seeded by token symbol hash) instead of `Math.random()`
-
-## Technical Details
-
-### New migrations:
 ```sql
--- user_api_keys
-CREATE TABLE public.user_api_keys (
+CREATE TABLE public.synapse_credit_ledger (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  key_name text NOT NULL,
-  key_prefix text NOT NULL,  -- first 8 chars for display
-  key_hash text NOT NULL,    -- SHA-256 hash of full key
-  status text NOT NULL DEFAULT 'active',
-  total_calls integer DEFAULT 0,
-  last_used_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-
--- user_payment_methods
-CREATE TABLE public.user_payment_methods (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  method_type text NOT NULL, -- credit_card, debit_card, bank_ach, bank_wire, dex_wallet, idia_life_wallet
-  display_label text NOT NULL,
-  identifier text,          -- last4 or wallet address prefix
-  is_default boolean DEFAULT false,
+  entry_type text NOT NULL, -- 'deposit', 'deduction', 'refund', 'subscription_purchase'
+  amount numeric NOT NULL, -- positive for deposits, negative for deductions
+  balance_after numeric NOT NULL,
+  description text,
+  reference_id text, -- links to invoice, bundle, API key, etc.
   metadata jsonb DEFAULT '{}',
   created_at timestamptz DEFAULT now()
 );
-
--- user_subscriptions
-CREATE TABLE public.user_subscriptions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  plan_name text NOT NULL,
-  cost numeric NOT NULL,
-  features jsonb DEFAULT '[]',
-  limits jsonb DEFAULT '{}',
-  status text DEFAULT 'active',
-  period_start timestamptz,
-  period_end timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-
--- user_invoices
-CREATE TABLE public.user_invoices (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  invoice_number text NOT NULL,
-  period text NOT NULL,
-  amount numeric NOT NULL,
-  status text DEFAULT 'pending',
-  pdf_url text,
-  created_at timestamptz DEFAULT now()
-);
+ALTER TABLE public.synapse_credit_ledger ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own ledger" ON public.synapse_credit_ledger
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE INDEX idx_credit_ledger_user ON public.synapse_credit_ledger(user_id, created_at DESC);
 ```
 
-All tables get RLS policies: user can SELECT/INSERT/UPDATE/DELETE only their own rows (`user_id = auth.uid()`).
+---
 
-### Files to modify:
-- `src/hooks/useBillingData.tsx` -- full rewrite with Supabase queries
-- `src/components/billing/BillingCredits.tsx` -- Add Payment Method modal, functional buttons
-- `src/components/trading/APIKeyManagement.tsx` -- Supabase CRUD
-- `src/components/trading/APIMonitoring.tsx` -- live data from transactions/pipeline
-- `src/components/trading/APIBilling.tsx` -- live data from transactions/subscriptions
-- `src/components/trading/TradingDeskDashboard.tsx` -- remove hardcoded perf metrics
-- `src/components/trading/TradingInterface.tsx` -- use SynapseCredits context, stabilize portfolio
-- `src/hooks/useTradingData.tsx` -- deterministic portfolio, remove market depth mock
+## Phase 2: Edge Functions
+
+### 2a. `top-up-credits` Edge Function
+- Accepts `{ user_id, credit_amount, usd_amount, payment_reference }`
+- Reads current balance from `synapse_credit_ledger` (latest `balance_after`)
+- Inserts a new `deposit` entry with updated `balance_after`
+- Returns the new balance
+
+### 2b. `quote-bundle` Edge Function
+- Accepts `{ bundle_id }` or `{ bundle_ids[] }`
+- Looks up `marketplace_bundles.price` (the `base_valuation`)
+- Returns `{ items: [{ bundle_id, name, base_valuation }], total_cost }`
+
+---
+
+## Phase 3: Refactor `SynapseCreditsContext` — Real-Time Ledgering
+
+**File:** `src/contexts/SynapseCreditsContext.tsx`
+
+- Remove `fetchApi('/api/v1/synapse/balance')` mock call
+- Query Supabase: fetch the user's `wallets` row for `wallet_address`, and the latest `synapse_credit_ledger` entry for `balance_after` as `available_credits`
+- Subscribe to Supabase Realtime on `synapse_credit_ledger` table filtered by `user_id` — on INSERT, update `balanceData.available_credits` instantly
+- Cleanup subscription on unmount
+
+---
+
+## Phase 4: `useCreditCheck` Hook — Insufficient Funds Interceptor
+
+**New file:** `src/hooks/useCreditCheck.tsx`
+
+- Exports `useCreditCheck()` returning `{ checkCredits(cost): boolean, InsufficientFundsModal }`
+- Reads `useSynapseCredits()` balance
+- If `cost > available_credits`, opens `SynapsePurchaseModal` with a warning banner: "Insufficient Synapse Credits. Please top up to complete this action."
+- Used in: ShoppingCart purchase flow, API key provisioning, bundle downloads
+
+---
+
+## Phase 5: Pre-Flight Quote Engine in ShoppingCart
+
+**File:** `src/components/marketplace/ShoppingCart.tsx`
+
+- Before enabling "Purchase & View Reports", call the `quote-bundle` edge function via `supabase.functions.invoke('quote-bundle', ...)`
+- Show a "Quoting..." loading state, then display the exact `base_valuation` per item and total
+- Only enable "Confirm Purchase" after quote is returned and credits are sufficient
+- Wire through `useCreditCheck` to intercept insufficient funds
+
+---
+
+## Phase 6: Upgrade `SynapsePurchaseModal` — Payment Gateway UI
+
+**File:** `src/components/billing/SynapsePurchaseModal.tsx`
+
+- Add a second step after tier selection: "Enter Payment Details" with card number (masked), expiry, CVV fields (simulated — no real PCI)
+- "Pay" button shows a processing animation ("Verifying payment..."), then calls `supabase.functions.invoke('top-up-credits', ...)` to log the DEPOSIT into the ledger
+- On success, balance updates in real-time via the Realtime subscription
+- Remove `fetchApi('/api/v1/billing/worldpay/initiate')` mock call
+
+---
+
+## Phase 7: Burn Rate Visuals
+
+**Files:** `src/components/trading/APIBilling.tsx`, `src/components/billing/SynapseGasGauge.tsx`
+
+- Calculate 30-day average usage from `synapse_credit_ledger` deduction entries
+- If current balance < 15% of 30-day average, turn gauge/indicators orange; if < 5%, turn red with pulse animation
+- Add a "Burn Rate" stat showing credits/day consumption rate
+
+---
+
+## Phase 8: Clear Mock Data from `lib/api.ts`
+
+**File:** `src/lib/api.ts`
+
+- Remove mock handlers for: `/api/v1/synapse/balance`, `/api/v1/settlement/balance`, `/api/v1/settlement/egress`, `/api/v1/billing/worldpay/initiate`, `/api/v1/delt/logs`
+- Keep `fetchApi` function for any remaining real API calls, but stop returning mock data for credit/billing/settlement endpoints
+
+---
+
+## Phase 9: Header CRD Display — Live Balance
+
+**File:** `src/components/layout/TopBar.tsx`
+
+- Already reads from `useSynapseCredits()` — once Context is refactored (Phase 3), the header will automatically show live balance instead of mock 1250.00 CRD
+
+---
+
+## Phase 10: Billing Credits "Credits Remaining" — Live
+
+**File:** `src/components/billing/BillingCredits.tsx`
+
+- Replace hardcoded `limit: 15000` in `useBillingData` with the subscription tier's actual credit allocation from `user_subscriptions`
+- "Credits Remaining" badge reads live balance from `synapse_credit_ledger`
+
+**File:** `src/hooks/useBillingData.tsx`
+
+- Usage calculation: sum of deduction entries in `synapse_credit_ledger` for current billing period (between `started_at` and `expires_at` from `user_subscriptions`)
+- Remove hardcoded `limit: 15000` fallback — derive from subscription tier
+
+---
+
+## Phase 11: Earnings & Settlement — Live Data
+
+**File:** `src/components/billing/EarningsSettlement.tsx`
+
+- Replace `fetchApi('/api/v1/settlement/balance')` with Supabase queries:
+  - `available_balance`: sum of completed `transactions` where `transaction_type = 'data_sale'` minus settled amounts
+  - `pending_balance`: sum of pending transactions
+  - `lifetime_earnings`: total sum
+  - `bank_last4`: from `user_payment_methods` where `method_type = 'bank_ach'` and `is_default = true`
+- Replace `fetchApi('/api/v1/settlement/egress')` with a Supabase insert into a `settlement_requests` or `transactions` table
+- Remove mock `businessId = 'ENT-MOCK'`
+
+---
+
+## Phase 12: Provenance Audit Log — Remove HRI Score, Live Data
+
+**File:** `src/components/trading/ProvenanceAuditLog.tsx`
+
+- Remove `hri_score_at_egress` column from the table header and rows
+- Remove from the `ProvenanceLog` interface
+- Replace `fetchApi('/api/v1/delt/logs')` with Supabase query on `transactions` filtered by `transaction_type = 'delt_transfer'` or similar, deriving provenance data from transaction metadata
+- Remove mock data from `lib/api.ts` (already covered in Phase 8)
+
+---
+
+## Phase 13: Subscription Plans — Unified Purchase Flow
+
+**Files:** `src/components/billing/BillingCredits.tsx`, `src/components/onboarding/EcosystemOnboarding.tsx`
+
+### Fix plan pricing to match Hub Enrollment:
+- Analyst: $9,995/yr
+- Professional: $24,995/yr
+- Enterprise: $49,995+/yr
+
+Currently `BillingCredits.tsx` shows $99/mo, $299/mo, $999/mo — these are wrong. Update the plans dialog to show annual pricing matching enrollment.
+
+### "Select Plan" button action:
+- Both the Subscription tab's "Select Plan" buttons and the Ecosystem Onboarding "Confirm & Continue" button navigate to a universal purchase screen
+- Create a new route/component `UniversalPurchaseScreen` or reuse an existing checkout flow
+- The screen shows: selected plan name, annual cost, payment method selector (from `user_payment_methods`), and a "Complete Purchase" button
+- On purchase: insert into `user_subscriptions`, insert a `subscription_purchase` entry into `synapse_credit_ledger`, create an invoice in `user_invoices`
+
+### Ecosystem Onboarding:
+- "Confirm & Continue" navigates to the same universal purchase screen with the selected role pre-loaded
+
+---
+
+## Technical Details
+
+### New files:
+- `src/hooks/useCreditCheck.tsx` — insufficient funds interceptor hook
+- `src/components/billing/UniversalPurchaseScreen.tsx` — checkout for subscriptions
+- `supabase/functions/top-up-credits/index.ts` — edge function for credit deposits
+- `supabase/functions/quote-bundle/index.ts` — edge function for bundle pricing
+
+### Modified files:
+- `src/contexts/SynapseCreditsContext.tsx` — Supabase + Realtime
+- `src/components/billing/SynapsePurchaseModal.tsx` — payment gateway UI + edge function
+- `src/components/billing/SynapseGasGauge.tsx` — burn rate visuals
+- `src/components/billing/BillingCredits.tsx` — live credits, fixed plan pricing, purchase navigation
+- `src/components/billing/EarningsSettlement.tsx` — live Supabase data
+- `src/components/trading/APIBilling.tsx` — burn rate visuals
+- `src/components/trading/ProvenanceAuditLog.tsx` — remove HRI, live data
+- `src/components/marketplace/ShoppingCart.tsx` — quote engine
+- `src/components/onboarding/EcosystemOnboarding.tsx` — navigate to purchase screen
+- `src/hooks/useBillingData.tsx` — live usage from ledger
+- `src/lib/api.ts` — remove mock handlers
+- `src/App.tsx` — add route for universal purchase screen
+
+### New migration:
+- `synapse_credit_ledger` table with RLS
 
