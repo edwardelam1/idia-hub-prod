@@ -36,13 +36,13 @@ export const APIKeyManagement = () => {
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null);
 
   const { data: apiKeys = [], isLoading } = useQuery({
-    queryKey: ['user-api-keys', user?.id],
+    queryKey: ['user-api-keys', userId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!userId) return [];
       const { data, error } = await supabase
         .from('user_api_keys')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
