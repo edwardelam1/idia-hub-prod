@@ -166,6 +166,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       }
     }
 
+    sections.push(settingsSection);
     return sections;
   };
 
