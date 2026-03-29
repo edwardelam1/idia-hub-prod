@@ -61,7 +61,7 @@ export const APIKeyManagement = () => {
         key_name: keyName,
         key_prefix: keyPrefix,
         key_hash: keyHash,
-      });
+      }]);
       if (error) throw error;
       return fullKey;
     },
