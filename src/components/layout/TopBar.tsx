@@ -27,6 +27,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const [notifications] = useState(3);
   const { balanceData, isLoading } = useSynapseCredits();
   const synapseCredits = balanceData?.available_credits ?? 0;
+  const navigate = useNavigate();
 
   const getUserName = () => {
     switch (userRole) {
