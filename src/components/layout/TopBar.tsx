@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Bell, ChevronDown, Coins, User, LogOut, Settings } from 'lucide-react';
+import { Bell, ChevronDown, Coins, LogOut, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import SynapsePurchaseModal from '@/components/billing/SynapsePurchaseModal';
 import IdentityStatusPills from '@/components/layout/IdentityStatusPills';

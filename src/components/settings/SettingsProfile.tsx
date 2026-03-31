@@ -17,10 +17,10 @@ export const SettingsProfile = () => {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-primary" />
-                Identity & Biometric Profile
+                Identity & Profile
               </CardTitle>
               <CardDescription>
-                Your identity is cryptographically anchored via the DELT Protocol.
+                Your identity is verified and managed through the IDIA Life mobile application.
               </CardDescription>
             </div>
             <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary gap-1.5">
@@ -33,7 +33,7 @@ export const SettingsProfile = () => {
           <Alert className="border-muted bg-muted/30">
             <Lock className="h-4 w-4" />
             <AlertDescription className="text-sm text-muted-foreground">
-              Personal information is cryptographically secured by the DELT Protocol. To update your biometric keys or info, please use the{' '}
+              Personal information is securely managed and can only be updated through the{' '}
               <span className="inline-flex items-center gap-1 font-medium text-foreground">
                 <Smartphone className="h-3.5 w-3.5" />
                 IDIA Life mobile application
@@ -59,9 +59,9 @@ export const SettingsProfile = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-muted-foreground text-xs uppercase tracking-wider">DELT Identity Hash</Label>
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">User ID</Label>
               <Input
-                value={`DELT-${user?.user_id?.slice(0, 8).toUpperCase() ?? '--------'}`}
+                value={user?.user_id?.slice(0, 12).toUpperCase() ?? '--------'}
                 disabled
                 className="bg-muted/20 text-foreground font-mono text-xs cursor-not-allowed"
               />

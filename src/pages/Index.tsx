@@ -28,6 +28,7 @@ import EarningsSettlement from '@/components/billing/EarningsSettlement';
 import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
 import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
 import SettingsPage from './SettingsPage';
+import BestFriendPage from './BestFriendPage';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
