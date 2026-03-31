@@ -202,61 +202,6 @@ export const TradingDeskDashboard = () => {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>API Access Tiers</CardTitle>
-              <CardDescription>
-                Your current tier and available upgrades
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="border rounded-lg p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-foreground">Analyst Tier</h4>
-                    <Badge variant="outline">Basic</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Entry-level API access</p>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• 10,000 calls/month</li>
-                    <li>• Standard endpoints</li>
-                    <li>• Email support</li>
-                  </ul>
-                  <Button variant="outline" className="w-full" disabled>View Details</Button>
-                </div>
-
-                <div className="border-2 border-primary rounded-lg p-4 space-y-2 bg-primary/5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-foreground">Professional Tier</h4>
-                    <Badge className="bg-primary text-primary-foreground">Current</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Advanced trading features</p>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• 100,000 calls/month</li>
-                    <li>• Feature Feeds access</li>
-                    <li>• Priority support</li>
-                    <li>• Sub-100ms latency SLA</li>
-                  </ul>
-                  <Button className="w-full">Manage Plan</Button>
-                </div>
-
-                <div className="border rounded-lg p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-foreground">Enterprise Tier</h4>
-                    <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/20">Custom</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Unlimited scale & support</p>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• Unlimited API calls</li>
-                    <li>• Custom endpoints</li>
-                    <li>• Dedicated support</li>
-                    <li>• Custom SLAs</li>
-                  </ul>
-                  <Button variant="outline" className="w-full">Contact Sales</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* API Keys Tab */}

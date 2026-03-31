@@ -28,6 +28,7 @@ import EarningsSettlement from '@/components/billing/EarningsSettlement';
 import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
 import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
 import SettingsPage from './SettingsPage';
+import BestFriendPage from './BestFriendPage';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
@@ -63,7 +64,7 @@ const Index = () => {
         <Route path="/organizations" element={<OrganizationManagement />} />
         <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<SecurityPage />} />
-        <Route path="/best-friend" element={<div className="p-6"><h1 className="text-2xl font-bold">Best Friend AI (Data Discovery)</h1><p className="text-muted-foreground mt-2">AI-powered data discovery assistant — use the floating Best Friend to chat.</p></div>} />
+        <Route path="/best-friend" element={<BestFriendPage />} />
         <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<TeamManagement />} />
         <Route path="/billing" element={<BillingCredits />} />

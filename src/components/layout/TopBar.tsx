@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Bell, ChevronDown, Coins, User, LogOut, Settings } from 'lucide-react';
+import { Bell, ChevronDown, Coins, LogOut, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import SynapsePurchaseModal from '@/components/billing/SynapsePurchaseModal';
 import IdentityStatusPills from '@/components/layout/IdentityStatusPills';
@@ -26,6 +27,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const [notifications] = useState(3);
   const { balanceData, isLoading } = useSynapseCredits();
   const synapseCredits = balanceData?.available_credits ?? 0;
+  const navigate = useNavigate();
 
   const getUserName = () => {
     switch (userRole) {
@@ -112,11 +114,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-sm">
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-sm">
+            <DropdownMenuItem className="text-sm" onClick={() => navigate('/settings')}>
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
