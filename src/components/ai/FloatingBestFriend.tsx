@@ -212,7 +212,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/30 via-pink-400/30 to-blue-400/30 blur-xl -z-10 animate-pulse" />
         )}
       </div>
-      <BestFriendChat isOpen={isChatOpen} onClose={() => { setIsChatOpen(false); setEmotion('neutral'); }} />
+      
     </>
   );
 };

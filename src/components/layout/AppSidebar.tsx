@@ -182,7 +182,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
         <div className="p-3 md:p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center space-x-2 md:space-x-3">
             <img
-              src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png"
+              src="/images/hub-logo.png"
               alt="IDIA Hub"
               className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0"
             />

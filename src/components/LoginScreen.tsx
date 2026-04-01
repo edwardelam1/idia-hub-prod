@@ -25,7 +25,7 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img 
-            src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png" 
+            src="/images/hub-logo.png" 
             alt="IDIA Hub Logo" 
             className="w-16 h-16 mx-auto mb-4"
           />
