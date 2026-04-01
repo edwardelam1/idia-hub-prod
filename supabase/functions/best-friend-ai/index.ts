@@ -98,12 +98,28 @@ serve(async (req) => {
       throw new Error('Gemini API key not configured');
     }
 
+    // Build marketplace context if available
+    let marketplaceContext = '';
+    if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
+      marketplaceContext = `\n\nMARKETPLACE SEARCH RESULTS (signal-level metadata only):
+${JSON.stringify(marketplaceResults.map((b: any) => ({
+  title: b.title,
+  category: b.category,
+  tier: b.tier,
+  price: b.price,
+  contacts_count: b.contacts_count,
+  features: b.features,
+})), null, 2)}
+
+CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata from these results (bundle names, categories, record counts, pricing, compliance tags). You must NEVER return raw data records. Raw data access requires Enterprise T1P (Tier-1-Provisioning) clearance. If the user asks for raw data, politely explain that raw data exports require Enterprise T1P clearance and direct them to contact their account manager.`;
+    }
+
     // Analyze the request to determine which agents to engage
     const analysisPrompt = `${BEST_FRIEND_PERSONA}
 
 Super Admin Request: "${message}"
 
-Context: ${context ? JSON.stringify(context) : 'No additional context provided'}
+Context: ${context ? JSON.stringify(context) : 'No additional context provided'}${marketplaceContext}
 
 Available Agent Capabilities:
 ${JSON.stringify(AGENT_CAPABILITIES, null, 2)}
@@ -114,6 +130,7 @@ As Best Friend, analyze this request and:
 3. Break down the task into specific actions for each agent
 4. Provide a friendly, professional response explaining your approach
 5. If this is a complex multi-step operation, outline the execution plan
+${marketplaceResults ? '6. Summarize the marketplace bundle results with signal-level insights (names, categories, pricing, record counts). Do NOT expose raw data.' : ''}
 
 Respond in a conversational, supportive tone while being precise about your technical approach.`;
 
