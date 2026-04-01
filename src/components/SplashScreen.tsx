@@ -22,7 +22,7 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
       <div className="text-center">
         <div className="mb-8 flex justify-center">
           <img 
-            src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png" 
+            src="/images/hub-logo.png" 
             alt="IDIA Hub Logo" 
             className="w-32 h-32 animate-pulse"
           />

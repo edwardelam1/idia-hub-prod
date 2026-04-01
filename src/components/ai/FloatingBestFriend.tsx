@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BestFriendAvatar from './BestFriendAvatar';
-import BestFriendChat from './BestFriendChat';
+
 import { useAudioCapabilities } from '@/hooks/useAudioCapabilities';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchApi } from '@/lib/api';
@@ -31,7 +31,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const [emotion, setEmotion] = useState<'excited' | 'calm' | 'sad' | 'neutral'>('neutral');
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  
   const [feedbackText, setFeedbackText] = useState<string>('');
   const [isVoiceMode, setIsVoiceMode] = useState(false);
 
@@ -200,7 +200,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
         onMouseDown={handleMouseDown}
       >
         <BestFriendAvatar
-          onChatClick={() => { setIsChatOpen(true); setEmotion('excited'); }}
+          onChatClick={() => { navigate('/best-friend'); setEmotion('excited'); }}
           onVoiceToggle={handleVoiceToggle}
           emotion={emotion}
           isListening={audio.isRecording}
@@ -212,7 +212,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/30 via-pink-400/30 to-blue-400/30 blur-xl -z-10 animate-pulse" />
         )}
       </div>
-      <BestFriendChat isOpen={isChatOpen} onClose={() => { setIsChatOpen(false); setEmotion('neutral'); }} />
+      
     </>
   );
 };
