@@ -200,7 +200,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
         onMouseDown={handleMouseDown}
       >
         <BestFriendAvatar
-          onChatClick={() => { setIsChatOpen(true); setEmotion('excited'); }}
+          onChatClick={() => { navigate('/best-friend'); setEmotion('excited'); }}
           onVoiceToggle={handleVoiceToggle}
           emotion={emotion}
           isListening={audio.isRecording}
