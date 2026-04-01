@@ -32,16 +32,26 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   const [selectedTier, setSelectedTier] = useState<string>('tier2');
   const [step, setStep] = useState<'select' | 'payment' | 'processing' | 'success'>('select');
   const [open, setOpen] = useState(defaultOpen ?? false);
+  const [purchaseMode, setPurchaseMode] = useState<'tier' | 'alacarte'>('tier');
+  const [alacarteAmount, setAlacarteAmount] = useState('');
 
   // Payment form fields (simulated)
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
-  const currentSelection = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
-  const usdAmount = currentSelection.credits * currentSelection.rate;
-  const baseRateCost = currentSelection.credits * BASE_RATE;
-  const savings = baseRateCost - usdAmount;
+  const currentTier = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
+
+  // Computed values based on mode
+  const alacarteUsd = parseInt(alacarteAmount) || 0;
+  const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
+  const alacarteValid = alacarteUsd >= 10 && alacarteUsd <= 1000;
+
+  const displayCredits = purchaseMode === 'alacarte' ? alacarteCredits : currentTier.credits;
+  const usdAmount = purchaseMode === 'alacarte' ? alacarteUsd : currentTier.credits * currentTier.rate;
+  const baseRateCost = purchaseMode === 'alacarte' ? alacarteUsd : currentTier.credits * BASE_RATE;
+  const savings = purchaseMode === 'alacarte' ? 0 : baseRateCost - usdAmount;
+  const canProceed = purchaseMode === 'alacarte' ? alacarteValid : true;
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
@@ -51,11 +61,21 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
       setCardNumber('');
       setCardExpiry('');
       setCardCvv('');
+      setPurchaseMode('tier');
+      setAlacarteAmount('');
     }
   };
 
   const handleProceedToPayment = () => {
+    if (!canProceed) return;
     setStep('payment');
+  };
+
+  const handleAlacarteInput = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    if (digits.length <= 4) {
+      setAlacarteAmount(digits);
+    }
   };
 
   const handlePurchase = async () => {
@@ -66,13 +86,12 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
     setStep('processing');
 
     try {
-      // Simulate payment verification delay
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const { data, error } = await supabase.functions.invoke('top-up-credits', {
         body: {
           user_id: (await supabase.auth.getUser()).data.user?.id ?? 'mock-ent-9921',
-          credit_amount: currentSelection.credits,
+          credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: `WP-${crypto.randomUUID().slice(0, 8)}`,
         },
@@ -82,7 +101,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
 
       setStep('success');
       toast.success('Credits added successfully!', {
-        description: `${currentSelection.credits.toLocaleString()} CRD added to your account.`,
+        description: `${displayCredits.toLocaleString()} CRD added to your account.`,
       });
       await refreshBalance();
 
@@ -119,7 +138,6 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
           </DialogDescription>
         </DialogHeader>
 
-        {/* Insufficient funds warning */}
         {insufficientWarning && step === 'select' && (
           <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
             <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
@@ -128,53 +146,107 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
         )}
 
         <div className="space-y-6 pt-2">
-          {/* STEP: SELECT TIER */}
           {step === 'select' && (
             <>
               <div className="flex justify-center">
                 <SynapseGasGauge />
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Select Volume Tranche</h4>
-                <div className="grid grid-cols-1 gap-3">
-                  {creditTiers.map((tier) => {
-                    const isSelected = selectedTier === tier.id;
-                    const usdCost = tier.credits * tier.rate;
-                    return (
-                      <Card
-                        key={tier.id}
-                        className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
-                          isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'hover:border-primary/50'
-                        }`}
-                        onClick={() => setSelectedTier(tier.id)}
-                      >
-                        {tier.popular && <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>}
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
-                              {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-sm text-foreground">{tier.name}</span>
-                                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">${tier.rate.toFixed(2)} / CRD</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-bold text-foreground font-mono">
-                              {tier.credits.toLocaleString()} <span className="text-xs text-muted-foreground font-sans">CRD</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</p>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
+              {/* Mode Toggle */}
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  onClick={() => setPurchaseMode('tier')}
+                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
+                    purchaseMode === 'tier'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Volume Tranches
+                </button>
+                <button
+                  onClick={() => setPurchaseMode('alacarte')}
+                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
+                    purchaseMode === 'alacarte'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  A La Carte
+                </button>
               </div>
+
+              {purchaseMode === 'tier' ? (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Select Volume Tranche</h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    {creditTiers.map((tier) => {
+                      const isSelected = selectedTier === tier.id;
+                      const usdCost = tier.credits * tier.rate;
+                      return (
+                        <Card
+                          key={tier.id}
+                          className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
+                            isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'hover:border-primary/50'
+                          }`}
+                          onClick={() => setSelectedTier(tier.id)}
+                        >
+                          {tier.popular && <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                                {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-sm text-foreground">{tier.name}</span>
+                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">${tier.rate.toFixed(2)} / CRD</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-foreground font-mono">
+                                {tier.credits.toLocaleString()} <span className="text-xs text-muted-foreground font-sans">CRD</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</p>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Custom Amount</h4>
+                  <p className="text-xs text-muted-foreground">Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/CRD.</p>
+                  <div className="space-y-2">
+                    <Label>Purchase Amount</Label>
+                    <div className="flex items-center gap-0">
+                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-r-0 border-input rounded-l-md text-sm font-medium text-muted-foreground">$</span>
+                      <Input
+                        className="rounded-none border-r-0 font-mono text-lg"
+                        placeholder="100"
+                        value={alacarteAmount}
+                        onChange={(e) => handleAlacarteInput(e.target.value)}
+                        inputMode="numeric"
+                      />
+                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-l-0 border-input rounded-r-md text-sm font-medium text-muted-foreground">.00</span>
+                    </div>
+                    {alacarteAmount && !alacarteValid && (
+                      <p className="text-xs text-destructive">
+                        {alacarteUsd < 10 ? 'Minimum purchase is $10.00' : 'Maximum purchase is $1,000.00'}
+                      </p>
+                    )}
+                    {alacarteValid && (
+                      <p className="text-xs text-emerald-500">
+                        You will receive <span className="font-mono font-bold">{alacarteCredits.toLocaleString()}</span> CRD
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Transaction Summary */}
               <div className="bg-muted/50 border border-border rounded-xl p-4 space-y-3">
@@ -185,7 +257,13 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credits to Add</span>
-                  <span className="text-emerald-500 font-mono">+{currentSelection.credits.toLocaleString()} CRD</span>
+                  <span className="text-emerald-500 font-mono">+{displayCredits.toLocaleString()} CRD</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Rate</span>
+                  <span className="text-foreground font-mono">
+                    ${purchaseMode === 'alacarte' ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / CRD
+                  </span>
                 </div>
                 {savings > 0 && (
                   <div className="flex items-center gap-2 text-xs text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
@@ -202,20 +280,19 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 </div>
               </div>
 
-              <Button className="w-full gap-2" size="lg" onClick={handleProceedToPayment}>
+              <Button className="w-full gap-2" size="lg" onClick={handleProceedToPayment} disabled={!canProceed}>
                 Continue to Payment <ArrowRight className="w-4 h-4" />
               </Button>
             </>
           )}
 
-          {/* STEP: PAYMENT */}
           {step === 'payment' && (
             <>
               <div className="space-y-4">
                 <div className="bg-muted/50 border border-border rounded-xl p-4 flex justify-between items-center">
                   <div>
                     <p className="text-sm text-muted-foreground">Purchasing</p>
-                    <p className="font-bold text-foreground">{currentSelection.credits.toLocaleString()} CRD</p>
+                    <p className="font-bold text-foreground">{displayCredits.toLocaleString()} CRD</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Total</p>
@@ -275,7 +352,6 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
             </>
           )}
 
-          {/* STEP: PROCESSING */}
           {step === 'processing' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
@@ -284,13 +360,12 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
             </div>
           )}
 
-          {/* STEP: SUCCESS */}
           {step === 'success' && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="text-foreground font-bold text-lg">Payment Successful!</p>
               <p className="text-muted-foreground text-sm">
-                {currentSelection.credits.toLocaleString()} CRD have been added to your ledger.
+                {displayCredits.toLocaleString()} CRD have been added to your ledger.
               </p>
             </div>
           )}

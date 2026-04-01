@@ -29,9 +29,18 @@ const mockHandlers: Record<string, (body?: any) => any> = {
     client_id: body?.client_id || 'ENT-MOCK',
     timestamp: new Date().toISOString(),
   }),
-  '/api/v1/best-friend/chat': (body?: any) => ({
-    response: `I've analyzed your request: "${body?.message || ''}". Based on the current system state, all services are operational. How else can I help?`,
-  }),
+  '/api/v1/best-friend/chat': (body?: any) => {
+    const marketplaceResults = body?.context?.marketplaceResults;
+    if (marketplaceResults && marketplaceResults.length > 0) {
+      const bundleNames = marketplaceResults.slice(0, 5).map((b: any) => b.title || b.name || 'Untitled').join(', ');
+      return {
+        response: `I found ${marketplaceResults.length} active bundles in the marketplace matching your query. Here's a signal-level summary:\n\n**Available Bundles:** ${bundleNames}\n\nThese bundles contain aggregated, anonymized data signals across various categories. Note: Raw data access requires Enterprise T1P clearance. Would you like me to drill into a specific bundle's metadata?`,
+      };
+    }
+    return {
+      response: `I've analyzed your request: "${body?.message || ''}". Based on the current system state, all services are operational. How else can I help?`,
+    };
+  },
   '/api/v1/synapse/query': () => ({
     data: [
       { region: 'US-KY', device_os: 'iOS 18.2', hri_score: 91.4, record_count: 1243, anonymization_level: 'k-anon-5', last_updated: '2026-02-27T08:00:00Z' },

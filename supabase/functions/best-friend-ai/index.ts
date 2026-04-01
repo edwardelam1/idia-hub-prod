@@ -92,7 +92,7 @@ serve(async (req) => {
   }
 
   try {
-    const { message, context } = await req.json();
+    const { message, context, marketplaceResults } = await req.json();
 
     if (!geminiApiKey) {
       throw new Error('Gemini API key not configured');
