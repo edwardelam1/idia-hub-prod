@@ -31,7 +31,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const [emotion, setEmotion] = useState<'excited' | 'calm' | 'sad' | 'neutral'>('neutral');
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  
   const [feedbackText, setFeedbackText] = useState<string>('');
   const [isVoiceMode, setIsVoiceMode] = useState(false);
 
