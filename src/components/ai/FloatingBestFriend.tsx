@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BestFriendAvatar from './BestFriendAvatar';
-import BestFriendChat from './BestFriendChat';
+
 import { useAudioCapabilities } from '@/hooks/useAudioCapabilities';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchApi } from '@/lib/api';
