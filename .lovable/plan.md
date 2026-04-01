@@ -1,39 +1,65 @@
 
 
-# Plan: Floating Best Friend Redirect + New Logo Replacement
+# Plan: A La Carte Credit Purchase + Best Friend Marketplace Search
 
-## 1. Floating Best Friend -- Navigate Instead of Pop-up
+## Part 1: A La Carte Custom Amount Option
 
-**File: `src/components/ai/FloatingBestFriend.tsx`**
-- Remove the `BestFriendChat` import and its `<BestFriendChat>` component from the render
-- Remove `isChatOpen` state
-- Change the `onChatClick` callback in `BestFriendAvatar` to call `navigate('/best-friend')` instead of opening the chat dialog
-- This makes the floating avatar button navigate to the full Best Friend AI page (same destination as the sidebar link)
+### `src/components/billing/SynapsePurchaseModal.tsx`
+- Add state: `purchaseMode: 'tier' | 'alacarte'`, `alacarteAmount: string`
+- Add a toggle row above tiers: "Volume Tranches" | "A La Carte"
+- When "A La Carte" is active, replace tier cards with a USD input field:
+  - Static `$` prefix, input accepts only digits, static `.00` suffix displayed
+  - Min $10, max $1,000 — validation error shown outside range
+  - Credits calculated at base rate: `credits = usdAmount / 0.75`
+  - No volume discount
+- Transaction Summary updates dynamically for both modes
+- Same payment flow after selection
 
-**File: `src/components/ai/BestFriendAvatar.tsx`**
-- No changes needed -- `onChatClick` is already a prop, just the parent changes what it does
+### `src/components/billing/SynapseTopUp.tsx`
+- Same pattern: add mode toggle between "Volume Tranches" and "A La Carte"
+- Custom amount input with identical $10-$1,000 validation and `.00` suffix
+- Summary panel updates reactively based on mode
 
-## 2. Replace Logo Across Three Locations
+---
 
-Copy the uploaded image into the public directory, then update all three logo references:
+## Part 2: Best Friend AI Marketplace Search (Credit-Gated)
 
-**Copy:** `user-uploads://The_Hub_Logo_Polished.png` to `public/images/hub-logo.png`
+### `src/pages/BestFriendPage.tsx`
+- Import `supabase` client and `useSynapseCredits`
+- Add a **"Marketplace Search"** toggle button below the input field (next to Send), styled as a pill/chip
+- When toggled ON, the input placeholder changes to `Search the data marketplace...`
+- Marketplace search triggers on:
+  1. The toggle is ON and user sends any message, OR
+  2. Message contains `@search marketplace` (case-insensitive) regardless of toggle state
+- On marketplace search:
+  1. Check credit balance >= 1 CRD
+  2. If insufficient, toast error: "Insufficient Synapse Credits (1 CRD required)"
+  3. If sufficient, query `marketplace_bundles` from Supabase (title, category, description, price, tier, contacts_count, data_points, features)
+  4. Deduct 1 CRD via `supabase.functions.invoke('top-up-credits', { body: { amount: -1 ... } })`
+  5. Inject bundle results as context into the AI chat request
+  6. Show a small "1 CRD deducted" badge on the AI response message
+- For non-marketplace queries, proceed as before (no credit cost)
 
-**File: `src/components/SplashScreen.tsx`** (line 25)
-- Change `src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png"` to `src="/images/hub-logo.png"`
+### `supabase/functions/best-friend-ai/index.ts`
+- Accept optional `marketplaceResults` in request body
+- When present, append to the Gemini prompt: the bundle data as context, with instruction to summarize signal-level metadata only (names, categories, record counts, pricing, compliance tags)
+- Add directive: "You must NEVER return raw data records. Raw data access requires Enterprise T1P clearance."
 
-**File: `src/components/LoginScreen.tsx`** (line 28)
-- Change `src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png"` to `src="/images/hub-logo.png"`
+### `src/lib/api.ts`
+- Update mock handler for `/api/v1/best-friend/chat` to check for `marketplaceResults` in context and return a smarter mock response summarizing the bundles
 
-**File: `src/components/layout/AppSidebar.tsx`** (line 185)
-- Change `src="/lovable-uploads/02424e72-23a1-4487-b4a8-5e645a56e27a.png"` to `src="/images/hub-logo.png"`
+---
 
-## Files Modified
-- `src/components/ai/FloatingBestFriend.tsx` -- remove chat dialog, navigate to `/best-friend`
-- `src/components/SplashScreen.tsx` -- new logo path
-- `src/components/LoginScreen.tsx` -- new logo path
-- `src/components/layout/AppSidebar.tsx` -- new logo path
+## Technical Details
 
-## Files Copied
-- `user-uploads://The_Hub_Logo_Polished.png` to `public/images/hub-logo.png`
+### Files modified:
+1. `src/components/billing/SynapsePurchaseModal.tsx` — a la carte mode + custom USD input
+2. `src/components/billing/SynapseTopUp.tsx` — a la carte mode + custom USD input
+3. `src/pages/BestFriendPage.tsx` — marketplace search button, credit deduction, Supabase query
+4. `supabase/functions/best-friend-ai/index.ts` — marketplace context in persona prompt
+5. `src/lib/api.ts` — enhanced mock handler
+
+### No database changes needed
+- `synapse_credit_ledger` already supports deductions
+- `marketplace_bundles` already exists for querying
 
