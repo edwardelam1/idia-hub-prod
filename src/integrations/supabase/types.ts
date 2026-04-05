@@ -5315,35 +5315,65 @@ export type Database = {
       synapse_credit_ledger: {
         Row: {
           amount: number
+          amount_idia_usd: number | null
           balance_after: number
+          balance_idia_usd: number | null
+          circle_transfer_id: string | null
           created_at: string | null
           description: string | null
+          destination_wallet: string | null
           entry_type: string
+          flare_tx_hash: string | null
           id: string
           metadata: Json | null
           reference_id: string | null
+          status: Database["public"]["Enums"]["idia_transaction_status"] | null
+          transaction_id: string | null
+          transaction_type:
+            | Database["public"]["Enums"]["idia_transaction_type"]
+            | null
           user_id: string
         }
         Insert: {
           amount: number
+          amount_idia_usd?: number | null
           balance_after?: number
+          balance_idia_usd?: number | null
+          circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
+          destination_wallet?: string | null
           entry_type: string
+          flare_tx_hash?: string | null
           id?: string
           metadata?: Json | null
           reference_id?: string | null
+          status?: Database["public"]["Enums"]["idia_transaction_status"] | null
+          transaction_id?: string | null
+          transaction_type?:
+            | Database["public"]["Enums"]["idia_transaction_type"]
+            | null
           user_id: string
         }
         Update: {
           amount?: number
+          amount_idia_usd?: number | null
           balance_after?: number
+          balance_idia_usd?: number | null
+          circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
+          destination_wallet?: string | null
           entry_type?: string
+          flare_tx_hash?: string | null
           id?: string
           metadata?: Json | null
           reference_id?: string | null
+          status?: Database["public"]["Enums"]["idia_transaction_status"] | null
+          transaction_id?: string | null
+          transaction_type?:
+            | Database["public"]["Enums"]["idia_transaction_type"]
+            | null
           user_id?: string
         }
         Relationships: []
@@ -6335,6 +6365,13 @@ export type Database = {
       }
     }
     Enums: {
+      idia_transaction_status: "PENDING" | "SETTLED" | "FAILED"
+      idia_transaction_type:
+        | "DATA_SALE"
+        | "DEPOSIT"
+        | "WITHDRAWAL"
+        | "FEE"
+        | "REWARD"
       user_role: "owner" | "manager" | "employee" | "warehouse_associate"
     }
     CompositeTypes: {
@@ -6463,6 +6500,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      idia_transaction_status: ["PENDING", "SETTLED", "FAILED"],
+      idia_transaction_type: [
+        "DATA_SALE",
+        "DEPOSIT",
+        "WITHDRAWAL",
+        "FEE",
+        "REWARD",
+      ],
       user_role: ["owner", "manager", "employee", "warehouse_associate"],
     },
   },

@@ -9,6 +9,7 @@ import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLef
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatIdiaUsd } from '@/lib/utils';
 import SynapseGasGauge from './SynapseGasGauge';
 
 const BASE_RATE = 0.75;
@@ -35,14 +36,12 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   const [purchaseMode, setPurchaseMode] = useState<'tier' | 'alacarte'>('tier');
   const [alacarteAmount, setAlacarteAmount] = useState('');
 
-  // Payment form fields (simulated)
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
   const currentTier = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
 
-  // Computed values based on mode
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
   const alacarteValid = alacarteUsd >= 10 && alacarteUsd <= 1000;
@@ -101,7 +100,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
 
       setStep('success');
       toast.success('Credits added successfully!', {
-        description: `${displayCredits.toLocaleString()} CRD added to your account.`,
+        description: `${formatIdiaUsd(displayCredits)} IDIA-USD added to your account.`,
       });
       await refreshBalance();
 
@@ -131,10 +130,10 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
-            {step === 'payment' ? 'Enter Payment Details' : step === 'processing' ? 'Processing...' : step === 'success' ? 'Purchase Complete' : 'Purchase Synapse Credits'}
+            {step === 'payment' ? 'Enter Payment Details' : step === 'processing' ? 'Processing...' : step === 'success' ? 'Purchase Complete' : 'Purchase IDIA-USD Credits'}
           </DialogTitle>
           <DialogDescription>
-            {step === 'payment' ? 'Securely enter your card details' : 'Fuel your data operations with Synapse Gas credits'}
+            {step === 'payment' ? 'Securely enter your card details' : 'Fuel your data operations with IDIA-USD credits'}
           </DialogDescription>
         </DialogHeader>
 
@@ -200,14 +199,14 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-sm text-foreground">{tier.name}</span>
-                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">${tier.rate.toFixed(2)} / CRD</span>
+                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">${tier.rate.toFixed(2)} / IDIA-USD</span>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="text-lg font-bold text-foreground font-mono">
-                                {tier.credits.toLocaleString()} <span className="text-xs text-muted-foreground font-sans">CRD</span>
+                                {formatIdiaUsd(tier.credits)}
                               </div>
                               <p className="text-xs text-muted-foreground">${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</p>
                             </div>
@@ -220,7 +219,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
               ) : (
                 <div className="space-y-4">
                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Custom Amount</h4>
-                  <p className="text-xs text-muted-foreground">Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/CRD.</p>
+                  <p className="text-xs text-muted-foreground">Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/IDIA-USD.</p>
                   <div className="space-y-2">
                     <Label>Purchase Amount</Label>
                     <div className="flex items-center gap-0">
@@ -241,7 +240,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                     )}
                     {alacarteValid && (
                       <p className="text-xs text-emerald-500">
-                        You will receive <span className="font-mono font-bold">{alacarteCredits.toLocaleString()}</span> CRD
+                        You will receive <span className="font-mono font-bold">{formatIdiaUsd(alacarteCredits)}</span> IDIA-USD
                       </p>
                     )}
                   </div>
@@ -253,16 +252,16 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Transaction Summary</h4>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Current Balance</span>
-                  <span className="text-foreground font-mono">{currentBalance.toLocaleString()} CRD</span>
+                  <span className="text-foreground font-mono">{formatIdiaUsd(currentBalance)} IDIA-USD</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credits to Add</span>
-                  <span className="text-emerald-500 font-mono">+{displayCredits.toLocaleString()} CRD</span>
+                  <span className="text-emerald-500 font-mono">+{formatIdiaUsd(displayCredits)} IDIA-USD</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Rate</span>
                   <span className="text-foreground font-mono">
-                    ${purchaseMode === 'alacarte' ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / CRD
+                    ${purchaseMode === 'alacarte' ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / IDIA-USD
                   </span>
                 </div>
                 {savings > 0 && (
@@ -292,7 +291,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 <div className="bg-muted/50 border border-border rounded-xl p-4 flex justify-between items-center">
                   <div>
                     <p className="text-sm text-muted-foreground">Purchasing</p>
-                    <p className="font-bold text-foreground">{displayCredits.toLocaleString()} CRD</p>
+                    <p className="font-bold text-foreground">{formatIdiaUsd(displayCredits)} IDIA-USD</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Total</p>
@@ -365,7 +364,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="text-foreground font-bold text-lg">Payment Successful!</p>
               <p className="text-muted-foreground text-sm">
-                {displayCredits.toLocaleString()} CRD have been added to your ledger.
+                {formatIdiaUsd(displayCredits)} IDIA-USD have been added to your ledger.
               </p>
             </div>
           )}
