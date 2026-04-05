@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,10 +8,12 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { CreditCard, Coins, Zap, ShieldCheck, TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react';
+import { CreditCard, Coins, Zap, ShieldCheck, TrendingUp, AlertTriangle, ArrowRight, Wallet } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { useBillingData } from '@/hooks/useBillingData';
+import { formatIdiaUsd } from '@/lib/utils';
+import WithdrawCryptoModal from '@/components/billing/WithdrawCryptoModal';
 
 const IndividualBilling = () => {
   return (
@@ -56,7 +59,7 @@ const IndividualBilling = () => {
             <div>
               <p className="text-sm font-medium text-foreground">Upgrade to Business Entity</p>
               <p className="text-xs text-muted-foreground">
-                Access Data Bundles, Synapse Credits, and Premier Filters.
+                Access Data Bundles, IDIA-USD Credits, and Premier Filters.
               </p>
             </div>
             <Button size="sm" className="gap-1.5" onClick={() => window.location.href = '/onboarding'}>
@@ -74,6 +77,7 @@ const BusinessBilling = () => {
   const navigate = useNavigate();
   const { balanceData, burnRate } = useSynapseCredits();
   const { subscriptionPlan, currentUsage, daysRemaining } = useBillingData();
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   const credits = balanceData?.available_credits ?? 0;
   const dailyBurn = burnRate?.daily_average ?? 0;
@@ -99,20 +103,20 @@ const BusinessBilling = () => {
         <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Credit Usage</span>
-            <span className="font-medium">{currentUsage.used.toLocaleString()} / {currentUsage.limit.toLocaleString()} CRD</span>
+            <span className="font-medium">{formatIdiaUsd(currentUsage.used)} / {formatIdiaUsd(currentUsage.limit)} IDIA-USD</span>
           </div>
           <Progress value={Math.min(usagePercent, 100)} className="h-2" />
         </CardContent>
       </Card>
 
-      {/* Synapse Credit Ledger */}
+      {/* IDIA-USD Credit Ledger */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-primary" />
-            Synapse Credit Ledger
+            IDIA-USD Credit Ledger
           </CardTitle>
-          <CardDescription>Real-time credit balance powered by the Synapse Engine.</CardDescription>
+          <CardDescription>Real-time credit balance · Backed 1:1 by USDC · Powered by Circle</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -120,9 +124,9 @@ const BusinessBilling = () => {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">Available Balance</p>
                 <p className={`text-2xl font-bold ${burnStatus === 'critical' ? 'text-destructive' : burnStatus === 'warning' ? 'text-orange-500' : 'text-foreground'}`}>
-                  {credits.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatIdiaUsd(credits)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">CRD</p>
+                <p className="text-xs text-muted-foreground mt-1">IDIA-USD</p>
               </CardContent>
             </Card>
             <Card className="border-border/50">
@@ -130,9 +134,9 @@ const BusinessBilling = () => {
                 <p className="text-xs text-muted-foreground">Daily Burn Rate</p>
                 <p className="text-2xl font-bold text-foreground flex items-center gap-1">
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  {dailyBurn.toFixed(1)}
+                  {formatIdiaUsd(dailyBurn)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">CRD / day</p>
+                <p className="text-xs text-muted-foreground mt-1">IDIA-USD / day</p>
               </CardContent>
             </Card>
             <Card className="border-border/50">
@@ -150,6 +154,10 @@ const BusinessBilling = () => {
             <Button size="sm" className="gap-1.5" onClick={() => navigate('/top-up')}>
               <Zap className="h-3.5 w-3.5" />
               Top Up Credits
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setWithdrawOpen(true)}>
+              <Wallet className="h-3.5 w-3.5" />
+              Withdraw to Crypto
             </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/billing')}>
               View Full Ledger
@@ -176,6 +184,8 @@ const BusinessBilling = () => {
           </div>
         </CardContent>
       </Card>
+
+      <WithdrawCryptoModal open={withdrawOpen} onOpenChange={setWithdrawOpen} />
     </div>
   );
 };

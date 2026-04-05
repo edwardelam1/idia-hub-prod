@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { formatIdiaUsd } from '@/lib/utils';
 
 interface BalanceData {
   wallet_address: string;
@@ -43,28 +45,30 @@ export const SynapseCreditsProvider = ({
     setError(null);
 
     try {
-      // Get latest balance from ledger
+      // Get latest balance from ledger - prefer balance_idia_usd, fallback to balance_after
       const { data: latestEntry, error: ledgerError } = await supabase
         .from('synapse_credit_ledger')
-        .select('balance_after, created_at')
+        .select('balance_after, balance_idia_usd, created_at')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (ledgerError) throw ledgerError;
 
-      const credits = latestEntry ? Number(latestEntry.balance_after) : 0;
+      const credits = latestEntry
+        ? Number(latestEntry.balance_idia_usd ?? latestEntry.balance_after)
+        : 0;
 
       // Calculate 30-day burn rate from deductions
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from('synapse_credit_ledger')
-        .select('amount')
+        .select('amount, amount_idia_usd')
         .eq('entry_type', 'deduction')
         .gte('created_at', thirtyDaysAgo);
 
       const totalDeductions = (deductions || []).reduce(
-        (sum, d) => sum + Math.abs(Number(d.amount)), 0
+        (sum, d) => sum + Math.abs(Number(d.amount_idia_usd ?? d.amount)), 0
       );
       const dailyAvg = totalDeductions / 30;
       
@@ -85,7 +89,7 @@ export const SynapseCreditsProvider = ({
       setBalanceData({
         wallet_address: walletAddress,
         available_credits: credits,
-        currency: 'SYNAPSE_GAS',
+        currency: 'IDIA-USD',
         last_updated: latestEntry?.created_at || new Date().toISOString(),
       });
     } catch {
@@ -112,11 +116,20 @@ export const SynapseCreditsProvider = ({
         },
         (payload) => {
           const newEntry = payload.new as any;
+          const newBalance = Number(newEntry.balance_idia_usd ?? newEntry.balance_after);
+          const txAmount = Number(newEntry.amount_idia_usd ?? newEntry.amount);
+
           setBalanceData(prev => prev ? {
             ...prev,
-            available_credits: Number(newEntry.balance_after),
+            available_credits: newBalance,
             last_updated: newEntry.created_at,
           } : prev);
+
+          // Toast notification for ledger updates
+          const sign = txAmount >= 0 ? '+' : '';
+          toast.info(`Ledger Updated: ${sign}${formatIdiaUsd(txAmount)}`, {
+            description: `New balance: ${formatIdiaUsd(newBalance)}`,
+          });
         }
       )
       .subscribe();

@@ -27,16 +27,17 @@ Deno.serve(async (req) => {
     // Get current balance
     const { data: lastEntry } = await supabase
       .from('synapse_credit_ledger')
-      .select('balance_after')
+      .select('balance_after, balance_idia_usd')
       .eq('user_id', user_id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const currentBalance = lastEntry?.balance_after ?? 0;
-    const newBalance = Number(currentBalance) + Number(credit_amount);
+    const currentBalance = Number(lastEntry?.balance_idia_usd ?? lastEntry?.balance_after ?? 0);
+    const newBalance = currentBalance + Number(credit_amount);
+    const txId = payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
 
-    // Insert deposit entry
+    // Insert deposit entry with both legacy and new columns
     const { data: entry, error } = await supabase
       .from('synapse_credit_ledger')
       .insert({
@@ -44,8 +45,13 @@ Deno.serve(async (req) => {
         entry_type: 'deposit',
         amount: credit_amount,
         balance_after: newBalance,
-        description: `Credit top-up: ${credit_amount} CRD ($${usd_amount} USD)`,
-        reference_id: payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`,
+        amount_idia_usd: credit_amount,
+        balance_idia_usd: newBalance,
+        transaction_id: txId,
+        transaction_type: 'DEPOSIT',
+        status: 'SETTLED',
+        description: `Credit top-up: ${Number(credit_amount).toFixed(4)} IDIA-USD ($${usd_amount} USD)`,
+        reference_id: txId,
         metadata: { usd_amount, payment_method: 'worldpay' },
       })
       .select()
@@ -60,7 +66,7 @@ Deno.serve(async (req) => {
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (err) {
+  } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

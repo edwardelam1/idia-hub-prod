@@ -1,6 +1,7 @@
 import { Database, Zap, RefreshCw, AlertCircle, TrendingDown } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { Button } from '@/components/ui/button';
+import { formatIdiaUsd } from '@/lib/utils';
 
 const SynapseGasGauge = () => {
   const { balanceData, burnRate, isLoading, error, refreshBalance } = useSynapseCredits();
@@ -9,7 +10,7 @@ const SynapseGasGauge = () => {
     return (
       <div className="flex flex-col items-center justify-center p-6 bg-card rounded-xl border border-border animate-pulse w-full max-w-sm">
         <RefreshCw className="w-8 h-8 text-primary animate-spin mb-3" />
-        <p className="text-muted-foreground font-mono text-sm">Querying Synapse Ledger...</p>
+        <p className="text-muted-foreground font-mono text-sm">Querying IDIA-USD Ledger...</p>
       </div>
     );
   }
@@ -36,7 +37,7 @@ const SynapseGasGauge = () => {
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
           <Database className="w-5 h-5 text-primary" />
-          <h3 className="text-foreground font-semibold tracking-wide text-sm uppercase">Synapse Gas</h3>
+          <h3 className="text-foreground font-semibold tracking-wide text-sm uppercase">IDIA-USD Balance</h3>
         </div>
         <Button
           variant="ghost"
@@ -51,17 +52,19 @@ const SynapseGasGauge = () => {
 
       <div className="flex items-baseline gap-2 mb-1">
         <span className={`text-4xl font-bold tracking-tight ${statusColor}`}>
-          {credits.toFixed(2)}
+          {formatIdiaUsd(credits)}
         </span>
-        <span className="text-muted-foreground font-mono text-sm">CRD</span>
       </div>
+
+      {/* Backed by USDC subtitle */}
+      <p className="text-xs text-muted-foreground mt-1">Backed 1:1 by USDC · Powered by Circle</p>
 
       {/* Burn Rate */}
       {dailyAvg > 0 && (
-        <div className="flex items-center gap-1.5 mt-2">
+        <div className="flex items-center gap-1.5 mt-3">
           <TrendingDown className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground font-mono">
-            ~{dailyAvg.toFixed(1)} CRD/day burn rate
+            ~{formatIdiaUsd(dailyAvg)}/day burn rate
           </span>
           {credits > 0 && dailyAvg > 0 && (
             <span className="text-xs text-muted-foreground ml-1">
