@@ -1,126 +1,130 @@
 
 
-# Plan: Synthetic Peg IDIA-USD Credit System
+# Plan: Correct Hub to "Synapse Credits" Architecture (Undo IDIA-USD Rebrand)
 
-This is a large architectural upgrade that migrates the existing CRD-based credit system to a proper IDIA-USD synthetic peg model with Circle USDC backing, a crypto withdrawal off-ramp, and a data sale revenue distribution engine with Flare Network receipts.
+The previous implementation incorrectly rebranded Hub UI elements to "IDIA-USD". The Hub is a B2B product and must use **"Synapse Credits"** exclusively. IDIA-USD is for the Life app (B2C) only.
 
----
-
-## Part 1: Database Migration — Immutable Ledger v2
-
-The existing `synapse_credit_ledger` table has columns: `amount`, `balance_after`, `entry_type` (text), `description`, `reference_id`, `metadata`, `user_id`. We need to evolve this schema.
-
-**Migration SQL:**
-
-1. Create enums:
-   - `idia_transaction_type` = `('DATA_SALE', 'DEPOSIT', 'WITHDRAWAL', 'FEE', 'REWARD')`
-   - `idia_transaction_status` = `('PENDING', 'SETTLED', 'FAILED')`
-
-2. Add new columns to `synapse_credit_ledger`:
-   - `transaction_id` (TEXT, UNIQUE) — idempotency key
-   - `transaction_type` (idia_transaction_type) — defaults to `'DEPOSIT'`
-   - `amount_idia_usd` (DECIMAL(10,4)) — the IDIA-USD amount (4 decimal precision)
-   - `balance_idia_usd` (DECIMAL(10,4)) — running balance after this tx
-   - `status` (idia_transaction_status) — defaults to `'SETTLED'`
-   - `destination_wallet` (TEXT, nullable) — for withdrawals
-   - `circle_transfer_id` (TEXT, nullable) — Circle API reference
-   - `flare_tx_hash` (TEXT, nullable) — Flare Network receipt hash
-
-3. Backfill existing rows: map `entry_type` values to new enums, copy `amount` -> `amount_idia_usd`, `balance_after` -> `balance_idia_usd`, set `status` = `'SETTLED'`, generate `transaction_id` from `reference_id` or `id`.
-
-4. Add index on `(user_id, created_at DESC)` for fast balance lookups.
-
-5. RLS: Users can only `SELECT` their own rows (`auth.uid() = user_id`). Service role handles inserts.
+This plan creates a new append-only `hub_synapse_ledger` table, a `get_hub_balance()` DB function, updates all UI labels, implements the settlement flow, and changes the revenue split to 60/30/10.
 
 ---
 
-## Part 2: Formatting Utilities & Context Updates
+## Part 1: Database Migration — `hub_synapse_ledger` + Balance Function
+
+Create a new migration:
+
+- **New table `hub_synapse_ledger`** (append-only, NO updates ever):
+  - `id` UUID PK
+  - `user_id` UUID (references auth.users)
+  - `amount_credits` DECIMAL(10,4)
+  - `entry_type` TEXT (`TOP_UP`, `CONSUMPTION`, `SETTLEMENT`)
+  - `status` TEXT (`PENDING`, `SETTLED`, `FAILED`)
+  - `reference_id` UUID nullable (links settlement rows to pending rows)
+  - `metadata` JSONB
+  - `created_at` TIMESTAMPTZ default now()
+  - Index on `(user_id, created_at DESC)`
+  - RLS: users can SELECT own rows only
+
+- **Function `get_hub_balance(uid UUID)`**: Returns `SUM(amount_credits)` from `hub_synapse_ledger` WHERE `user_id = uid` AND `status != 'FAILED'`. This is the ONLY way to get balance.
+
+- **RLS policy**: Deny UPDATE/DELETE entirely. Only INSERT via service role.
+
+---
+
+## Part 2: Formatting Utility
 
 ### `src/lib/utils.ts`
-- Add `formatIdiaUsd(amount: number): string` — formats to exactly 4 decimal places with `$` prefix (e.g., `$5.0000`).
-
-### `src/contexts/SynapseCreditsContext.tsx`
-- Rename internal references from CRD to IDIA-USD.
-- Fetch latest `balance_idia_usd` from ledger (fall back to `balance_after` for compatibility).
-- Update Realtime subscription to read `balance_idia_usd` from new INSERT payloads.
-- On Realtime INSERT, trigger a toast: `"Ledger Updated: +$X.XXXX"` (or negative for withdrawals).
-- Expose `currency: 'IDIA-USD'` instead of `'SYNAPSE_GAS'`.
+- Add `formatCredits(amount: number): string` — formats to 4 decimal places (e.g., `1,000.0000 CR`). Keep `formatIdiaUsd` for backward compat but the Hub UI will use `formatCredits`.
 
 ---
 
-## Part 3: Wallet UI Updates
+## Part 3: Context Update — `SynapseCreditsContext.tsx`
 
-### `src/components/billing/SynapseGasGauge.tsx`
-- Change header from "Synapse Gas" to "IDIA-USD Balance".
-- Replace "CRD" suffix with "IDIA-USD".
-- Use `formatIdiaUsd()` for all displayed amounts.
-- Add subtitle beneath balance: `"Backed 1:1 by USDC · Powered by Circle"` in muted text.
-
-### `src/components/settings/SettingsBilling.tsx`
-- Update BusinessBilling card labels from "CRD" to "IDIA-USD".
-- Apply 4-decimal formatting to all balance displays.
-- Add "Powered by Circle USDC" descriptor to the Synapse Credit Ledger card.
-
-### `src/components/billing/SynapsePurchaseModal.tsx` & `SynapseTopUp.tsx`
-- Update all "CRD" labels to "IDIA-USD".
-- Apply `formatIdiaUsd()` formatting throughout.
+- Switch from reading `synapse_credit_ledger` to calling `get_hub_balance` RPC for balance.
+- Update Realtime subscription to listen on `hub_synapse_ledger` INSERT events.
+- Toast messages use "Synapse Credits" terminology (e.g., "Ledger Updated: +1,000.0000 CR").
+- Expose `currency: 'SYNAPSE_CREDITS'`.
 
 ---
 
-## Part 4: Withdrawal Off-Ramp
+## Part 4: UI Rebrand — Replace ALL "IDIA-USD" with "Synapse Credits"
 
-### Edge Function: `supabase/functions/withdraw-to-crypto/index.ts`
-- Accepts `{ user_id, amount, destination_address }`.
-- Validates balance >= amount from latest ledger row.
-- Inserts a `WITHDRAWAL` row with negative `amount_idia_usd`, status `PENDING`.
-- Makes POST to Circle `/v1/transfers` API using `CIRCLE_API_KEY` and `CIRCLE_MASTER_WALLET_ID` secrets.
-- On success: updates ledger row status to `SETTLED`, stores `circle_transfer_id`.
-- On failure: inserts compensatory `DEPOSIT` row to refund, returns error.
-- **Secrets needed**: `CIRCLE_API_KEY`, `CIRCLE_MASTER_WALLET_ID` (must be added).
+### `SynapseGasGauge.tsx`
+- Header: "IDIA-USD Balance" → "Synapse Credit Balance"
+- Loading text: "Querying IDIA-USD Ledger..." → "Querying Synapse Ledger..."
+- Subtitle: "Backed 1:1 by USDC · Powered by Circle" → "Held in FBO custody at Airwallex"
+- Use `formatCredits()` instead of `formatIdiaUsd()`
+- Burn rate label: "IDIA-USD / day" → "CR / day"
 
-### Withdrawal UI: New modal component `src/components/billing/WithdrawCryptoModal.tsx`
-- Amount input (validated against balance, min $1.0000).
-- Web3 wallet address input (validated for 0x format, 42 chars).
-- Summary showing amount, network fee estimate, net amount.
-- Submit button triggers `withdraw-to-crypto` edge function.
-- Accessible from the Wallet/Billing UI via a "Withdraw to Crypto" button.
+### `SettingsBilling.tsx`
+- Card title: "IDIA-USD Credit Ledger" → "Synapse Credit Ledger"
+- Description: replace Circle/USDC references with "Secure FBO account at Airwallex"
+- All balance labels: "IDIA-USD" → "Synapse Credits" / "CR"
+- Remove "Withdraw to Crypto" button (that's a Life app feature, not Hub)
+- Remove `WithdrawCryptoModal` import/usage from this file
+
+### `SynapsePurchaseModal.tsx`
+- Title: "Purchase IDIA-USD Credits" → "Purchase Synapse Credits"
+- All "IDIA-USD" labels → "Synapse Credits" / "CR"
+- Rate labels: "$ / IDIA-USD" → "$ / CR"
+- Success toast: "IDIA-USD added" → "Synapse Credits added"
+- Footer: Add "Funds held in secure FBO account at Airwallex"
+- Use `formatCredits()` throughout
+
+### `SynapseTopUp.tsx`
+- Title: "Fund IDIA-USD Wallet" → "Fund Synapse Credits"
+- Description: replace Circle/USDC text with Airwallex FBO text
+- All "IDIA-USD" → "CR" / "Synapse Credits"
+- Use `formatCredits()` throughout
+
+### `BestFriendPage.tsx`
+- Badge: "1 CRD deducted" → "1 CR deducted"
+- Error messages: "1 CRD required" → "1 Synapse Credit required"
+
+### `WithdrawCryptoModal.tsx`
+- Keep the component (it's for Circle/USDC off-ramp, used from Life app context), but remove it from `SettingsBilling.tsx` Hub context.
 
 ---
 
-## Part 5: Data Sale Ingestion Engine
+## Part 5: Edge Function — `execute-hub-query`
 
-### Edge Function: `supabase/functions/process-data-sale/index.ts`
-- Triggered by Worldpay webhook (payment success).
-- **Revenue Split** (100% accounted):
-  - 30% → User Liquidity Pool (distributed to data contributors)
-  - 60% → IDIA Revenue (platform)
-  - 5% → Burn (deflationary mechanism)
-  - 5% → Community Pool
-- For each contributing user in the bundle, calculate their weighted share of the 30% pool.
-- Insert `DATA_SALE` transaction into each user's `synapse_credit_ledger` with their IDIA-USD amount.
-- **Flare Network Receipt**: Convert the user's earned fiat to 18-decimal BigInt for Flare Coston2 Testnet (`amount * 10^18`). Prepare transaction payload for AWS KMS signing, transferring from Master Treasury. Respect the 1 Billion token hardcap.
-- Store the `flare_tx_hash` on the ledger row.
-- **Secrets needed**: `FLARE_RPC_URL`, `AWS_KMS_KEY_ID`, `IDIA_TREASURY_ADDRESS` (must be added).
+Create new edge function `supabase/functions/execute-hub-query/index.ts`:
+
+- Accepts `{ user_id, query_cost_credits, query_type, bundle_id }`.
+- **Step 1**: INSERT a `CONSUMPTION` row with `amount_credits: -query_cost_credits`, `status: 'PENDING'`. Returns the row ID.
+- **Step 2**: Simulate Synapse Engine confirmation. INSERT a `SETTLEMENT` row with `amount_credits: 0`, `status: 'SETTLED'`, `reference_id` pointing to the PENDING row.
+- **Metadata logging (60/30/10 War Chest)**: The SETTLEMENT row's metadata records:
+  - `corporate_revenue`: 60% of credits consumed (recognized revenue)
+  - `user_liquidity_pool`: 30% (to be distributed as IDIA-USD in Life app)
+  - `ecosystem_war_chest`: 10% (escrowed for Phase 2)
+  - `fbo_routing`: "JPM FBO" reference
+
+### Update `process-data-sale/index.ts`
+- Change the split from 60/30/5/5 to **60/30/10**:
+  - 60% IDIA Corporate Revenue
+  - 30% User Liquidity Pool
+  - 10% Ecosystem War Chest
+- Remove the `BURN` and `COMMUNITY_POOL` constants.
+
+---
+
+## Part 6: Update `top-up-credits` Edge Function
+
+- Update to write to `hub_synapse_ledger` instead of (or in addition to) `synapse_credit_ledger` for Hub top-ups.
+- Entry type: `TOP_UP`, status: `SETTLED`.
 
 ---
 
 ## Files Modified
-1. **New migration** — schema evolution for synapse_credit_ledger
-2. `src/lib/utils.ts` — add `formatIdiaUsd()`
-3. `src/contexts/SynapseCreditsContext.tsx` — IDIA-USD context + toast on realtime
-4. `src/components/billing/SynapseGasGauge.tsx` — rebrand to IDIA-USD
-5. `src/components/settings/SettingsBilling.tsx` — IDIA-USD labels
-6. `src/components/billing/SynapsePurchaseModal.tsx` — IDIA-USD labels
-7. `src/components/billing/SynapseTopUp.tsx` — IDIA-USD labels
-8. **New**: `src/components/billing/WithdrawCryptoModal.tsx` — withdrawal UI
-9. **New**: `supabase/functions/withdraw-to-crypto/index.ts` — Circle off-ramp
-10. **New**: `supabase/functions/process-data-sale/index.ts` — revenue split + Flare receipt
-11. `supabase/functions/top-up-credits/index.ts` — update to use new columns
 
-## Secrets Required (to be added before implementation)
-- `CIRCLE_API_KEY` — Circle API authentication
-- `CIRCLE_MASTER_WALLET_ID` — Source wallet for USDC transfers
-- `FLARE_RPC_URL` — Flare Coston2 Testnet RPC endpoint
-- `AWS_KMS_KEY_ID` — KMS key for signing Flare transactions
-- `IDIA_TREASURY_ADDRESS` — Master treasury contract address on Flare
+1. **New migration** — `hub_synapse_ledger` table + `get_hub_balance` function
+2. `src/lib/utils.ts` — add `formatCredits()`
+3. `src/contexts/SynapseCreditsContext.tsx` — switch to `hub_synapse_ledger` + RPC balance
+4. `src/components/billing/SynapseGasGauge.tsx` — "Synapse Credits" + Airwallex
+5. `src/components/settings/SettingsBilling.tsx` — "Synapse Credits", remove Withdraw
+6. `src/components/billing/SynapsePurchaseModal.tsx` — "Synapse Credits" labels
+7. `src/components/billing/SynapseTopUp.tsx` — "Synapse Credits" labels
+8. `src/pages/BestFriendPage.tsx` — "CR" badge labels
+9. **New**: `supabase/functions/execute-hub-query/index.ts` — settlement flow + 60/30/10 split
+10. `supabase/functions/process-data-sale/index.ts` — 60/30/10 split
+11. `supabase/functions/top-up-credits/index.ts` — write to `hub_synapse_ledger`
 
