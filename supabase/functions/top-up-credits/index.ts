@@ -24,7 +24,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get current balance
+    const txId = payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
+
+    // Write to hub_synapse_ledger (append-only, SUM-based balance)
+    const { data: entry, error } = await supabase
+      .from('hub_synapse_ledger')
+      .insert({
+        user_id,
+        amount_credits: Number(credit_amount),
+        entry_type: 'TOP_UP',
+        status: 'SETTLED',
+        metadata: {
+          usd_amount,
+          payment_method: 'worldpay',
+          payment_reference: txId,
+        },
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Also write to legacy synapse_credit_ledger for backward compatibility
     const { data: lastEntry } = await supabase
       .from('synapse_credit_ledger')
       .select('balance_after, balance_idia_usd')
@@ -35,10 +56,8 @@ Deno.serve(async (req) => {
 
     const currentBalance = Number(lastEntry?.balance_idia_usd ?? lastEntry?.balance_after ?? 0);
     const newBalance = currentBalance + Number(credit_amount);
-    const txId = payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
 
-    // Insert deposit entry with both legacy and new columns
-    const { data: entry, error } = await supabase
+    await supabase
       .from('synapse_credit_ledger')
       .insert({
         user_id,
@@ -50,18 +69,18 @@ Deno.serve(async (req) => {
         transaction_id: txId,
         transaction_type: 'DEPOSIT',
         status: 'SETTLED',
-        description: `Credit top-up: ${Number(credit_amount).toFixed(4)} IDIA-USD ($${usd_amount} USD)`,
+        description: `Credit top-up: ${Number(credit_amount).toFixed(4)} CR ($${usd_amount} USD)`,
         reference_id: txId,
         metadata: { usd_amount, payment_method: 'worldpay' },
-      })
-      .select()
-      .single();
+      });
 
-    if (error) throw error;
+    // Get new balance from hub_synapse_ledger via RPC
+    const { data: hubBalance } = await supabase
+      .rpc('get_hub_balance', { uid: user_id });
 
     return new Response(JSON.stringify({
       success: true,
-      new_balance: newBalance,
+      new_balance: Number(hubBalance ?? newBalance),
       entry_id: entry.id,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
