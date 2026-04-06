@@ -2293,6 +2293,39 @@ export type Database = {
         }
         Relationships: []
       }
+      hub_synapse_ledger: {
+        Row: {
+          amount_credits: number
+          created_at: string
+          entry_type: string
+          id: string
+          metadata: Json | null
+          reference_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount_credits?: number
+          created_at?: string
+          entry_type: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount_credits?: number
+          created_at?: string
+          entry_type?: string
+          id?: string
+          metadata?: Json | null
+          reference_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       idia_payments: {
         Row: {
           amount_idia_usd: number
@@ -6287,6 +6320,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_hub_balance: { Args: { uid: string }; Returns: number }
       get_user_business_access: {
         Args: { p_user_id: string }
         Returns: {

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { formatIdiaUsd } from '@/lib/utils';
+import { formatCredits } from '@/lib/utils';
 
 interface BalanceData {
   wallet_address: string;
@@ -45,30 +45,40 @@ export const SynapseCreditsProvider = ({
     setError(null);
 
     try {
-      // Get latest balance from ledger - prefer balance_idia_usd, fallback to balance_after
-      const { data: latestEntry, error: ledgerError } = await supabase
-        .from('synapse_credit_ledger')
-        .select('balance_after, balance_idia_usd, created_at')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Use get_hub_balance RPC for SUM-based balance
+      const userId = user?.user_id;
+      let credits = 0;
 
-      if (ledgerError) throw ledgerError;
+      if (userId) {
+        const { data: balanceResult, error: rpcError } = await supabase
+          .rpc('get_hub_balance', { uid: userId });
 
-      const credits = latestEntry
-        ? Number(latestEntry.balance_idia_usd ?? latestEntry.balance_after)
-        : 0;
+        if (rpcError) throw rpcError;
+        credits = Number(balanceResult ?? 0);
+      } else {
+        // Fallback: read latest entry from hub_synapse_ledger
+        const { data: latestEntry, error: ledgerError } = await supabase
+          .from('hub_synapse_ledger')
+          .select('amount_credits, created_at')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      // Calculate 30-day burn rate from deductions
+        if (ledgerError) throw ledgerError;
+        credits = latestEntry ? Number(latestEntry.amount_credits) : 0;
+      }
+
+      // Calculate 30-day burn rate from consumption entries
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
-        .from('synapse_credit_ledger')
-        .select('amount, amount_idia_usd')
-        .eq('entry_type', 'deduction')
+        .from('hub_synapse_ledger')
+        .select('amount_credits')
+        .eq('entry_type', 'CONSUMPTION')
+        .neq('status', 'FAILED')
         .gte('created_at', thirtyDaysAgo);
 
       const totalDeductions = (deductions || []).reduce(
-        (sum, d) => sum + Math.abs(Number(d.amount_idia_usd ?? d.amount)), 0
+        (sum, d) => sum + Math.abs(Number(d.amount_credits)), 0
       );
       const dailyAvg = totalDeductions / 30;
       
@@ -89,46 +99,42 @@ export const SynapseCreditsProvider = ({
       setBalanceData({
         wallet_address: walletAddress,
         available_credits: credits,
-        currency: 'IDIA-USD',
-        last_updated: latestEntry?.created_at || new Date().toISOString(),
+        currency: 'SYNAPSE_CREDITS',
+        last_updated: new Date().toISOString(),
       });
     } catch {
       setError("Failed to verify ledger balance. Synapse Engine unreachable.");
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress]);
+  }, [walletAddress, user?.user_id]);
 
   useEffect(() => {
     fetchLedgerBalance();
   }, [fetchLedgerBalance]);
 
-  // Realtime subscription on synapse_credit_ledger
+  // Realtime subscription on hub_synapse_ledger
   useEffect(() => {
     const channel = supabase
-      .channel('synapse-credit-realtime')
+      .channel('hub-synapse-ledger-realtime')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'synapse_credit_ledger',
+          table: 'hub_synapse_ledger',
         },
         (payload) => {
           const newEntry = payload.new as any;
-          const newBalance = Number(newEntry.balance_idia_usd ?? newEntry.balance_after);
-          const txAmount = Number(newEntry.amount_idia_usd ?? newEntry.amount);
+          const txAmount = Number(newEntry.amount_credits);
 
-          setBalanceData(prev => prev ? {
-            ...prev,
-            available_credits: newBalance,
-            last_updated: newEntry.created_at,
-          } : prev);
+          // Refresh balance via RPC after any ledger change
+          fetchLedgerBalance();
 
           // Toast notification for ledger updates
           const sign = txAmount >= 0 ? '+' : '';
-          toast.info(`Ledger Updated: ${sign}${formatIdiaUsd(txAmount)}`, {
-            description: `New balance: ${formatIdiaUsd(newBalance)}`,
+          toast.info(`Ledger Updated: ${sign}${formatCredits(txAmount)}`, {
+            description: `Entry type: ${newEntry.entry_type} · Status: ${newEntry.status}`,
           });
         }
       )
@@ -137,7 +143,7 @@ export const SynapseCreditsProvider = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.user_id]);
+  }, [user?.user_id, fetchLedgerBalance]);
 
   return (
     <SynapseCreditsContext.Provider value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchLedgerBalance }}>

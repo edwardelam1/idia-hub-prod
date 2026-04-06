@@ -240,7 +240,7 @@ const BestFriendPage = () => {
           >
             <Search className="h-3 w-3" />
             Marketplace Search
-            {marketplaceMode && <span className="text-[10px] opacity-75">(1 CRD/search)</span>}
+            {marketplaceMode && <span className="text-[10px] opacity-75">(1 CR/search)</span>}
           </button>
           {!marketplaceMode && (
             <span className="text-[10px] text-muted-foreground">or type <code className="bg-muted px-1 py-0.5 rounded text-[10px]">@search marketplace</code></span>
