@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { fetchApi } from '@/lib/api';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { toast } from '@/hooks/use-toast';
-import { formatIdiaUsd } from '@/lib/utils';
+import { formatCredits } from '@/lib/utils';
 
 interface PricingTier {
   crd: number;
@@ -74,7 +74,7 @@ const SynapseTopUp = () => {
       } else {
         toast({
           title: 'Worldpay Session Initialized (Mock)',
-          description: `Session ${response.session_id} created for ${formatIdiaUsd(displayCredits)} IDIA-USD ($${usdAmount.toLocaleString()}).`,
+          description: `Session ${response.session_id} created for ${formatCredits(displayCredits)} ($${usdAmount.toLocaleString()}).`,
         });
       }
     } catch (err: any) {
@@ -89,10 +89,10 @@ const SynapseTopUp = () => {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Zap className="w-6 h-6 text-primary" />
-          Fund IDIA-USD Wallet
+          Fund Synapse Credits
         </h1>
         <p className="text-muted-foreground mt-2">
-          Purchase IDIA-USD credits to execute data queries and fund Liability Shield protocol transfers. Backed 1:1 by USDC · Powered by Circle. Larger tranches unlock lower per-credit rates.
+          Purchase Synapse Credits to execute data queries and fund Liability Shield protocol transfers. Funds held in secure FBO account at Airwallex. Larger tranches unlock lower per-credit rates.
         </p>
       </div>
 
@@ -152,14 +152,14 @@ const SynapseTopUp = () => {
                           </div>
                           <span className="text-foreground font-semibold">{tier.label}</span>
                           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
-                            ${tier.rate.toFixed(2)} / IDIA-USD
+                            ${tier.rate.toFixed(2)} / CR
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground ml-7">{tier.description}</p>
                       </div>
                       <div className="text-left sm:text-right ml-7 sm:ml-0">
                         <div className="text-2xl font-bold text-foreground font-mono">
-                          {formatIdiaUsd(tier.crd)}
+                          {formatCredits(tier.crd)}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
@@ -174,7 +174,7 @@ const SynapseTopUp = () => {
             <div className="space-y-4 p-5 rounded-xl border-2 border-border bg-card">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Custom Amount</h2>
               <p className="text-sm text-muted-foreground">
-                Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/IDIA-USD (no volume discount).
+                Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/CR (no volume discount).
               </p>
               <div className="space-y-2">
                 <Label>Purchase Amount</Label>
@@ -196,7 +196,7 @@ const SynapseTopUp = () => {
                 )}
                 {alacarteValid && (
                   <p className="text-sm text-emerald-400 font-medium">
-                    You will receive <span className="font-mono font-bold">{formatIdiaUsd(alacarteCredits)}</span> IDIA-USD
+                    You will receive <span className="font-mono font-bold">{formatCredits(alacarteCredits)}</span>
                   </p>
                 )}
               </div>
@@ -210,17 +210,17 @@ const SynapseTopUp = () => {
 
           <div className="flex justify-between text-sm mb-4">
             <span className="text-muted-foreground">Current Balance</span>
-            <span className="text-foreground font-mono">{formatIdiaUsd(currentBalance)} IDIA-USD</span>
+            <span className="text-foreground font-mono">{formatCredits(currentBalance)}</span>
           </div>
 
           <div className="flex justify-between text-sm mb-4">
             <span className="text-muted-foreground">Credits to Add</span>
-            <span className="text-emerald-400 font-mono">+{formatIdiaUsd(displayCredits)} IDIA-USD</span>
+            <span className="text-emerald-400 font-mono">+{formatCredits(displayCredits)}</span>
           </div>
 
           <div className="flex justify-between text-sm mb-4">
             <span className="text-muted-foreground">Effective Rate</span>
-            <span className="text-foreground font-mono">${effectiveRate.toFixed(2)} / IDIA-USD</span>
+            <span className="text-foreground font-mono">${effectiveRate.toFixed(2)} / CR</span>
           </div>
 
           {savings > 0 && (
@@ -266,7 +266,7 @@ const SynapseTopUp = () => {
           </div>
           <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <CreditCard className="w-4 h-4" />
-            <span>Corporate Cards & ACH Accepted</span>
+            <span>Funds held in secure FBO account at Airwallex</span>
           </div>
         </div>
       </div>

@@ -72,8 +72,8 @@ const BestFriendPage = () => {
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
         if (available < 1) {
-          toast.error('Insufficient Synapse Credits (1 CRD required for marketplace search)');
-          setConversation(prev => [...prev, { role: 'error', content: 'Insufficient Synapse Credits. You need at least 1 CRD to search the marketplace.' }]);
+          toast.error('Insufficient Synapse Credits (1 CR required for marketplace search)');
+          setConversation(prev => [...prev, { role: 'error', content: 'Insufficient Synapse Credits. You need at least 1 Synapse Credit to search the marketplace.' }]);
           setIsLoading(false);
           return;
         }
@@ -182,7 +182,7 @@ const BestFriendPage = () => {
                       <div className="mt-1 flex items-center gap-1">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />
-                          1 CRD deducted
+                          1 CR deducted
                         </Badge>
                       </div>
                     )}
@@ -240,7 +240,7 @@ const BestFriendPage = () => {
           >
             <Search className="h-3 w-3" />
             Marketplace Search
-            {marketplaceMode && <span className="text-[10px] opacity-75">(1 CRD/search)</span>}
+            {marketplaceMode && <span className="text-[10px] opacity-75">(1 CR/search)</span>}
           </button>
           {!marketplaceMode && (
             <span className="text-[10px] text-muted-foreground">or type <code className="bg-muted px-1 py-0.5 rounded text-[10px]">@search marketplace</code></span>
