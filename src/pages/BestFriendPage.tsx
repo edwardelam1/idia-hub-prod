@@ -72,8 +72,8 @@ const BestFriendPage = () => {
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
         if (available < 1) {
-          toast.error('Insufficient Synapse Credits (1 CRD required for marketplace search)');
-          setConversation(prev => [...prev, { role: 'error', content: 'Insufficient Synapse Credits. You need at least 1 CRD to search the marketplace.' }]);
+          toast.error('Insufficient Synapse Credits (1 CR required for marketplace search)');
+          setConversation(prev => [...prev, { role: 'error', content: 'Insufficient Synapse Credits. You need at least 1 Synapse Credit to search the marketplace.' }]);
           setIsLoading(false);
           return;
         }
