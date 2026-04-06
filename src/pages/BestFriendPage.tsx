@@ -182,7 +182,7 @@ const BestFriendPage = () => {
                       <div className="mt-1 flex items-center gap-1">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />
-                          1 CRD deducted
+                          1 CR deducted
                         </Badge>
                       </div>
                     )}
