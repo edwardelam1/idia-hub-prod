@@ -14,116 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      affiliate_campaigns: {
-        Row: {
-          budget_allocation: number | null
-          business_id: string
-          campaign_name: string
-          campaign_type: string
-          commission_rate: number | null
-          created_at: string | null
-          created_by: string | null
-          end_date: string | null
-          id: string
-          start_date: string
-          status: string | null
-          target_audience: Json | null
-          updated_at: string | null
-        }
-        Insert: {
-          budget_allocation?: number | null
-          business_id: string
-          campaign_name: string
-          campaign_type?: string
-          commission_rate?: number | null
-          created_at?: string | null
-          created_by?: string | null
-          end_date?: string | null
-          id?: string
-          start_date: string
-          status?: string | null
-          target_audience?: Json | null
-          updated_at?: string | null
-        }
-        Update: {
-          budget_allocation?: number | null
-          business_id?: string
-          campaign_name?: string
-          campaign_type?: string
-          commission_rate?: number | null
-          created_at?: string | null
-          created_by?: string | null
-          end_date?: string | null
-          id?: string
-          start_date?: string
-          status?: string | null
-          target_audience?: Json | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "affiliate_campaigns_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      affiliate_transactions: {
-        Row: {
-          campaign_id: string
-          commission_amount: number | null
-          created_at: string | null
-          creator_id: string
-          id: string
-          metadata: Json | null
-          tracking_code: string | null
-          transaction_type: string
-          transaction_value: number | null
-          user_id: string | null
-        }
-        Insert: {
-          campaign_id: string
-          commission_amount?: number | null
-          created_at?: string | null
-          creator_id: string
-          id?: string
-          metadata?: Json | null
-          tracking_code?: string | null
-          transaction_type: string
-          transaction_value?: number | null
-          user_id?: string | null
-        }
-        Update: {
-          campaign_id?: string
-          commission_amount?: number | null
-          created_at?: string | null
-          creator_id?: string
-          id?: string
-          metadata?: Json | null
-          tracking_code?: string | null
-          transaction_type?: string
-          transaction_value?: number | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "affiliate_transactions_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "affiliate_campaigns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "affiliate_transactions_creator_id_fkey"
-            columns: ["creator_id"]
-            isOneToOne: false
-            referencedRelation: "creator_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       ar_campaign_performance: {
         Row: {
           business_id: string
@@ -1630,6 +1520,35 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      device_routing: {
+        Row: {
+          created_at: string | null
+          device_os: string | null
+          platform_guid: string
+          push_token: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_os?: string | null
+          platform_guid: string
+          push_token: string
+        }
+        Update: {
+          created_at?: string | null
+          device_os?: string | null
+          platform_guid?: string
+          push_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_routing_platform_guid_fkey"
+            columns: ["platform_guid"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["platform_guid"]
+          },
+        ]
       }
       economic_impact_metrics: {
         Row: {
@@ -3752,20 +3671,15 @@ export type Database = {
         Row: {
           account_type: string | null
           activity_preferences: string[] | null
-          address: Json | null
           age: number | null
           ai_assistant_name: string | null
-          aliases: string[] | null
           available_credit_line: number | null
           avatar_url: string | null
           bio: string | null
           created_at: string | null
-          date_of_birth: string | null
           display_name: string | null
           document_type: string | null
           ein: string | null
-          first_name: string | null
-          full_legal_address: Json | null
           gender: string | null
           health_goals: string[] | null
           id: string
@@ -3776,21 +3690,14 @@ export type Database = {
           kyc_submitted_at: string | null
           kyc_tier: number
           kyc_verified_at: string | null
-          last_name: string | null
           liveness_verified: boolean
           location: string | null
-          middle_name: string | null
           motivational_phase: string | null
           occupation: string | null
-          phone: string | null
-          phone_number: string | null
+          platform_guid: string
           quiet_time_enabled: boolean | null
           quiet_time_end: string | null
           quiet_time_start: string | null
-          ssn_hash: string | null
-          ssn_last_four: string | null
-          ssn_last4: string | null
-          suffix: string | null
           trust_score: number | null
           updated_at: string | null
           user_id: string
@@ -3798,20 +3705,15 @@ export type Database = {
         Insert: {
           account_type?: string | null
           activity_preferences?: string[] | null
-          address?: Json | null
           age?: number | null
           ai_assistant_name?: string | null
-          aliases?: string[] | null
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
           created_at?: string | null
-          date_of_birth?: string | null
           display_name?: string | null
           document_type?: string | null
           ein?: string | null
-          first_name?: string | null
-          full_legal_address?: Json | null
           gender?: string | null
           health_goals?: string[] | null
           id?: string
@@ -3822,21 +3724,14 @@ export type Database = {
           kyc_submitted_at?: string | null
           kyc_tier?: number
           kyc_verified_at?: string | null
-          last_name?: string | null
           liveness_verified?: boolean
           location?: string | null
-          middle_name?: string | null
           motivational_phase?: string | null
           occupation?: string | null
-          phone?: string | null
-          phone_number?: string | null
+          platform_guid?: string
           quiet_time_enabled?: boolean | null
           quiet_time_end?: string | null
           quiet_time_start?: string | null
-          ssn_hash?: string | null
-          ssn_last_four?: string | null
-          ssn_last4?: string | null
-          suffix?: string | null
           trust_score?: number | null
           updated_at?: string | null
           user_id: string
@@ -3844,20 +3739,15 @@ export type Database = {
         Update: {
           account_type?: string | null
           activity_preferences?: string[] | null
-          address?: Json | null
           age?: number | null
           ai_assistant_name?: string | null
-          aliases?: string[] | null
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
           created_at?: string | null
-          date_of_birth?: string | null
           display_name?: string | null
           document_type?: string | null
           ein?: string | null
-          first_name?: string | null
-          full_legal_address?: Json | null
           gender?: string | null
           health_goals?: string[] | null
           id?: string
@@ -3868,21 +3758,14 @@ export type Database = {
           kyc_submitted_at?: string | null
           kyc_tier?: number
           kyc_verified_at?: string | null
-          last_name?: string | null
           liveness_verified?: boolean
           location?: string | null
-          middle_name?: string | null
           motivational_phase?: string | null
           occupation?: string | null
-          phone?: string | null
-          phone_number?: string | null
+          platform_guid?: string
           quiet_time_enabled?: boolean | null
           quiet_time_end?: string | null
           quiet_time_start?: string | null
-          ssn_hash?: string | null
-          ssn_last_four?: string | null
-          ssn_last4?: string | null
-          suffix?: string | null
           trust_score?: number | null
           updated_at?: string | null
           user_id?: string
@@ -5348,9 +5231,9 @@ export type Database = {
       synapse_credit_ledger: {
         Row: {
           amount: number
-          amount_idia_usd: number | null
+          amount_idia_beta: number | null
           balance_after: number
-          balance_idia_usd: number | null
+          balance_idia_beta: number | null
           circle_transfer_id: string | null
           created_at: string | null
           description: string | null
@@ -5369,9 +5252,9 @@ export type Database = {
         }
         Insert: {
           amount: number
-          amount_idia_usd?: number | null
+          amount_idia_beta?: number | null
           balance_after?: number
-          balance_idia_usd?: number | null
+          balance_idia_beta?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -5390,9 +5273,9 @@ export type Database = {
         }
         Update: {
           amount?: number
-          amount_idia_usd?: number | null
+          amount_idia_beta?: number | null
           balance_after?: number
-          balance_idia_usd?: number | null
+          balance_idia_beta?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -5688,6 +5571,38 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "business_locations"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_aca_records: {
+        Row: {
+          aca_hash_key: string
+          consent_scope: string[]
+          created_at: string | null
+          id: string
+          platform_guid: string
+        }
+        Insert: {
+          aca_hash_key: string
+          consent_scope?: string[]
+          created_at?: string | null
+          id?: string
+          platform_guid: string
+        }
+        Update: {
+          aca_hash_key?: string
+          consent_scope?: string[]
+          created_at?: string | null
+          id?: string
+          platform_guid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_aca_records_platform_guid_fkey"
+            columns: ["platform_guid"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["platform_guid"]
           },
         ]
       }
@@ -6050,7 +5965,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          idia_usd_balance: number | null
+          idia_beta_balance: number | null
           total_earned: number | null
           updated_at: string
           user_id: string
@@ -6058,7 +5973,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          idia_usd_balance?: number | null
+          idia_beta_balance?: number | null
           total_earned?: number | null
           updated_at?: string
           user_id: string
@@ -6066,7 +5981,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
-          idia_usd_balance?: number | null
+          idia_beta_balance?: number | null
           total_earned?: number | null
           updated_at?: string
           user_id?: string
@@ -6078,8 +5993,8 @@ export type Database = {
           cash_balance: number | null
           created_at: string | null
           id: string
+          idia_beta_balance: number | null
           idia_token_balance: number | null
-          idia_usd_balance: number | null
           updated_at: string | null
           user_id: string
           wallet_address: string
@@ -6088,8 +6003,8 @@ export type Database = {
           cash_balance?: number | null
           created_at?: string | null
           id?: string
+          idia_beta_balance?: number | null
           idia_token_balance?: number | null
-          idia_usd_balance?: number | null
           updated_at?: string | null
           user_id: string
           wallet_address: string
@@ -6098,8 +6013,8 @@ export type Database = {
           cash_balance?: number | null
           created_at?: string | null
           id?: string
+          idia_beta_balance?: number | null
           idia_token_balance?: number | null
-          idia_usd_balance?: number | null
           updated_at?: string | null
           user_id?: string
           wallet_address?: string

@@ -15,6 +15,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Bell, ChevronDown, Coins, LogOut, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import SynapsePurchaseModal from '@/components/billing/SynapsePurchaseModal';
 import IdentityStatusPills from '@/components/layout/IdentityStatusPills';
 
@@ -28,21 +29,31 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const { balanceData, isLoading } = useSynapseCredits();
   const synapseCredits = balanceData?.available_credits ?? 0;
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
 
   const getUserName = () => {
+    if (profile?.display_name) return profile.display_name;
+    if (user?.email) return user.email.split('@')[0];
+    // Fallback for mock mode
     switch (userRole) {
       case 'super-admin': return 'Super Admin';
-      case 'organization-admin': return 'John Smith';
-      case 'team-lead': return 'Sarah Johnson';
-      case 'team-member': return 'Mike Davis';
+      case 'organization-admin': return 'Org Admin';
+      case 'team-lead': return 'Team Lead';
+      case 'team-member': return 'Team Member';
       default: return 'User';
     }
   };
 
   const getOrganization = () => {
     if (userRole === 'super-admin') return 'IDIA Platform';
-    return 'Acme Corporation';
+    if (user?.email) {
+      const domain = user.email.split('@')[1];
+      if (domain) return domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+    }
+    return 'Organization';
   };
+
+  const displayName = getUserName();
 
   return (
     <header className="
@@ -57,7 +68,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
         <SidebarTrigger className="flex-shrink-0" />
         <div className="min-w-0">
           <h1 className="text-sm md:text-lg font-semibold text-foreground truncate">
-            Welcome back, {getUserName()}
+            Welcome back, {displayName}
           </h1>
           <p className="text-xs md:text-sm text-muted-foreground truncate hidden sm:block">
             {getOrganization()}
@@ -67,7 +78,6 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
 
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         <IdentityStatusPills />
-        {/* Synapse Credits - shown for non-super-admin users */}
         {userRole !== 'super-admin' && (
           <div className="hidden sm:flex items-center space-x-2">
             <SynapsePurchaseModal
@@ -84,7 +94,6 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           </div>
         )}
 
-        {/* Notifications */}
         <Button variant="ghost" size="sm" className="relative h-8 w-8 md:h-9 md:w-9">
           <Bell className="h-3 w-3 md:h-4 md:w-4" />
           {notifications > 0 && (
@@ -94,13 +103,12 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           )}
         </Button>
 
-        {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9">
               <Avatar className="h-6 w-6 md:h-8 md:w-8">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs md:text-sm">
-                  {getUserName().split(' ').map(n => n[0]).join('')}
+                  {displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </AvatarFallback>
               </Avatar>
               <ChevronDown className="h-3 w-3 md:h-4 md:w-4 hidden sm:block" />
@@ -109,7 +117,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           <DropdownMenuContent align="end" className="w-48 md:w-56">
             <DropdownMenuLabel>
               <div>
-                <p className="font-medium text-sm">{getUserName()}</p>
+                <p className="font-medium text-sm">{displayName}</p>
                 <p className="text-xs text-muted-foreground capitalize">{userRole.replace('-', ' ')}</p>
               </div>
             </DropdownMenuLabel>

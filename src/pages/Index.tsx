@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SplashScreen from '@/components/SplashScreen';
 import LoginScreen from '@/components/LoginScreen';
@@ -29,17 +29,43 @@ import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
 import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
 import SettingsPage from './SettingsPage';
 import BestFriendPage from './BestFriendPage';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
   const [userRole, setUserRole] = useState<string>('');
 
-  const handleSplashComplete = () => setCurrentView('login');
+  // When Supabase auth resolves, skip splash/login
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && currentView !== 'app') {
+      setUserRole(user?.role ?? 'team-member');
+      setCurrentView('app');
+    }
+  }, [isLoading, isAuthenticated, user, currentView]);
+
+  const handleSplashComplete = () => {
+    if (isAuthenticated) {
+      setUserRole(user?.role ?? 'team-member');
+      setCurrentView('app');
+    } else {
+      setCurrentView('login');
+    }
+  };
+
   const handleLogin = (role: string) => { setUserRole(role); setCurrentView('app'); };
-  const handleLogout = () => { setUserRole(''); setCurrentView('login'); };
+  const handleRealLogin = () => {
+    // Auth state change in AuthContext will set user; we just switch view
+    setCurrentView('app');
+  };
+  const handleLogout = () => { 
+    setUserRole(''); 
+    setCurrentView('login'); 
+  };
 
   const renderDashboard = () => {
-    switch (userRole) {
+    const role = user?.role || userRole;
+    switch (role) {
       case 'super-admin': return <SuperAdminDashboard />;
       case 'organization-admin': return <OrganizationAdminDashboard />;
       case 'team-lead': return <TeamLeadDashboard />;
@@ -48,15 +74,18 @@ const Index = () => {
     }
   };
 
-  if (currentView === 'splash') return <SplashScreen onComplete={handleSplashComplete} />;
-  if (currentView === 'login') return <LoginScreen onLogin={handleLogin} />;
+  if (currentView === 'splash' && !isAuthenticated) return <SplashScreen onComplete={handleSplashComplete} />;
+  if (currentView === 'splash' && isLoading) return <SplashScreen onComplete={handleSplashComplete} />;
+  if (currentView === 'login' && !isAuthenticated) return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
+
+  const effectiveRole = user?.role || userRole || 'team-member';
 
   return (
-    <AppLayout userRole={userRole} onLogout={handleLogout}>
+    <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={renderDashboard()} />
-        <Route path="/marketplace" element={<DataMarketplace userRole={userRole} />} />
+        <Route path="/marketplace" element={<DataMarketplace userRole={effectiveRole} />} />
         <Route path="/data-viewer/:bundleId" element={<DataViewer />} />
         <Route path="/data-viewer/purchased/:purchaseId" element={<DataViewer />} />
         <Route path="/my-reports" element={<MyReports />} />

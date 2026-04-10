@@ -5,18 +5,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, User } from 'lucide-react';
+import { Building2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LoginScreenProps {
   onLogin: (role: string) => void;
+  onRealLogin?: () => void;
 }
 
-const LoginScreen = ({ onLogin }: LoginScreenProps) => {
+const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  const handleRealLogin = async () => {
+    if (!email || !password) {
+      toast.error('Please enter email and password');
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      const { useAuth } = await import('@/contexts/AuthContext');
+      // We can't use hooks here, so we call supabase directly
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      toast.success('Signed in successfully');
+      onRealLogin?.();
+    } catch (err: any) {
+      toast.error(err.message || 'Sign in failed');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
   const handleQuickLogin = (role: string) => {
-    // For prototype purposes - direct login without authentication
     onLogin(role);
   };
 
@@ -66,10 +89,11 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRealLogin()}
                   />
                 </div>
-                <Button className="w-full" onClick={() => handleQuickLogin('team-member')}>
-                  Sign In
+                <Button className="w-full" onClick={handleRealLogin} disabled={isSigningIn}>
+                  {isSigningIn ? 'Signing In...' : 'Sign In'}
                 </Button>
               </TabsContent>
               
