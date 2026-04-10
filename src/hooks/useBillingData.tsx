@@ -28,6 +28,14 @@ const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: nu
     features: ['Everything in Professional', 'Unlimited API calls', 'Custom SLAs', 'Dedicated support', 'Custom endpoints', 'White-label options', '50,000+ CRD included'],
     limits: { credits: 50000, apiCalls: 1000000, dataExport: 500, teamMembers: 100 },
   },
+  pure_alpha: {
+    name: 'Pure Alpha',
+    cost: '$99,995/yr',
+    costNumeric: 99995,
+    description: 'Full-spectrum intelligence with priority data access',
+    features: ['Everything in Enterprise', 'Alpha signal feeds', 'Dedicated account manager', 'Custom data pipelines', 'Priority settlement', '100,000+ CRD included'],
+    limits: { credits: 100000, apiCalls: 5000000, dataExport: 2000, teamMembers: 500 },
+  },
 };
 
 export const useBillingData = () => {

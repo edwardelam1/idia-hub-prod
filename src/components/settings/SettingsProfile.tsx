@@ -7,7 +7,12 @@ import { ShieldCheck, Lock, Smartphone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const SettingsProfile = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || '—';
+  const email = user?.email || '—';
+  const userId = user?.user_id ?? '—';
+  const accountStatus = user?.account_status ?? 'N/A';
 
   return (
     <div className="space-y-6 mt-4">
@@ -43,9 +48,9 @@ export const SettingsProfile = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Full Name</Label>
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider">Display Name</Label>
               <Input
-                value="John Smith"
+                value={displayName}
                 disabled
                 className="bg-muted/20 text-foreground cursor-not-allowed"
               />
@@ -53,7 +58,7 @@ export const SettingsProfile = () => {
             <div className="space-y-2">
               <Label className="text-muted-foreground text-xs uppercase tracking-wider">Email</Label>
               <Input
-                value="j.smith@acme-corp.io"
+                value={email}
                 disabled
                 className="bg-muted/20 text-foreground cursor-not-allowed"
               />
@@ -61,7 +66,7 @@ export const SettingsProfile = () => {
             <div className="space-y-2">
               <Label className="text-muted-foreground text-xs uppercase tracking-wider">User ID</Label>
               <Input
-                value={user?.user_id?.slice(0, 12).toUpperCase() ?? '--------'}
+                value={userId.length > 12 ? userId.slice(0, 12).toUpperCase() + '…' : userId}
                 disabled
                 className="bg-muted/20 text-foreground font-mono text-xs cursor-not-allowed"
               />
@@ -69,7 +74,7 @@ export const SettingsProfile = () => {
             <div className="space-y-2">
               <Label className="text-muted-foreground text-xs uppercase tracking-wider">Account Status</Label>
               <Input
-                value={user?.account_status ?? 'N/A'}
+                value={accountStatus}
                 disabled
                 className="bg-muted/20 text-foreground font-mono text-xs cursor-not-allowed"
               />
