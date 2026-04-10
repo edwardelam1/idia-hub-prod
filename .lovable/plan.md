@@ -1,130 +1,78 @@
 
 
-# Plan: Correct Hub to "Synapse Credits" Architecture (Undo IDIA-USD Rebrand)
+# Plan: Connect Auth, Profile, and Billing to Live Supabase Data
 
-The previous implementation incorrectly rebranded Hub UI elements to "IDIA-USD". The Hub is a B2B product and must use **"Synapse Credits"** exclusively. IDIA-USD is for the Life app (B2C) only.
-
-This plan creates a new append-only `hub_synapse_ledger` table, a `get_hub_balance()` DB function, updates all UI labels, implements the settlement flow, and changes the revenue split to 60/30/10.
+The root cause of all three issues is that `AuthContext` uses a hardcoded mock user (`mock-ent-9921`) instead of the actual Supabase auth session. This cascades everywhere: the profile shows fake names, the TopBar shows "Mike Davis", and billing queries find no subscription because they query with a fake user_id.
 
 ---
 
-## Part 1: Database Migration — `hub_synapse_ledger` + Balance Function
+## Problem Summary
 
-Create a new migration:
-
-- **New table `hub_synapse_ledger`** (append-only, NO updates ever):
-  - `id` UUID PK
-  - `user_id` UUID (references auth.users)
-  - `amount_credits` DECIMAL(10,4)
-  - `entry_type` TEXT (`TOP_UP`, `CONSUMPTION`, `SETTLEMENT`)
-  - `status` TEXT (`PENDING`, `SETTLED`, `FAILED`)
-  - `reference_id` UUID nullable (links settlement rows to pending rows)
-  - `metadata` JSONB
-  - `created_at` TIMESTAMPTZ default now()
-  - Index on `(user_id, created_at DESC)`
-  - RLS: users can SELECT own rows only
-
-- **Function `get_hub_balance(uid UUID)`**: Returns `SUM(amount_credits)` from `hub_synapse_ledger` WHERE `user_id = uid` AND `status != 'FAILED'`. This is the ONLY way to get balance.
-
-- **RLS policy**: Deny UPDATE/DELETE entirely. Only INSERT via service role.
+1. **AuthContext** hardcodes a mock user — never checks `supabase.auth.getSession()`
+2. **SettingsProfile** hardcodes "John Smith" and "j.smith@acme-corp.io"
+3. **TopBar** maps roles to hardcoded names ("Mike Davis", "Sarah Johnson", etc.)
+4. **Billing** queries `user_subscriptions` with mock user_id, finds nothing, then falls back to "Professional $24,995/yr" — but the Subscription Tier card below shows "0 days remaining" because no real subscription was found
+5. Eddie's real subscription tier is `pure_alpha` which isn't in PLAN_PRICING, so it also needs to be added
 
 ---
 
-## Part 2: Formatting Utility
+## Changes
 
-### `src/lib/utils.ts`
-- Add `formatCredits(amount: number): string` — formats to 4 decimal places (e.g., `1,000.0000 CR`). Keep `formatIdiaUsd` for backward compat but the Hub UI will use `formatCredits`.
+### 1. `src/contexts/AuthContext.tsx` — Connect to Supabase Auth
 
----
+- Import `supabase` client and add `useEffect` to call `supabase.auth.getSession()` on mount
+- Subscribe to `onAuthStateChange` for session changes
+- When a session exists, populate `user` from the Supabase session: `user_id` = `session.user.id`, email from `session.user.email`
+- Fetch the user's profile from the `profiles` table to get `display_name`, `account_type`
+- Fetch the user's subscription from `user_subscriptions` to determine role
+- Expose `profile` data (display_name, email) on the context alongside the existing `user` object
+- Keep the mock fallback for prototype quick-login (when no Supabase session exists and login() is called with overrides)
+- Add `login` method to call `supabase.auth.signInWithPassword` for real auth
+- Add `logout` to call `supabase.auth.signOut`
+- Expose `profile: { first_name, last_name, email, display_name }` on context
 
-## Part 3: Context Update — `SynapseCreditsContext.tsx`
+### 2. `src/components/settings/SettingsProfile.tsx` — Pull from Live Data
 
-- Switch from reading `synapse_credit_ledger` to calling `get_hub_balance` RPC for balance.
-- Update Realtime subscription to listen on `hub_synapse_ledger` INSERT events.
-- Toast messages use "Synapse Credits" terminology (e.g., "Ledger Updated: +1,000.0000 CR").
-- Expose `currency: 'SYNAPSE_CREDITS'`.
+- Read profile data from AuthContext instead of hardcoded strings
+- Display `user.email` from Supabase auth session
+- Display name from profile or auth metadata
+- User ID from `user.user_id` (the real UUID)
+- Account status from subscription or profile data
 
----
+### 3. `src/components/layout/TopBar.tsx` — Pull Name from Auth
 
-## Part 4: UI Rebrand — Replace ALL "IDIA-USD" with "Synapse Credits"
+- Replace `getUserName()` hardcoded switch with profile data from AuthContext
+- Replace `getOrganization()` with data from business_users/profiles or keep as fallback
+- Show real initials from profile name
 
-### `SynapseGasGauge.tsx`
-- Header: "IDIA-USD Balance" → "Synapse Credit Balance"
-- Loading text: "Querying IDIA-USD Ledger..." → "Querying Synapse Ledger..."
-- Subtitle: "Backed 1:1 by USDC · Powered by Circle" → "Held in FBO custody at Airwallex"
-- Use `formatCredits()` instead of `formatIdiaUsd()`
-- Burn rate label: "IDIA-USD / day" → "CR / day"
+### 4. `src/components/LoginScreen.tsx` — Add Real Auth
 
-### `SettingsBilling.tsx`
-- Card title: "IDIA-USD Credit Ledger" → "Synapse Credit Ledger"
-- Description: replace Circle/USDC references with "Secure FBO account at Airwallex"
-- All balance labels: "IDIA-USD" → "Synapse Credits" / "CR"
-- Remove "Withdraw to Crypto" button (that's a Life app feature, not Hub)
-- Remove `WithdrawCryptoModal` import/usage from this file
+- The "Sign In" button calls `supabase.auth.signInWithPassword` with the entered email/password
+- On success, set the session which triggers AuthContext to populate
+- Keep quick-access prototype buttons as mock mode fallback
 
-### `SynapsePurchaseModal.tsx`
-- Title: "Purchase IDIA-USD Credits" → "Purchase Synapse Credits"
-- All "IDIA-USD" labels → "Synapse Credits" / "CR"
-- Rate labels: "$ / IDIA-USD" → "$ / CR"
-- Success toast: "IDIA-USD added" → "Synapse Credits added"
-- Footer: Add "Funds held in secure FBO account at Airwallex"
-- Use `formatCredits()` throughout
+### 5. `src/hooks/useBillingData.tsx` — Add `pure_alpha` Tier
 
-### `SynapseTopUp.tsx`
-- Title: "Fund IDIA-USD Wallet" → "Fund Synapse Credits"
-- Description: replace Circle/USDC text with Airwallex FBO text
-- All "IDIA-USD" → "CR" / "Synapse Credits"
-- Use `formatCredits()` throughout
+- Add `pure_alpha` to `PLAN_PRICING` map so Eddie's subscription resolves correctly
+- The subscription query will now work because it uses the real user UUID
 
-### `BestFriendPage.tsx`
-- Badge: "1 CRD deducted" → "1 CR deducted"
-- Error messages: "1 CRD required" → "1 Synapse Credit required"
+### 6. `src/pages/Index.tsx` — Auth-Aware Routing
 
-### `WithdrawCryptoModal.tsx`
-- Keep the component (it's for Circle/USDC off-ramp, used from Life app context), but remove it from `SettingsBilling.tsx` Hub context.
-
----
-
-## Part 5: Edge Function — `execute-hub-query`
-
-Create new edge function `supabase/functions/execute-hub-query/index.ts`:
-
-- Accepts `{ user_id, query_cost_credits, query_type, bundle_id }`.
-- **Step 1**: INSERT a `CONSUMPTION` row with `amount_credits: -query_cost_credits`, `status: 'PENDING'`. Returns the row ID.
-- **Step 2**: Simulate Synapse Engine confirmation. INSERT a `SETTLEMENT` row with `amount_credits: 0`, `status: 'SETTLED'`, `reference_id` pointing to the PENDING row.
-- **Metadata logging (60/30/10 War Chest)**: The SETTLEMENT row's metadata records:
-  - `corporate_revenue`: 60% of credits consumed (recognized revenue)
-  - `user_liquidity_pool`: 30% (to be distributed as IDIA-USD in Life app)
-  - `ecosystem_war_chest`: 10% (escrowed for Phase 2)
-  - `fbo_routing`: "JPM FBO" reference
-
-### Update `process-data-sale/index.ts`
-- Change the split from 60/30/5/5 to **60/30/10**:
-  - 60% IDIA Corporate Revenue
-  - 30% User Liquidity Pool
-  - 10% Ecosystem War Chest
-- Remove the `BURN` and `COMMUNITY_POOL` constants.
-
----
-
-## Part 6: Update `top-up-credits` Edge Function
-
-- Update to write to `hub_synapse_ledger` instead of (or in addition to) `synapse_credit_ledger` for Hub top-ups.
-- Entry type: `TOP_UP`, status: `SETTLED`.
+- Check Supabase session to determine if user is logged in instead of relying solely on `currentView` state
+- When a Supabase session exists, skip splash/login and go directly to app
 
 ---
 
 ## Files Modified
 
-1. **New migration** — `hub_synapse_ledger` table + `get_hub_balance` function
-2. `src/lib/utils.ts` — add `formatCredits()`
-3. `src/contexts/SynapseCreditsContext.tsx` — switch to `hub_synapse_ledger` + RPC balance
-4. `src/components/billing/SynapseGasGauge.tsx` — "Synapse Credits" + Airwallex
-5. `src/components/settings/SettingsBilling.tsx` — "Synapse Credits", remove Withdraw
-6. `src/components/billing/SynapsePurchaseModal.tsx` — "Synapse Credits" labels
-7. `src/components/billing/SynapseTopUp.tsx` — "Synapse Credits" labels
-8. `src/pages/BestFriendPage.tsx` — "CR" badge labels
-9. **New**: `supabase/functions/execute-hub-query/index.ts` — settlement flow + 60/30/10 split
-10. `supabase/functions/process-data-sale/index.ts` — 60/30/10 split
-11. `supabase/functions/top-up-credits/index.ts` — write to `hub_synapse_ledger`
+1. `src/contexts/AuthContext.tsx` — Supabase auth integration + profile fetch
+2. `src/components/settings/SettingsProfile.tsx` — live profile data
+3. `src/components/layout/TopBar.tsx` — live name/org from auth context
+4. `src/components/LoginScreen.tsx` — real signInWithPassword
+5. `src/hooks/useBillingData.tsx` — add `pure_alpha` tier
+6. `src/pages/Index.tsx` — session-aware routing
+
+## No Database Changes Required
+
+Eddie's profile row doesn't exist in `profiles` table yet, but the `handle_new_user` trigger should have created it. We may need to manually insert a profile row or handle the missing-profile case gracefully in the UI.
 
