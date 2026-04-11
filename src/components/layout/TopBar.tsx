@@ -51,8 +51,9 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
 
   const getOrganization = () => {
     if (userRole === 'super-admin') return 'IDIA Platform';
-    if (user?.email) {
-      const domain = user.email.split('@')[1];
+    const email = piiData?.email || user?.email;
+    if (email) {
+      const domain = email.split('@')[1];
       if (domain) return domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
     }
     return 'Organization';
