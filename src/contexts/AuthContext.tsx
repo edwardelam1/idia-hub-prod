@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
 export type AccountType = 'individual' | 'business';
 
@@ -12,8 +12,17 @@ interface AuthUser {
   email?: string;
 }
 
+/** In-memory PII — NEVER persisted to database or localStorage */
+export interface PiiData {
+  displayName: string | null;
+  fullName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  platformGuid: string | null;
+  source: 'secure_enclave' | 'auth_metadata_stub' | 'mock';
+}
+
 interface ProfileData {
-  display_name: string | null;
   avatar_url: string | null;
   account_type: string | null;
 }
@@ -21,6 +30,7 @@ interface ProfileData {
 interface AuthContextType {
   user: AuthUser | null;
   profile: ProfileData | null;
+  piiData: PiiData | null;
   isAuthenticated: boolean;
   isBusinessAccount: boolean;
   isAdminRole: boolean;
@@ -55,19 +65,41 @@ const buildUserFromSession = (session: Session, subscription: any, profileData: 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [piiData, setPiiData] = useState<PiiData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMockMode, setIsMockMode] = useState(false);
 
+  /** Fetch PII from life-pii-bridge edge function (in-memory only) */
+  const fetchPiiData = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('life-pii-bridge');
+      if (error) {
+        console.warn('PII bridge unavailable, using fallback:', error.message);
+        return null;
+      }
+      return {
+        displayName: data.display_name ?? null,
+        fullName: data.full_name ?? null,
+        email: data.email ?? null,
+        avatarUrl: data.avatar_url ?? null,
+        platformGuid: data.platform_guid ?? null,
+        source: data.source ?? 'auth_metadata_stub',
+      } as PiiData;
+    } catch (err) {
+      console.warn('PII bridge error:', err);
+      return null;
+    }
+  }, []);
+
   const fetchProfileAndSubscription = useCallback(async (session: Session) => {
-    // Fetch profile
+    // Fetch profile (non-PII fields only)
     const { data: profileRow } = await supabase
       .from('profiles')
-      .select('display_name, avatar_url, account_type')
+      .select('avatar_url, account_type')
       .eq('user_id', session.user.id)
       .maybeSingle();
 
     const prof: ProfileData = profileRow ?? {
-      display_name: session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0] ?? null,
       avatar_url: null,
       account_type: 'business',
     };
@@ -84,24 +116,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       .maybeSingle();
 
     setUser(buildUserFromSession(session, sub, prof));
-  }, []);
+
+    // Fetch PII from bridge (in-memory only, never persisted)
+    const pii = await fetchPiiData();
+    setPiiData(pii);
+  }, [fetchPiiData]);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session && !isMockMode) {
-          // Use setTimeout to avoid Supabase deadlock
           setTimeout(() => fetchProfileAndSubscription(session), 0);
         } else if (!session && !isMockMode) {
           setUser(null);
           setProfile(null);
+          setPiiData(null); // Clear PII from memory on logout
         }
         setIsLoading(false);
       }
     );
 
-    // Then check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         fetchProfileAndSubscription(session);
@@ -114,7 +148,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [fetchProfileAndSubscription, isMockMode]);
 
   const login = useCallback(async (emailOrRole: string, password?: string) => {
-    // If it's a mock role (no password), use mock mode
     if (!password && mockUsers[emailOrRole]) {
       setIsMockMode(true);
       const mock = mockUsers[emailOrRole];
@@ -124,24 +157,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         account_status: mock.account_status!,
         account_type: mock.account_type!,
       });
-      setProfile({ display_name: null, avatar_url: null, account_type: mock.account_type! });
+      setProfile({ avatar_url: null, account_type: mock.account_type! });
+      setPiiData({
+        displayName: emailOrRole.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        fullName: null,
+        email: null,
+        avatarUrl: null,
+        platformGuid: null,
+        source: 'mock',
+      });
       return;
     }
 
-    // Real Supabase auth
     setIsMockMode(false);
     const { error } = await supabase.auth.signInWithPassword({
       email: emailOrRole,
       password: password!,
     });
     if (error) throw error;
-    // onAuthStateChange will handle the rest
   }, []);
 
   const logout = useCallback(async () => {
     setIsMockMode(false);
     setUser(null);
     setProfile(null);
+    setPiiData(null); // Clear all PII from memory
     await supabase.auth.signOut();
     localStorage.removeItem('idia_auth_token');
   }, []);
@@ -150,7 +190,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const isAdminRole = ['enterprise_admin', 'organization-admin', 'super-admin'].includes(user?.role ?? '');
 
   return (
-    <AuthContext.Provider value={{ user, profile, isAuthenticated: !!user, isBusinessAccount, isAdminRole, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, profile, piiData, isAuthenticated: !!user, isBusinessAccount, isAdminRole, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
