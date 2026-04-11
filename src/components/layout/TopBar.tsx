@@ -29,12 +29,17 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const { balanceData, isLoading } = useSynapseCredits();
   const synapseCredits = balanceData?.available_credits ?? 0;
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, piiData } = useAuth();
 
   const getUserName = () => {
-    if (profile?.display_name) return profile.display_name;
-    if (user?.email) return user.email.split('@')[0];
-    // Fallback for mock mode
+    // PII from in-memory bridge (never from DB)
+    if (piiData?.displayName) return piiData.displayName;
+    if (piiData?.email) return piiData.email.split('@')[0];
+    // Fallback: platform GUID prefix
+    if (user?.user_id && !user.user_id.startsWith('mock-')) {
+      return user.user_id.slice(0, 8).toUpperCase();
+    }
+    // Mock mode fallback
     switch (userRole) {
       case 'super-admin': return 'Super Admin';
       case 'organization-admin': return 'Org Admin';
