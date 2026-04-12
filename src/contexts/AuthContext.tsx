@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  const fetchProfileAndSubscription = useCallback(const fetchProfileAndSubscription = useCallback(
+  const fetchProfileAndSubscription = useCallback(
     async (session: Session) => {
       // 1. Initial Profile Fetch
       let { data: profileRow } = await supabase
@@ -104,14 +104,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // If missing (likely due to SSO trigger delay), wait 500ms and try exactly once more.
       if (!profileRow) {
         console.log("Profile not found immediately. Waiting for database trigger...");
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         const retryFetch = await supabase
           .from("profiles")
           .select("avatar_url, account_type, platform_guid")
           .eq("user_id", session.user.id)
           .maybeSingle();
-          
+
         profileRow = retryFetch.data;
       }
 
@@ -142,10 +142,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
 
       const deriveTier = (subData: any): SubscriptionTier => {
-        if (!subData) return 'base'; 
+        if (!subData) return "base";
         const tier = subData.tier?.toLowerCase();
-        if (['pure_alpha', 'enterprise'].includes(tier)) return 'enterprise';
-        return (tier as SubscriptionTier) ?? 'base';
+        if (["pure_alpha", "enterprise"].includes(tier)) return "enterprise";
+        return (tier as SubscriptionTier) ?? "base";
       };
 
       setSubscriptionTier(deriveTier(sub));
@@ -154,7 +154,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const pii = await fetchPiiData();
       setPiiData(pii);
     },
-    [fetchPiiData]
+    [fetchPiiData],
   );
 
   useEffect(() => {
