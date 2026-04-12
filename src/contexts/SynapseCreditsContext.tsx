@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
-import { formatCredits } from '@/lib/utils';
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { formatCredits } from "@/lib/utils";
 
 interface BalanceData {
   wallet_address: string;
@@ -14,7 +14,7 @@ interface BalanceData {
 interface BurnRateData {
   daily_average: number;
   thirty_day_total: number;
-  burn_status: 'healthy' | 'warning' | 'critical';
+  burn_status: "healthy" | "warning" | "critical";
 }
 
 interface SynapseCreditsContextType {
@@ -29,7 +29,7 @@ const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefine
 
 export const SynapseCreditsProvider = ({
   children,
-  walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d89A34"
+  walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d89A34",
 }: {
   children: React.ReactNode;
   walletAddress?: string;
@@ -50,17 +50,16 @@ export const SynapseCreditsProvider = ({
       let credits = 0;
 
       if (userId) {
-        const { data: balanceResult, error: rpcError } = await supabase
-          .rpc('get_hub_balance', { uid: userId });
+        const { data: balanceResult, error: rpcError } = await supabase.rpc("get_hub_balance", { uid: userId });
 
         if (rpcError) throw rpcError;
         credits = Number(balanceResult ?? 0);
       } else {
-        // Fallback: read latest entry from hub_synapse_ledger
+        // Fallback: read latest entry from synapse_credit_ledger
         const { data: latestEntry, error: ledgerError } = await supabase
-          .from('hub_synapse_ledger')
-          .select('amount_credits, created_at')
-          .order('created_at', { ascending: false })
+          .from("synapse_credit_ledger")
+          .select("amount_credits, created_at")
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -71,23 +70,21 @@ export const SynapseCreditsProvider = ({
       // Calculate 30-day burn rate from consumption entries
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
-        .from('hub_synapse_ledger')
-        .select('amount_credits')
-        .eq('entry_type', 'CONSUMPTION')
-        .neq('status', 'FAILED')
-        .gte('created_at', thirtyDaysAgo);
+        .from("synapse_credit_ledger")
+        .select("amount_credits")
+        .eq("entry_type", "CONSUMPTION")
+        .neq("status", "FAILED")
+        .gte("created_at", thirtyDaysAgo);
 
-      const totalDeductions = (deductions || []).reduce(
-        (sum, d) => sum + Math.abs(Number(d.amount_credits)), 0
-      );
+      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount_credits)), 0);
       const dailyAvg = totalDeductions / 30;
-      
-      let burnStatus: 'healthy' | 'warning' | 'critical' = 'healthy';
+
+      let burnStatus: "healthy" | "warning" | "critical" = "healthy";
       if (dailyAvg > 0) {
         const threshold15 = dailyAvg * 30 * 0.15;
         const threshold5 = dailyAvg * 30 * 0.05;
-        if (credits < threshold5) burnStatus = 'critical';
-        else if (credits < threshold15) burnStatus = 'warning';
+        if (credits < threshold5) burnStatus = "critical";
+        else if (credits < threshold15) burnStatus = "warning";
       }
 
       setBurnRate({
@@ -99,7 +96,7 @@ export const SynapseCreditsProvider = ({
       setBalanceData({
         wallet_address: walletAddress,
         available_credits: credits,
-        currency: 'SYNAPSE_CREDITS',
+        currency: "SYNAPSE_CREDITS",
         last_updated: new Date().toISOString(),
       });
     } catch {
@@ -113,16 +110,16 @@ export const SynapseCreditsProvider = ({
     fetchLedgerBalance();
   }, [fetchLedgerBalance]);
 
-  // Realtime subscription on hub_synapse_ledger
+  // Realtime subscription on synapse_credit_ledger
   useEffect(() => {
     const channel = supabase
-      .channel('hub-synapse-ledger-realtime')
+      .channel("hub-synapse-ledger-realtime")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'hub_synapse_ledger',
+          event: "INSERT",
+          schema: "public",
+          table: "synapse_credit_ledger",
         },
         (payload) => {
           const newEntry = payload.new as any;
@@ -132,11 +129,11 @@ export const SynapseCreditsProvider = ({
           fetchLedgerBalance();
 
           // Toast notification for ledger updates
-          const sign = txAmount >= 0 ? '+' : '';
+          const sign = txAmount >= 0 ? "+" : "";
           toast.info(`Ledger Updated: ${sign}${formatCredits(txAmount)}`, {
             description: `Entry type: ${newEntry.entry_type} · Status: ${newEntry.status}`,
           });
-        }
+        },
       )
       .subscribe();
 
@@ -146,7 +143,9 @@ export const SynapseCreditsProvider = ({
   }, [user?.user_id, fetchLedgerBalance]);
 
   return (
-    <SynapseCreditsContext.Provider value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchLedgerBalance }}>
+    <SynapseCreditsContext.Provider
+      value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchLedgerBalance }}
+    >
       {children}
     </SynapseCreditsContext.Provider>
   );
@@ -155,7 +154,7 @@ export const SynapseCreditsProvider = ({
 export const useSynapseCredits = () => {
   const context = useContext(SynapseCreditsContext);
   if (!context) {
-    throw new Error('useSynapseCredits must be used within a SynapseCreditsProvider');
+    throw new Error("useSynapseCredits must be used within a SynapseCreditsProvider");
   }
   return context;
 };
