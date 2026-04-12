@@ -91,7 +91,71 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  const fetchProfileAndSubscription = useCallback(
+  const fetchProfileAndSubscription = useCallback(const fetchProfileAndSubscription = useCallback(
+    async (session: Session) => {
+      // 1. Initial Profile Fetch
+      let { data: profileRow } = await supabase
+        .from("profiles")
+        .select("avatar_url, account_type, platform_guid")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      // 2. The Anti-Race-Condition Check
+      // If missing (likely due to SSO trigger delay), wait 500ms and try exactly once more.
+      if (!profileRow) {
+        console.log("Profile not found immediately. Waiting for database trigger...");
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const retryFetch = await supabase
+          .from("profiles")
+          .select("avatar_url, account_type, platform_guid")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+          
+        profileRow = retryFetch.data;
+      }
+
+      // 3. THE IRONCLAD GATEKEEPER
+      // If there is still no profile, or they lack a platform_guid, kill the session immediately.
+      if (!profileRow || !profileRow.platform_guid) {
+        console.error("CRITICAL SECURITY EXCEPTION: Invalid or missing profile payload. Terminating session.");
+        await supabase.auth.signOut();
+        // Send them to a clean error state or back to the life signup
+        window.location.href = "https://life.thebigidia.com/auth?return_to=hub&mode=signup&error=missing_profile";
+        return;
+      }
+
+      const prof: ProfileData = {
+        avatar_url: profileRow.avatar_url,
+        account_type: profileRow.account_type || "business",
+      };
+      setProfile(prof);
+
+      // Fetch subscription
+      const { data: sub } = await supabase
+        .from("user_subscriptions")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const deriveTier = (subData: any): SubscriptionTier => {
+        if (!subData) return 'base'; 
+        const tier = subData.tier?.toLowerCase();
+        if (['pure_alpha', 'enterprise'].includes(tier)) return 'enterprise';
+        return (tier as SubscriptionTier) ?? 'base';
+      };
+
+      setSubscriptionTier(deriveTier(sub));
+      setUser(buildUserFromSession(session, sub, prof));
+
+      const pii = await fetchPiiData();
+      setPiiData(pii);
+    },
+    [fetchPiiData]
+  );
 
   useEffect(() => {
     const {
