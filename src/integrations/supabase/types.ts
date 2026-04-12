@@ -4752,7 +4752,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      staged_data: {
+      staged_health_data: {
         Row: {
           activity_type: string;
           anonymized_location_zone: string | null;

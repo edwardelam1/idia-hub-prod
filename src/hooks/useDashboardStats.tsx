@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PipelineHealth {
   total_raw_data: number;
@@ -20,10 +20,14 @@ interface DashboardStats {
 }
 
 export const useDashboardStats = (): DashboardStats => {
-  const { data: pipelineHealth, isLoading: pipelineLoading, error: pipelineError } = useQuery({
-    queryKey: ['pipeline-health'],
+  const {
+    data: pipelineHealth,
+    isLoading: pipelineLoading,
+    error: pipelineError,
+  } = useQuery({
+    queryKey: ["pipeline-health"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('check_pipeline_health');
+      const { data, error } = await supabase.rpc("check_pipeline_health");
       if (error) throw error;
       return (data as unknown as PipelineHealth[])?.[0] ?? null;
     },
@@ -31,12 +35,12 @@ export const useDashboardStats = (): DashboardStats => {
   });
 
   const { data: bundlesCount, isLoading: bundlesLoading } = useQuery({
-    queryKey: ['active-bundles-count'],
+    queryKey: ["active-bundles-count"],
     queryFn: async () => {
       const { count, error } = await supabase
-        .from('marketplace_bundles')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .from("marketplace_bundles")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true);
       if (error) throw error;
       return count ?? 0;
     },
@@ -44,11 +48,9 @@ export const useDashboardStats = (): DashboardStats => {
   });
 
   const { data: stagedCount, isLoading: stagedLoading } = useQuery({
-    queryKey: ['staged-data-count'],
+    queryKey: ["staged-data-count"],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from('staged_data')
-        .select('*', { count: 'exact', head: true });
+      const { count, error } = await supabase.from("staged_health_data").select("*", { count: "exact", head: true });
       if (error) throw error;
       return count ?? 0;
     },
