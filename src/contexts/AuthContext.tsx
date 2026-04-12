@@ -106,7 +106,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (!profileRow || !profileRow.display_name) {
         console.warn("Strict Policy Violation: Account must originate from IDIA Life. Redirecting...");
         await supabase.auth.signOut();
-        window.location.href = "https://life.thebigidia.com";
+        window.location.href = "https://life.thebigidia.com/auth?return_to=hub&mode=signup";
         return;
       }
 
