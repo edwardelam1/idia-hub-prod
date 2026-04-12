@@ -58,7 +58,8 @@ const Index = () => {
     // Auth state change in AuthContext will set user; we just switch view
     setCurrentView('app');
   };
-  const handleLogout = () => { 
+  const handleLogout = async () => { 
+    await authLogout();
     setUserRole(''); 
     setCurrentView('login'); 
   };
