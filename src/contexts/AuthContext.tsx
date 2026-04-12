@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { Session } from '@supabase/supabase-js';
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
-export type AccountType = 'individual' | 'business';
+export type AccountType = "individual" | "business";
 
 interface AuthUser {
   user_id: string;
@@ -19,7 +19,7 @@ export interface PiiData {
   email: string | null;
   avatarUrl: string | null;
   platformGuid: string | null;
-  source: 'secure_enclave' | 'auth_metadata_stub' | 'mock';
+  source: "secure_enclave" | "auth_metadata_stub" | "mock";
 }
 
 interface ProfileData {
@@ -40,24 +40,24 @@ interface AuthContextType {
 }
 
 const mockUsers: Record<string, Partial<AuthUser>> = {
-  'super-admin': { role: 'super-admin', account_status: 'DELT_AUTHORIZED', account_type: 'business' },
-  'organization-admin': { role: 'organization-admin', account_status: 'DELT_AUTHORIZED', account_type: 'business' },
-  'team-lead': { role: 'team-lead', account_status: 'DELT_AUTHORIZED', account_type: 'business' },
-  'team-member': { role: 'team-member', account_status: 'DELT_AUTHORIZED', account_type: 'business' },
+  "super-admin": { role: "super-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
+  "organization-admin": { role: "organization-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
+  "team-lead": { role: "team-lead", account_status: "DELT_AUTHORIZED", account_type: "business" },
+  "team-member": { role: "team-member", account_status: "DELT_AUTHORIZED", account_type: "business" },
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const buildUserFromSession = (session: Session, subscription: any, profileData: ProfileData | null): AuthUser => {
-  const tier = subscription?.tier?.toLowerCase() ?? '';
-  let role = 'team-member';
-  if (['enterprise', 'pure_alpha'].includes(tier)) role = 'organization-admin';
+  const tier = subscription?.tier?.toLowerCase() ?? "";
+  let role = "team-member";
+  if (["enterprise", "pure_alpha"].includes(tier)) role = "organization-admin";
 
   return {
     user_id: session.user.id,
     role,
-    account_status: subscription ? 'DELT_AUTHORIZED' : 'PENDING',
-    account_type: (profileData?.account_type as AccountType) || 'business',
+    account_status: subscription ? "DELT_AUTHORIZED" : "PENDING",
+    account_type: (profileData?.account_type as AccountType) || "business",
     email: session.user.email,
   };
 };
@@ -72,9 +72,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   /** Fetch PII from life-pii-bridge edge function (in-memory only) */
   const fetchPiiData = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('life-pii-bridge');
+      const { data, error } = await supabase.functions.invoke("life-pii-bridge");
       if (error) {
-        console.warn('PII bridge unavailable, using fallback:', error.message);
+        console.warn("PII bridge unavailable, using fallback:", error.message);
         return null;
       }
       return {
@@ -83,58 +83,71 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         email: data.email ?? null,
         avatarUrl: data.avatar_url ?? null,
         platformGuid: data.platform_guid ?? null,
-        source: data.source ?? 'auth_metadata_stub',
+        source: data.source ?? "auth_metadata_stub",
       } as PiiData;
     } catch (err) {
-      console.warn('PII bridge error:', err);
+      console.warn("PII bridge error:", err);
       return null;
     }
   }, []);
 
-  const fetchProfileAndSubscription = useCallback(async (session: Session) => {
-    // Fetch profile (non-PII fields only)
-    const { data: profileRow } = await supabase
-      .from('profiles')
-      .select('avatar_url, account_type')
-      .eq('user_id', session.user.id)
-      .maybeSingle();
+  const fetchProfileAndSubscription = useCallback(
+    async (session: Session) => {
+      // 1. Fetch profile including display_name to verify IDIA Life origin
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("avatar_url, account_type, display_name")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
 
-    const prof: ProfileData = profileRow ?? {
-      avatar_url: null,
-      account_type: 'business',
-    };
-    setProfile(prof);
+      // STRICT POLICY ENFORCEMENT:
+      // If the user lacks a display_name, they haven't completed IDIA Life onboarding.
+      // They likely just created a raw account via the Hub's OAuth buttons.
+      if (!profileRow || !profileRow.display_name) {
+        console.warn("Strict Policy Violation: Account must originate from IDIA Life. Redirecting...");
+        await supabase.auth.signOut();
+        window.location.href = "https://life.thebigidia.com";
+        return;
+      }
 
-    // Fetch subscription
-    const { data: sub } = await supabase
-      .from('user_subscriptions')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      const prof: ProfileData = profileRow ?? {
+        avatar_url: null,
+        account_type: "business",
+      };
+      setProfile(prof);
 
-    setUser(buildUserFromSession(session, sub, prof));
+      // Fetch subscription
+      const { data: sub } = await supabase
+        .from("user_subscriptions")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    // Fetch PII from bridge (in-memory only, never persisted)
-    const pii = await fetchPiiData();
-    setPiiData(pii);
-  }, [fetchPiiData]);
+      setUser(buildUserFromSession(session, sub, prof));
+
+      // Fetch PII from bridge (in-memory only, never persisted)
+      const pii = await fetchPiiData();
+      setPiiData(pii);
+    },
+    [fetchPiiData],
+  );
 
   useEffect(() => {
-    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session && !isMockMode) {
-          setTimeout(() => fetchProfileAndSubscription(session), 0);
-        } else if (!session && !isMockMode) {
-          setUser(null);
-          setProfile(null);
-          setPiiData(null); // Clear PII from memory on logout
-        }
-        setIsLoading(false);
+    const {
+      data: { subscription: authSub },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session && !isMockMode) {
+        setTimeout(() => fetchProfileAndSubscription(session), 0);
+      } else if (!session && !isMockMode) {
+        setUser(null);
+        setProfile(null);
+        setPiiData(null); // Clear PII from memory on logout
       }
-    );
+      setIsLoading(false);
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -159,12 +172,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       setProfile({ avatar_url: null, account_type: mock.account_type! });
       setPiiData({
-        displayName: emailOrRole.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        displayName: emailOrRole.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         fullName: null,
         email: null,
         avatarUrl: null,
         platformGuid: null,
-        source: 'mock',
+        source: "mock",
       });
       return;
     }
@@ -183,14 +196,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setProfile(null);
     setPiiData(null); // Clear all PII from memory
     await supabase.auth.signOut();
-    localStorage.removeItem('idia_auth_token');
+    localStorage.removeItem("idia_auth_token");
   }, []);
 
-  const isBusinessAccount = user?.account_type === 'business';
-  const isAdminRole = ['enterprise_admin', 'organization-admin', 'super-admin'].includes(user?.role ?? '');
+  const isBusinessAccount = user?.account_type === "business";
+  const isAdminRole = ["enterprise_admin", "organization-admin", "super-admin"].includes(user?.role ?? "");
 
   return (
-    <AuthContext.Provider value={{ user, profile, piiData, isAuthenticated: !!user, isBusinessAccount, isAdminRole, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        piiData,
+        isAuthenticated: !!user,
+        isBusinessAccount,
+        isAdminRole,
+        isLoading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -199,7 +224,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
