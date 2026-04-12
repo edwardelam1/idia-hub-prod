@@ -92,48 +92,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const fetchProfileAndSubscription = useCallback(
-    async (session: Session) => {
-      // 1. Fetch profile including platform_guid to verify IDIA Life origin
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("avatar_url, account_type, platform_guid")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
-
-      // STRICT POLICY ENFORCEMENT:
-      // We check for platform_guid instead of display_name since the Zero-PII migration.
-      // If they don't have a platform_guid, they didn't go through the Life onboarding.
-      if (!profileRow || !profileRow.platform_guid) {
-        console.warn("Strict Policy Violation: Account must originate from IDIA Life. Redirecting...");
-        await supabase.auth.signOut();
-        window.location.href = "https://life.thebigidia.com/auth?return_to=hub&mode=signup";
-        return;
-      }
-
-      const prof: ProfileData = {
-        avatar_url: profileRow.avatar_url,
-        account_type: profileRow.account_type || "business",
-      };
-      setProfile(prof);
-
-      // Fetch subscription
-      const { data: sub } = await supabase
-        .from("user_subscriptions")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      setUser(buildUserFromSession(session, sub, prof));
-
-      // Fetch PII from bridge (in-memory only, never persisted)
-      const pii = await fetchPiiData();
-      setPiiData(pii);
-    },
-    [fetchPiiData],
-  );
 
   useEffect(() => {
     const {
