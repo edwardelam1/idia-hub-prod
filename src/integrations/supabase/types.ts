@@ -2208,7 +2208,7 @@ export type Database = {
       };
       synapse_credit_ledger: {
         Row: {
-          amount_credits: number;
+          amount: number;
           created_at: string;
           entry_type: string;
           id: string;
@@ -2218,7 +2218,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
-          amount_credits?: number;
+          amount?: number;
           created_at?: string;
           entry_type: string;
           id?: string;
@@ -2228,7 +2228,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
-          amount_credits?: number;
+          amount?: number;
           created_at?: string;
           entry_type?: string;
           id?: string;

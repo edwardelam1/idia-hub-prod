@@ -58,25 +58,25 @@ export const SynapseCreditsProvider = ({
         // Fallback: read latest entry from synapse_credit_ledger
         const { data: latestEntry, error: ledgerError } = await supabase
           .from("synapse_credit_ledger")
-          .select("amount_credits, created_at")
+          .select("amount, created_at")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (ledgerError) throw ledgerError;
-        credits = latestEntry ? Number(latestEntry.amount_credits) : 0;
+        credits = latestEntry ? Number(latestEntry.amount) : 0;
       }
 
-      // Calculate 30-day burn rate from consumption entries
+      // Calculate 30-day burn rate from deduction entries
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from("synapse_credit_ledger")
-        .select("amount_credits")
-        .eq("entry_type", "CONSUMPTION")
+        .select("amount")
+        .eq("entry_type", "deduction")
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
 
-      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount_credits)), 0);
+      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
       const dailyAvg = totalDeductions / 30;
 
       let burnStatus: "healthy" | "warning" | "critical" = "healthy";
@@ -123,7 +123,7 @@ export const SynapseCreditsProvider = ({
         },
         (payload) => {
           const newEntry = payload.new as any;
-          const txAmount = Number(newEntry.amount_credits);
+          const txAmount = Number(newEntry.amount);
 
           // Refresh balance via RPC after any ledger change
           fetchLedgerBalance();

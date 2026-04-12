@@ -31,8 +31,8 @@ Deno.serve(async (req) => {
       .from("synapse_credit_ledger")
       .insert({
         user_id,
-        amount_credits: Number(credit_amount),
-        entry_type: "TOP_UP",
+        amount: Number(credit_amount),
+        entry_type: "deposit",
         status: "SETTLED",
         metadata: {
           usd_amount,

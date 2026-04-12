@@ -51,13 +51,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 1: INSERT CONSUMPTION row (negative amount, PENDING)
+    // Step 1: INSERT deduction row (negative amount, PENDING)
     const { data: consumptionRow, error: consumptionError } = await supabase
       .from("synapse_credit_ledger")
       .insert({
         user_id,
-        amount_credits: -query_cost_credits,
-        entry_type: "CONSUMPTION",
+        amount: -query_cost_credits,
+        entry_type: "deduction",
         status: "PENDING",
         metadata: {
           query_type: query_type || "data_query",
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       .from("synapse_credit_ledger")
       .insert({
         user_id,
-        amount_credits: 0,
+        amount: 0,
         entry_type: "SETTLEMENT",
         status: "SETTLED",
         reference_id: consumptionRow.id,
