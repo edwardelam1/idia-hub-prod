@@ -1,39 +1,51 @@
 
 
-# Floating Buddy Behavior + Best Friend AI Prompt Fix
+# Persona Split + Secure Credit Deduction Edge Function
+
+## Overview
+Three changes: (1) create a dedicated `deduct-synapse-credit` edge function for secure server-side credit deductions, (2) update `BestFriendPage.tsx` to call it instead of hacking `top-up-credits` with negative values, (3) rewrite the `best-friend-ai` edge function prompt with the Jekyll/Hyde "Store Clerk vs Data Scientist" persona split.
 
 ## Changes
 
-### 1. `src/components/ai/FloatingBestFriend.tsx` — Resting position, auto-hide, fluid motion
+### 1. Create `supabase/functions/deduct-synapse-credit/index.ts`
+- Authenticates the caller via the Authorization header (`getUser`)
+- Accepts `{ amount, description, referenceId }` in the body
+- Inserts into `synapse_credit_ledger` with correct column names: `amount` (negative), `entry_type: "usage"`, `status: "SETTLED"`, `description`, `reference_id`, `user_id`
+- Uses service role key to bypass RLS for ledger writes
+- Returns `{ success: true, deducted: N }`
 
-- **Remove random autonomous movement**: Delete the `findSafePosition` helper and the `setInterval` that randomly repositions the buddy every 8-15 seconds
-- **Fixed resting position**: Default position to bottom-left corner (`x: 20, y: window.innerHeight - 120`)
-- **Auto-hide after 5s inactivity**: Add a `isVisible` state and an `activityTimeoutRef`. On any user interaction (mouse move, click, key press), show the buddy and reset a 5-second timer. When the timer fires, fade the buddy out (`opacity-0 pointer-events-none` with a smooth transition)
-- **Fluid motion**: Replace `transition-all duration-300` with `transition-all duration-700 ease-in-out` for smoother positional changes. Remove `animate-pulse` on movement
-- **Dynamic feedback timeout**: In `handleVoiceInput`, replace the hardcoded `3000ms` timeout with `Math.max(5000, response.length * 60)`. Apply similar dynamic timeouts to contextual page reactions
+**Column alignment note**: The existing `synapse_credit_ledger` schema uses `amount` (not `credit_amount`), `entry_type` (not `transaction_type` for the primary field), `reference_id` (not `payment_reference`). The function will use the correct column names.
 
-### 2. `supabase/functions/best-friend-ai/index.ts` — Strict data policy prompt
+### 2. Update `src/pages/BestFriendPage.tsx`
+- Replace `deductCredit` to call `supabase.functions.invoke('deduct-synapse-credit', { body: { amount: 1, description: 'Marketplace Search Query' } })` instead of the `top-up-credits` hack
+- If deduction fails, throw to abort the AI response
+- Pass `marketplaceResults` directly in the edge function body (not nested in `context`) so the AI edge function receives it at the top level as expected
 
-- **Add STRICT DATA POLICY block** to the `analysisPrompt` between the persona and the request, enforcing:
-  - Default mode: only personal operational data, system health, dashboard metrics
-  - Marketplace restriction: if no `marketplaceResults` provided, refuse and instruct user to toggle Marketplace Search or use `@search marketplace`
-- **Update instruction #6**: When no marketplace results, enforce the strict personal data policy instead of leaving it blank
+### 3. Rewrite `supabase/functions/best-friend-ai/index.ts` — Persona Split
+- Remove the single `BEST_FRIEND_PERSONA` constant
+- Define two personas: `STORE_CLERK_PERSONA` (navigator, refuses data requests, directs user to toggle Marketplace Search) and `DATA_SCIENTIST_PERSONA` (synthesizes insights from provided search results)
+- Dynamically select persona based on whether `marketplaceResults` is present and non-empty
+- Store Clerk mode: navigate, inform, refuse data/statistics requests
+- Data Scientist mode: synthesize insights, simulate metrics, act authoritative with the provided marketplace result themes/features
+- Keep existing history formatting and OpenAI call logic unchanged
 
 ## Technical Details
 
-**Auto-hide logic** (FloatingBestFriend):
+**Ledger insert shape** (deduct-synapse-credit):
 ```
-activityTimeoutRef tracks a 5s window.
-Global listeners: mousemove, click, keydown → setIsVisible(true), reset timer.
-Timer fires → setIsVisible(false).
-Wrapper div gets: opacity-0/opacity-100 + pointer-events-none transition.
+{ user_id, amount: -1, entry_type: "usage", status: "SETTLED",
+  description: "Marketplace Search Query",
+  reference_id: "USAGE-xxxxxxxx" }
 ```
 
-**Resting position**: After drag release, buddy smoothly returns to bottom-left (`{x: 20, y: window.innerHeight - 120}`). No more random wandering.
+**Persona detection logic** (best-friend-ai):
+```
+const isDataScientist = marketplaceResults?.length > 0;
+const systemPrompt = isDataScientist ? DATA_SCIENTIST_PERSONA + ... : STORE_CLERK_PERSONA + ...;
+```
 
 ## Result
-- Buddy rests in bottom-left, fades out after 5s of no activity, reappears on interaction
-- Smooth fluid transitions instead of jumpy random placement
-- AI responses stay visible long enough to read
-- Edge function enforces strict data boundaries to prevent hallucinated responses
+- Credit deductions are server-side authenticated — no client-side ledger manipulation
+- AI persona dynamically switches between helpful navigator and deep data analyst based on search authorization
+- Hallucinated "systems operational" responses eliminated by strict mode enforcement
 
