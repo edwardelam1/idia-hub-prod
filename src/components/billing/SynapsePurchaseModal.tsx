@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, Lock } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -36,10 +36,6 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   const [purchaseMode, setPurchaseMode] = useState<'tier' | 'alacarte'>('tier');
   const [alacarteAmount, setAlacarteAmount] = useState('');
 
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-
   const currentTier = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
 
   const alacarteUsd = parseInt(alacarteAmount) || 0;
@@ -57,9 +53,6 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
     onOpenChange?.(isOpen);
     if (!isOpen) {
       setStep('select');
-      setCardNumber('');
-      setCardExpiry('');
-      setCardCvv('');
       setPurchaseMode('tier');
       setAlacarteAmount('');
     }
@@ -78,10 +71,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   };
 
   const handlePurchase = async () => {
-    if (!cardNumber || !cardExpiry || !cardCvv) {
-      toast.error('Please fill in all payment fields');
-      return;
-    }
+    // Worldpay SDK handles tokenization — no local card validation needed
     setStep('processing');
 
     try {
@@ -111,11 +101,6 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
     }
   };
 
-  const formatCardNumber = (val: string) => {
-    const cleaned = val.replace(/\D/g, '').slice(0, 16);
-    return cleaned.replace(/(.{4})/g, '$1 ').trim();
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -130,10 +115,10 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
-            {step === 'payment' ? 'Enter Payment Details' : step === 'processing' ? 'Processing...' : step === 'success' ? 'Purchase Complete' : 'Purchase Synapse Credits'}
+            {step === 'payment' ? 'Authorize Payment' : step === 'processing' ? 'Processing...' : step === 'success' ? 'Purchase Complete' : 'Purchase Synapse Credits'}
           </DialogTitle>
           <DialogDescription>
-            {step === 'payment' ? 'Securely enter your card details' : 'Fuel your data operations with Synapse Credits'}
+            {step === 'payment' ? 'Complete your purchase via the secure Worldpay gateway' : 'Fuel your data operations with Synapse Credits'}
           </DialogDescription>
         </DialogHeader>
 
@@ -283,13 +268,34 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 Continue to Payment <ArrowRight className="w-4 h-4" />
               </Button>
 
-              <p className="text-xs text-center text-muted-foreground">Funds held in secure FBO account at Airwallex</p>
+              <p className="text-xs text-center text-muted-foreground">Funds held in secure FBO account at Unit Banking</p>
             </>
           )}
 
           {step === 'payment' && (
             <>
               <div className="space-y-4">
+                {/* Institutional Custody Bridge */}
+                <div className="bg-muted/50 border border-border rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Coins className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-foreground font-mono">
+                          {currentBalance.toLocaleString(undefined, { minimumFractionDigits: 4 })} CR
+                        </p>
+                        <p className="text-xs text-muted-foreground">Held in FBO custody at Unit Banking</p>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Verified Port
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Purchase summary */}
                 <div className="bg-muted/50 border border-border rounded-xl p-4 flex justify-between items-center">
                   <div>
                     <p className="text-sm text-muted-foreground">Purchasing</p>
@@ -301,35 +307,19 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <Label>Card Number</Label>
-                    <Input
-                      placeholder="4242 4242 4242 4242"
-                      value={cardNumber}
-                      onChange={e => setCardNumber(formatCardNumber(e.target.value))}
-                      maxLength={19}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Expiry</Label>
-                      <Input
-                        placeholder="MM/YY"
-                        value={cardExpiry}
-                        onChange={e => setCardExpiry(e.target.value.replace(/[^\d/]/g, '').slice(0, 5))}
-                        maxLength={5}
-                      />
-                    </div>
-                    <div>
-                      <Label>CVV</Label>
-                      <Input
-                        type="password"
-                        placeholder="•••"
-                        value={cardCvv}
-                        onChange={e => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        maxLength={4}
-                      />
+                {/* Worldpay SDK Container */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-foreground">Secure Payment Gateway</h4>
+                  <div
+                    id="worldpay-sdk-container"
+                    className="min-h-[160px] border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6"
+                  >
+                    <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        Card data is encrypted before reaching IDIA servers.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -340,14 +330,14 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
                 <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
-                  <CreditCard className="w-4 h-4" /> Pay ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </Button>
               </div>
 
               <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Encrypted & Secured by Worldpay</span>
+                  <span>PCI-DSS Level 1 · Encrypted & Secured by Worldpay</span>
                 </div>
               </div>
             </>

@@ -4,6 +4,8 @@ import { ShieldCheck, User, Search, Users, Building2, Lock, ArrowRight, External
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { useBillingData } from '@/hooks/useBillingData';
 
 interface EcosystemOnboardingProps {
   isLifeAppVerified?: boolean;
@@ -24,6 +26,8 @@ interface Role {
 const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false }: EcosystemOnboardingProps) => {
   const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const { currentUsage } = useBillingData();
+  const usagePercent = currentUsage.limit > 0 ? Math.min((currentUsage.used / currentUsage.limit) * 100, 100) : 0;
 
   const automaticRoles: Role[] = [
     {
@@ -111,6 +115,19 @@ const EcosystemOnboarding = ({ isLifeAppVerified = false, hasBusinessTag = false
           </div>
         ))}
       </div>
+
+      {/* Credit Usage Progress */}
+      {currentUsage.limit > 0 && (
+        <div className="mb-6 p-4 bg-muted/30 border border-border rounded-xl space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Credit Usage</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              {currentUsage.used.toLocaleString(undefined, { minimumFractionDigits: 2 })} / {currentUsage.limit.toLocaleString()} CR used
+            </span>
+          </div>
+          <Progress value={usagePercent} className="h-2" />
+        </div>
+      )}
 
       <Separator className="mb-6" />
 
