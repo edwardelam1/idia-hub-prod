@@ -120,13 +120,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profileRow = retryFetch.data;
       }
 
-      // 3. THE IRONCLAD GATEKEEPER
-      // Financial security requirement: Termination of session if profile or platform_guid is missing.
-      if (!profileRow || !profileRow.platform_guid) {
-        console.error("CRITICAL SECURITY EXCEPTION: Invalid or missing profile payload. Terminating session.");
-        await supabase.auth.signOut();
-        window.location.href = "https://life.thebigidia.com/auth?return_to=hub&mode=signup&error=missing_profile";
-        return;
+      // 3. SELF-HEALING PROFILE CREATION
+      // If profile is still missing after retry, auto-create it instead of nuking the session.
+      if (!profileRow) {
+        console.warn("Profile missing — auto-creating for user:", session.user.id);
+        const { data: newProfile, error: insertErr } = await supabase
+          .from("profiles")
+          .insert({ user_id: session.user.id, account_type: "personal" } as any)
+          .select("avatar_url, account_type, platform_guid")
+          .single();
+
+        if (insertErr || !newProfile) {
+          console.error("Failed to auto-create profile:", insertErr);
+          await supabase.auth.signOut();
+          return;
+        }
+        profileRow = newProfile;
       }
 
       const prof: ProfileData = {
