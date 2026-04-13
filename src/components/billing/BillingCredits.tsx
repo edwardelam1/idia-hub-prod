@@ -50,7 +50,7 @@ const BillingCredits = () => {
 
   const handleAddPM = () => {
     if (!pmLabel.trim() || !pmIdentifier.trim()) { toast.error('Fill in all fields'); return; }
-    addPaymentMethod.mutate({ method_type: pmType, display_label: pmLabel, identifier: pmIdentifier });
+    addPaymentMethod.mutate({ paymentToken: pmIdentifier, display_label: pmLabel });
     setPmLabel('');
     setPmIdentifier('');
     setShowAddPM(false);
