@@ -79,7 +79,7 @@ const BillingCredits = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Billing & Credits</h1>
+          <h1 className="text-3xl font-bold">Hub Enrollment</h1>
           <p className="text-muted-foreground">Manage your subscription, credits, and billing</p>
         </div>
         <div className="flex items-center space-x-4">
@@ -149,46 +149,49 @@ const BillingCredits = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Current Usage</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{currentUsage.used.toLocaleString()}</div>
-            <div className="text-sm text-muted-foreground">of {currentUsage.limit.toLocaleString()} credits</div>
-            <Progress value={usagePercentage} className="mt-2" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Plan</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{subscriptionPlan.cost}</div>
-            <div className="text-sm text-muted-foreground">{subscriptionPlan.name} Plan</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Projected Usage</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{projectedUsage.toLocaleString()}</div>
-            <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-emerald-500'}`}>
-              {projectedUsage > currentUsage.limit ? <><AlertTriangle className="h-4 w-4 mr-1" />Over limit</> : <><TrendingUp className="h-4 w-4 mr-1" />Within limit</>}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Next Billing</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : '—'}</div>
-            <div className="text-sm text-muted-foreground">{daysRemaining > 0 ? 'days remaining' : 'No active period'}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="invoices" className="space-y-4">
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
           <TabsTrigger value="payment">Payment Methods</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Current Usage</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{currentUsage.used.toLocaleString()}</div>
+                <div className="text-sm text-muted-foreground">of {currentUsage.limit.toLocaleString()} credits</div>
+                <Progress value={usagePercentage} className="mt-2" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Plan</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{subscriptionPlan.cost}</div>
+                <div className="text-sm text-muted-foreground">{subscriptionPlan.name} Plan</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Projected Usage</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{projectedUsage.toLocaleString()}</div>
+                <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-emerald-500'}`}>
+                  {projectedUsage > currentUsage.limit ? <><AlertTriangle className="h-4 w-4 mr-1" />Over limit</> : <><TrendingUp className="h-4 w-4 mr-1" />Within limit</>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Next Billing</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : '—'}</div>
+                <div className="text-sm text-muted-foreground">{daysRemaining > 0 ? 'days remaining' : 'No active period'}</div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         <TabsContent value="invoices" className="space-y-4">
           <Card>
