@@ -246,25 +246,37 @@ const SynapseTopUp = () => {
             </div>
           )}
 
+          {/* Worldpay SDK Mount Point */}
+          <div
+            id="worldpay-sdk-container"
+            className="min-h-[120px] border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/50"
+          >
+            <div className="text-center p-4">
+              <CreditCard className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-xs text-muted-foreground">Worldpay Secure SDK Port Initializing...</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground mt-3">
+            <ShieldCheck className="w-3 h-3" />
+            <span>PCI-DSS Level 1 — Encryption provided by Worldpay</span>
+          </div>
+
           <button
             onClick={handleWorldpayCheckout}
             disabled={isProcessing || !canProceed}
-            className="w-full flex justify-center items-center px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex justify-center items-center px-4 py-3 mt-4 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isProcessing ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                Continue to Worldpay <ArrowRight className="w-4 h-4 ml-2" />
+                Authorize via Worldpay <ArrowRight className="w-4 h-4 ml-2" />
               </>
             )}
           </button>
 
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Encrypted & Secured by Worldpay</span>
-          </div>
-          <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <CreditCard className="w-4 h-4" />
             <span>Funds held in secure FBO account at Airwallex</span>
           </div>
