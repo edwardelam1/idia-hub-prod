@@ -41,6 +41,13 @@ const mockHandlers: Record<string, (body?: any) => any> = {
       response: `I've analyzed your request: "${body?.message || ''}". Based on the current system state, all services are operational. How else can I help?`,
     };
   },
+  '/api/v1/billing/worldpay/initiate': (body?: any) => ({
+    session_id: `WP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    payment_url: '#worldpay-mock',
+    credit_amount: body?.credit_amount ?? 0,
+    usd_amount: body?.usd_amount ?? 0,
+    expires_in: 900,
+  }),
   '/api/v1/synapse/query': () => ({
     data: [
       { region: 'US-KY', device_os: 'iOS 18.2', hri_score: 91.4, record_count: 1243, anonymization_level: 'k-anon-5', last_updated: '2026-02-27T08:00:00Z' },

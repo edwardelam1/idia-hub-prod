@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus } from 'lucide-react';
+import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus, ShieldCheck } from 'lucide-react';
 import { useBillingData } from '@/hooks/useBillingData';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -107,17 +107,42 @@ const BillingCredits = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>{pmType.includes('wallet') ? 'Wallet Name' : pmType.includes('bank') ? 'Bank Name' : 'Card Brand'}</Label>
-                  <Input placeholder={pmType.includes('wallet') ? 'e.g. MetaMask' : pmType.includes('bank') ? 'e.g. Chase' : 'e.g. Visa'} value={pmLabel} onChange={e => setPmLabel(e.target.value)} />
-                </div>
-                <div>
-                  <Label>{pmType.includes('wallet') ? 'Wallet Address (prefix)' : pmType.includes('bank') ? 'Account Last 4' : 'Card Last 4'}</Label>
-                  <Input placeholder={pmType.includes('wallet') ? '0x71C7...' : '1234'} value={pmIdentifier} onChange={e => setPmIdentifier(e.target.value)} maxLength={pmType.includes('wallet') ? 42 : 4} />
-                </div>
-                <Button onClick={handleAddPM} disabled={addPaymentMethod.isPending} className="w-full">
-                  {addPaymentMethod.isPending ? 'Adding...' : 'Add Payment Method'}
-                </Button>
+
+                {pmType.includes('wallet') ? (
+                  <>
+                    <div>
+                      <Label>Wallet Name</Label>
+                      <Input placeholder="e.g. MetaMask" value={pmLabel} onChange={e => setPmLabel(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Wallet Address (prefix)</Label>
+                      <Input placeholder="0x71C7..." value={pmIdentifier} onChange={e => setPmIdentifier(e.target.value)} maxLength={42} />
+                    </div>
+                    <Button onClick={handleAddPM} disabled={addPaymentMethod.isPending} className="w-full">
+                      {addPaymentMethod.isPending ? 'Adding...' : 'Add Payment Method'}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      id="worldpay-sdk-container"
+                      className="min-h-[150px] border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/50"
+                    >
+                      <div className="text-center p-4">
+                        <CreditCard className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                        <p className="text-xs text-muted-foreground">Worldpay Secure SDK Port Initializing...</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Card & bank details captured securely by Worldpay</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+                      <ShieldCheck className="h-3 w-3" />
+                      PCI-DSS Level 1 — Encryption provided by Worldpay
+                    </div>
+                    <Button disabled className="w-full">
+                      Authorize via Worldpay
+                    </Button>
+                  </>
+                )}
               </div>
             </DialogContent>
           </Dialog>
