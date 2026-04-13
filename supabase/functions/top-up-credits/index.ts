@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        new_balance: Number(hubBalance ?? newBalance),
+        new_balance: Number(newBalance ?? 0),
         entry_id: entry.id,
       }),
       {
