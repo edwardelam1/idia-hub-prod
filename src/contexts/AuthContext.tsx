@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
+// --- Types & Interfaces ---
 export type AccountType = "individual" | "business";
+export type SubscriptionTier = "none" | "base" | "analyst" | "professional" | "enterprise";
 
 interface AuthUser {
   user_id: string;
@@ -35,10 +37,12 @@ interface AuthContextType {
   isBusinessAccount: boolean;
   isAdminRole: boolean;
   isLoading: boolean;
+  subscriptionTier: SubscriptionTier;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
 }
 
+// --- Mock Data for Prototype Mode ---
 const mockUsers: Record<string, Partial<AuthUser>> = {
   "super-admin": { role: "super-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
   "organization-admin": { role: "organization-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
@@ -66,6 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [piiData, setPiiData] = useState<PiiData | null>(null);
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("none");
   const [isLoading, setIsLoading] = useState(true);
   const [isMockMode, setIsMockMode] = useState(false);
 
@@ -101,10 +106,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
 
       // 2. The Anti-Race-Condition Check
-      // If missing (likely due to SSO trigger delay), wait 500ms and try exactly once more.
+      // If missing (likely due to SSO trigger delay), wait 1000ms and try exactly once more.
       if (!profileRow) {
         console.log("Profile not found immediately. Waiting for database trigger...");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const retryFetch = await supabase
           .from("profiles")
@@ -116,11 +121,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       // 3. THE IRONCLAD GATEKEEPER
-      // If there is still no profile, or they lack a platform_guid, kill the session immediately.
+      // Financial security requirement: Termination of session if profile or platform_guid is missing.
       if (!profileRow || !profileRow.platform_guid) {
         console.error("CRITICAL SECURITY EXCEPTION: Invalid or missing profile payload. Terminating session.");
         await supabase.auth.signOut();
-        // Send them to a clean error state or back to the life signup
         window.location.href = "https://life.thebigidia.com/auth?return_to=hub&mode=signup&error=missing_profile";
         return;
       }
@@ -131,7 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       };
       setProfile(prof);
 
-      // Fetch subscription
+      // 4. Fetch Subscription & Derive Tier
       const { data: sub } = await supabase
         .from("user_subscriptions")
         .select("*")
@@ -143,14 +147,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const deriveTier = (subData: any): SubscriptionTier => {
         if (!subData) return "base";
-        const tier = subData.tier?.toLowerCase();
-        if (["pure_alpha", "enterprise"].includes(tier)) return "enterprise";
-        return (tier as SubscriptionTier) ?? "base";
+        const tierName = subData.tier?.toLowerCase();
+        if (["pure_alpha", "enterprise"].includes(tierName)) return "enterprise";
+        return (tierName as SubscriptionTier) ?? "base";
       };
 
       setSubscriptionTier(deriveTier(sub));
       setUser(buildUserFromSession(session, sub, prof));
 
+      // 5. Load in-memory PII
       const pii = await fetchPiiData();
       setPiiData(pii);
     },
@@ -160,13 +165,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const {
       data: { subscription: authSub },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session && !isMockMode) {
+        // Use timeout to ensure state settles
         setTimeout(() => fetchProfileAndSubscription(session), 0);
       } else if (!session && !isMockMode) {
         setUser(null);
         setProfile(null);
-        setPiiData(null); // Clear PII from memory on logout
+        setPiiData(null);
+        setSubscriptionTier("none");
       }
       setIsLoading(false);
     });
@@ -183,6 +190,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [fetchProfileAndSubscription, isMockMode]);
 
   const login = useCallback(async (emailOrRole: string, password?: string) => {
+    // Mock login for prototyping
     if (!password && mockUsers[emailOrRole]) {
       setIsMockMode(true);
       const mock = mockUsers[emailOrRole];
@@ -193,6 +201,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         account_type: mock.account_type!,
       });
       setProfile({ avatar_url: null, account_type: mock.account_type! });
+      setSubscriptionTier(emailOrRole === "super-admin" ? "enterprise" : "base");
       setPiiData({
         displayName: emailOrRole.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         fullName: null,
@@ -216,7 +225,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsMockMode(false);
     setUser(null);
     setProfile(null);
-    setPiiData(null); // Clear all PII from memory
+    setPiiData(null);
+    setSubscriptionTier("none");
     await supabase.auth.signOut();
     localStorage.removeItem("idia_auth_token");
   }, []);
@@ -234,6 +244,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         isBusinessAccount,
         isAdminRole,
         isLoading,
+        subscriptionTier,
         login,
         logout,
       }}
