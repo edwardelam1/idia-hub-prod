@@ -14,7 +14,6 @@ interface AuthUser {
   email?: string;
 }
 
-/** In-memory PII — NEVER persisted to database or localStorage */
 export interface PiiData {
   displayName: string | null;
   fullName: string | null;
@@ -42,12 +41,9 @@ interface AuthContextType {
   logout: () => void;
 }
 
-// --- Mock Data for Prototype Mode ---
 const mockUsers: Record<string, Partial<AuthUser>> = {
   "super-admin": { role: "super-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
   "organization-admin": { role: "organization-admin", account_status: "DELT_AUTHORIZED", account_type: "business" },
-  "team-lead": { role: "team-lead", account_status: "DELT_AUTHORIZED", account_type: "business" },
-  "team-member": { role: "team-member", account_status: "DELT_AUTHORIZED", account_type: "business" },
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,14 +70,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMockMode, setIsMockMode] = useState(false);
 
-  /** Fetch PII from life-pii-bridge edge function (in-memory only) */
   const fetchPiiData = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("life-pii-bridge");
-      if (error) {
-        console.warn("PII bridge unavailable, using fallback:", error.message);
-        return null;
-      }
+      if (error) return null;
       return {
         displayName: data.display_name ?? null,
         fullName: data.full_name ?? null,
@@ -91,7 +83,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         source: data.source ?? "auth_metadata_stub",
       } as PiiData;
     } catch (err) {
-      console.warn("PII bridge error:", err);
       return null;
     }
   }, []);
@@ -105,11 +96,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq("user_id", session.user.id)
         .maybeSingle();
 
-      // 2. The Anti-Race-Condition Check
-      // If missing (likely due to SSO trigger delay), wait 1000ms and try exactly once more.
+      // 2. Anti-Race-Condition Check (Wait for DB Trigger)
       if (!profileRow) {
-        console.log("Profile not found immediately. Waiting for database trigger...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.warn("Profile check 1 failed. Waiting 1.5s for database trigger...");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
         const retryFetch = await supabase
           .from("profiles")
@@ -120,22 +110,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profileRow = retryFetch.data;
       }
 
-      // 3. SELF-HEALING PROFILE CREATION
-      // If profile is still missing after retry, auto-create it instead of nuking the session.
-      if (!profileRow) {
-        console.warn("Profile missing — auto-creating for user:", session.user.id);
-        const { data: newProfile, error: insertErr } = await supabase
-          .from("profiles")
-          .insert({ user_id: session.user.id, account_type: "personal" } as any)
-          .select("avatar_url, account_type, platform_guid")
-          .single();
-
-        if (insertErr || !newProfile) {
-          console.error("Failed to auto-create profile:", insertErr);
-          await supabase.auth.signOut();
-          return;
-        }
-        profileRow = newProfile;
+      // 3. IRONCLAD GATEKEEPER — EXTREME GOLDEN RULE
+      // No self-healing allowed. If it's missing, they didn't come from IDIA Life.
+      if (!profileRow || !profileRow.platform_guid) {
+        console.error("EXTREME GOLDEN RULE VIOLATION: No verified profile. Terminating session.");
+        await supabase.auth.signOut();
+        localStorage.removeItem("idia_auth_token");
+        window.location.href = "https://life.thebigidia.com";
+        return;
       }
 
       const prof: ProfileData = {
@@ -144,7 +126,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       };
       setProfile(prof);
 
-      // 4. Fetch Subscription & Derive Tier
+      // 4. Subscription & Tier Logic
       const { data: sub } = await supabase
         .from("user_subscriptions")
         .select("*")
@@ -156,15 +138,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const deriveTier = (subData: any): SubscriptionTier => {
         if (!subData) return "base";
-        const tierName = subData.tier?.toLowerCase();
-        if (["pure_alpha", "enterprise"].includes(tierName)) return "enterprise";
-        return (tierName as SubscriptionTier) ?? "base";
+        const t = subData.tier?.toLowerCase();
+        if (["pure_alpha", "enterprise"].includes(t)) return "enterprise";
+        return (t as SubscriptionTier) ?? "base";
       };
 
       setSubscriptionTier(deriveTier(sub));
       setUser(buildUserFromSession(session, sub, prof));
 
-      // 5. Load in-memory PII
       const pii = await fetchPiiData();
       setPiiData(pii);
     },
@@ -176,7 +157,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       data: { subscription: authSub },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session && !isMockMode) {
-        // Use timeout to ensure state settles
         setTimeout(() => fetchProfileAndSubscription(session), 0);
       } else if (!session && !isMockMode) {
         setUser(null);
@@ -199,29 +179,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [fetchProfileAndSubscription, isMockMode]);
 
   const login = useCallback(async (emailOrRole: string, password?: string) => {
-    // Mock login for prototyping
     if (!password && mockUsers[emailOrRole]) {
       setIsMockMode(true);
       const mock = mockUsers[emailOrRole];
       setUser({
         user_id: `mock-${emailOrRole}`,
         role: mock.role!,
-        account_status: mock.account_status!,
-        account_type: mock.account_type!,
-      });
-      setProfile({ avatar_url: null, account_type: mock.account_type! });
-      setSubscriptionTier(emailOrRole === "super-admin" ? "enterprise" : "base");
-      setPiiData({
-        displayName: emailOrRole.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-        fullName: null,
-        email: null,
-        avatarUrl: null,
-        platformGuid: null,
-        source: "mock",
+        account_status: "DELT_AUTHORIZED",
+        account_type: "business",
       });
       return;
     }
-
     setIsMockMode(false);
     const { error } = await supabase.auth.signInWithPassword({
       email: emailOrRole,
@@ -240,9 +208,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.removeItem("idia_auth_token");
   }, []);
 
-  const isBusinessAccount = user?.account_type === "business";
-  const isAdminRole = ["enterprise_admin", "organization-admin", "super-admin"].includes(user?.role ?? "");
-
   return (
     <AuthContext.Provider
       value={{
@@ -250,8 +215,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile,
         piiData,
         isAuthenticated: !!user,
-        isBusinessAccount,
-        isAdminRole,
+        isBusinessAccount: user?.account_type === "business",
+        isAdminRole: ["enterprise_admin", "organization-admin", "super-admin"].includes(user?.role ?? ""),
         isLoading,
         subscriptionTier,
         login,
@@ -265,8 +230,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
