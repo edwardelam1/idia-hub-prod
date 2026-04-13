@@ -86,122 +86,118 @@ const IndividualDashboard = () => {
 
         <ScrollArea className="flex-1 mt-4">
           {/* ──── OVERVIEW TAB ──── */}
-          <TabsContent value="overview" className="mt-0 space-y-4">
+          <TabsContent value="overview" className="mt-0 space-y-3">
             {/* Gauge + Key Metrics row */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="md:row-span-2 flex flex-col items-center justify-center">
-                <CardContent className="pt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card>
+                <CardContent className="p-4">
                   <SynapseGasGauge />
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
                   <CardTitle className="text-sm font-medium">Data Sources</CardTitle>
                   <Database className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0">
                   <div className="text-2xl font-bold">{personalStats.activeSources}</div>
                   <p className="text-xs text-muted-foreground">Connected</p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
                   <CardTitle className="text-sm font-medium">Synapse Score</CardTitle>
                   <BrainCircuit className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0">
                   <div className="text-2xl font-bold text-primary">{personalStats.synapseScore}</div>
                   <p className="text-xs text-muted-foreground">Contribution rating</p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
                   <CardTitle className="text-sm font-medium">Data Assets</CardTitle>
                   <Activity className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0">
                   <div className="text-2xl font-bold">{personalStats.dataAssets.toLocaleString()}</div>
                   <p className="text-xs text-muted-foreground">Total points</p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Performance & Contributions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Asset Performance</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+            {/* Performance & Contributions — merged into one card */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs">Synapse Contribution</span>
-                      <span className="text-xs font-medium">{personalStats.synapseScore}%</span>
-                    </div>
-                    <Progress value={personalStats.synapseScore} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs">Source Connectivity</span>
-                      <span className="text-xs font-medium">92%</span>
-                    </div>
-                    <Progress value={92} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs">Data Freshness</span>
-                      <span className="text-xs font-medium">78%</span>
-                    </div>
-                    <Progress value={78} className="h-2" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Recent Contributions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {recentContributions.map((item) => (
-                      <div key={item.id} className="flex items-start space-x-3">
-                        {getContributionIcon(item.type)}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium">{item.action}</p>
-                          <p className="text-[11px] text-muted-foreground">{item.timestamp}</p>
+                    <p className="text-sm font-semibold mb-2">Asset Performance</p>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-xs">Synapse Contribution</span>
+                          <span className="text-xs font-medium">{personalStats.synapseScore}%</span>
                         </div>
-                        <Badge variant="secondary" className="text-[10px] capitalize">
-                          {item.type}
-                        </Badge>
+                        <Progress value={personalStats.synapseScore} className="h-1.5" />
                       </div>
-                    ))}
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-xs">Source Connectivity</span>
+                          <span className="text-xs font-medium">92%</span>
+                        </div>
+                        <Progress value={92} className="h-1.5" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-xs">Data Freshness</span>
+                          <span className="text-xs font-medium">78%</span>
+                        </div>
+                        <Progress value={78} className="h-1.5" />
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <div>
+                    <p className="text-sm font-semibold mb-2">Recent Contributions</p>
+                    <div className="space-y-2">
+                      {recentContributions.map((item) => (
+                        <div key={item.id} className="flex items-start space-x-2">
+                          {getContributionIcon(item.type)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium leading-tight">{item.action}</p>
+                            <p className="text-[11px] text-muted-foreground">{item.timestamp}</p>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px] capitalize">
+                            {item.type}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="text-center p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors">
-                <Plug className="h-6 w-6 mx-auto mb-1.5 text-primary" />
-                <p className="text-xs font-medium">Connect Source</p>
-              </div>
-              <div className="text-center p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors">
-                <Eye className="h-6 w-6 mx-auto mb-1.5 text-primary" />
-                <p className="text-xs font-medium">View Insights</p>
-              </div>
-              <div className="text-center p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors">
-                <BrainCircuit className="h-6 w-6 mx-auto mb-1.5 text-primary" />
-                <p className="text-xs font-medium">Synapse Impact</p>
-              </div>
-              <div className="text-center p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors">
-                <Bot className="h-6 w-6 mx-auto mb-1.5 text-primary" />
-                <p className="text-xs font-medium">Best Friend AI</p>
-              </div>
-            </div>
+            {/* Quick Actions — inline row */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-around gap-4">
+                  {[
+                    { icon: Plug, label: "Connect Source" },
+                    { icon: Eye, label: "View Insights" },
+                    { icon: BrainCircuit, label: "Synapse Impact" },
+                    { icon: Bot, label: "Best Friend AI" },
+                  ].map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors">
+                      <Icon className="h-4 w-4 text-primary" />
+                      <span className="text-xs font-medium">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ──── USAGE STATS TAB ──── */}
