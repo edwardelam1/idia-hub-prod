@@ -45,33 +45,32 @@ export const SynapseCreditsProvider = ({
     setError(null);
 
     try {
-      // Use get_hub_balance RPC for SUM-based balance
       const userId = user?.user_id;
-      let credits = 0;
-
-      if (userId) {
-        const { data: balanceResult, error: rpcError } = await supabase.rpc("get_hub_balance", { uid: userId });
-
-        if (rpcError) throw rpcError;
-        credits = Number(balanceResult ?? 0);
-      } else {
-        // Fallback: read latest entry from synapse_credit_ledger
-        const { data: latestEntry, error: ledgerError } = await supabase
-          .from("synapse_credit_ledger")
-          .select("amount, created_at")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (ledgerError) throw ledgerError;
-        credits = latestEntry ? Number(latestEntry.amount) : 0;
+      if (!userId) {
+        setIsLoading(false);
+        return;
       }
 
-      // Calculate 30-day burn rate from deduction entries
+      // 1. DIRECT TETHER: Pull absolute latest 'balance_after' for THIS user
+      const { data: latestEntry, error: ledgerError } = await supabase
+        .from("synapse_credit_ledger")
+        .select("balance_after")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (ledgerError) throw ledgerError;
+
+      // Default to 0 if no ledger entry exists
+      const credits = latestEntry ? Number(latestEntry.balance_after) : 0;
+
+      // 2. BURN RATE: Calculate from deduction entries for THIS user
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from("synapse_credit_ledger")
         .select("amount")
+        .eq("user_id", userId)
         .eq("entry_type", "deduction")
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
@@ -81,10 +80,8 @@ export const SynapseCreditsProvider = ({
 
       let burnStatus: "healthy" | "warning" | "critical" = "healthy";
       if (dailyAvg > 0) {
-        const threshold15 = dailyAvg * 30 * 0.15;
-        const threshold5 = dailyAvg * 30 * 0.05;
-        if (credits < threshold5) burnStatus = "critical";
-        else if (credits < threshold15) burnStatus = "warning";
+        if (credits < dailyAvg * 2) burnStatus = "critical";
+        else if (credits < dailyAvg * 7) burnStatus = "warning";
       }
 
       setBurnRate({
@@ -99,8 +96,9 @@ export const SynapseCreditsProvider = ({
         currency: "SYNAPSE_CREDITS",
         last_updated: new Date().toISOString(),
       });
-    } catch {
-      setError("Failed to verify ledger balance. Synapse Engine unreachable.");
+    } catch (err) {
+      console.error("Ledger Sync Error:", err);
+      setError("Failed to verify ledger balance.");
     } finally {
       setIsLoading(false);
     }
@@ -110,29 +108,22 @@ export const SynapseCreditsProvider = ({
     fetchLedgerBalance();
   }, [fetchLedgerBalance]);
 
-  // Realtime subscription on synapse_credit_ledger
+  // Realtime subscription for automatic UI updates
   useEffect(() => {
+    if (!user?.user_id) return;
+
     const channel = supabase
-      .channel("hub-synapse-ledger-realtime")
+      .channel(`ledger-${user.user_id}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "synapse_credit_ledger",
+          filter: `user_id=eq.${user.user_id}`,
         },
-        (payload) => {
-          const newEntry = payload.new as any;
-          const txAmount = Number(newEntry.amount);
-
-          // Refresh balance via RPC after any ledger change
-          fetchLedgerBalance();
-
-          // Toast notification for ledger updates
-          const sign = txAmount >= 0 ? "+" : "";
-          toast.info(`Ledger Updated: ${sign}${formatCredits(txAmount)}`, {
-            description: `Entry type: ${newEntry.entry_type} · Status: ${newEntry.status}`,
-          });
+        () => {
+          fetchLedgerBalance(); // Refresh on any new entry
         },
       )
       .subscribe();
@@ -153,8 +144,6 @@ export const SynapseCreditsProvider = ({
 
 export const useSynapseCredits = () => {
   const context = useContext(SynapseCreditsContext);
-  if (!context) {
-    throw new Error("useSynapseCredits must be used within a SynapseCreditsProvider");
-  }
+  if (!context) throw new Error("useSynapseCredits must be used within a SynapseCreditsProvider");
   return context;
 };
