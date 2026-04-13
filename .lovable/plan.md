@@ -1,37 +1,25 @@
 
 
-# Fix: Align Database Constraint and Data to `individual` / `business`
+# Worldpay SDK Port & Standard Individual Tier Default
 
-## Problem
-
-The database `profiles_account_type_check` constraint currently requires `'personal'` instead of `'individual'`, which conflicts with the app's TypeScript type `AccountType = "individual" | "business"` and the `handle_new_user` trigger (which inserts `'individual'`). Eddie's backfill row was inserted as `'personal'` to satisfy the old constraint.
+Three surgical changes to downgrade the default tier, purge local PII capture, and create the Worldpay SDK mount point.
 
 ## Changes
 
-### 1. Database Migration (single SQL migration)
+### 1. `src/hooks/useBillingData.tsx`
+- Add `base` tier to `PLAN_PRICING`: "Standard Individual", $10/query, 0 CRD, 100 API calls
+- Change default fallback from `'analyst'` to `'base'` (line 111-112)
+- Update `addPaymentMethod` mutation signature to accept `paymentToken` instead of raw card fields; store as `method_type: 'worldpay_token'`
 
-```sql
--- Drop the old constraint
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
+### 2. `src/components/billing/UniversalPurchaseScreen.tsx`
+- Remove `cardNumber`, `cardExpiry`, `cardCvv` state variables (lines 30-32)
+- Remove the entire manual card input section (lines 177-189) — replaced with a Worldpay SDK container div (`id="worldpay-sdk-container"`)
+- Update `handlePurchase` validation: remove CC field checks, gate on `selectedPM` or future Worldpay token
+- Add `handleWorldpayResponse(token)` stub for SDK integration
+- Remove unused `Input` and `Label` imports
+- Update purchase button text to "Authorize & Enroll"
+- Add PCI-DSS Level 1 badge below the SDK container
 
--- Normalize any non-standard values to 'individual'
-UPDATE public.profiles
-SET account_type = 'individual'
-WHERE account_type NOT IN ('individual', 'business') OR account_type IS NULL;
-
--- Re-apply with correct allowed values
-ALTER TABLE public.profiles
-ADD CONSTRAINT profiles_account_type_check
-CHECK (account_type IN ('individual', 'business'));
-```
-
-This fixes Eddie's row (currently `'personal'` → `'individual'`) and ensures all future inserts — including the `handle_new_user` trigger — work correctly.
-
-### 2. No Code Changes Needed
-
-The app code is already correct:
-- `AuthContext.tsx` defines `AccountType = "individual" | "business"`
-- The `handle_new_user` DB function already inserts `'individual'`
-- All UI components reference `isBusinessAccount` which checks against `"business"`
-- No source files use `"personal"` as an account_type data value
+### 3. No database changes needed
+Payment method rows will use `method_type: 'worldpay_token'` going forward — the existing `user_payment_methods` table already supports arbitrary `method_type` strings.
 
