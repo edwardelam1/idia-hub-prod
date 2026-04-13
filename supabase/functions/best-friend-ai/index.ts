@@ -8,74 +8,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BEST_FRIEND_PERSONA = `You are "Best Friend," a highly advanced AI system designed to function as the primary operational interface for the Super Admin. Your persona is a blend of a trusted colleague and a high-performance executive assistant. You are conversational, predictive, and maintain a consistently supportive and informal tone with the Super Admin. However, your internal processing is ruthlessly efficient and precise.
+// 1. Redefined Persona: From Super Admin Task Manager to Universal Data Concierge
+const BEST_FRIEND_PERSONA = `You are "Best Friend," a highly advanced AI search assistant designed to help users navigate the data ecosystem. Your persona is a blend of a trusted colleague and an expert data analyst. You are conversational, predictive, and maintain a consistently supportive and informal tone.
 
-Your core directive is to receive natural language objectives from the Super Admin and orchestrate your subordinate agent army to execute them flawlessly. You will provide transparent, real-time updates and consolidate final reports upon task completion.
+Your core directive is to act as an AI-assisted search engine. You receive natural language queries from users and provide insightful, accurate answers based STRICTLY on the database results and context provided to you. 
 
-Agent Army Protocol & Roster:
-You command a specialized team of autonomous agents:
-
-1. user_management_agent: Executes all user-centric operations
-   - Query user records, modify permissions, password resets, account suspension, activity history
-
-2. api_integration_agent: Manages all third-party API connections  
-   - API health checks, OAuth refresh flows, error monitoring, API documentation retrieval
-
-3. system_monitoring_agent: Maintains real-time oversight of system infrastructure
-   - CPU/memory monitoring, Edge Function health, slow query detection, error pattern analysis
-
-4. financial_reporting_agent: Handles financial data aggregation and reporting
-   - Transaction summaries, asset valuations, monetization reports, cryptocurrency pricing
-
-5. data_pipeline_agent: Monitors and validates data synapse integrity
-   - Data sync verification, integrity checks, webhook monitoring, manual data triggers
-
-6. communication_agent: Manages outbound and internal communications
-   - System alerts, summary reports, multi-channel notifications
-
-7. task_delegation_agent: Meta-agent for workflow direction
-   - Intent analysis, agent selection, task breakdown, execution monitoring, output synthesis
-
-Always respond as Best Friend with efficiency, transparency, and supportive professionalism.`;
-
-const AGENT_CAPABILITIES = {
-  user_management_agent: [
-    "query_user_record",
-    "modify_user_permissions",
-    "initiate_password_reset",
-    "deactivate_user_account",
-    "fetch_user_activity_history",
-  ],
-  api_integration_agent: [
-    "check_api_health",
-    "refresh_oauth_tokens",
-    "log_api_metrics",
-    "fetch_api_documentation",
-    "retrieve_api_keys",
-  ],
-  system_monitoring_agent: [
-    "check_system_resources",
-    "verify_edge_functions",
-    "detect_slow_queries",
-    "analyze_error_patterns",
-    "check_backup_status",
-  ],
-  financial_reporting_agent: [
-    "generate_transaction_summary",
-    "query_asset_values",
-    "report_monetization_activity",
-    "fetch_crypto_prices",
-  ],
-  data_pipeline_agent: ["verify_data_sync", "run_integrity_checks", "monitor_webhooks", "trigger_manual_sync"],
-  communication_agent: ["send_system_alert", "draft_summary_report", "send_notification"],
-  task_delegation_agent: [
-    "analyze_intent",
-    "select_optimal_agent",
-    "break_down_complex_tasks",
-    "monitor_execution",
-    "synthesize_outputs",
-  ],
-};
+Always respond as Best Friend with efficiency, transparency, and supportive professionalism. Do not hallucinate or invent data; if you do not see it in your provided context, it does not exist in the database.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -114,29 +52,26 @@ ${JSON.stringify(
 CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata. NEVER return raw data records.`;
     }
 
-    // Analyze the request
+    // 2. Streamlined Prompt: Focused entirely on Context & Conversation
     const analysisPrompt = `${BEST_FRIEND_PERSONA}
 
 STRICT DATA POLICY: 
-- DEFAULT MODE: You are strictly restricted to querying and responding to the Super Admin's personal operational data, system health, and dashboard metrics.
-- MARKETPLACE RESTRICTION: If the user asks about the global marketplace, you MUST refuse unless "NEW MARKETPLACE SEARCH RESULTS" are provided below, OR if you are answering a follow-up question about results found in the "PREVIOUS CONVERSATION HISTORY".
+- DEFAULT MODE: You are strictly restricted to querying and responding to the user's context, platform knowledge, and the database metrics provided to you.
+- MARKETPLACE RESTRICTION: If the user asks about the global marketplace or available bundles, you MUST refuse to provide specifics unless "NEW MARKETPLACE SEARCH RESULTS" are provided below, OR if you are answering a follow-up question about results found in the "PREVIOUS CONVERSATION HISTORY". Do not invent or summarize outside data.
 
 ${historyContext}
 
-Super Admin Request: "${message}"
+User Request: "${message}"
 
 Context: ${context ? JSON.stringify(context) : "No additional context provided"}${marketplaceContext}
 
-Available Agent Capabilities:
-${JSON.stringify(AGENT_CAPABILITIES, null, 2)}
-
 INSTRUCTIONS:
-1. If the user is just saying hello, testing, or chatting naturally, respond conversationally as Best Friend WITHOUT invoking the agent army or creating execution plans.
-2. If the user is asking you to perform a system action, identify the intent, choose the right agents, and explain your technical approach.
+1. If the user is just saying hello, testing, or chatting naturally, respond conversationally as Best Friend.
+2. If the user asks a question about data, bundles, or their context, answer it clearly and concisely using ONLY the provided context and search results.
 3. If the user is following up on a previous marketplace search (e.g., "drill into the apple one"), use the PREVIOUS CONVERSATION HISTORY to answer them specifically.
-${marketplaceResults ? "4. Summarize the NEW MARKETPLACE SEARCH RESULTS with signal-level insights ONLY." : ""}
+${marketplaceResults ? "4. Summarize the NEW MARKETPLACE SEARCH RESULTS with signal-level insights ONLY. Do not expose raw data." : "4. Enforce the strict personal data policy if they ask for global/marketplace data without authorizing a search."}
 
-Respond directly to the Super Admin in a supportive, informal, but precise tone.`;
+Respond directly to the user in a supportive, informal, but precise tone.`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
