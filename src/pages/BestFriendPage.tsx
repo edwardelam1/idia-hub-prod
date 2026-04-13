@@ -1,14 +1,14 @@
-import { useState } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Send, Bot, User, Brain, Search, Coins } from 'lucide-react';
-import { toast } from 'sonner';
-import { fetchApi } from '@/lib/api';
-import { useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Send, Bot, User, Brain, Search, Coins } from "lucide-react";
+import { toast } from "sonner";
+import { fetchApi } from "@/lib/api";
+import { useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
 interface ChatMessage {
   role: string;
@@ -20,7 +20,7 @@ const MARKETPLACE_TRIGGER = /@search\s+marketplace/i;
 
 const BestFriendPage = () => {
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
-  const [currentMessage, setCurrentMessage] = useState('');
+  const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const location = useLocation();
@@ -31,8 +31,8 @@ const BestFriendPage = () => {
   };
 
   const deductCredit = async () => {
-    const userId = (await supabase.auth.getUser()).data.user?.id ?? 'mock-ent-9921';
-    await supabase.functions.invoke('top-up-credits', {
+    const userId = (await supabase.auth.getUser()).data.user?.id ?? "mock-ent-9921";
+    await supabase.functions.invoke("top-up-credits", {
       body: {
         user_id: userId,
         credit_amount: -1,
@@ -45,13 +45,13 @@ const BestFriendPage = () => {
 
   const queryMarketplace = async (query: string) => {
     const { data, error } = await supabase
-      .from('marketplace_bundles')
-      .select('title, category, description, price, tier, contacts_count, data_points, features, bundle_id')
-      .eq('is_active', true)
+      .from("marketplace_bundles")
+      .select("title, category, description, price, tier, contacts_count, data_points, features, bundle_id")
+      .eq("is_active", true)
       .limit(20);
 
     if (error) {
-      console.error('Marketplace query error:', error);
+      console.error("Marketplace query error:", error);
       return [];
     }
     return data || [];
@@ -63,8 +63,8 @@ const BestFriendPage = () => {
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = isMarketplaceSearch(userMessage);
-    setCurrentMessage('');
-    setConversation(prev => [...prev, { role: 'user', content: userMessage }]);
+    setCurrentMessage("");
+    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
       let marketplaceResults: any[] | undefined;
@@ -72,8 +72,14 @@ const BestFriendPage = () => {
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
         if (available < 1) {
-          toast.error('Insufficient Synapse Credits (1 CR required for marketplace search)');
-          setConversation(prev => [...prev, { role: 'error', content: 'Insufficient Synapse Credits. You need at least 1 Synapse Credit to search the marketplace.' }]);
+          toast.error("Insufficient Synapse Credits (1 CR required for marketplace search)");
+          setConversation((prev) => [
+            ...prev,
+            {
+              role: "error",
+              content: "Insufficient Synapse Credits. You need at least 1 Synapse Credit to search the marketplace.",
+            },
+          ]);
           setIsLoading(false);
           return;
         }
@@ -82,12 +88,13 @@ const BestFriendPage = () => {
         await deductCredit();
       }
 
-      const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, '').trim() || userMessage;
+      const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
 
-      const data = await fetchApi('/api/v1/best-friend/chat', {
-        method: 'POST',
+      const data = await fetchApi("/api/v1/best-friend/chat", {
+        method: "POST",
         body: JSON.stringify({
           message: cleanedMessage,
+          history: conversation.slice(-6), // Pass the last 6 messages for memory context
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
@@ -95,22 +102,31 @@ const BestFriendPage = () => {
           },
         }),
       });
-      setConversation(prev => [...prev, {
-        role: 'assistant',
-        content: data.response,
-        creditDeducted: doMarketplace,
-      }]);
+      setConversation((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.response,
+          creditDeducted: doMarketplace,
+        },
+      ]);
     } catch (error) {
-      console.error('Best Friend AI Error:', error);
-      toast.error('Failed to connect to Best Friend AI');
-      setConversation(prev => [...prev, { role: 'error', content: 'Sorry, I encountered an issue. Please try again.' }]);
+      console.error("Best Friend AI Error:", error);
+      toast.error("Failed to connect to Best Friend AI");
+      setConversation((prev) => [
+        ...prev,
+        { role: "error", content: "Sorry, I encountered an issue. Please try again." },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   return (
@@ -122,7 +138,9 @@ const BestFriendPage = () => {
         </div>
         <div>
           <h1 className="text-xl font-bold text-foreground">Best Friend AI</h1>
-          <p className="text-xs text-muted-foreground">Your AI-powered assistant for data discovery and platform navigation</p>
+          <p className="text-xs text-muted-foreground">
+            Your AI-powered assistant for data discovery and platform navigation
+          </p>
         </div>
       </div>
 
@@ -135,18 +153,21 @@ const BestFriendPage = () => {
             </div>
             <p className="font-medium text-foreground text-lg">Hey there! I'm Best Friend AI.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
-              I can help you navigate the platform, discover data bundles, analyze trends, and manage your workspace. Just ask!
+              I can help you navigate the platform, discover data bundles, analyze trends, and manage your workspace.
+              Just ask!
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6 max-w-lg">
               {[
-                'Show me the latest marketplace bundles',
-                'What is my current credit balance?',
-                'Help me understand my pipeline status',
-                '@search marketplace health data',
+                "Show me the latest marketplace bundles",
+                "What is my current credit balance?",
+                "Help me understand my pipeline status",
+                "@search marketplace health data",
               ].map((suggestion) => (
                 <button
                   key={suggestion}
-                  onClick={() => { setCurrentMessage(suggestion); }}
+                  onClick={() => {
+                    setCurrentMessage(suggestion);
+                  }}
                   className="text-left text-sm px-3 py-2 rounded-lg border border-border bg-muted/30 hover:bg-accent hover:text-accent-foreground transition-colors text-muted-foreground"
                 >
                   {suggestion}
@@ -157,32 +178,37 @@ const BestFriendPage = () => {
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
             {conversation.map((message, index) => (
-              <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex items-start gap-3 max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    message.role === 'user'
-                      ? 'bg-primary/10 text-primary'
-                      : message.role === 'error'
-                        ? 'bg-destructive/10 text-destructive'
-                        : 'bg-primary/10 text-primary'
-                  }`}>
-                    {message.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+              <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`flex items-start gap-3 max-w-[80%] ${message.role === "user" ? "flex-row-reverse" : ""}`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      message.role === "user"
+                        ? "bg-primary/10 text-primary"
+                        : message.role === "error"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {message.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                   </div>
                   <div>
-                    <div className={`rounded-lg px-4 py-3 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : message.role === 'error'
-                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                          : 'bg-muted text-foreground'
-                    }`}>
+                    <div
+                      className={`rounded-lg px-4 py-3 ${
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : message.role === "error"
+                            ? "bg-destructive/10 text-destructive border border-destructive/20"
+                            : "bg-muted text-foreground"
+                      }`}
+                    >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
                     {message.creditDeducted && (
                       <div className="mt-1 flex items-center gap-1">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
-                          <Coins className="h-2.5 w-2.5" />
-                          1 CR deducted
+                          <Coins className="h-2.5 w-2.5" />1 CR deducted
                         </Badge>
                       </div>
                     )}
@@ -199,8 +225,14 @@ const BestFriendPage = () => {
                   <div className="bg-muted rounded-lg px-4 py-3">
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      <div
+                        className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      />
+                      <div
+                        className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -214,18 +246,14 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border flex-shrink-0 max-w-3xl mx-auto w-full space-y-2">
         <div className="flex gap-2">
           <Input
-            placeholder={marketplaceMode ? 'Search the data marketplace...' : 'Ask Best Friend AI anything...'}
+            placeholder={marketplaceMode ? "Search the data marketplace..." : "Ask Best Friend AI anything..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isLoading}
             className="flex-1"
           />
-          <Button
-            onClick={handleSendMessage}
-            disabled={isLoading || !currentMessage.trim()}
-            className="px-4"
-          >
+          <Button onClick={handleSendMessage} disabled={isLoading || !currentMessage.trim()} className="px-4">
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -234,8 +262,8 @@ const BestFriendPage = () => {
             onClick={() => setMarketplaceMode(!marketplaceMode)}
             className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
               marketplaceMode
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:border-muted-foreground/50'
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:border-muted-foreground/50"
             }`}
           >
             <Search className="h-3 w-3" />
@@ -243,7 +271,9 @@ const BestFriendPage = () => {
             {marketplaceMode && <span className="text-[10px] opacity-75">(1 CR/search)</span>}
           </button>
           {!marketplaceMode && (
-            <span className="text-[10px] text-muted-foreground">or type <code className="bg-muted px-1 py-0.5 rounded text-[10px]">@search marketplace</code></span>
+            <span className="text-[10px] text-muted-foreground">
+              or type <code className="bg-muted px-1 py-0.5 rounded text-[10px]">@search marketplace</code>
+            </span>
           )}
         </div>
       </div>
