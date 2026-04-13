@@ -1,34 +1,20 @@
 
 
-# Finalize Ledger Tethering & Purge Remaining PII
+# Condense Overview Tab in IndividualDashboard
 
 ## Changes
 
-### 1. `src/components/dashboards/IndividualDashboard.tsx` — Tab-based layout with live gauge
-- Wrap content in `Tabs` with three tabs: **Overview**, **Usage Stats**, **Ledger Audit**
-- Import `useSynapseCredits` and `useBillingData`; derive `liveBalance` from context
-- Add `SynapseGasGauge` at top of Overview tab showing real ledger balance
-- Move existing stat cards, performance, contributions, and quick actions into the Overview tab
-- Usage Stats tab: display `currentUsage` metrics from `useBillingData` (used/limit credits, API calls, data export)
-- Ledger Audit tab: placeholder card for future ledger transaction log
-- Apply sticky header + scrollable content pattern (matching Hub Enrollment)
+### `src/components/dashboards/IndividualDashboard.tsx`
 
-### 2. `src/components/onboarding/EcosystemOnboarding.tsx` — Connect progress to ledger
-- Import `useBillingData` to get `currentUsage`
-- Add a credit usage progress bar below the "Included With Verification" section showing `currentUsage.used / currentUsage.limit * 100`
-- Display formatted used/limit values (e.g., "0 / 5,000 CR used")
+**Reorganize the Overview tab into a tighter, single-scroll layout:**
 
-### 3. `src/components/billing/SynapsePurchaseModal.tsx` — Purge PII inputs, add Worldpay SDK container
-- Delete `cardNumber`, `cardExpiry`, `cardCvv` state variables and the `formatCardNumber` helper
-- Remove the Card Number / Expiry / CVV input fields from the payment step
-- Insert a `#worldpay-sdk-container` div with placeholder styling and "PCI-DSS Secure Port Initializing..." message
-- Update `handlePurchase` to remove the card field validation check (the Worldpay SDK handles tokenization externally)
-- Clear the `setCardNumber`/`setCardExpiry`/`setCardCvv` calls in `handleOpenChange`
-- Update the "Pay" button label to "Authorize via Worldpay"
-- Update FBO custody label from "Airwallex" to "Unit Banking"
+1. **Top row**: SynapseGasGauge + 3 stat cards in a single `grid-cols-2 md:grid-cols-4` row (remove the `md:row-span-2` on the gauge — make it the same height as the stat cards)
 
-## Result
-- Individual Dashboard gains tabbed navigation with live Synapse Gauge
-- Onboarding shows real credit usage progress
-- Purchase modal is PCI-compliant with no raw card data in the DOM
+2. **Middle row**: Merge "Asset Performance" and "Recent Contributions" into a single compact card with two columns side-by-side, reducing vertical space
+
+3. **Quick Actions**: Shrink from 4 separate bordered boxes to a single inline row of icon+label pairs inside one card, using `flex gap-4` instead of a grid of bordered divs
+
+4. **Reduce padding**: Use `space-y-3` instead of `space-y-4`, and `gap-3` instead of `gap-4` on the grids. Use `p-4` instead of `p-6` on card headers/content for the overview cards
+
+**Net effect**: Overview goes from 3 vertical sections with generous spacing to a compact, scannable single-page view without removing any information.
 
