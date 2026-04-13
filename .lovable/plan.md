@@ -1,67 +1,66 @@
 
 
-# Fix Build Error + Implement Tier-Based Route Guards
+# Fix: Eddie's Account Kicked to IDIA Life (Missing Profile Row)
 
-## Part 1: Fix Build Error (Critical)
+## Root Cause
 
-**File: `src/contexts/AuthContext.tsx`**
+Eddie's account (`217c6224-d839-43b0-98cb-b4d1be267536`, `edward.elam@gmail.com`) exists in `auth.users` since July 2025 but has **no row in the `profiles` table**. The `handle_new_user` trigger either wasn't attached when this account was created via Apple OAuth, or it failed silently.
 
-- **Line 99**: Change `"avatar_url, account_type, display_name"` to `"avatar_url, account_type"`
-- **Lines 103-111**: Remove the strict policy enforcement block that checks `display_name` (column no longer exists after Zero-PII migration)
-- **Line 113**: Will now type-check correctly against `ProfileData`
+When Eddie logs in, `AuthContext.tsx` queries `profiles`, finds nothing, waits 1 second, retries, still finds nothing, then executes the "Ironclad Gatekeeper" — signing out and redirecting to `life.thebigidia.com`. This is the flash of dashboard followed by the redirect.
 
-## Part 2: Add `subscriptionTier` to AuthContext
+## Fix (Two Parts)
 
-**File: `src/contexts/AuthContext.tsx`**
+### Part 1: Insert the missing profile row (Database Migration)
 
-- Add `SubscriptionTier` type export: `'none' | 'base' | 'analyst' | 'professional' | 'enterprise'`
-- Add `subscriptionTier` to `AuthContextType` interface and state (`useState<SubscriptionTier>('none')`)
-- After fetching subscription (line ~127), derive tier: `pure_alpha`/`enterprise` → `'enterprise'`, missing sub → `'base'`, otherwise map directly
-- Set `subscriptionTier` in mock login (super-admin → enterprise, others → base)
-- Clear to `'none'` on logout
-- Expose `subscriptionTier` in the Provider value
+Insert Eddie's profile row with a freshly minted `platform_guid`:
 
-## Part 3: Create New Files
-
-### `src/utils/tierLogic.ts`
-- Export `SubscriptionTier` type and `hasRequiredTier()` function using weight comparison (none=0, base=1, analyst=2, professional=3, enterprise=4)
-
-### `src/components/layout/FeatureLocked.tsx`
-- Lock screen with icon, tier/business explanation text, and buttons to navigate to dashboard or `/billing` (upgrade) / `/compliance` (enroll business)
-
-### `src/components/layout/ProtectedRoute.tsx`
-- Accepts `requiredTier` and `requireBusiness` props
-- Reads `subscriptionTier`, `isBusinessAccount`, `user.role` from `useAuth()`
-- Super-admin bypasses all gates
-- Renders `<FeatureLocked>` on failure, children on success
-
-## Part 4: Wrap Routes in Index.tsx
-
-**File: `src/pages/Index.tsx`**
-
-Import `ProtectedRoute` and wrap routes per access matrix:
-
-- **Base (no guard)**: `/dashboard`, `/settings`, `/best-friend`, `/onboarding`, `/purchase`, `/billing`, `/top-up`, `/earnings`, `/earnings/banking`
-- **Analyst**: `/marketplace`, `/data-viewer/*`, `/my-reports`, `/saved-searches`, `/analytics`, `/my-lists`
-- **Professional**: `/liquidity`, `/trading`, `/egress-logs`, `/system-health`, `/pay-blueprint`
-- **Business required**: `/organizations`, `/teams`, `/ai-management`, `/compliance`, `/security`, `/auth-settings`
-
-## Technical Details
-
-Tier derivation logic:
-```text
-deriveTier(sub):
-  no subscription → 'base'
-  tier includes 'pure_alpha' or 'enterprise' → 'enterprise'
-  tier matches known value → use directly
-  fallback → 'base'
+```sql
+INSERT INTO public.profiles (user_id, account_type, platform_guid)
+VALUES ('217c6224-d839-43b0-98cb-b4d1be267536', 'individual', gen_random_uuid())
+ON CONFLICT (user_id) DO NOTHING;
 ```
 
-ProtectedRoute evaluation order:
-```text
-1. Super-admin? → bypass all
-2. requireBusiness && !isBusinessAccount? → FeatureLocked(business)
-3. !hasRequiredTier(userTier, requiredTier)? → FeatureLocked(tier)
-4. Pass → render children
+This is the same thing the `handle_new_user` trigger does — we're just backfilling it.
+
+### Part 2: Make AuthContext resilient (Code Change)
+
+The current "Ironclad Gatekeeper" is too aggressive for the Hub prototype stage. If a profile is missing, we should **auto-create it** instead of nuking the session. This prevents the same issue from happening to any future user whose trigger fails.
+
+**File: `src/contexts/AuthContext.tsx`** — Replace the gatekeeper block (lines 123-130) with a self-healing insert:
+
+```typescript
+// 3. SELF-HEALING PROFILE CREATION
+// If profile is still missing after retry, create it on the fly
+if (!profileRow) {
+  console.warn("Profile missing — auto-creating for user:", session.user.id);
+  const { data: newProfile, error: insertErr } = await supabase
+    .from("profiles")
+    .insert({ user_id: session.user.id, account_type: "individual" })
+    .select("avatar_url, account_type, platform_guid")
+    .single();
+
+  if (insertErr || !newProfile) {
+    console.error("Failed to auto-create profile:", insertErr);
+    await supabase.auth.signOut();
+    return;
+  }
+  profileRow = newProfile;
+}
 ```
+
+The `platform_guid` will be auto-generated by the database default (`gen_random_uuid()`), so no client-side UUID generation is needed.
+
+### Part 3: Fix duplicate types build error
+
+**File: `src/integrations/supabase/types.ts`** — Remove the duplicate `synapse_credit_ledger` and `staged_health_data` table definitions that are causing TS2300 errors. Keep only the newer/more complete version of each.
+
+**File: `src/components/billing/UniversalPurchaseScreen.tsx`** — The `balance_after` column reference will resolve once the duplicate type is cleaned up (the correct definition includes it).
+
+## Summary
+
+| Step | What | Why |
+|------|------|-----|
+| Migration | Insert Eddie's profile row | Immediate fix for his account |
+| AuthContext | Self-healing profile creation | Prevents this from happening to anyone else |
+| Types cleanup | Remove duplicate table defs | Fixes build errors |
 
