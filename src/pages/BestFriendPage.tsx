@@ -30,30 +30,20 @@ const BestFriendPage = () => {
     return marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
   };
 
-  const deductCredit = async () => {
-    // 1. Rigorous Auth Check
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError) throw new Error(`Auth Error: ${authError.message}`);
-
-    const userId = authData.user?.id;
-    if (!userId) throw new Error("Could not verify user identity for credit deduction.");
-
-    // 2. Invoke the Edge Function and capture both network errors and payload errors
+  const deductCredit = async (searchId: string) => {
     const { data, error } = await supabase.functions.invoke("deduct-synapse-credit", {
       body: {
         amount: 1,
         description: "Marketplace Search Query",
+        referenceId: searchId,
       },
     });
 
-    // 3. Force errors to surface
     if (error) {
-      // Handles network, CORS, or 500 errors from the Edge Function
       throw new Error(`Edge Function Network Error: ${error.message || JSON.stringify(error)}`);
     }
 
     if (data?.error) {
-      // Handles logical errors returned manually from your Edge Function payload
       throw new Error(`Billing Logic Error: ${data.error}`);
     }
 
@@ -102,10 +92,9 @@ const BestFriendPage = () => {
           return;
         }
 
-        // Because we added "throw new Error" to these functions, if they fail,
-        // the execution jumps immediately to the catch block below.
+        const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
         marketplaceResults = await queryMarketplace(userMessage);
-        await deductCredit();
+        await deductCredit(searchId);
       }
 
       const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
@@ -118,8 +107,9 @@ const BestFriendPage = () => {
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
-            ...(marketplaceResults ? { marketplaceResults } : {}),
+            isMarketplaceMode: doMarketplace,
           },
+          ...(marketplaceResults ? { marketplaceResults } : {}),
         }),
       });
 
