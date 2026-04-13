@@ -4,6 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: number; description: string; features: string[]; limits: { credits: number; apiCalls: number; dataExport: number; teamMembers: number } }> = {
+  base: {
+    name: 'Standard Individual',
+    cost: '$10/query',
+    costNumeric: 10,
+    description: 'A la carte ecosystem access for verified individuals',
+    features: ['Biological Identity Verified', 'Base Synapse Access', 'Pay-as-you-go ($10/query)'],
+    limits: { credits: 0, apiCalls: 100, dataExport: 0, teamMembers: 0 },
+  },
   analyst: {
     name: 'Analyst',
     cost: '$9,995/yr',
@@ -108,8 +116,8 @@ export const useBillingData = () => {
     enabled: !!userId,
   });
 
-  const tier = subscription?.tier?.toLowerCase() ?? 'analyst';
-  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.analyst;
+  const tier = subscription?.tier?.toLowerCase() ?? 'base';
+  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.base;
   const creditLimit = planInfo.limits.credits;
   const currentUsage = { used: usageData?.used ?? 0, limit: creditLimit };
 
@@ -120,14 +128,13 @@ export const useBillingData = () => {
     : 0;
 
   const addPaymentMethod = useMutation({
-    mutationFn: async (pm: { method_type: string; display_label: string; identifier: string; metadata?: Record<string, unknown> }) => {
+    mutationFn: async (pm: { paymentToken: string; display_label: string }) => {
       if (!userId) throw new Error('Not authenticated');
       const { error } = await supabase.from('user_payment_methods').insert([{
         user_id: userId,
-        method_type: pm.method_type,
+        method_type: 'worldpay_token',
         display_label: pm.display_label,
-        identifier: pm.identifier,
-        metadata: (pm.metadata ?? {}) as any,
+        identifier: pm.paymentToken,
       }]);
       if (error) throw error;
     },
