@@ -75,7 +75,7 @@ const UniversalPurchaseScreen = () => {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle() as any;
 
       const currentBalance = Number(lastEntry?.balance_after ?? 0);
 
