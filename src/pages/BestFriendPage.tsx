@@ -31,15 +31,19 @@ const BestFriendPage = () => {
   };
 
   const deductCredit = async () => {
-    const userId = (await supabase.auth.getUser()).data.user?.id ?? "mock-ent-9921";
-    await supabase.functions.invoke("top-up-credits", {
+    const { error } = await supabase.functions.invoke('deduct-synapse-credit', {
       body: {
-        user_id: userId,
-        credit_amount: -1,
-        usd_amount: 0,
-        payment_reference: `MKT-SEARCH-${crypto.randomUUID().slice(0, 8)}`,
+        amount: 1,
+        description: 'Marketplace Search Query',
       },
     });
+
+    if (error) {
+      console.error('Deduction failed:', error);
+      toast.error('Failed to deduct Synapse Credit. Query aborted.');
+      throw error;
+    }
+
     await refreshBalance();
   };
 
@@ -94,11 +98,11 @@ const BestFriendPage = () => {
         method: "POST",
         body: JSON.stringify({
           message: cleanedMessage,
-          history: conversation.slice(-6), // Pass the last 6 messages for memory context
+          history: conversation.slice(-6),
+          marketplaceResults: marketplaceResults || undefined,
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
-            ...(marketplaceResults ? { marketplaceResults } : {}),
           },
         }),
       });
