@@ -8,33 +8,25 @@ const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: nu
     name: 'Analyst',
     cost: '$9,995/yr',
     costNumeric: 9995,
-    description: 'Entry-level API access for analysts',
-    features: ['Standard endpoints', 'Email support', 'Basic analytics', '5,000 CRD included'],
-    limits: { credits: 5000, apiCalls: 10000, dataExport: 10, teamMembers: 5 },
+    description: 'Foundational data access and AI-curated views',
+    features: ['Foundational Filters', 'Basic Search', 'AI-Curated View', '5,000 CRD included'],
+    limits: { credits: 5000, apiCalls: 100000, dataExport: 50, teamMembers: 5 },
   },
   professional: {
     name: 'Professional',
     cost: '$24,995/yr',
     costNumeric: 24995,
-    description: 'Advanced trading features and integrations',
-    features: ['Advanced AI analytics', 'Priority support', 'Custom integrations', 'Compliance reporting', 'API access', 'Team collaboration', '20,000 CRD included'],
-    limits: { credits: 20000, apiCalls: 100000, dataExport: 50, teamMembers: 25 },
+    description: 'Advanced trading features and merchant data integration',
+    features: ['Advanced Filters', 'Merchant Data Integration', 'Team Management', '20,000 CRD included'],
+    limits: { credits: 20000, apiCalls: 1000000, dataExport: 250, teamMembers: 25 },
   },
   enterprise: {
     name: 'Enterprise',
     cost: '$49,995+/yr',
     costNumeric: 49995,
-    description: 'Unlimited scale and dedicated support',
-    features: ['Everything in Professional', 'Unlimited API calls', 'Custom SLAs', 'Dedicated support', 'Custom endpoints', 'White-label options', '50,000+ CRD included'],
-    limits: { credits: 50000, apiCalls: 1000000, dataExport: 500, teamMembers: 100 },
-  },
-  pure_alpha: {
-    name: 'Pure Alpha',
-    cost: '$99,995/yr',
-    costNumeric: 99995,
-    description: 'Full-spectrum intelligence with priority data access',
-    features: ['Everything in Enterprise', 'Alpha signal feeds', 'Dedicated account manager', 'Custom data pipelines', 'Priority settlement', '100,000+ CRD included'],
-    limits: { credits: 100000, apiCalls: 5000000, dataExport: 2000, teamMembers: 500 },
+    description: 'Full-spectrum intelligence with HFT-grade API and SLAs',
+    features: ['Premier Filters', 'Developer API & Webhooks', 'Dedicated Account Manager', 'Enterprise SSO', '50,000+ CRD included'],
+    limits: { credits: 50000, apiCalls: 10000000, dataExport: 1000, teamMembers: 100 },
   },
 };
 
@@ -116,8 +108,8 @@ export const useBillingData = () => {
     enabled: !!userId,
   });
 
-  const tier = subscription?.tier?.toLowerCase() ?? 'professional';
-  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.professional;
+  const tier = subscription?.tier?.toLowerCase() ?? 'analyst';
+  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.analyst;
   const creditLimit = planInfo.limits.credits;
   const currentUsage = { used: usageData?.used ?? 0, limit: creditLimit };
 

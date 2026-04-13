@@ -16,7 +16,7 @@ export const APIEndpoints = () => {
       method: "GET",
       path: "/v1/features/market-data",
       description: "Retrieve real-time market feature feeds for algorithmic trading",
-      tier: "Professional",
+      tier: "Analyst",
       latency: "< 100ms",
       credits: 5,
       auth: "OAuth 2.0 + API Key"
@@ -27,7 +27,7 @@ export const APIEndpoints = () => {
       description: "Access aggregated health data analytics for predictive modeling",
       tier: "Professional",
       latency: "< 100ms",
-      credits: 8,
+      credits: 15,
       auth: "OAuth 2.0 + API Key"
     },
     {
@@ -36,7 +36,7 @@ export const APIEndpoints = () => {
       description: "Experiential Conversion Protocol reports with blockchain provenance",
       tier: "Enterprise",
       latency: "< 100ms",
-      credits: 12,
+      credits: 50,
       auth: "OAuth 2.0 + API Key"
     },
     {
@@ -44,27 +44,18 @@ export const APIEndpoints = () => {
       path: "/v1/queries/custom",
       description: "Execute custom queries with differential privacy protection",
       tier: "Enterprise",
+      latency: "< 100ms",
+      credits: 50,
+      auth: "OAuth 2.0 + API Key"
+    },
+    {
+      method: "POST",
+      path: "/v1/agent/transaction_request",
+      description: "Agentic AI Transactional Verification Bridge",
+      tier: "Enterprise",
       latency: "< 200ms",
       credits: 15,
-      auth: "OAuth 2.0 + API Key"
-    },
-    {
-      method: "GET",
-      path: "/v1/provenance/{data_id}",
-      description: "Retrieve DigiRAMP blockchain anchoring ID for data provenance",
-      tier: "Professional",
-      latency: "< 150ms",
-      credits: 3,
-      auth: "OAuth 2.0 + API Key"
-    },
-    {
-      method: "GET",
-      path: "/v1/streams/realtime",
-      description: "WebSocket connection for real-time data streaming (Kafka/Kinesis)",
-      tier: "Enterprise",
-      latency: "< 50ms",
-      credits: 20,
-      auth: "OAuth 2.0 + API Key"
+      auth: "OAuth 2.0 + mTLS"
     }
   ];
 
@@ -104,16 +95,42 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
     console.error('Error:', error);
   });`;
 
+  const responseExample = `{
+  "data": {
+    "feature_id": "market-data-2025-10-27",
+    "timestamp": "2025-10-27T15:30:45Z",
+    "features": {
+      "payment_velocity": 0.847,
+      "transaction_volume": 125000,
+      "market_sentiment": "bullish"
+    }
+  },
+  "metadata": {
+    "latency_ms": 47,
+    "credits_consumed": 5,
+    "tier": "analyst"
+  },
+  "provenance": {
+    "digiramp_anchor_id": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d",
+    "blockchain": "ethereum",
+    "timestamp": "2025-10-27T15:30:45Z",
+    "immutable": true
+  },
+  "headers": {
+    "X-IDIA-LIABILITY-TOKEN": "audit_8522e971_e064_4591"
+  }
+}`;
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5 text-primary" />
-            API Endpoints Documentation
+            Consumption Rate Matrix
           </CardTitle>
           <CardDescription>
-            Production endpoints with OAuth 2.0 authentication and TLS 1.3+ encryption
+            Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -156,7 +173,9 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
                     className={
                       endpoint.tier === "Enterprise"
                         ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-xs"
-                        : "bg-primary/10 text-primary border-primary/20 text-xs"
+                        : endpoint.tier === "Professional"
+                        ? "bg-primary/10 text-primary border-primary/20 text-xs"
+                        : "bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs"
                     }
                   >
                     {endpoint.tier} Tier
@@ -239,33 +258,12 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
 
       <Card>
         <CardHeader>
-          <CardTitle>Response Format</CardTitle>
-          <CardDescription>All responses include DigiRAMP Anchoring ID for blockchain provenance</CardDescription>
+          <CardTitle>Institutional Response Format</CardTitle>
+          <CardDescription>All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance</CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-            <code>{`{
-  "data": {
-    "feature_id": "market-data-2025-10-27",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "features": {
-      "payment_velocity": 0.847,
-      "transaction_volume": 125000,
-      "market_sentiment": "bullish"
-    }
-  },
-  "metadata": {
-    "latency_ms": 47,
-    "credits_consumed": 5,
-    "tier": "professional"
-  },
-  "provenance": {
-    "digiramp_anchor_id": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d",
-    "blockchain": "ethereum",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "immutable": true
-  }
-}`}</code>
+            <code>{responseExample}</code>
           </pre>
         </CardContent>
       </Card>

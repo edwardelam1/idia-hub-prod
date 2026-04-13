@@ -53,7 +53,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const buildUserFromSession = (session: Session, subscription: any, profileData: ProfileData | null): AuthUser => {
   const tier = subscription?.tier?.toLowerCase() ?? "";
   let role = "team-member";
-  if (["enterprise", "pure_alpha"].includes(tier)) role = "organization-admin";
+  if (tier === "enterprise") role = "organization-admin";
 
   return {
     user_id: session.user.id,
@@ -148,7 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const deriveTier = (subData: any): SubscriptionTier => {
         if (!subData) return "base";
         const t = subData.tier?.toLowerCase();
-        if (["pure_alpha", "enterprise"].includes(t)) return "enterprise";
+        if (t === "enterprise") return "enterprise";
         return (t as SubscriptionTier) ?? "base";
       };
 
