@@ -37,6 +37,8 @@ interface AuthContextType {
   isAdminRole: boolean;
   isLoading: boolean;
   subscriptionTier: SubscriptionTier;
+  activePerspective: AccountType;
+  switchPerspective: (type: AccountType) => void;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
 }
@@ -69,6 +71,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("none");
   const [isLoading, setIsLoading] = useState(true);
   const [isMockMode, setIsMockMode] = useState(false);
+  const [activePerspective, setActivePerspective] = useState<AccountType>("individual");
+
+  const switchPerspective = useCallback((type: AccountType) => {
+    console.log(`Switching perspective to: ${type}`);
+    setActivePerspective(type);
+  }, []);
 
   const fetchPiiData = useCallback(async () => {
     try {
@@ -125,6 +133,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         account_type: profileRow.account_type || "business",
       };
       setProfile(prof);
+      setActivePerspective((profileRow.account_type as AccountType) || "individual");
 
       // 4. Subscription & Tier Logic
       const { data: sub } = await supabase
@@ -215,10 +224,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile,
         piiData,
         isAuthenticated: !!user,
-        isBusinessAccount: user?.account_type === "business",
+        isBusinessAccount: activePerspective === "business",
         isAdminRole: ["enterprise_admin", "organization-admin", "super-admin"].includes(user?.role ?? ""),
         isLoading,
         subscriptionTier,
+        activePerspective,
+        switchPerspective,
         login,
         logout,
       }}
