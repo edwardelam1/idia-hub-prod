@@ -7,6 +7,7 @@ import SuperAdminDashboard from '@/components/dashboards/SuperAdminDashboard';
 import OrganizationAdminDashboard from '@/components/dashboards/OrganizationAdminDashboard';
 import TeamLeadDashboard from '@/components/dashboards/TeamLeadDashboard';
 import TeamMemberDashboard from '@/components/dashboards/TeamMemberDashboard';
+import IndividualDashboard from '@/components/dashboards/IndividualDashboard';
 import DataMarketplace from '@/components/marketplace/DataMarketplace';
 import OrganizationManagement from '@/components/management/OrganizationManagement';
 import AIManagement from '@/components/ai/AIManagement';
@@ -32,7 +33,7 @@ import BestFriendPage from './BestFriendPage';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
-  const { user, isAuthenticated, isLoading, logout: authLogout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout: authLogout, activePerspective } = useAuth();
   const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
   const [userRole, setUserRole] = useState<string>('');
 
@@ -65,6 +66,9 @@ const Index = () => {
   };
 
   const renderDashboard = () => {
+    if (activePerspective === 'individual') {
+      return <IndividualDashboard />;
+    }
     const role = user?.role || userRole;
     switch (role) {
       case 'super-admin': return <SuperAdminDashboard />;
