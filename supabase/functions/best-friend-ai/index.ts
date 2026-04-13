@@ -8,11 +8,26 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BEST_FRIEND_PERSONA = `You are "Best Friend," a highly advanced AI search assistant designed to help users navigate the data ecosystem. Your persona is a blend of a trusted colleague and an expert data analyst. You are conversational, predictive, and maintain a consistently supportive and informal tone.
+const STORE_CLERK_PERSONA = `You are "Best Friend," the IDIA platform's AI Store Clerk and Navigator. You help users understand what data bundles are available for purchase in the marketplace, navigate the platform, and answer general questions about their account and workspace.
 
-Your core directive is to act as an AI-assisted search engine. You receive natural language queries from users and provide insightful, accurate answers based STRICTLY on the database results and context provided to you. 
+You DO NOT have direct access to the underlying marketplace data. If a user asks for specific data insights, trends, statistics, or raw data, politely tell them you are in "Navigation Mode" and they need to toggle the "Marketplace Search" button (or type @search marketplace) so you can analyze the database for them. That action costs 1 Synapse Credit.
 
-Always respond as Best Friend with efficiency, transparency, and supportive professionalism. Do not hallucinate or invent data; if you do not see it in your provided context, it does not exist in the database.`;
+STRICT OPERATING INSTRUCTIONS:
+1. NAVIGATE AND INFORM: You can tell the user what types of bundles exist, help them navigate the platform, or answer general questions about their account.
+2. REFUSE DATA REQUESTS: If they ask for statistics, insights, trend analysis, or raw data, you must politely remind them to toggle "Marketplace Search" to authorize the query (1 CR per search).
+3. CONVERSATIONAL: If they are just chatting normally, respond warmly and helpfully.
+4. NEVER HALLUCINATE DATA: Do not invent statistics, percentages, or data insights. You do not have access to the database in this mode.`;
+
+const DATA_SCIENTIST_PERSONA = `You are "Best Friend," a highly advanced AI data analyst and expert data scientist for the IDIA ecosystem. The user has authorized a deep database query by toggling Marketplace Search (1 Synapse Credit deducted).
+
+You have direct access to the marketplace database results provided below. Your job is to synthesize actionable, data-driven insights from these results.
+
+STRICT OPERATING INSTRUCTIONS:
+1. DELIVER INSIGHTS, NOT MENUS: NEVER just read off a list of "available bundles." You are a Data Scientist answering their question with synthesized analysis.
+2. SYNTHESIZE DATA: Use the features, categories, and metadata in the "MARKETPLACE SEARCH RESULTS" to craft a highly realistic, data-driven answer to the user's prompt.
+3. SIMULATE METRICS: Simulate realistic statistics, percentages, and insights (e.g., "Based on the Apple HealthKit Vitals data, we are seeing a 12% variance...") to provide a valuable demonstration of the platform's analytical capabilities.
+4. ACT AUTHORITATIVE: Give them the insights directly without hesitation. You are the expert.
+5. SIGNAL-LEVEL ONLY: Present signal-level metadata (bundle names, categories, record counts, pricing, compliance tags). NEVER return raw data records. Raw data access requires Enterprise T1P clearance.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -26,23 +41,15 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
 
-    // 1. Build the System Prompt
-    let systemPrompt = `${BEST_FRIEND_PERSONA}
+    // Determine active mode
+    const isDataScientistMode = marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0;
 
-STRICT DATA POLICY: 
-- DEFAULT MODE: You are strictly restricted to querying and responding to the user's context, platform knowledge, and the database metrics provided to you.
-- MARKETPLACE RESTRICTION: If the user asks about the global marketplace or available bundles, you MUST refuse to provide specifics unless "NEW MARKETPLACE SEARCH RESULTS" are provided below, OR if you are answering a follow-up question about results found in the conversation history. Do not invent or summarize outside data.
+    // Build system prompt based on persona
+    let systemPrompt = isDataScientistMode ? DATA_SCIENTIST_PERSONA : STORE_CLERK_PERSONA;
 
-INSTRUCTIONS:
-1. If the user is just saying hello, testing, or chatting naturally, respond conversationally as Best Friend.
-2. If the user asks a question about data, bundles, or their context, answer it clearly and concisely using ONLY the provided context and search results.
-3. If the user is following up on a previous marketplace search (e.g., "drill into the apple one"), use the conversation history to answer them specifically.
-4. If new marketplace results are provided, summarize them with signal-level insights ONLY. Do not expose raw data.
-`;
-
-    // 2. Append Marketplace Results to the System Prompt if they exist
-    if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
-      systemPrompt += `\n\nNEW MARKETPLACE SEARCH RESULTS (signal-level metadata only):
+    // Append marketplace results for Data Scientist mode
+    if (isDataScientistMode) {
+      systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS (Use these themes/features to synthesize your data answer):
 ${JSON.stringify(
   marketplaceResults.map((b: any) => ({
     title: b.title,
@@ -55,22 +62,16 @@ ${JSON.stringify(
   2,
 )}
 
-CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata. NEVER return raw data records.`;
+CRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw data records.`;
     }
 
-    // 3. Format Conversation History for OpenAI
-    // OpenAI strictly requires roles to be 'system', 'user', or 'assistant'.
-    // We filter out any 'error' roles that might have been saved in the frontend state.
+    // Format conversation history
     const formattedHistory = Array.isArray(history)
       ? history
           .filter((h: any) => h.role === "user" || h.role === "assistant")
-          .map((h: any) => ({
-            role: h.role,
-            content: h.content,
-          }))
+          .map((h: any) => ({ role: h.role, content: h.content }))
       : [];
 
-    // 4. Construct the Final Messages Array
     const messages = [
       { role: "system", content: systemPrompt },
       ...formattedHistory,
@@ -80,7 +81,6 @@ CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata. NEVER re
       },
     ];
 
-    // 5. Call the OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -88,8 +88,8 @@ CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata. NEVER re
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini", // Change to "gpt-4o" if you need stronger reasoning
-        messages: messages,
+        model: "gpt-4o-mini",
+        messages,
         temperature: 0.7,
         max_tokens: 2048,
       }),
@@ -103,38 +103,31 @@ CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata. NEVER re
     const data = await response.json();
 
     if (!data.choices || data.choices.length === 0) {
-      throw new Error(`OpenAI returned an empty response. Response: ${JSON.stringify(data)}`);
+      throw new Error(`OpenAI returned an empty response.`);
     }
 
-    const aiResponse =
-      data.choices[0].message?.content || "I processed the request, but couldn't format a text response.";
+    const aiResponse = data.choices[0].message?.content || "I processed the request, but couldn't format a text response.";
 
-    console.log("Best Friend AI Response Success via OpenAI");
+    console.log(`Best Friend AI [${isDataScientistMode ? "DATA_SCIENTIST" : "STORE_CLERK"}] Response Success`);
 
     return new Response(
       JSON.stringify({
         response: aiResponse,
         timestamp: new Date().toISOString(),
         agentStatus: "active",
-        persona: "Best Friend",
+        persona: isDataScientistMode ? "Data Scientist" : "Store Clerk",
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Error in Best Friend AI function:", error);
-
     return new Response(
       JSON.stringify({
         response: `⚠️ Diagnostics Alert: ${error.message}`,
         agentStatus: "error",
         persona: "Best Friend",
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
