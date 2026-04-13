@@ -31,19 +31,15 @@ const BestFriendPage = () => {
   };
 
   const deductCredit = async () => {
-    const { error } = await supabase.functions.invoke('deduct-synapse-credit', {
+    const userId = (await supabase.auth.getUser()).data.user?.id ?? "mock-ent-9921";
+    await supabase.functions.invoke("top-up-credits", {
       body: {
-        amount: 1,
-        description: 'Marketplace Search Query',
+        user_id: userId,
+        credit_amount: -1,
+        usd_amount: 0,
+        payment_reference: `MKT-SEARCH-${crypto.randomUUID().slice(0, 8)}`,
       },
     });
-
-    if (error) {
-      console.error('Deduction failed:', error);
-      toast.error('Failed to deduct Synapse Credit. Query aborted.');
-      throw error;
-    }
-
     await refreshBalance();
   };
 
@@ -98,11 +94,11 @@ const BestFriendPage = () => {
         method: "POST",
         body: JSON.stringify({
           message: cleanedMessage,
-          history: conversation.slice(-6),
-          marketplaceResults: marketplaceResults || undefined,
+          history: conversation.slice(-6), // Pass the last 6 messages for memory context
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
+            ...(marketplaceResults ? { marketplaceResults } : {}),
           },
         }),
       });
@@ -114,17 +110,20 @@ const BestFriendPage = () => {
           creditDeducted: doMarketplace,
         },
       ]);
-    } catch (error) {
-      console.error("Best Friend AI Error:", error);
-      toast.error("Failed to connect to Best Friend AI");
-      setConversation((prev) => [
-        ...prev,
-        { role: "error", content: "Sorry, I encountered an issue. Please try again." },
-      ]);
+    } catch (error: any) {
+      console.error('Best Friend AI Execution Error:', error);
+      
+      // Extract the real error message instead of the generic fallback
+      const errorMessage = error?.message || (error?.error?.message) || 'Unknown execution error occurred.';
+      
+      toast.error(`Failed: ${errorMessage}`);
+      setConversation(prev => [...prev, { 
+        role: 'error', 
+        content: `⚠️ System Alert: ${errorMessage}\n\nPlease check your console for more details.` 
+      }]);
     } finally {
       setIsLoading(false);
     }
-  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
