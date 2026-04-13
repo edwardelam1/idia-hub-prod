@@ -14,12 +14,13 @@ interface AuthUser {
   email?: string;
 }
 
+/** In-memory PII — NEVER persisted to database or localStorage */
 export interface PiiData {
   displayName: string | null;
   fullName: string | null;
   email: string | null;
   avatarUrl: string | null;
-  platform_guid: string | null;
+  platformGuid: string | null; // Fixed naming to resolve TS2551
   source: "secure_enclave" | "auth_metadata_stub" | "mock";
 }
 
@@ -37,6 +38,8 @@ interface AuthContextType {
   isAdminRole: boolean;
   isLoading: boolean;
   subscriptionTier: SubscriptionTier;
+  activePerspective: AccountType; // Restored to resolve TS2339
+  switchPerspective: (type: AccountType) => void;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
 }
@@ -51,7 +54,7 @@ const buildUserFromSession = (session: Session, subscription: any, profileData: 
   return {
     user_id: session.user.id,
     role,
-    account_status: subscription ? "DELT_AUTHORIZED" : "PENDING",
+    account_status: subscription ? "AUTHORIZED" : "PENDING",
     account_type: (profileData?.account_type as AccountType) || "business",
     email: session.user.email,
   };
@@ -63,14 +66,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [piiData, setPiiData] = useState<PiiData | null>(null);
   const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("none");
   const [isLoading, setIsLoading] = useState(true);
+  const [activePerspective, setActivePerspective] = useState<AccountType>("individual");
+
+  const switchPerspective = useCallback((type: AccountType) => {
+    setActivePerspective(type);
+  }, []);
 
   const fetchPiiData = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("life-pii-bridge");
       if (error) return null;
-      return data as PiiData;
+      // Map platform_guid (DB) to platformGuid (Frontend)
+      return {
+        displayName: data.display_name ?? null,
+        fullName: data.full_name ?? null,
+        email: data.email ?? null,
+        avatarUrl: data.avatar_url ?? null,
+        platformGuid: data.platform_guid ?? null,
+        source: data.source ?? "auth_metadata_stub",
+      } as PiiData;
     } catch (err) {
-      console.warn("PII Bridge unreachable");
       return null;
     }
   }, []);
@@ -78,16 +93,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const fetchProfileAndSubscription = useCallback(
     async (session: Session) => {
       try {
-        // 1. Initial Profile Fetch
-        let { data: profileRow, error: profileError } = await supabase
+        let { data: profileRow } = await supabase
           .from("profiles")
           .select("avatar_url, account_type, platform_guid")
           .eq("user_id", session.user.id)
           .maybeSingle();
 
-        // 2. Anti-Race-Condition Check
         if (!profileRow) {
-          console.log("Profile check 1: Waiting 1.5s for DB trigger...");
           await new Promise((resolve) => setTimeout(resolve, 1500));
           const { data: retryRow } = await supabase
             .from("profiles")
@@ -97,9 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           profileRow = retryRow;
         }
 
-        // 3. IRONCLAD GATEKEEPER
         if (!profileRow || !profileRow.platform_guid) {
-          console.error("GATEKEEPER: Origin Verification Failed.");
           await supabase.auth.signOut();
           window.location.href = "https://life.thebigidia.com";
           return;
@@ -109,9 +119,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           avatar_url: profileRow.avatar_url,
           account_type: profileRow.account_type || "business",
         };
-        setProfile(prof);
 
-        // 4. Subscription & Tier
+        setProfile(prof);
+        setActivePerspective((profileRow.account_type as AccountType) || "individual");
+
         const { data: sub } = await supabase
           .from("user_subscriptions")
           .select("*")
@@ -133,7 +144,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const pii = await fetchPiiData();
         setPiiData(pii);
       } catch (err) {
-        console.error("Auth initialization failed:", err);
+        console.error("Auth init failed:", err);
       } finally {
         setIsLoading(false);
       }
@@ -144,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const {
       data: { subscription: authSub },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
         fetchProfileAndSubscription(session).catch(console.error);
       } else {
@@ -191,10 +202,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile,
         piiData,
         isAuthenticated: !!user,
-        isBusinessAccount: user?.account_type === "business",
+        isBusinessAccount: activePerspective === "business",
         isAdminRole: user?.role === "organization-admin",
         isLoading,
         subscriptionTier,
+        activePerspective,
+        switchPerspective,
         login,
         logout,
       }}
@@ -206,8 +219,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
