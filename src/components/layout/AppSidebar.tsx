@@ -83,7 +83,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
     const finance: NavSection = {
       label: 'Finance',
       items: [
-        { title: 'Synapse Ledger', url: '/billing', icon: DollarSign },
+        { title: 'Hub Enrollment', url: '/billing', icon: DollarSign },
         { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
         { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
       ],
@@ -94,7 +94,6 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
       label: 'Compliance',
       items: [
         { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
-        { title: 'Hub Enrollment', url: '/onboarding', icon: ShieldCheck },
         { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
       ],
     };

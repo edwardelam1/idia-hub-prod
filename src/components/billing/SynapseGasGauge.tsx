@@ -10,7 +10,7 @@ const SynapseGasGauge = () => {
     return (
       <div className="flex flex-col items-center justify-center p-6 bg-card rounded-xl border border-border animate-pulse w-full max-w-sm">
         <RefreshCw className="w-8 h-8 text-primary animate-spin mb-3" />
-        <p className="text-muted-foreground font-mono text-sm">Querying Synapse Ledger...</p>
+        <p className="text-muted-foreground font-mono text-sm">Querying Hub Enrollment...</p>
       </div>
     );
   }
