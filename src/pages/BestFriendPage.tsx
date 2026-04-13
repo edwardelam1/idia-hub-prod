@@ -31,15 +31,32 @@ const BestFriendPage = () => {
   };
 
   const deductCredit = async () => {
-    const userId = (await supabase.auth.getUser()).data.user?.id ?? "mock-ent-9921";
-    await supabase.functions.invoke("top-up-credits", {
+    // 1. Rigorous Auth Check
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw new Error(`Auth Error: ${authError.message}`);
+
+    const userId = authData.user?.id;
+    if (!userId) throw new Error("Could not verify user identity for credit deduction.");
+
+    // 2. Invoke the Edge Function and capture both network errors and payload errors
+    const { data, error } = await supabase.functions.invoke("deduct-synapse-credit", {
       body: {
-        user_id: userId,
-        credit_amount: -1,
-        usd_amount: 0,
-        payment_reference: `MKT-SEARCH-${crypto.randomUUID().slice(0, 8)}`,
+        amount: 1,
+        description: "Marketplace Search Query",
       },
     });
+
+    // 3. Force errors to surface
+    if (error) {
+      // Handles network, CORS, or 500 errors from the Edge Function
+      throw new Error(`Edge Function Network Error: ${error.message || JSON.stringify(error)}`);
+    }
+
+    if (data?.error) {
+      // Handles logical errors returned manually from your Edge Function payload
+      throw new Error(`Billing Logic Error: ${data.error}`);
+    }
+
     await refreshBalance();
   };
 
@@ -50,10 +67,11 @@ const BestFriendPage = () => {
       .eq("is_active", true)
       .limit(20);
 
+    // Force database errors to surface
     if (error) {
-      console.error("Marketplace query error:", error);
-      return [];
+      throw new Error(`Database Query Error: ${error.message}`);
     }
+
     return data || [];
   };
 
@@ -84,6 +102,8 @@ const BestFriendPage = () => {
           return;
         }
 
+        // Because we added "throw new Error" to these functions, if they fail,
+        // the execution jumps immediately to the catch block below.
         marketplaceResults = await queryMarketplace(userMessage);
         await deductCredit();
       }
@@ -94,7 +114,7 @@ const BestFriendPage = () => {
         method: "POST",
         body: JSON.stringify({
           message: cleanedMessage,
-          history: conversation.slice(-6), // Pass the last 6 messages for memory context
+          history: conversation.slice(-6),
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
@@ -102,6 +122,7 @@ const BestFriendPage = () => {
           },
         }),
       });
+
       setConversation((prev) => [
         ...prev,
         {
@@ -111,19 +132,27 @@ const BestFriendPage = () => {
         },
       ]);
     } catch (error: any) {
-      console.error('Best Friend AI Execution Error:', error);
-      
-      // Extract the real error message instead of the generic fallback
-      const errorMessage = error?.message || (error?.error?.message) || 'Unknown execution error occurred.';
-      
+      console.error("Best Friend AI Execution Error:", error);
+
+      // Safely extract the error string no matter how deeply nested it is
+      const errorMessage =
+        error?.message ||
+        error?.error?.message ||
+        error?.data?.error ||
+        (typeof error === "string" ? error : "An unknown execution error occurred.");
+
       toast.error(`Failed: ${errorMessage}`);
-      setConversation(prev => [...prev, { 
-        role: 'error', 
-        content: `⚠️ System Alert: ${errorMessage}\n\nPlease check your console for more details.` 
-      }]);
+      setConversation((prev) => [
+        ...prev,
+        {
+          role: "error",
+          content: `⚠️ System Alert: ${errorMessage}\n\nPlease check your console for more details.`,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
