@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useBillingData, PLAN_PRICING } from '@/hooks/useBillingData';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
@@ -75,7 +74,7 @@ const BillingCredits = () => {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <Tabs defaultValue="overview" className="flex flex-col h-full">
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-background border-b px-6 pt-6 pb-4 space-y-4">
         <div className="flex items-center justify-between">
@@ -150,13 +149,12 @@ const BillingCredits = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-0">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="subscription">Subscription</TabsTrigger>
-            <TabsTrigger value="payment">Payment Methods</TabsTrigger>
-          </TabsList>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
+          <TabsTrigger value="payment">Payment Methods</TabsTrigger>
+        </TabsList>
       </div>
 
       {/* Scrollable content */}
@@ -421,8 +419,7 @@ const BillingCredits = () => {
           </Card>
         </TabsContent>
       </div>
-      </Tabs>
-    </div>
+    </Tabs>
   );
 };
 
