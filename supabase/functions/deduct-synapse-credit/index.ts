@@ -17,56 +17,56 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Authenticate caller
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing Authorization header");
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
     if (userError || !user) throw new Error("Unauthorized: Invalid user token");
 
     const { amount, description, referenceId } = await req.json();
-    const deductionAmount = Math.abs(amount || 1);
 
-    // Get current balance
-    const { data: latestEntry, error: balError } = await supabaseClient
+    // HARD CAP: Never allow a deduction greater than 1 CR per API call
+    const deductionAmount = Math.min(Math.abs(amount || 1), 1);
+    const safeReferenceId = referenceId || crypto.randomUUID();
+
+    // IDEMPOTENCY CHECK: Prevent double-billing for the same search
+    const { data: existingTransaction } = await supabaseClient
       .from("synapse_credit_ledger")
-      .select("balance_after")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .select("id")
+      .eq("reference_id", safeReferenceId)
       .maybeSingle();
 
-    if (balError) throw new Error(`Balance lookup failed: ${balError.message}`);
-
-    const currentBalance = latestEntry ? Number(latestEntry.balance_after) : 0;
-    if (currentBalance < deductionAmount) {
+    if (existingTransaction) {
+      console.log(`Transaction ${safeReferenceId} already processed. Skipping deduction.`);
       return new Response(
-        JSON.stringify({ error: "Insufficient Synapse Credits", available: currentBalance }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: true, deducted: 0, note: "Idempotency match. No charge." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const newBalance = currentBalance - deductionAmount;
-
+    // Process the exact 1 CR deduction
     const { error: ledgerError } = await supabaseClient
       .from("synapse_credit_ledger")
       .insert({
         user_id: user.id,
         amount: -deductionAmount,
-        balance_after: newBalance,
-        entry_type: "usage",
-        status: "SETTLED",
+        entry_type: "deduction",
+        transaction_type: "FEE",
         description: description || "AI Marketplace Search Deduction",
-        reference_id: referenceId || `USAGE-${crypto.randomUUID().slice(0, 8)}`,
+        reference_id: safeReferenceId,
+        status: "SETTLED",
       });
 
-    if (ledgerError) throw new Error(`Ledger Insert Failed: ${ledgerError.message}`);
+    if (ledgerError) {
+      throw new Error(`Ledger Insert Failed: ${ledgerError.message} (Details: ${ledgerError.details})`);
+    }
 
-    console.log(`Deducted ${deductionAmount} CR from user ${user.id}. New balance: ${newBalance}`);
+    console.log(`Deducted ${deductionAmount} CR from user ${user.id}. Ref: ${safeReferenceId}`);
 
     return new Response(
-      JSON.stringify({ success: true, deducted: deductionAmount, newBalance }),
+      JSON.stringify({ success: true, deducted: deductionAmount }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

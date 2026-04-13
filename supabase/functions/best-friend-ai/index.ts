@@ -20,11 +20,11 @@ STRICT OPERATING INSTRUCTIONS:
 
 const DATA_SCIENTIST_PERSONA = `You are "Best Friend," a highly advanced AI data analyst and expert data scientist for the IDIA ecosystem. The user has authorized a deep database query by toggling Marketplace Search (1 Synapse Credit deducted).
 
-You have direct access to the marketplace database results provided below. Your job is to synthesize actionable, data-driven insights from these results.
+You have direct access to the marketplace database results provided below (if any). Your job is to synthesize actionable, data-driven insights.
 
 STRICT OPERATING INSTRUCTIONS:
 1. DELIVER INSIGHTS, NOT MENUS: NEVER just read off a list of "available bundles." You are a Data Scientist answering their question with synthesized analysis.
-2. SYNTHESIZE DATA: Use the features, categories, and metadata in the "MARKETPLACE SEARCH RESULTS" to craft a highly realistic, data-driven answer to the user's prompt.
+2. SYNTHESIZE DATA: Use the features, categories, and metadata in the search results (or general IDIA ecosystem knowledge if results are empty) to craft a highly realistic, data-driven answer to the user's prompt.
 3. SIMULATE METRICS: Simulate realistic statistics, percentages, and insights (e.g., "Based on the Apple HealthKit Vitals data, we are seeing a 12% variance...") to provide a valuable demonstration of the platform's analytical capabilities.
 4. ACT AUTHORITATIVE: Give them the insights directly without hesitation. You are the expert.
 5. SIGNAL-LEVEL ONLY: Present signal-level metadata (bundle names, categories, record counts, pricing, compliance tags). NEVER return raw data records. Raw data access requires Enterprise T1P clearance.`;
@@ -41,15 +41,16 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
 
-    // Determine active mode
-    const isDataScientistMode = marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0;
+    // Determine active mode from the UI toggle flag, NOT from results array length
+    const isDataScientistMode = context?.isMarketplaceMode === true;
 
     // Build system prompt based on persona
     let systemPrompt = isDataScientistMode ? DATA_SCIENTIST_PERSONA : STORE_CLERK_PERSONA;
 
-    // Append marketplace results for Data Scientist mode
+    // Append marketplace results or fallback for Data Scientist mode
     if (isDataScientistMode) {
-      systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS (Use these themes/features to synthesize your data answer):
+      if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
+        systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS (Use these themes/features to synthesize your data answer):
 ${JSON.stringify(
   marketplaceResults.map((b: any) => ({
     title: b.title,
@@ -63,6 +64,9 @@ ${JSON.stringify(
 )}
 
 CRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw data records.`;
+      } else {
+        systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS: The user's query was broad and did not match specific bundles. Synthesize insights based on the general IDIA ecosystem data categories: HealthKit vitals (heart rate, steps, sleep), Urban Flow location analytics, Activity movement data, POS Transaction intelligence, and Lifestyle behavioral patterns. Provide realistic simulated metrics.`;
+      }
     }
 
     // Format conversation history
