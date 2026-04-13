@@ -3,22 +3,26 @@ import { Search, Database, ShieldAlert, Play, Loader2, Info, Terminal, ChevronDo
 import { fetchApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 
 interface MarketplaceTerminalProps {
   synapseBalance?: number;
   isBioKeyVerified?: boolean;
 }
 
-const MarketplaceTerminal = ({ synapseBalance = 0, isBioKeyVerified = false }: MarketplaceTerminalProps) => {
+const MarketplaceTerminal = ({ synapseBalance: propBalance, isBioKeyVerified = false }: MarketplaceTerminalProps) => {
   const [query, setQuery] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const { balanceData } = useSynapseCredits();
+  const displayCredits = propBalance ?? balanceData?.available_credits ?? 0;
+
   const QUERY_COST_CRD = 1.0;
 
   const handleRunQuery = async () => {
-    if (synapseBalance < QUERY_COST_CRD) return;
+    if (displayCredits < QUERY_COST_CRD) return;
     setIsExecuting(true);
     try {
       const response = await fetchApi<{ data: any }>('/api/v1/synapse/query', {
@@ -55,7 +59,7 @@ const MarketplaceTerminal = ({ synapseBalance = 0, isBioKeyVerified = false }: M
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-muted-foreground">
                 <Database className="w-3 h-3" />
-                <span className="text-[11px] font-mono font-medium">{synapseBalance.toFixed(2)} CRD</span>
+                <span className="text-[11px] font-mono font-medium">{displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })} CRD</span>
               </div>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </div>
@@ -97,7 +101,7 @@ const MarketplaceTerminal = ({ synapseBalance = 0, isBioKeyVerified = false }: M
               <Button
                 size="sm"
                 onClick={handleRunQuery}
-                disabled={isExecuting || !isBioKeyVerified || synapseBalance < QUERY_COST_CRD}
+                disabled={isExecuting || !isBioKeyVerified || displayCredits < QUERY_COST_CRD}
                 className="h-8 text-xs font-semibold gap-1.5"
               >
                 {isExecuting ? (

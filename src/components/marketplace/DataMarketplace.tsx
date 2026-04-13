@@ -30,9 +30,10 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const { bundles, isLoading, error } = useMarketplaceBundles();
   const { balanceData } = useSynapseCredits();
   
+  const currentLedgerBalance = balanceData?.available_credits ?? 0;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<any>({});
-  const [userCredits, setUserCredits] = useState(12500);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [showAddDataModal, setShowAddDataModal] = useState(false);
 
@@ -62,10 +63,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   }));
 
   const handleDownloadBundle = (bundle: any) => {
-    if (userCredits >= bundle.price) {
-      setUserCredits(prev => prev - bundle.price);
-      
-      // Add to purchase history
+    if (currentLedgerBalance >= bundle.price) {
       addPurchase({
         bundleId: bundle.bundle_id,
         bundleName: bundle.name,
@@ -91,10 +89,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   };
 
   const handlePurchase = (totalCost: number) => {
-    if (userCredits >= totalCost) {
-      setUserCredits(prev => prev - totalCost);
-      
-      // Add to purchase history
+    if (currentLedgerBalance >= totalCost) {
       addPurchase({
         items: cartItems,
         totalCost,
@@ -181,11 +176,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   return (
     <div className={`space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
       <div className="flex items-center justify-between gap-2">
-        <MarketplaceHeader userCredits={userCredits} isMobile={isMobile} isTablet={isTablet} />
+        <MarketplaceHeader userCredits={currentLedgerBalance} isMobile={isMobile} isTablet={isTablet} />
         <ShoppingCartComponent
           cartItems={cartItems}
           onUpdateCart={handleUpdateCart}
-          userCredits={userCredits}
+          userCredits={currentLedgerBalance}
           onPurchase={handlePurchase}
         />
       </div>
@@ -223,7 +218,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 bundle={bundle}
                 isMobile={isMobile}
                 isTablet={isTablet}
-                userCredits={userCredits}
+                userCredits={currentLedgerBalance}
                 onDownload={handleDownloadBundle}
                 onAddToCart={handleAddToCart}
               />
