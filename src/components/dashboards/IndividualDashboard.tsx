@@ -32,9 +32,9 @@ const IndividualDashboard = () => {
 
   const getContributionIcon = (type: string) => {
     switch (type) {
-      case "health": return <Activity className="h-4 w-4 text-green-600" />;
-      case "lifestyle": return <Eye className="h-4 w-4 text-blue-600" />;
-      case "finance": return <Sparkles className="h-4 w-4 text-amber-600" />;
+      case "health": return <Activity className="h-4 w-4 text-primary" />;
+      case "lifestyle": return <Eye className="h-4 w-4 text-primary" />;
+      case "finance": return <Sparkles className="h-4 w-4 text-primary" />;
       default: return <Database className="h-4 w-4 text-muted-foreground" />;
     }
   };
@@ -105,7 +105,7 @@ const IndividualDashboard = () => {
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Active</div>
+            <div className="text-2xl font-bold text-primary">Active</div>
             <p className="text-xs text-muted-foreground">IDIA Life verified</p>
           </CardContent>
         </Card>
