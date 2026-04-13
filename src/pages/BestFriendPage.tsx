@@ -31,11 +31,24 @@ const BestFriendPage = () => {
   };
 
   const deductCredit = async (searchId: string) => {
+    // 1. Get the session explicitly
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("You must be logged in to search the marketplace.");
+    }
+
     const { data, error } = await supabase.functions.invoke("deduct-synapse-credit", {
       body: {
         amount: 1,
         description: "Marketplace Search Query",
         referenceId: searchId,
+      },
+      // 2. Explicitly pass the token to override any client defaults
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
       },
     });
 
