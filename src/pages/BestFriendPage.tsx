@@ -78,32 +78,71 @@ const BestFriendPage = () => {
     return data || [];
   };
 
-  const handleSendMessage = async () => {
-    if (!currentMessage.trim()) return;
+  // 1. Add this guard at the very top of handleSendMessage
+const handleSendMessage = async () => {
+  if (!currentMessage.trim() || isLoading) return; // Prevent double-trigger
 
-    setIsLoading(true);
-    const userMessage = currentMessage;
-    const doMarketplace = isMarketplaceSearch(userMessage);
-    setCurrentMessage("");
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+  setIsLoading(true);
+  const userMessage = currentMessage;
+  const doMarketplace = isMarketplaceSearch(userMessage);
+  setCurrentMessage("");
+  setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
-    try {
-      let marketplaceResults: any[] | undefined;
+  try {
+    let marketplaceResults: any[] | undefined;
+    let realPipelineData: any[] | undefined; // Container for REAL data
 
-      if (doMarketplace) {
-        const available = balanceData?.available_credits ?? 0;
-        if (available < 1) {
-          toast.error("Insufficient Synapse Credits (1 CR required for marketplace search)");
-          setConversation((prev) => [
-            ...prev,
-            {
-              role: "error",
-              content: "Insufficient Synapse Credits. You need at least 1 Synapse Credit to search the marketplace.",
-            },
-          ]);
-          setIsLoading(false);
-          return;
-        }
+    if (doMarketplace) {
+      const available = balanceData?.available_credits ?? 0;
+      if (available < 1) {
+        toast.error("Insufficient Synapse Credits");
+        setConversation((prev) => [...prev, { role: "error", content: "Insufficient Credits." }]);
+        setIsLoading(false);
+        return;
+      }
+
+      const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
+      
+      // FETCH REAL DATA FROM THE PIPELINE
+      const { data: healthData } = await supabase
+        .from('staged_health_data')
+        .select('steps_count, average_heartrate, blood_oxygen_saturation, activity_type')
+        .limit(50);
+      
+      realPipelineData = healthData || [];
+      marketplaceResults = await queryMarketplace(userMessage);
+      await deductCredit(searchId);
+    }
+
+    const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
+
+    const data = await fetchApi("/api/v1/best-friend/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        message: cleanedMessage,
+        history: conversation.slice(-6).map(m => ({ role: m.role, content: m.content })),
+        context: {
+          currentPage: location.pathname,
+          timestamp: new Date().toISOString(),
+          isMarketplaceMode: doMarketplace,
+          realPipelineData, // PASS REAL DATA TO THE AI
+        },
+        ...(marketplaceResults ? { marketplaceResults } : {}),
+      }),
+    });
+
+    setConversation((prev) => [
+      ...prev,
+      { role: "assistant", content: data.response, creditDeducted: doMarketplace },
+    ]);
+  } catch (error: any) {
+    console.error("AI Error:", error);
+    toast.error(`Failed: ${error.message}`);
+    setConversation(prev => [...prev, { role: 'error', content: `⚠️ Alert: ${error.message}` }]);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
         marketplaceResults = await queryMarketplace(userMessage);
