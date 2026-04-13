@@ -117,6 +117,10 @@ CRITICAL DATA ACCESS RULE: You must ONLY present signal-level metadata from thes
     // Analyze the request to determine which agents to engage
     const analysisPrompt = `${BEST_FRIEND_PERSONA}
 
+STRICT DATA POLICY: 
+- DEFAULT MODE: You are strictly restricted to querying and responding to the Super Admin's personal operational data, system health, and dashboard metrics. 
+- MARKETPLACE RESTRICTION: If the user asks about the marketplace, global database, or bundles, and there are NO "MARKETPLACE SEARCH RESULTS" provided below, you MUST refuse and tell them to toggle "Marketplace Search" or use "@search marketplace" to authorize the database query. Do not invent or summarize outside data.
+
 Super Admin Request: "${message}"
 
 Context: ${context ? JSON.stringify(context) : 'No additional context provided'}${marketplaceContext}
@@ -130,7 +134,7 @@ As Best Friend, analyze this request and:
 3. Break down the task into specific actions for each agent
 4. Provide a friendly, professional response explaining your approach
 5. If this is a complex multi-step operation, outline the execution plan
-${marketplaceResults ? '6. Summarize the marketplace bundle results with signal-level insights (names, categories, pricing, record counts). Do NOT expose raw data.' : ''}
+${marketplaceResults ? '6. Summarize the marketplace bundle results with signal-level insights ONLY. Do NOT expose raw data to prevent scraping.' : '6. Enforce the strict personal data policy if they ask for global/marketplace data without authorizing a search.'}
 
 Respond in a conversational, supportive tone while being precise about your technical approach.`;
 

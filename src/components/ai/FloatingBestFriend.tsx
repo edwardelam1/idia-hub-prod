@@ -1,20 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BestFriendAvatar from './BestFriendAvatar';
-
 import { useAudioCapabilities } from '@/hooks/useAudioCapabilities';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchApi } from '@/lib/api';
 import { toast } from 'sonner';
-import { AlertTriangle, Shield, Activity } from 'lucide-react';
+import { AlertTriangle, Shield } from 'lucide-react';
 
 interface FloatingBestFriendProps {
   userRole: string;
-}
-
-interface Position {
-  x: number;
-  y: number;
 }
 
 interface SecurityAlert {
@@ -25,43 +19,53 @@ interface SecurityAlert {
   route?: string;
 }
 
+const RESTING_POSITION = { x: 20, y: typeof window !== 'undefined' ? window.innerHeight - 120 : 600 };
+
 const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
-  const [position, setPosition] = useState<Position>({ x: 50, y: 50 });
-  const [isMoving, setIsMoving] = useState(false);
+  const [position, setPosition] = useState(RESTING_POSITION);
   const [emotion, setEmotion] = useState<'excited' | 'calm' | 'sad' | 'neutral'>('neutral');
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState<Position>({ x: 0, y: 0 });
-  
-  const [feedbackText, setFeedbackText] = useState<string>('');
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [feedbackText, setFeedbackText] = useState('');
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
 
   const location = useLocation();
   const navigate = useNavigate();
   const audio = useAudioCapabilities();
   const { user } = useAuth();
-  const moveIntervalRef = useRef<number | null>(null);
   const alertIntervalRef = useRef<number | null>(null);
+  const activityTimeoutRef = useRef<number | null>(null);
 
   const isDeltAuthorized = user?.account_status === 'DELT_AUTHORIZED';
 
-  const findSafePosition = (): Position => ({
-    x: Math.max(20, Math.min(window.innerWidth - 220, Math.random() * (window.innerWidth - 240))),
-    y: Math.max(20, Math.min(window.innerHeight - 220, Math.random() * (window.innerHeight - 240)))
-  });
+  // Auto-hide after 5s of inactivity
+  const resetActivityTimer = useCallback(() => {
+    setIsVisible(true);
+    if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+    activityTimeoutRef.current = window.setTimeout(() => setIsVisible(false), 5000);
+  }, []);
 
-  // Autonomous movement
   useEffect(() => {
-    if (!isDragging) {
-      moveIntervalRef.current = window.setInterval(() => {
-        setPosition(findSafePosition());
-        setIsMoving(true);
-        setTimeout(() => setIsMoving(false), 1000);
-      }, 8000 + Math.random() * 7000);
-    }
-    return () => { if (moveIntervalRef.current) clearInterval(moveIntervalRef.current); };
+    const events = ['mousemove', 'click', 'keydown', 'scroll', 'touchstart'] as const;
+    events.forEach(e => window.addEventListener(e, resetActivityTimer));
+    resetActivityTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetActivityTimer));
+      if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+    };
+  }, [resetActivityTimer]);
+
+  // Update resting position on resize
+  useEffect(() => {
+    const onResize = () => {
+      if (!isDragging) setPosition({ x: 20, y: window.innerHeight - 120 });
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, [isDragging]);
 
-  // Live data monitoring via fetchApi
+  // Live data monitoring
   useEffect(() => {
     const checkLiveData = async () => {
       try {
@@ -69,10 +73,9 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
         if (data.today_records > 0 && location.pathname === '/dashboard') {
           setFeedbackText(`I've processed ${data.total_records} health records so far.`);
           setEmotion('calm');
-          setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 4000);
+          const timeout = Math.max(5000, `I've processed ${data.total_records} health records so far.`.length * 60);
+          setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, timeout);
         }
-
-        // Only show DELT alerts if authorized
         if (isDeltAuthorized) {
           const secData = await fetchApi('/api/v1/security/events');
           const critical = secData.events?.filter((e: any) => e.severity === 'critical') || [];
@@ -80,7 +83,7 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
             showProactiveAlert({
               id: 'live-security',
               type: 'critical',
-              message: `Critical security event detected. Immediate attention required.`,
+              message: 'Critical security event detected. Immediate attention required.',
               route: '/security'
             });
           }
@@ -99,28 +102,31 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
 
   const showProactiveAlert = (alert: SecurityAlert) => {
     setEmotion(alert.type === 'critical' ? 'sad' : 'calm');
-    setPosition({ x: window.innerWidth - 300, y: window.innerHeight / 2 - 100 });
-    setIsMoving(true);
-
     toast(alert.message, {
       duration: 8000,
       icon: alert.type === 'critical' ? <AlertTriangle className="h-4 w-4" /> : <Shield className="h-4 w-4" />,
       action: alert.route ? { label: "Show me", onClick: () => { setEmotion('excited'); navigate(alert.route!); } } : undefined
     });
-
-    setTimeout(() => { setIsMoving(false); setEmotion('neutral'); }, 3000);
+    setTimeout(() => setEmotion('neutral'), 3000);
   };
 
-  // Contextual reactions
+  // Contextual reactions with dynamic timeouts
   useEffect(() => {
-    const reactions: Record<string, () => void> = {
-      '/dashboard': () => { setEmotion('calm'); setFeedbackText("Dashboard looking good!"); setTimeout(() => setFeedbackText(''), 4000); },
-      '/system-health': () => { setEmotion('calm'); setFeedbackText("System Health Dashboard - All services operational!"); setTimeout(() => setFeedbackText(''), 5000); },
-      '/security': () => { setEmotion('excited'); setFeedbackText("Security Command Center active."); setTimeout(() => setFeedbackText(''), 5000); },
-      '/marketplace': () => { setEmotion('neutral'); setFeedbackText("Data Marketplace - I can help find optimal bundles."); setTimeout(() => setFeedbackText(''), 5000); },
+    const reactions: Record<string, string> = {
+      '/dashboard': "Dashboard looking good!",
+      '/system-health': "System Health Dashboard - All services operational!",
+      '/security': "Security Command Center active.",
+      '/marketplace': "Data Marketplace - I can help find optimal bundles.",
     };
-    const reaction = reactions[location.pathname];
-    if (reaction) setTimeout(reaction, 1500);
+    const msg = reactions[location.pathname];
+    if (msg) {
+      setTimeout(() => {
+        setEmotion('calm');
+        setFeedbackText(msg);
+        const timeout = Math.max(5000, msg.length * 60);
+        setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, timeout);
+      }, 1500);
+    }
   }, [location.pathname]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -141,7 +147,11 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
   const handleMouseUp = () => {
     setIsDragging(false);
     setEmotion('calm');
-    setTimeout(() => setEmotion('neutral'), 2000);
+    // Return to resting position
+    setTimeout(() => {
+      setPosition({ x: 20, y: window.innerHeight - 120 });
+      setEmotion('neutral');
+    }, 500);
   };
 
   useEffect(() => {
@@ -183,37 +193,35 @@ const FloatingBestFriend = ({ userRole }: FloatingBestFriendProps) => {
       setFeedbackText(data.response);
       setEmotion('calm');
       await audio.speak(data.response);
-      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 3000);
+      const readingTimeMs = Math.max(5000, data.response.length * 60);
+      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, readingTimeMs);
     } catch (error) {
       console.error('Voice interaction error:', error);
       setFeedbackText('Sorry, I had trouble understanding.');
       setEmotion('sad');
-      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 3000);
+      setTimeout(() => { setFeedbackText(''); setEmotion('neutral'); }, 4000);
     }
   };
 
   return (
-    <>
-      <div
-        className={`fixed z-50 cursor-move transition-all duration-300 ${isMoving ? 'animate-pulse' : ''} ${isDragging ? 'scale-110' : 'hover:scale-105'}`}
-        style={{ left: `${position.x}px`, top: `${position.y}px`, transform: isDragging ? 'rotate(5deg)' : 'rotate(0deg)' }}
-        onMouseDown={handleMouseDown}
-      >
-        <BestFriendAvatar
-          onChatClick={() => { navigate('/best-friend'); setEmotion('excited'); }}
-          onVoiceToggle={handleVoiceToggle}
-          emotion={emotion}
-          isListening={audio.isRecording}
-          isSpeaking={audio.isSpeaking}
-          feedbackText={feedbackText}
-          className="drop-shadow-2xl"
-        />
-        {(isMoving || emotion === 'excited') && (
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/30 via-pink-400/30 to-blue-400/30 blur-xl -z-10 animate-pulse" />
-        )}
-      </div>
-      
-    </>
+    <div
+      className={`fixed z-50 cursor-move transition-all duration-700 ease-in-out ${isDragging ? 'scale-110' : 'hover:scale-105'} ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      style={{ left: `${position.x}px`, top: `${position.y}px`, transform: isDragging ? 'rotate(5deg)' : 'rotate(0deg)' }}
+      onMouseDown={handleMouseDown}
+    >
+      <BestFriendAvatar
+        onChatClick={() => { navigate('/best-friend'); setEmotion('excited'); }}
+        onVoiceToggle={handleVoiceToggle}
+        emotion={emotion}
+        isListening={audio.isRecording}
+        isSpeaking={audio.isSpeaking}
+        feedbackText={feedbackText}
+        className="drop-shadow-2xl"
+      />
+      {emotion === 'excited' && (
+        <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/30 via-pink-400/30 to-blue-400/30 blur-xl -z-10 animate-pulse" />
+      )}
+    </div>
   );
 };
 
