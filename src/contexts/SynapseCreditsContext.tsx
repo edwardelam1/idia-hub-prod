@@ -51,19 +51,13 @@ export const SynapseCreditsProvider = ({
         return;
       }
 
-      // 1. DIRECT TETHER: Pull absolute latest 'balance_after' for THIS user
-      const { data: latestEntry, error: ledgerError } = await supabase
-        .from("synapse_credit_ledger")
-        .select("balance_after")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // 1. SUM-BASED BALANCE: Calculate from all ledger entries (robust, no running total)
+      const { data: balance, error: ledgerError } = await supabase
+        .rpc("get_synapse_balance", { uid: userId });
 
       if (ledgerError) throw ledgerError;
 
-      // Default to 0 if no ledger entry exists
-      const credits = latestEntry ? Number(latestEntry.balance_after) : 0;
+      const credits = Number(balance ?? 0);
 
       // 2. BURN RATE: Calculate from deduction entries for THIS user
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

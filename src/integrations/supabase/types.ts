@@ -6134,6 +6134,7 @@ export type Database = {
         }[]
       }
       get_hub_balance: { Args: { uid: string }; Returns: number }
+      get_synapse_balance: { Args: { uid: string }; Returns: number }
       get_user_business_access: {
         Args: { p_user_id: string }
         Returns: {

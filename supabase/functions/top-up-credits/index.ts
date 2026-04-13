@@ -45,40 +45,13 @@ Deno.serve(async (req) => {
 
     if (error) throw error;
 
-    // Also write to legacy synapse_credit_ledger for backward compatibility
-    const { data: lastEntry } = await supabase
-      .from("synapse_credit_ledger")
-      .select("balance_after, balance_idia_usd")
-      .eq("user_id", user_id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const currentBalance = Number(lastEntry?.balance_idia_usd ?? lastEntry?.balance_after ?? 0);
-    const newBalance = currentBalance + Number(credit_amount);
-
-    await supabase.from("synapse_credit_ledger").insert({
-      user_id,
-      entry_type: "deposit",
-      amount: credit_amount,
-      balance_after: newBalance,
-      amount_idia_usd: credit_amount,
-      balance_idia_usd: newBalance,
-      transaction_id: txId,
-      transaction_type: "DEPOSIT",
-      status: "SETTLED",
-      description: `Credit top-up: ${Number(credit_amount).toFixed(4)} CR ($${usd_amount} USD)`,
-      reference_id: txId,
-      metadata: { usd_amount, payment_method: "worldpay" },
-    });
-
-    // Get new balance from synapse_credit_ledger via RPC
-    const { data: hubBalance } = await supabase.rpc("get_hub_balance", { uid: user_id });
+    // Get new balance via SUM-based RPC
+    const { data: newBalance } = await supabase.rpc("get_synapse_balance", { uid: user_id });
 
     return new Response(
       JSON.stringify({
         success: true,
-        new_balance: Number(hubBalance ?? newBalance),
+        new_balance: Number(newBalance ?? 0),
         entry_id: entry.id,
       }),
       {
