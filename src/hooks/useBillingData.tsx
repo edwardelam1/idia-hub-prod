@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: number; description: string; features: string[]; limits: { credits: number; apiCalls: number; dataExport: number; teamMembers: number } }> = {
+export const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: number; description: string; features: string[]; limits: { credits: number; apiCalls: number; dataExport: number; teamMembers: number } }> = {
   base: {
     name: 'Standard Individual',
     cost: '$10/query',
@@ -17,7 +17,7 @@ const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: nu
     cost: '$9,995/yr',
     costNumeric: 9995,
     description: 'Foundational data access and AI-curated views',
-    features: ['Foundational Filters', 'Basic Search', 'AI-Curated View', '5,000 CRD included'],
+    features: ['Foundational Filters', 'Basic Search', 'AI-Curated View', '5,000 CRD included', 'Standard Support', 'Basic Reporting', 'Single User Access'],
     limits: { credits: 5000, apiCalls: 100000, dataExport: 50, teamMembers: 5 },
   },
   professional: {
@@ -25,7 +25,7 @@ const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: nu
     cost: '$24,995/yr',
     costNumeric: 24995,
     description: 'Advanced trading features and merchant data integration',
-    features: ['Advanced Filters', 'Merchant Data Integration', 'Team Management', '20,000 CRD included'],
+    features: ['Advanced Filters', 'Merchant Data Integration', 'Team Management', '20,000 CRD included', 'Priority Support', 'Custom Reports', 'API Access', 'Compliance Dashboard'],
     limits: { credits: 20000, apiCalls: 1000000, dataExport: 250, teamMembers: 25 },
   },
   enterprise: {
@@ -33,7 +33,7 @@ const PLAN_PRICING: Record<string, { name: string; cost: string; costNumeric: nu
     cost: '$49,995+/yr',
     costNumeric: 49995,
     description: 'Full-spectrum intelligence with HFT-grade API and SLAs',
-    features: ['Premier Filters', 'Developer API & Webhooks', 'Dedicated Account Manager', 'Enterprise SSO', '50,000+ CRD included'],
+    features: ['Premier Filters', 'Developer API & Webhooks', 'Dedicated Account Manager', 'Enterprise SSO', '50,000+ CRD included', '24/7 Premium Support', 'White-Glove Onboarding', 'Custom SLAs', 'Unlimited Data Export'],
     limits: { credits: 50000, apiCalls: 10000000, dataExport: 1000, teamMembers: 100 },
   },
 };
