@@ -37,6 +37,8 @@ interface AuthContextType {
   isAdminRole: boolean;
   isLoading: boolean;
   subscriptionTier: SubscriptionTier;
+  activePerspective: AccountType;
+  switchPerspective: (type: AccountType) => void;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
 }
