@@ -116,7 +116,7 @@ const BestFriendPage = () => {
         method: "POST",
         body: JSON.stringify({
           message: cleanedMessage,
-          history: conversation.slice(-6),
+          history: conversation.slice(-6).map((m) => ({ role: m.role, content: m.content })),
           context: {
             currentPage: location.pathname,
             timestamp: new Date().toISOString(),
@@ -125,6 +125,20 @@ const BestFriendPage = () => {
           ...(marketplaceResults ? { marketplaceResults } : {}),
         }),
       });
+
+      // NEW: Check for internal errors returned with 200 status
+      if (data?.error) {
+        throw new Error(`AI System Error: ${data.error}`);
+      }
+
+      setConversation((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.response || "The AI returned an empty response. Please try again.",
+          creditDeducted: doMarketplace,
+        },
+      ]);
 
       setConversation((prev) => [
         ...prev,
