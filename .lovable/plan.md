@@ -1,51 +1,33 @@
 
 
-# Persona Split + Secure Credit Deduction Edge Function
+# Give Best Friend AI Full Staged Table Visibility
 
-## Overview
-Three changes: (1) create a dedicated `deduct-synapse-credit` edge function for secure server-side credit deductions, (2) update `BestFriendPage.tsx` to call it instead of hacking `top-up-credits` with negative values, (3) rewrite the `best-friend-ai` edge function prompt with the Jekyll/Hyde "Store Clerk vs Data Scientist" persona split.
+## Problem
+The frontend currently fetches only 50 records with a subset of columns from each staged table. The edge function then only summarizes aggregates, losing granularity. The AI needs the full picture.
 
-## Changes
+## Plan
 
-### 1. Create `supabase/functions/deduct-synapse-credit/index.ts`
-- Authenticates the caller via the Authorization header (`getUser`)
-- Accepts `{ amount, description, referenceId }` in the body
-- Inserts into `synapse_credit_ledger` with correct column names: `amount` (negative), `entry_type: "usage"`, `status: "SETTLED"`, `description`, `reference_id`, `user_id`
-- Uses service role key to bypass RLS for ledger writes
-- Returns `{ success: true, deducted: N }`
+### 1. Update `BestFriendPage.tsx` — Fetch all columns, increase limit
+- **staged_health_data**: Change `.select(...)` to `.select("*")` and increase `.limit(50)` to `.limit(500)` (covers all 219 records with headroom)
+- **staged_lifestyle_data**: Same — `.select("*")` and `.limit(500)` (covers all 136 records)
+- Remove the narrow column lists so the AI receives every field (vitals, sleep, nutrition, clinical, body composition, etc.)
 
-**Column alignment note**: The existing `synapse_credit_ledger` schema uses `amount` (not `credit_amount`), `entry_type` (not `transaction_type` for the primary field), `reference_id` (not `payment_reference`). The function will use the correct column names.
+### 2. Update `best-friend-ai` Edge Function — Raw Data Auditor mode
+Replace the current aggregation-only approach with the user's provided logic:
 
-### 2. Update `src/pages/BestFriendPage.tsx`
-- Replace `deductCredit` to call `supabase.functions.invoke('deduct-synapse-credit', { body: { amount: 1, description: 'Marketplace Search Query' } })` instead of the `top-up-credits` hack
-- If deduction fails, throw to abort the AI response
-- Pass `marketplaceResults` directly in the edge function body (not nested in `context`) so the AI edge function receives it at the top level as expected
+- **Inject full record arrays** into the system prompt as structured JSON (not just averages)
+- **Calculate audit metrics** server-side: total samples, HR baseline, max HR, step volume, session count, avg quality score
+- **Biometric Cost Analysis**: Map lifestyle events with their durations, quality scores, and activity contexts
+- **New system prompt** for Data Scientist mode becomes the "IDIA Raw Data Auditor" persona that performs direct table analysis, Work Load Biometric Cost calculation, and Personal Alpha readiness assessment
+- Keep the Store Clerk persona unchanged for non-marketplace queries
+- Retain CORS headers, conversation history, error handling, and the existing response format
+- Keep `gpt-4o-mini` model (the user's snippet uses `gpt-4-turbo-preview` but that's more expensive; will use `gpt-4o-mini` unless you prefer otherwise)
+- Lower temperature to `0.3` for more deterministic analysis (compromise between current 0.7 and user's 0.1)
 
-### 3. Rewrite `supabase/functions/best-friend-ai/index.ts` — Persona Split
-- Remove the single `BEST_FRIEND_PERSONA` constant
-- Define two personas: `STORE_CLERK_PERSONA` (navigator, refuses data requests, directs user to toggle Marketplace Search) and `DATA_SCIENTIST_PERSONA` (synthesizes insights from provided search results)
-- Dynamically select persona based on whether `marketplaceResults` is present and non-empty
-- Store Clerk mode: navigate, inform, refuse data/statistics requests
-- Data Scientist mode: synthesize insights, simulate metrics, act authoritative with the provided marketplace result themes/features
-- Keep existing history formatting and OpenAI call logic unchanged
+### 3. Token Budget Consideration
+355 total records × ~20 fields each could push prompt size. The edge function will serialize records as compact JSON (no pretty-printing) and cap at the first 200 records per table if the combined payload exceeds ~80KB, to stay within the 128K context window of gpt-4o-mini.
 
-## Technical Details
-
-**Ledger insert shape** (deduct-synapse-credit):
-```
-{ user_id, amount: -1, entry_type: "usage", status: "SETTLED",
-  description: "Marketplace Search Query",
-  reference_id: "USAGE-xxxxxxxx" }
-```
-
-**Persona detection logic** (best-friend-ai):
-```
-const isDataScientist = marketplaceResults?.length > 0;
-const systemPrompt = isDataScientist ? DATA_SCIENTIST_PERSONA + ... : STORE_CLERK_PERSONA + ...;
-```
-
-## Result
-- Credit deductions are server-side authenticated — no client-side ledger manipulation
-- AI persona dynamically switches between helpful navigator and deep data analyst based on search authorization
-- Hallucinated "systems operational" responses eliminated by strict mode enforcement
+## Files Changed
+- `src/pages/BestFriendPage.tsx` — widen select columns and raise limits
+- `supabase/functions/best-friend-ai/index.ts` — new Raw Data Auditor prompt with full record injection and audit metrics
 
