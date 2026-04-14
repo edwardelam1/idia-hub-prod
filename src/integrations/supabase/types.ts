@@ -4839,6 +4839,8 @@ export type Database = {
           rem_duration_minutes: number | null
           respiratory_rate_per_min: number | null
           resting_heart_rate: number | null
+          reward_amount: number | null
+          reward_calculated: boolean | null
           saturated_fat_g: number | null
           sexual_activity: boolean | null
           sleep_duration: number | null
@@ -4932,6 +4934,8 @@ export type Database = {
           rem_duration_minutes?: number | null
           respiratory_rate_per_min?: number | null
           resting_heart_rate?: number | null
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
           saturated_fat_g?: number | null
           sexual_activity?: boolean | null
           sleep_duration?: number | null
@@ -5025,6 +5029,8 @@ export type Database = {
           rem_duration_minutes?: number | null
           respiratory_rate_per_min?: number | null
           resting_heart_rate?: number | null
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
           saturated_fat_g?: number | null
           sexual_activity?: boolean | null
           sleep_duration?: number | null
@@ -5067,8 +5073,11 @@ export type Database = {
           location_zone: string | null
           processed_at: string | null
           pseudo_user_id: string
+          reward_amount: number | null
+          reward_calculated: boolean | null
           session_duration: number | null
           social_interactions: Json | null
+          synapse_weight_coefficient: number | null
         }
         Insert: {
           activity_context?: Json | null
@@ -5084,8 +5093,11 @@ export type Database = {
           location_zone?: string | null
           processed_at?: string | null
           pseudo_user_id: string
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
           session_duration?: number | null
           social_interactions?: Json | null
+          synapse_weight_coefficient?: number | null
         }
         Update: {
           activity_context?: Json | null
@@ -5101,8 +5113,11 @@ export type Database = {
           location_zone?: string | null
           processed_at?: string | null
           pseudo_user_id?: string
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
           session_duration?: number | null
           social_interactions?: Json | null
+          synapse_weight_coefficient?: number | null
         }
         Relationships: []
       }
@@ -5524,6 +5539,7 @@ export type Database = {
           created_at: string | null
           id: string
           platform_guid: string
+          source_id: string
         }
         Insert: {
           aca_hash_key: string
@@ -5531,6 +5547,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           platform_guid: string
+          source_id?: string
         }
         Update: {
           aca_hash_key?: string
@@ -5538,6 +5555,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           platform_guid?: string
+          source_id?: string
         }
         Relationships: [
           {
