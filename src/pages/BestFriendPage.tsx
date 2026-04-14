@@ -57,9 +57,9 @@ const BestFriendPage = () => {
   const queryMarketplace = async (query: string) => {
     const { data, error } = await supabase
       .from("marketplace_bundles")
-      .select("title, category, contacts_count, features")
+      .select("title, category, record_count, tier, price, features")
       .eq("is_active", true)
-      .limit(5);
+      .limit(10);
     if (error) throw error;
     return data || [];
   };
@@ -78,6 +78,7 @@ const BestFriendPage = () => {
     try {
       let marketplaceResults: any[] | undefined;
       let realPipelineData: any[] | undefined;
+      let realLifestyleData: any[] | undefined;
 
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
@@ -93,13 +94,22 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Fetch Real Data Summary from the Pipeline
-        const { data: healthData } = await supabase
-          .from("staged_health_data")
-          .select("steps_count, average_heartrate, blood_oxygen_saturation, activity_type")
-          .limit(10);
+        // 1. Fetch Real Data Summary from the Pipeline (health + lifestyle)
+        const [healthResult, lifestyleResult] = await Promise.all([
+          supabase
+            .from("staged_health_data")
+            .select("steps_count, average_heartrate, blood_oxygen_saturation, activity_type, data_quality_score, calories_burned, duration_seconds")
+            .order("processed_at", { ascending: false })
+            .limit(50),
+          supabase
+            .from("staged_lifestyle_data")
+            .select("event_type, event_category, session_duration, activity_context, data_quality_score")
+            .order("processed_at", { ascending: false })
+            .limit(50),
+        ]);
 
-        realPipelineData = healthData || [];
+        realPipelineData = healthResult.data || [];
+        realLifestyleData = lifestyleResult.data || [];
         marketplaceResults = await queryMarketplace(userMessage);
 
         // 2. Securely deduct the credit
@@ -117,7 +127,8 @@ const BestFriendPage = () => {
           context: {
             currentPage: location.pathname,
             isMarketplaceMode: doMarketplace,
-            realPipelineData, // GROUND TRUTH INJECTION
+            realPipelineData,
+            realLifestyleData,
           },
           marketplaceResults,
         }),

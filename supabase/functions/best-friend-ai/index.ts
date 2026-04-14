@@ -20,14 +20,14 @@ STRICT OPERATING INSTRUCTIONS:
 
 const DATA_SCIENTIST_PERSONA = `You are "Best Friend," a highly advanced AI data analyst and expert data scientist for the IDIA ecosystem. The user has authorized a deep database query by toggling Marketplace Search (1 Synapse Credit deducted).
 
-You have direct access to the marketplace database results provided below (if any). Your job is to synthesize actionable, data-driven insights.
+You have direct access to LIVE pipeline data and marketplace bundle metadata provided below. Your job is to synthesize actionable, data-driven insights from REAL data.
 
 STRICT OPERATING INSTRUCTIONS:
 1. DELIVER INSIGHTS, NOT MENUS: NEVER just read off a list of "available bundles." You are a Data Scientist answering their question with synthesized analysis.
-2. SYNTHESIZE DATA: Use the features, categories, and metadata in the search results (or general IDIA ecosystem knowledge if results are empty) to craft a highly realistic, data-driven answer to the user's prompt.
-3. SIMULATE METRICS: Simulate realistic statistics, percentages, and insights (e.g., "Based on the Apple HealthKit Vitals data, we are seeing a 12% variance...") to provide a valuable demonstration of the platform's analytical capabilities.
+2. USE REAL DATA: When pipeline data is provided, use the ACTUAL numbers (real step counts, heart rates, activity types, lifestyle events). Do NOT invent fake statistics when real data is available.
+3. SYNTHESIZE: Combine pipeline data with marketplace context to provide comprehensive analysis.
 4. ACT AUTHORITATIVE: Give them the insights directly without hesitation. You are the expert.
-5. SIGNAL-LEVEL ONLY: Present signal-level metadata (bundle names, categories, record counts, pricing, compliance tags). NEVER return raw data records. Raw data access requires Enterprise T1P clearance.`;
+5. SIGNAL-LEVEL ONLY: Present signal-level metadata and aggregated statistics. NEVER return raw data records. Raw data access requires Enterprise T1P clearance.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,32 +41,85 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
 
-    // Determine active mode from the UI toggle flag, NOT from results array length
+    // Determine active mode from the UI toggle flag
     const isDataScientistMode = context?.isMarketplaceMode === true;
 
     // Build system prompt based on persona
     let systemPrompt = isDataScientistMode ? DATA_SCIENTIST_PERSONA : STORE_CLERK_PERSONA;
 
-    // Append marketplace results or fallback for Data Scientist mode
+    // Append real pipeline data and marketplace results for Data Scientist mode
     if (isDataScientistMode) {
+      // Inject real pipeline data (health + lifestyle)
+      const realPipelineData = context?.realPipelineData;
+      const realLifestyleData = context?.realLifestyleData;
+
+      if (realPipelineData && Array.isArray(realPipelineData) && realPipelineData.length > 0) {
+        // Aggregate health stats
+        const steps = realPipelineData.filter((r: any) => r.steps_count != null);
+        const heartRates = realPipelineData.filter((r: any) => r.average_heartrate != null);
+        const bloodOx = realPipelineData.filter((r: any) => r.blood_oxygen_saturation != null);
+        const activities = realPipelineData.map((r: any) => r.activity_type).filter(Boolean);
+        const activityDist: Record<string, number> = {};
+        activities.forEach((a: string) => { activityDist[a] = (activityDist[a] || 0) + 1; });
+
+        const avgSteps = steps.length > 0
+          ? Math.round(steps.reduce((s: number, r: any) => s + (r.steps_count || 0), 0) / steps.length)
+          : null;
+        const avgHR = heartRates.length > 0
+          ? Math.round(heartRates.reduce((s: number, r: any) => s + (r.average_heartrate || 0), 0) / heartRates.length)
+          : null;
+        const avgSpO2 = bloodOx.length > 0
+          ? (bloodOx.reduce((s: number, r: any) => s + (r.blood_oxygen_saturation || 0), 0) / bloodOx.length).toFixed(1)
+          : null;
+
+        systemPrompt += `\n\nLIVE HEALTH PIPELINE DATA (${realPipelineData.length} records):
+- Average Steps: ${avgSteps ?? 'N/A'}
+- Average Heart Rate: ${avgHR ?? 'N/A'} bpm
+- Average SpO2: ${avgSpO2 ?? 'N/A'}%
+- Activity Distribution: ${JSON.stringify(activityDist)}
+- Records with step data: ${steps.length}
+- Records with heart rate: ${heartRates.length}
+- Records with blood oxygen: ${bloodOx.length}`;
+      }
+
+      if (realLifestyleData && Array.isArray(realLifestyleData) && realLifestyleData.length > 0) {
+        const eventTypes = realLifestyleData.map((r: any) => r.event_type).filter(Boolean);
+        const eventDist: Record<string, number> = {};
+        eventTypes.forEach((e: string) => { eventDist[e] = (eventDist[e] || 0) + 1; });
+        const categories = realLifestyleData.map((r: any) => r.event_category).filter(Boolean);
+        const catDist: Record<string, number> = {};
+        categories.forEach((c: string) => { catDist[c] = (catDist[c] || 0) + 1; });
+
+        systemPrompt += `\n\nLIVE LIFESTYLE PIPELINE DATA (${realLifestyleData.length} records):
+- Event Type Distribution: ${JSON.stringify(eventDist)}
+- Category Distribution: ${JSON.stringify(catDist)}`;
+      }
+
+      // Append marketplace bundle metadata
       if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
-        systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS (Use these themes/features to synthesize your data answer):
+        systemPrompt += `\n\nMARKETPLACE BUNDLE METADATA:
 ${JSON.stringify(
   marketplaceResults.map((b: any) => ({
     title: b.title,
     category: b.category,
     tier: b.tier,
     price: b.price,
+    record_count: b.record_count,
     features: b.features,
   })),
   null,
   2,
-)}
-
-CRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw data records.`;
-      } else {
-        systemPrompt += `\n\nMARKETPLACE SEARCH RESULTS: The user's query was broad and did not match specific bundles. Synthesize insights based on the general IDIA ecosystem data categories: HealthKit vitals (heart rate, steps, sleep), Urban Flow location analytics, Activity movement data, POS Transaction intelligence, and Lifestyle behavioral patterns. Provide realistic simulated metrics.`;
+)}`;
       }
+
+      // Fallback if no data at all
+      if ((!realPipelineData || realPipelineData.length === 0) && 
+          (!realLifestyleData || realLifestyleData.length === 0) &&
+          (!marketplaceResults || marketplaceResults.length === 0)) {
+        systemPrompt += `\n\nNO PIPELINE DATA AVAILABLE: The query returned no staged data. Inform the user that no health or lifestyle data has been processed yet, and suggest they connect their devices via IDIA Life to start generating pipeline data.`;
+      }
+
+      systemPrompt += `\n\nCRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw data records.`;
     }
 
     // Format conversation history
@@ -81,7 +134,7 @@ CRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw 
       ...formattedHistory,
       {
         role: "user",
-        content: `Current Context: ${context ? JSON.stringify(context) : "No additional context provided"}\n\nUser Request: "${message}"`,
+        content: `Current Context: ${context ? JSON.stringify({ currentPage: context.currentPage, isMarketplaceMode: context.isMarketplaceMode }) : "No additional context provided"}\n\nUser Request: "${message}"`,
       },
     ];
 
