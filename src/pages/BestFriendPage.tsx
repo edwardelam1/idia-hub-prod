@@ -143,6 +143,53 @@ const BestFriendPage = () => {
     }
   };
 
+  const handleSecureExport = async (messageIndex: number) => {
+    setExportingIndex(messageIndex);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session?.access_token) {
+        throw new Error("Authentication required");
+      }
+
+      const acaRecordIds = Array.from({ length: 5 }, () =>
+        `ACA-${Array.from({ length: 16 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('')}`
+      );
+
+      const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
+        body: {
+          client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
+          aca_record_ids: acaRecordIds,
+          country_of_origin: "US",
+          egress_type: "secure_export",
+          data_summary: { source: "best_friend_chat", query_index: messageIndex },
+        },
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      setConversation(prev => prev.map((msg, i) =>
+        i === messageIndex ? {
+          ...msg,
+          liabilityToken: {
+            liability_token_hash: data.liability_token_hash,
+            digiramp_anchor_id: data.digiramp_anchor_id,
+            egress_log_id: data.egress_log_id,
+            egress_fee_charged: data.egress_fee_charged,
+          }
+        } : msg
+      ));
+
+      await refreshBalance();
+      toast.success(`Liability Shield: ${data.egress_fee_charged} CRD egress fee charged`);
+    } catch (err: any) {
+      toast.error(`Secure Export Error: ${err.message}`);
+    } finally {
+      setExportingIndex(null);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
