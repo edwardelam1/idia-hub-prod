@@ -3023,7 +3023,6 @@ export type Database = {
           bundle_id: string
           bundle_version: number | null
           category: string
-          contacts_count: number | null
           created_at: string | null
           cross_platform_insights: Json | null
           data_fusion_level: string | null
@@ -3034,6 +3033,7 @@ export type Database = {
           is_active: boolean | null
           key_insights: string[] | null
           match_percentage: number | null
+          participant_count: number | null
           predictive_analytics: Json | null
           price: number
           suggested_filters: string[] | null
@@ -3046,7 +3046,6 @@ export type Database = {
           bundle_id?: string
           bundle_version?: number | null
           category: string
-          contacts_count?: number | null
           created_at?: string | null
           cross_platform_insights?: Json | null
           data_fusion_level?: string | null
@@ -3057,6 +3056,7 @@ export type Database = {
           is_active?: boolean | null
           key_insights?: string[] | null
           match_percentage?: number | null
+          participant_count?: number | null
           predictive_analytics?: Json | null
           price: number
           suggested_filters?: string[] | null
@@ -3069,7 +3069,6 @@ export type Database = {
           bundle_id?: string
           bundle_version?: number | null
           category?: string
-          contacts_count?: number | null
           created_at?: string | null
           cross_platform_insights?: Json | null
           data_fusion_level?: string | null
@@ -3080,6 +3079,7 @@ export type Database = {
           is_active?: boolean | null
           key_insights?: string[] | null
           match_percentage?: number | null
+          participant_count?: number | null
           predictive_analytics?: Json | null
           price?: number
           suggested_filters?: string[] | null
