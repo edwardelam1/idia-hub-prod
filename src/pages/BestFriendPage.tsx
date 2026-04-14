@@ -133,7 +133,7 @@ const BestFriendPage = () => {
         ...prev,
         {
           role: "assistant",
-          content: data.response || "Synapse Orchestrator returned no data for this Bio-Alpha query.",
+          content: data.response || "Synapse Orchestrator returned no data for this query.",
           creditDeducted: doMarketplace,
         },
       ]);
@@ -225,7 +225,7 @@ const BestFriendPage = () => {
             </div>
             <p className="font-medium text-foreground text-lg">Connected to IDIA Synapse.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
-              Select the 'Search Marketplace' to do deep research within the IDIA Protocol.
+              Select the 'Marketplace' button to conduct deep research within the IDIA Protocol.
             </p>
           </div>
         ) : (
@@ -291,7 +291,7 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border flex-shrink-0 max-w-3xl mx-auto w-full space-y-2">
         <div className="flex gap-2">
           <Input
-            placeholder={marketplaceMode ? "Querying IDIA Bio-Sovereign Alpha..." : "Ask Best Friend AI anything..."}
+            placeholder={marketplaceMode ? "Querying the IDIA Protocol..." : "Ask Best Friend AI anything..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
