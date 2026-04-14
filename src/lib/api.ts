@@ -38,13 +38,7 @@ const mockHandlers: Record<string, (body?: any) => any> = {
     ],
     total_count: 2,
   }),
-  "/api/v1/delt/transfer": (body?: any) => ({
-    success: true,
-    liability_token: `LT-${crypto.randomUUID().replace(/-/g, "")}`,
-    provenance_id: crypto.randomUUID(),
-    client_id: body?.client_id || "ENT-MOCK",
-    timestamp: new Date().toISOString(),
-  }),
+  // DELT transfer now handled via live edge function below
   // REMOVED the mock handler for /api/v1/best-friend/chat so it no longer traps the request
   "/api/v1/billing/worldpay/initiate": (body?: any) => ({
     session_id: `WP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
