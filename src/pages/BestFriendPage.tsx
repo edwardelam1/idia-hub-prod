@@ -98,18 +98,14 @@ const BestFriendPage = () => {
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
-            .select(
-              "steps_count, average_heartrate, activity_type, data_quality_score, calories_burned, duration_seconds, processed_at",
-            )
+            .select("*")
             .order("processed_at", { ascending: false })
-            .limit(50),
+            .limit(500),
           supabase
             .from("staged_lifestyle_data")
-            .select(
-              "event_type, event_category, session_duration, activity_context, data_quality_score, synapse_weight_coefficient, reward_amount",
-            )
+            .select("*")
             .order("processed_at", { ascending: false })
-            .limit(50),
+            .limit(500),
         ]);
 
         realPipelineData = healthResult.data || [];
