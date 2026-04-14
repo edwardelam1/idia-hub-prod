@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Coins } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "react-router-dom";
@@ -14,6 +14,12 @@ interface ChatMessage {
   role: string;
   content: string;
   creditDeducted?: boolean;
+  liabilityToken?: {
+    liability_token_hash: string;
+    digiramp_anchor_id: string;
+    egress_log_id: string;
+    egress_fee_charged: number;
+  };
 }
 
 const MARKETPLACE_TRIGGER = /@search\s+marketplace/i;
