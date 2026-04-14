@@ -54,10 +54,11 @@ const BestFriendPage = () => {
     await refreshBalance();
   };
 
-  const queryMarketplace = async (query: string) => {
+  const queryMarketplace = async () => {
+    // 🚨 FIX: Changed 'record_count' to 'participant_count' per actual schema
     const { data, error } = await supabase
       .from("marketplace_bundles")
-      .select("title, category, record_count, tier, price, features")
+      .select("title, category, participant_count, tier, price, features")
       .eq("is_active", true)
       .limit(10);
     if (error) throw error;
@@ -65,14 +66,13 @@ const BestFriendPage = () => {
   };
 
   const handleSendMessage = async () => {
-    // GUARD: Prevents blank messages and double-firing from rapid clicks
     if (!currentMessage.trim() || isLoading) return;
 
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = isMarketplaceSearch(userMessage);
 
-    setCurrentMessage(""); // Clear input immediately for UX
+    setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
@@ -94,31 +94,34 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Fetch Real Data Summary from the Pipeline (health + lifestyle)
+        // 1. Fetch Real Data Summary (Health Reliability & Bio-Sovereign Metrics)
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
-            .select("steps_count, average_heartrate, blood_oxygen_saturation, activity_type, data_quality_score, calories_burned, duration_seconds")
+            .select(
+              "steps_count, average_heartrate, activity_type, data_quality_score, calories_burned, duration_seconds, processed_at",
+            )
             .order("processed_at", { ascending: false })
             .limit(50),
           supabase
             .from("staged_lifestyle_data")
-            .select("event_type, event_category, session_duration, activity_context, data_quality_score")
+            .select(
+              "event_type, event_category, session_duration, activity_context, data_quality_score, synapse_weight_coefficient, reward_amount",
+            )
             .order("processed_at", { ascending: false })
             .limit(50),
         ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
-        marketplaceResults = await queryMarketplace(userMessage);
+        marketplaceResults = await queryMarketplace();
 
-        // 2. Securely deduct the credit
         await deductCredit(searchId);
       }
 
       const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
 
-      // 3. Ask Best Friend AI
+      // 3. Ask Best Friend AI (Injected with Bio-Sovereign Alpha context)
       const data = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -127,8 +130,10 @@ const BestFriendPage = () => {
           context: {
             currentPage: location.pathname,
             isMarketplaceMode: doMarketplace,
+            // Per SPEC-AI.5.2, we pass Trust Scores and Utility for AI weighting
             realPipelineData,
             realLifestyleData,
+            bioSovereignAlpha: true,
           },
           marketplaceResults,
         }),
@@ -140,12 +145,12 @@ const BestFriendPage = () => {
         ...prev,
         {
           role: "assistant",
-          content: data.response || "The pipeline returned no data for this query.",
+          content: data.response || "Synapse Orchestrator returned no data for this Bio-Alpha query.",
           creditDeducted: doMarketplace,
         },
       ]);
     } catch (error: any) {
-      console.error("Best Friend AI Execution Error:", error);
+      console.error("Best Friend Execution Error:", error);
       const errorMessage = error?.message || "An unknown execution error occurred.";
       toast.error(`Error: ${errorMessage}`);
       setConversation((prev) => [...prev, { role: "error", content: `⚠️ System Alert: ${errorMessage}` }]);
@@ -158,12 +163,12 @@ const BestFriendPage = () => {
     setExportingIndex(messageIndex);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData?.session?.access_token) {
-        throw new Error("Authentication required");
-      }
+      if (!sessionData?.session?.access_token) throw new Error("Authentication required");
 
-      const acaRecordIds = Array.from({ length: 5 }, () =>
-        `ACA-${Array.from({ length: 16 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('')}`
+      // Generate ACA IDs for DELT Protocol Transfer
+      const acaRecordIds = Array.from(
+        { length: 5 },
+        () => `ACA-${Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("")}`,
       );
 
       const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
@@ -180,17 +185,21 @@ const BestFriendPage = () => {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      setConversation(prev => prev.map((msg, i) =>
-        i === messageIndex ? {
-          ...msg,
-          liabilityToken: {
-            liability_token_hash: data.liability_token_hash,
-            digiramp_anchor_id: data.digiramp_anchor_id,
-            egress_log_id: data.egress_log_id,
-            egress_fee_charged: data.egress_fee_charged,
-          }
-        } : msg
-      ));
+      setConversation((prev) =>
+        prev.map((msg, i) =>
+          i === messageIndex
+            ? {
+                ...msg,
+                liabilityToken: {
+                  liability_token_hash: data.liability_token_hash,
+                  digiramp_anchor_id: data.digiramp_anchor_id,
+                  egress_log_id: data.egress_log_id,
+                  egress_fee_charged: data.egress_fee_charged,
+                },
+              }
+            : msg,
+        ),
+      );
 
       await refreshBalance();
       toast.success(`Liability Shield: ${data.egress_fee_charged} CRD egress fee charged`);
@@ -226,9 +235,10 @@ const BestFriendPage = () => {
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
               <Brain className="h-8 w-8 text-primary" />
             </div>
-            <p className="font-medium text-foreground text-lg">Connected to IDIA Pipeline.</p>
+            <p className="font-medium text-foreground text-lg">Connected to IDIA Synapse.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
-              Toggle Marketplace Search to authorize deep-query access to staged health and lifestyle data.
+              Authorize Marketplace Search to analyze your Trust Scores and determine your 30% revenue share
+              eligibility.
             </p>
           </div>
         ) : (
@@ -239,7 +249,7 @@ const BestFriendPage = () => {
                   className={`flex items-start gap-3 max-w-[80%] ${message.role === "user" ? "flex-row-reverse" : ""}`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === "user" ? "bg-primary/10 text-primary" : "bg-primary/10 text-primary"}`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/10 text-primary`}
                   >
                     {message.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                   </div>
@@ -276,9 +286,10 @@ const BestFriendPage = () => {
                           <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
                         </Badge>
                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
-                          <p className="text-emerald-700">🛡️ Liability Shield Active</p>
-                          <p className="text-muted-foreground truncate">Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…</p>
-                          <p className="text-muted-foreground truncate">Anchor: {message.liabilityToken.digiramp_anchor_id.substring(0, 20)}…</p>
+                          <p className="text-emerald-700">🛡️ Liability Shield Active (DELT Protocol)</p>
+                          <p className="text-muted-foreground truncate">
+                            Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…
+                          </p>
                         </div>
                       </div>
                     )}
@@ -293,7 +304,7 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border flex-shrink-0 max-w-3xl mx-auto w-full space-y-2">
         <div className="flex gap-2">
           <Input
-            placeholder={marketplaceMode ? "Querying IDIA Life Pipeline..." : "Ask Best Friend AI anything..."}
+            placeholder={marketplaceMode ? "Querying IDIA Bio-Sovereign Alpha..." : "Ask Best Friend AI anything..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
@@ -307,14 +318,10 @@ const BestFriendPage = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              marketplaceMode
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-muted/50 text-muted-foreground border-border hover:text-foreground"
-            }`}
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${marketplaceMode ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-muted-foreground border-border hover:text-foreground"}`}
           >
             <Search className="h-3 w-3" />
-            Marketplace Search (1 CR/search)
+            Marketplace Analytics (1 CR/search)
           </button>
         </div>
       </div>
