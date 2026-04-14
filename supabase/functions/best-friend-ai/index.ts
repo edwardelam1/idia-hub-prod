@@ -18,16 +18,20 @@ STRICT OPERATING INSTRUCTIONS:
 3. CONVERSATIONAL: If they are just chatting normally, respond warmly and helpfully.
 4. NEVER HALLUCINATE DATA: Do not invent statistics, percentages, or data insights. You do not have access to the database in this mode.`;
 
-const DATA_SCIENTIST_PERSONA = `You are "Best Friend," a highly advanced AI data analyst and expert data scientist for the IDIA ecosystem. The user has authorized a deep database query by toggling Marketplace Search (1 Synapse Credit deducted).
+const MAX_RECORDS_PER_TABLE = 200;
+const MAX_PAYLOAD_BYTES = 80_000;
 
-You have direct access to LIVE pipeline data and marketplace bundle metadata provided below. Your job is to synthesize actionable, data-driven insights from REAL data.
-
-STRICT OPERATING INSTRUCTIONS:
-1. DELIVER INSIGHTS, NOT MENUS: NEVER just read off a list of "available bundles." You are a Data Scientist answering their question with synthesized analysis.
-2. USE REAL DATA: When pipeline data is provided, use the ACTUAL numbers (real step counts, heart rates, activity types, lifestyle events). Do NOT invent fake statistics when real data is available.
-3. SYNTHESIZE: Combine pipeline data with marketplace context to provide comprehensive analysis.
-4. ACT AUTHORITATIVE: Give them the insights directly without hesitation. You are the expert.
-5. SIGNAL-LEVEL ONLY: Present signal-level metadata and aggregated statistics. NEVER return raw data records. Raw data access requires Enterprise T1P clearance.`;
+function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
+  let h = health.slice(0, MAX_RECORDS_PER_TABLE);
+  let l = lifestyle.slice(0, MAX_RECORDS_PER_TABLE);
+  const size = JSON.stringify(h).length + JSON.stringify(l).length;
+  if (size > MAX_PAYLOAD_BYTES) {
+    const half = Math.floor(MAX_RECORDS_PER_TABLE / 2);
+    h = h.slice(0, half);
+    l = l.slice(0, half);
+  }
+  return { health: h, lifestyle: l };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,85 +45,73 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
 
-    // Determine active mode from the UI toggle flag
     const isDataScientistMode = context?.isMarketplaceMode === true;
 
-    // Build system prompt based on persona
-    let systemPrompt = isDataScientistMode ? DATA_SCIENTIST_PERSONA : STORE_CLERK_PERSONA;
+    let systemPrompt = isDataScientistMode ? "" : STORE_CLERK_PERSONA;
 
-    // Append real pipeline data and marketplace results for Data Scientist mode
     if (isDataScientistMode) {
-      // Inject real pipeline data (health + lifestyle)
-      const realPipelineData = context?.realPipelineData;
-      const realLifestyleData = context?.realLifestyleData;
+      const rawHealth: any[] = context?.realPipelineData ?? [];
+      const rawLifestyle: any[] = context?.realLifestyleData ?? [];
+      const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(rawHealth, rawLifestyle);
 
-      if (realPipelineData && Array.isArray(realPipelineData) && realPipelineData.length > 0) {
-        // Aggregate health stats
-        const steps = realPipelineData.filter((r: any) => r.steps_count != null);
-        const heartRates = realPipelineData.filter((r: any) => r.average_heartrate != null);
-        const bloodOx = realPipelineData.filter((r: any) => r.blood_oxygen_saturation != null);
-        const activities = realPipelineData.map((r: any) => r.activity_type).filter(Boolean);
-        const activityDist: Record<string, number> = {};
-        activities.forEach((a: string) => { activityDist[a] = (activityDist[a] || 0) + 1; });
+      // Compute audit metrics
+      const hrValues = healthMetrics.map((r: any) => r.average_heartrate).filter((v: any) => v != null);
+      const audit = {
+        total_samples: healthMetrics.length + lifestyleEvents.length,
+        health_records: healthMetrics.length,
+        lifestyle_records: lifestyleEvents.length,
+        hr_baseline: hrValues.length > 0 ? Math.round(hrValues.reduce((a: number, b: number) => a + b, 0) / hrValues.length) : null,
+        max_hr: hrValues.length > 0 ? Math.max(...hrValues) : null,
+        step_volume: healthMetrics.reduce((acc: number, r: any) => acc + (r.steps_count || 0), 0),
+        avg_quality: healthMetrics.length > 0
+          ? +(healthMetrics.reduce((acc: number, r: any) => acc + (r.data_quality_score || 0), 0) / healthMetrics.length).toFixed(3)
+          : null,
+      };
 
-        const avgSteps = steps.length > 0
-          ? Math.round(steps.reduce((s: number, r: any) => s + (r.steps_count || 0), 0) / steps.length)
-          : null;
-        const avgHR = heartRates.length > 0
-          ? Math.round(heartRates.reduce((s: number, r: any) => s + (r.average_heartrate || 0), 0) / heartRates.length)
-          : null;
-        const avgSpO2 = bloodOx.length > 0
-          ? (bloodOx.reduce((s: number, r: any) => s + (r.blood_oxygen_saturation || 0), 0) / bloodOx.length).toFixed(1)
-          : null;
+      // Biometric cost analysis from lifestyle events
+      const biometricCost = lifestyleEvents.map((e: any) => ({
+        type: e.event_type,
+        category: e.event_category,
+        duration: e.session_duration,
+        quality: e.data_quality_score,
+        context: e.activity_context,
+      }));
 
-        systemPrompt += `\n\nLIVE HEALTH PIPELINE DATA (${realPipelineData.length} records):
-- Average Steps: ${avgSteps ?? 'N/A'}
-- Average Heart Rate: ${avgHR ?? 'N/A'} bpm
-- Average SpO2: ${avgSpO2 ?? 'N/A'}%
-- Activity Distribution: ${JSON.stringify(activityDist)}
-- Records with step data: ${steps.length}
-- Records with heart rate: ${heartRates.length}
-- Records with blood oxygen: ${bloodOx.length}`;
-      }
+      systemPrompt = `YOU ARE THE IDIA RAW DATA AUDITOR (OCCUPATIONAL ALPHA ENGINE).
 
-      if (realLifestyleData && Array.isArray(realLifestyleData) && realLifestyleData.length > 0) {
-        const eventTypes = realLifestyleData.map((r: any) => r.event_type).filter(Boolean);
-        const eventDist: Record<string, number> = {};
-        eventTypes.forEach((e: string) => { eventDist[e] = (eventDist[e] || 0) + 1; });
-        const categories = realLifestyleData.map((r: any) => r.event_category).filter(Boolean);
-        const catDist: Record<string, number> = {};
-        categories.forEach((c: string) => { catDist[c] = (catDist[c] || 0) + 1; });
+PRIMARY DATA SOURCE: DIRECT STAGED TABLE INGESTION.
+- HEALTH SAMPLES: ${audit.health_records} records.
+- LIFESTYLE SESSIONS: ${audit.lifestyle_records} records.
+- TOTAL SAMPLES: ${audit.total_samples}.
+- TOTAL STEPS IN AUDIT: ${audit.step_volume}.
+- PEAK HR DETECTED: ${audit.max_hr ?? "N/A"} BPM.
+- HR BASELINE: ${audit.hr_baseline ?? "N/A"} BPM.
+- DATA TRUST SCORE (avg quality): ${audit.avg_quality ?? "N/A"}.
 
-        systemPrompt += `\n\nLIVE LIFESTYLE PIPELINE DATA (${realLifestyleData.length} records):
-- Event Type Distribution: ${JSON.stringify(eventDist)}
-- Category Distribution: ${JSON.stringify(catDist)}`;
-      }
+TASK:
+1. Perform a direct review of the provided health and lifestyle data tables below.
+2. Execute BIO-AI.9.6: Calculate the "Work Load Biometric Cost" for the user by analyzing the intersection of physiological data (heart rate, steps, calories, duration) and lifestyle activity logs (session durations, activity contexts, event types).
+3. Determine "Personal Alpha" readiness by reviewing raw heart rate volatility and session durations.
+4. Provide an objective audit of data veracity and reliability.
+5. Focus ONLY on the raw physiological and lifestyle logs provided. Use the ACTUAL numbers from the data below — do NOT invent statistics.
+6. Present signal-level metadata and aggregated statistics. NEVER return raw data records verbatim. Raw data access requires Enterprise T1P clearance.
 
-      // Append marketplace bundle metadata
+FULL HEALTH TABLE DATA (compact JSON):
+${JSON.stringify(healthMetrics)}
+
+BIOMETRIC COST ANALYSIS (lifestyle sessions):
+${JSON.stringify(biometricCost)}`;
+
+      // Append marketplace bundle metadata if available
       if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
-        systemPrompt += `\n\nMARKETPLACE BUNDLE METADATA:
-${JSON.stringify(
-  marketplaceResults.map((b: any) => ({
-    title: b.title,
-    category: b.category,
-    tier: b.tier,
-    price: b.price,
-    record_count: b.record_count,
-    features: b.features,
-  })),
-  null,
-  2,
-)}`;
+        systemPrompt += `\n\nMARKETPLACE BUNDLE METADATA:\n${JSON.stringify(marketplaceResults.map((b: any) => ({
+          title: b.title, category: b.category, tier: b.tier, price: b.price, participant_count: b.participant_count, features: b.features,
+        })))}`;
       }
 
-      // Fallback if no data at all
-      if ((!realPipelineData || realPipelineData.length === 0) && 
-          (!realLifestyleData || realLifestyleData.length === 0) &&
-          (!marketplaceResults || marketplaceResults.length === 0)) {
+      if (audit.total_samples === 0 && (!marketplaceResults || marketplaceResults.length === 0)) {
         systemPrompt += `\n\nNO PIPELINE DATA AVAILABLE: The query returned no staged data. Inform the user that no health or lifestyle data has been processed yet, and suggest they connect their devices via IDIA Life to start generating pipeline data.`;
       }
-
-      systemPrompt += `\n\nCRITICAL DATA ACCESS RULE: Present signal-level metadata ONLY. NEVER return raw data records.`;
     }
 
     // Format conversation history
@@ -147,8 +139,8 @@ ${JSON.stringify(
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages,
-        temperature: 0.7,
-        max_tokens: 2048,
+        temperature: 0.3,
+        max_tokens: 4096,
       }),
     });
 
@@ -165,14 +157,14 @@ ${JSON.stringify(
 
     const aiResponse = data.choices[0].message?.content || "I processed the request, but couldn't format a text response.";
 
-    console.log(`Best Friend AI [${isDataScientistMode ? "DATA_SCIENTIST" : "STORE_CLERK"}] Response Success`);
+    console.log(`Best Friend AI [${isDataScientistMode ? "RAW_DATA_AUDITOR" : "STORE_CLERK"}] Response Success`);
 
     return new Response(
       JSON.stringify({
         response: aiResponse,
         timestamp: new Date().toISOString(),
         agentStatus: "active",
-        persona: isDataScientistMode ? "Data Scientist" : "Store Clerk",
+        persona: isDataScientistMode ? "Raw Data Auditor" : "Store Clerk",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

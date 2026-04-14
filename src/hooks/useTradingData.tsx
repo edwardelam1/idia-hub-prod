@@ -89,8 +89,8 @@ export const useTradingData = () => {
       name: b.title || b.category || 'Data Bundle',
       price: (b.price ?? 0) / 100,
       change24h: ((b.bundle_version ?? 1) % 20) - 5,
-      volume24h: b.contacts_count ?? 0,
-      marketCap: ((b.price ?? 0) / 100) * (b.contacts_count ?? 1) * 100,
+      volume24h: b.participant_count ?? 0,
+      marketCap: ((b.price ?? 0) / 100) * (b.participant_count ?? 1) * 100,
     }));
   }, [liveBundles]);
 
