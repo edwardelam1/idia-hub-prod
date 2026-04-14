@@ -31,6 +31,7 @@ const BestFriendPage = () => {
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const location = useLocation();
   const { balanceData, refreshBalance } = useSynapseCredits();
+  const [exportingIndex, setExportingIndex] = useState<number | null>(null);
 
   const isMarketplaceSearch = (msg: string) => {
     return marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
