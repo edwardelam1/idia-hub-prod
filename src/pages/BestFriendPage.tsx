@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Coins } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { useLocation } from "react-router-dom";
@@ -14,6 +14,12 @@ interface ChatMessage {
   role: string;
   content: string;
   creditDeducted?: boolean;
+  liabilityToken?: {
+    liability_token_hash: string;
+    digiramp_anchor_id: string;
+    egress_log_id: string;
+    egress_fee_charged: number;
+  };
 }
 
 const MARKETPLACE_TRIGGER = /@search\s+marketplace/i;
@@ -25,6 +31,7 @@ const BestFriendPage = () => {
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const location = useLocation();
   const { balanceData, refreshBalance } = useSynapseCredits();
+  const [exportingIndex, setExportingIndex] = useState<number | null>(null);
 
   const isMarketplaceSearch = (msg: string) => {
     return marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
@@ -136,6 +143,53 @@ const BestFriendPage = () => {
     }
   };
 
+  const handleSecureExport = async (messageIndex: number) => {
+    setExportingIndex(messageIndex);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session?.access_token) {
+        throw new Error("Authentication required");
+      }
+
+      const acaRecordIds = Array.from({ length: 5 }, () =>
+        `ACA-${Array.from({ length: 16 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('')}`
+      );
+
+      const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
+        body: {
+          client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
+          aca_record_ids: acaRecordIds,
+          country_of_origin: "US",
+          egress_type: "secure_export",
+          data_summary: { source: "best_friend_chat", query_index: messageIndex },
+        },
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      setConversation(prev => prev.map((msg, i) =>
+        i === messageIndex ? {
+          ...msg,
+          liabilityToken: {
+            liability_token_hash: data.liability_token_hash,
+            digiramp_anchor_id: data.digiramp_anchor_id,
+            egress_log_id: data.egress_log_id,
+            egress_fee_charged: data.egress_fee_charged,
+          }
+        } : msg
+      ));
+
+      await refreshBalance();
+      toast.success(`Liability Shield: ${data.egress_fee_charged} CRD egress fee charged`);
+    } catch (err: any) {
+      toast.error(`Secure Export Error: ${err.message}`);
+    } finally {
+      setExportingIndex(null);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -184,11 +238,37 @@ const BestFriendPage = () => {
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
-                    {message.creditDeducted && (
-                      <div className="mt-1 flex items-center gap-1">
+                    {message.creditDeducted && !message.liabilityToken && (
+                      <div className="mt-2 flex items-center gap-2">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />1 CR deducted
                         </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          disabled={exportingIndex === index}
+                          onClick={() => handleSecureExport(index)}
+                        >
+                          {exportingIndex === index ? (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          ) : (
+                            <Shield className="h-2.5 w-2.5" />
+                          )}
+                          Secure Export (250 CRD)
+                        </Button>
+                      </div>
+                    )}
+                    {message.liabilityToken && (
+                      <div className="mt-2 space-y-1">
+                        <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
+                          <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
+                        </Badge>
+                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
+                          <p className="text-emerald-700">🛡️ Liability Shield Active</p>
+                          <p className="text-muted-foreground truncate">Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…</p>
+                          <p className="text-muted-foreground truncate">Anchor: {message.liabilityToken.digiramp_anchor_id.substring(0, 20)}…</p>
+                        </div>
                       </div>
                     )}
                   </div>

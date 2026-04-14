@@ -1601,6 +1601,51 @@ export type Database = {
           },
         ]
       }
+      egress_logs: {
+        Row: {
+          aca_record_references: string[]
+          batch_checksum: string
+          client_id: string
+          country_of_origin: string
+          created_at: string
+          data_payload_summary: Json | null
+          digiramp_anchor_id: string
+          egress_type: string
+          id: string
+          liability_token_hash: string
+          synapse_ledger_entry_id: string | null
+          user_id: string
+        }
+        Insert: {
+          aca_record_references?: string[]
+          batch_checksum: string
+          client_id: string
+          country_of_origin?: string
+          created_at?: string
+          data_payload_summary?: Json | null
+          digiramp_anchor_id: string
+          egress_type?: string
+          id?: string
+          liability_token_hash: string
+          synapse_ledger_entry_id?: string | null
+          user_id: string
+        }
+        Update: {
+          aca_record_references?: string[]
+          batch_checksum?: string
+          client_id?: string
+          country_of_origin?: string
+          created_at?: string
+          data_payload_summary?: Json | null
+          digiramp_anchor_id?: string
+          egress_type?: string
+          id?: string
+          liability_token_hash?: string
+          synapse_ledger_entry_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       employee_schedules: {
         Row: {
           created_at: string | null

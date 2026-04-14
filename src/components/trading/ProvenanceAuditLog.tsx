@@ -8,11 +8,14 @@ import {
 } from '@/components/ui/table';
 
 interface ProvenanceLog {
-  provenance_id: string;
-  egress_timestamp: string;
+  id: string;
+  created_at: string;
   liability_token_hash: string;
-  aca_record_reference: string;
+  aca_record_references: string[];
   country_of_origin: string;
+  digiramp_anchor_id: string;
+  egress_type: string;
+  client_id: string;
 }
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
@@ -24,24 +27,13 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     queryKey: ['provenance-logs', userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('transactions')
-        .select('id, created_at, description, metadata, status')
-        .eq('transaction_type', 'delt_transfer')
+        .from('egress_logs')
+        .select('id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id')
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
-
-      return (data || []).map((tx: any) => {
-        const meta = tx.metadata || {};
-        return {
-          provenance_id: tx.id,
-          egress_timestamp: tx.created_at,
-          liability_token_hash: meta.liability_token_hash || tx.id.replace(/-/g, ''),
-          aca_record_reference: meta.aca_record_reference || '',
-          country_of_origin: meta.country_of_origin || 'US',
-        } as ProvenanceLog;
-      });
+      return (data || []) as ProvenanceLog[];
     },
     enabled: !!userId,
   });
@@ -99,48 +91,57 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
             <TableRow className="bg-muted/30">
               <TableHead className="text-xs uppercase tracking-wider">Egress Timestamp</TableHead>
               <TableHead className="text-xs uppercase tracking-wider">Liability Token Hash</TableHead>
-              <TableHead className="text-xs uppercase tracking-wider">ACA Reference</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider">ACA References</TableHead>
+              <TableHead className="text-xs uppercase tracking-wider">DigiRAMP Anchor</TableHead>
               <TableHead className="text-xs uppercase tracking-wider">Country</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
-                  No Liability Shield transfers recorded for this organization.
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                  No Liability Shield transfers recorded yet.
                 </TableCell>
               </TableRow>
             ) : (
-              logs.map((log) => (
-                <TableRow key={log.provenance_id}>
-                  <TableCell className="text-foreground whitespace-nowrap">
-                    {new Date(log.egress_timestamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
-                        {truncateHash(log.liability_token_hash)}
-                      </span>
-                      <button onClick={() => handleCopy(log.liability_token_hash)} className="text-muted-foreground hover:text-foreground transition-colors" title="Copy Full Hash">
-                        {copiedHash === log.liability_token_hash ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs">
-                        {truncateHash(log.aca_record_reference)}
-                      </span>
-                      {log.aca_record_reference && (
-                        <button onClick={() => handleCopy(log.aca_record_reference)} className="text-muted-foreground hover:text-foreground transition-colors">
-                          {copiedHash === log.aca_record_reference ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              logs.map((log) => {
+                const acaJoined = (log.aca_record_references || []).join(', ');
+                return (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-foreground whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
+                          {truncateHash(log.liability_token_hash)}
+                        </span>
+                        <button onClick={() => handleCopy(log.liability_token_hash)} className="text-muted-foreground hover:text-foreground transition-colors" title="Copy Full Hash">
+                          {copiedHash === log.liability_token_hash ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                         </button>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground font-mono">{log.country_of_origin}</TableCell>
-                </TableRow>
-              ))
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs">
+                          {truncateHash(acaJoined)}
+                        </span>
+                        {acaJoined && (
+                          <button onClick={() => handleCopy(acaJoined)} className="text-muted-foreground hover:text-foreground transition-colors">
+                            {copiedHash === acaJoined ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-muted-foreground text-xs">
+                        {truncateHash(log.digiramp_anchor_id)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground font-mono">{log.country_of_origin}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

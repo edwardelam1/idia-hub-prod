@@ -38,13 +38,7 @@ const mockHandlers: Record<string, (body?: any) => any> = {
     ],
     total_count: 2,
   }),
-  "/api/v1/delt/transfer": (body?: any) => ({
-    success: true,
-    liability_token: `LT-${crypto.randomUUID().replace(/-/g, "")}`,
-    provenance_id: crypto.randomUUID(),
-    client_id: body?.client_id || "ENT-MOCK",
-    timestamp: new Date().toISOString(),
-  }),
+  // DELT transfer now handled via live edge function below
   // REMOVED the mock handler for /api/v1/best-friend/chat so it no longer traps the request
   "/api/v1/billing/worldpay/initiate": (body?: any) => ({
     session_id: `WP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
@@ -109,6 +103,26 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     if (error) {
       console.error("Supabase Edge Function Error:", error);
       throw new Error(error.message || "Failed to connect to Best Friend AI Edge Function");
+    }
+
+    return data as T;
+  }
+
+  // ROUTE DELT TRANSFER TO LIVE EDGE FUNCTION
+  if (endpoint.startsWith("/api/v1/delt/transfer")) {
+    const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
+
+    const { data: session } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
+      body: bodyParsed,
+      headers: session?.session?.access_token
+        ? { Authorization: `Bearer ${session.session.access_token}` }
+        : {},
+    });
+
+    if (error) {
+      console.error("Liability Shield Edge Function Error:", error);
+      throw new Error(error.message || "Failed to execute Liability Shield protocol");
     }
 
     return data as T;
