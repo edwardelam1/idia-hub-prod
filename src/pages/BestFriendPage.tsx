@@ -14,7 +14,12 @@ interface ChatMessage {
   role: string;
   content: string;
   creditDeducted?: boolean;
+  queryEgressToken?: {
+    // Tracks the ACA token for the query itself
+    liability_token_hash: string;
+  };
   liabilityToken?: {
+    // Tracks the ACA token for full Secure Export
     liability_token_hash: string;
     digiramp_anchor_id: string;
     egress_log_id: string;
@@ -55,7 +60,6 @@ const BestFriendPage = () => {
   };
 
   const queryMarketplace = async () => {
-    // 🚨 FIX: Changed 'record_count' to 'participant_count' per actual schema
     const { data, error } = await supabase
       .from("marketplace_bundles")
       .select("title, category, participant_count, tier, price, features")
@@ -79,6 +83,7 @@ const BestFriendPage = () => {
       let marketplaceResults: any[] | undefined;
       let realPipelineData: any[] | undefined;
       let realLifestyleData: any[] | undefined;
+      let queryEgressToken: any = undefined;
 
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
@@ -94,22 +99,44 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Fetch Real Data Summary (Health Reliability & Bio-Sovereign Metrics)
-        const [healthResult, lifestyleResult] = await Promise.all([
-          supabase.from("staged_health_data").select("*").order("processed_at", { ascending: false }).limit(500),
-          supabase.from("staged_lifestyle_data").select("*").order("processed_at", { ascending: false }).limit(500),
+        // 1. Fetch Pipeline Data AND Real ACA Records for the Egress Log
+        const [healthResult, lifestyleResult, acaResult] = await Promise.all([
+          supabase.from("staged_health_data").select("*").order("processed_at", { ascending: false }).limit(50),
+          supabase.from("staged_lifestyle_data").select("*").order("processed_at", { ascending: false }).limit(50),
+          supabase.from("user_aca_records").select("aca_hash_key").order("created_at", { ascending: false }).limit(10), // 🚨 FETCH REAL ACA HASHES
         ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
-        marketplaceResults = await queryMarketplace();
 
+        // Extract real ACA IDs, fallback only if db is totally empty
+        const realAcaIds = acaResult.data?.map((a) => a.aca_hash_key) || [];
+        const activeAcaIds = realAcaIds.length > 0 ? realAcaIds : [`ACA-SYS-${Date.now()}`];
+
+        marketplaceResults = await queryMarketplace();
         await deductCredit(searchId);
+
+        // 2. 🚨 AUTOMATIC EGRESS LOGGING: Log the AI query itself to DELT Protocol 🚨
+        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
+          body: {
+            client_id: `HUB-AI-${searchId}`,
+            aca_record_ids: activeAcaIds, // Attaching real ACA records to the query
+            country_of_origin: "US",
+            egress_type: "ai_query_context",
+            data_summary: { source: "best_friend_chat", query: userMessage },
+          },
+          headers: { Authorization: `Bearer ${sessionData?.session?.access_token}` },
+        });
+
+        if (egressData?.liability_token_hash) {
+          queryEgressToken = { liability_token_hash: egressData.liability_token_hash };
+        }
       }
 
       const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
 
-      // 3. Ask Best Friend AI (Injected with Bio-Sovereign Alpha context)
+      // 3. Ask Best Friend AI
       const data = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -118,10 +145,8 @@ const BestFriendPage = () => {
           context: {
             currentPage: location.pathname,
             isMarketplaceMode: doMarketplace,
-            // Per SPEC-AI.5.2, we pass Trust Scores and Utility for AI weighting
             realPipelineData,
             realLifestyleData,
-            bioSovereignAlpha: true,
           },
           marketplaceResults,
         }),
@@ -133,8 +158,9 @@ const BestFriendPage = () => {
         ...prev,
         {
           role: "assistant",
-          content: data.response || "Synapse Orchestrator returned no data for this query.",
+          content: data.response || "Synapse Orchestrator returned no data.",
           creditDeducted: doMarketplace,
+          queryEgressToken: queryEgressToken, // Pass the query egress token to the UI
         },
       ]);
     } catch (error: any) {
@@ -153,19 +179,21 @@ const BestFriendPage = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData?.session?.access_token) throw new Error("Authentication required");
 
-      // Generate ACA IDs for DELT Protocol Transfer
-      const acaRecordIds = Array.from(
-        { length: 5 },
-        () => `ACA-${Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("")}`,
-      );
+      // 🚨 FIX: Replaced mock generator with REAL ACA records from the database 🚨
+      const { data: acaResult } = await supabase
+        .from("user_aca_records")
+        .select("aca_hash_key")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      const realAcaIds = acaResult?.map((a) => a.aca_hash_key) || [`ACA-SYS-${Date.now()}`];
 
       const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
         body: {
           client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-          aca_record_ids: acaRecordIds,
+          aca_record_ids: realAcaIds, // Using real chain-of-title records
           country_of_origin: "US",
           egress_type: "secure_export",
-          data_summary: { source: "best_friend_chat", query_index: messageIndex },
+          data_summary: { source: "best_friend_chat_export", query_index: messageIndex },
         },
         headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
       });
@@ -225,7 +253,8 @@ const BestFriendPage = () => {
             </div>
             <p className="font-medium text-foreground text-lg">Connected to IDIA Synapse.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
-              Select the 'Marketplace' button to conduct deep research within the IDIA Protocol.
+              Authorize Marketplace Search to audit raw data. Egress logs are automatically generated to preserve Chain
+              of Title.
             </p>
           </div>
         ) : (
@@ -246,6 +275,16 @@ const BestFriendPage = () => {
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
+
+                    {/* Automatic Query Egress Log Indicator */}
+                    {message.queryEgressToken && (
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background border px-2 py-1 rounded">
+                        <Shield className="h-3 w-3 text-emerald-600" />
+                        DELT Query Audit: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
+                      </div>
+                    )}
+
+                    {/* Secure Export Actions */}
                     {message.creditDeducted && !message.liabilityToken && (
                       <div className="mt-2 flex items-center gap-2">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
@@ -267,13 +306,15 @@ const BestFriendPage = () => {
                         </Button>
                       </div>
                     )}
+
+                    {/* Complete Liability Token (Export) */}
                     {message.liabilityToken && (
                       <div className="mt-2 space-y-1">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
                         </Badge>
                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
-                          <p className="text-emerald-700">🛡️ Liability Shield Active (DELT Protocol)</p>
+                          <p className="text-emerald-700">🛡️ Liability Shield Active </p>
                           <p className="text-muted-foreground truncate">
                             Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…
                           </p>
@@ -291,7 +332,7 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border flex-shrink-0 max-w-3xl mx-auto w-full space-y-2">
         <div className="flex gap-2">
           <Input
-            placeholder={marketplaceMode ? "Querying the IDIA Protocol..." : "Ask Best Friend AI anything..."}
+            placeholder={marketplaceMode ? "Querying IDIA Pipeline Data..." : "Ask Best Friend AI anything..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
