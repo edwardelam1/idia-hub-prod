@@ -280,7 +280,7 @@ const BestFriendPage = () => {
                     {message.queryEgressToken && (
                       <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background border px-2 py-1 rounded">
                         <Shield className="h-3 w-3 text-emerald-600" />
-                        DELT Query Audit: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
+                        Liability Token: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
                       </div>
                     )}
 
