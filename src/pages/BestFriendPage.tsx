@@ -96,16 +96,8 @@ const BestFriendPage = () => {
 
         // 1. Fetch Real Data Summary (Health Reliability & Bio-Sovereign Metrics)
         const [healthResult, lifestyleResult] = await Promise.all([
-          supabase
-            .from("staged_health_data")
-            .select("*")
-            .order("processed_at", { ascending: false })
-            .limit(500),
-          supabase
-            .from("staged_lifestyle_data")
-            .select("*")
-            .order("processed_at", { ascending: false })
-            .limit(500),
+          supabase.from("staged_health_data").select("*").order("processed_at", { ascending: false }).limit(500),
+          supabase.from("staged_lifestyle_data").select("*").order("processed_at", { ascending: false }).limit(500),
         ]);
 
         realPipelineData = healthResult.data || [];
@@ -233,8 +225,7 @@ const BestFriendPage = () => {
             </div>
             <p className="font-medium text-foreground text-lg">Connected to IDIA Synapse.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
-              Authorize Marketplace Search to analyze your Trust Scores and determine your 30% revenue share
-              eligibility.
+              Select the 'Search Marketplace' to do deep research within the IDIA Protocol.
             </p>
           </div>
         ) : (
