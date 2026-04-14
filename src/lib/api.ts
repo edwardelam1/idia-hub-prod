@@ -108,6 +108,26 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     return data as T;
   }
 
+  // ROUTE DELT TRANSFER TO LIVE EDGE FUNCTION
+  if (endpoint.startsWith("/api/v1/delt/transfer")) {
+    const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
+
+    const { data: session } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
+      body: bodyParsed,
+      headers: session?.session?.access_token
+        ? { Authorization: `Bearer ${session.session.access_token}` }
+        : {},
+    });
+
+    if (error) {
+      console.error("Liability Shield Edge Function Error:", error);
+      throw new Error(error.message || "Failed to execute Liability Shield protocol");
+    }
+
+    return data as T;
+  }
+
   // FALLBACK MOCK LOGIC FOR OTHER UNFINISHED ENDPOINTS
   if (!API_BASE_URL) {
     const bodyParsed = options.body ? JSON.parse(options.body as string) : undefined;
