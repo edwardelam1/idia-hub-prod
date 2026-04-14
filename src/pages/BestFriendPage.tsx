@@ -238,11 +238,37 @@ const BestFriendPage = () => {
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
-                    {message.creditDeducted && (
-                      <div className="mt-1 flex items-center gap-1">
+                    {message.creditDeducted && !message.liabilityToken && (
+                      <div className="mt-2 flex items-center gap-2">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />1 CR deducted
                         </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          disabled={exportingIndex === index}
+                          onClick={() => handleSecureExport(index)}
+                        >
+                          {exportingIndex === index ? (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          ) : (
+                            <Shield className="h-2.5 w-2.5" />
+                          )}
+                          Secure Export (250 CRD)
+                        </Button>
+                      </div>
+                    )}
+                    {message.liabilityToken && (
+                      <div className="mt-2 space-y-1">
+                        <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
+                          <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
+                        </Badge>
+                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
+                          <p className="text-emerald-700">🛡️ Liability Shield Active</p>
+                          <p className="text-muted-foreground truncate">Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…</p>
+                          <p className="text-muted-foreground truncate">Anchor: {message.liabilityToken.digiramp_anchor_id.substring(0, 20)}…</p>
+                        </div>
                       </div>
                     )}
                   </div>
