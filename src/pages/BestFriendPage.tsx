@@ -78,6 +78,7 @@ const BestFriendPage = () => {
     try {
       let marketplaceResults: any[] | undefined;
       let realPipelineData: any[] | undefined;
+      let realLifestyleData: any[] | undefined;
 
       if (doMarketplace) {
         const available = balanceData?.available_credits ?? 0;
@@ -108,7 +109,7 @@ const BestFriendPage = () => {
         ]);
 
         realPipelineData = healthResult.data || [];
-        const realLifestyleData = lifestyleResult.data || [];
+        realLifestyleData = lifestyleResult.data || [];
         marketplaceResults = await queryMarketplace(userMessage);
 
         // 2. Securely deduct the credit
@@ -126,7 +127,8 @@ const BestFriendPage = () => {
           context: {
             currentPage: location.pathname,
             isMarketplaceMode: doMarketplace,
-            realPipelineData, // GROUND TRUTH INJECTION
+            realPipelineData,
+            realLifestyleData,
           },
           marketplaceResults,
         }),
