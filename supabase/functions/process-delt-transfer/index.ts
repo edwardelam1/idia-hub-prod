@@ -18,26 +18,33 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Authenticate caller
+    // 1. Authenticate caller using getUser() — reliable across all Supabase versions
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      throw new Error("Authentication required");
+      throw new Error("Authentication required — no Bearer token provided");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user
+    // Use getUser() instead of getClaims() — getClaims is unavailable on older SDK
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      throw new Error("Invalid authentication token");
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user?.id) {
+      console.error("Auth verification failed:", userError?.message);
+      throw new Error("Invalid authentication token — could not resolve user identity");
     }
-    const userId = claimsData.claims.sub as string;
+    const userId = userData.user.id;
+
+    // Reject zero-UUID to prevent orphan rows invisible to RLS
+    if (userId === "00000000-0000-0000-0000-000000000000") {
+      throw new Error("Invalid user identity — zero UUID rejected");
+    }
+
+    console.log(`DELT Transfer: Authenticated user ${userId.slice(0, 8)}...`);
 
     // 2. Parse and validate body
     const body = await req.json();
@@ -111,6 +118,8 @@ serve(async (req) => {
     await adminClient.from("egress_logs")
       .update({ synapse_ledger_entry_id: ledgerResult.data.id })
       .eq("id", egressResult.data.id);
+
+    console.log(`DELT Transfer: Success — egress_log ${egressResult.data.id}, user ${userId.slice(0, 8)}...`);
 
     // 7. Return full liability token object
     return new Response(JSON.stringify({

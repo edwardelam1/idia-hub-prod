@@ -8,16 +8,97 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const STORE_CLERK_PERSONA = `You are "Best Friend," the IDIA platform's AI Store Clerk and Navigator. You help users understand what data bundles are available for purchase in the marketplace, navigate the platform, and answer general questions about their account and workspace.
+// ─── BANNED LEXICON & LINGUISTIC GOVERNANCE ────────────────────────────────────
+const BANNED_WORDS = [
+  "unleash", "dive into", "game-changing", "revolutionary", "transformative",
+  "leverage", "unlock potential", "dive deeper", "delve", "synergy",
+];
 
-You DO NOT have direct access to the underlying marketplace data. If a user asks for specific data insights, trends, statistics, or raw data, politely tell them you are in "Navigation Mode" and they need to toggle the "Marketplace Search" button (or type @search marketplace) so you can analyze the database for them. That action costs 1 Synapse Credit.
+function applyLinguisticGovernance(text: string): string {
+  let cleaned = text;
+  // Strip banned phrases (case-insensitive)
+  for (const phrase of BANNED_WORDS) {
+    const re = new RegExp(phrase, "gi");
+    cleaned = cleaned.replace(re, "");
+  }
+  // Remove semicolons and em dashes
+  cleaned = cleaned.replace(/;/g, ".").replace(/—/g, ",");
+  // Collapse double spaces
+  cleaned = cleaned.replace(/ {2,}/g, " ").trim();
+  return cleaned;
+}
 
-STRICT OPERATING INSTRUCTIONS:
-1. NAVIGATE AND INFORM: You can tell the user what types of bundles exist, help them navigate the platform, or answer general questions about their account.
-2. REFUSE DATA REQUESTS: If they ask for statistics, insights, trend analysis, or raw data, you must politely remind them to toggle "Marketplace Search" to authorize the query (1 CR per search).
-3. CONVERSATIONAL: If they are just chatting normally, respond warmly and helpfully.
-4. NEVER HALLUCINATE DATA: Do not invent statistics, percentages, or data insights. You do not have access to the database in this mode.`;
+// ─── INTENT-BASED ROUTING ──────────────────────────────────────────────────────
+type AgentType = "MEDICAL_AGENT" | "CONSTRUCTION_AGENT" | "FINANCE_AGENT" | "GENERAL_NAVIGATOR";
 
+function routeIntent(message: string): AgentType {
+  if (/\b(heart|medical|health|clinical|diagnosis|symptom|treatment|patient|drug|pharma)\b/i.test(message)) return "MEDICAL_AGENT";
+  if (/\b(cost|permits?|construction|steel|concrete|labor|ENR|building)\b/i.test(message)) return "CONSTRUCTION_AGENT";
+  if (/\b(market|sales|CLV|revenue|SEC|filing|stock|portfolio|RFM)\b/i.test(message)) return "FINANCE_AGENT";
+  return "GENERAL_NAVIGATOR";
+}
+
+// ─── ORCHESTRATOR SYSTEM PROMPT ────────────────────────────────────────────────
+const ORCHESTRATOR_PROMPT = `You are the IDIA Chief Researcher. Your role is strategic navigation and research coordination.
+
+STRICT LANGUAGE RULES:
+- Use simple vocabulary. Short sentences. Max 20 words per sentence.
+- Start sentences with "And," "But," or "So" when it fits naturally.
+- Never use semicolons or em dashes.
+- Never use these words: unleash, dive into, game-changing, revolutionary, transformative, leverage, unlock potential, dive deeper, delve, synergy.
+- Every numeric claim must include its source.
+
+OPERATIONAL PROTOCOL:
+1. DECOMPOSE the user query into a research plan.
+2. ROUTE to the correct domain agent (Medical, Construction, Finance, or General).
+3. VERIFY all outputs. Never report a number without a citation.
+4. Present findings clearly. Use bullet points for lists.
+
+If you detect a domain you cannot serve yet, say so plainly. Do not fabricate expertise.`;
+
+// ─── STORE CLERK (NON-MARKETPLACE) ─────────────────────────────────────────────
+const STORE_CLERK_PERSONA = `You are "Best Friend," the IDIA platform's AI Store Clerk and Navigator.
+
+LANGUAGE RULES:
+- Simple vocabulary. Short sentences. Max 20 words per sentence.
+- Never use: unleash, dive into, game-changing, revolutionary, transformative, leverage, unlock potential, dive deeper.
+- No semicolons. No em dashes.
+
+OPERATING INSTRUCTIONS:
+1. Help users understand data bundles and navigate the platform.
+2. If they ask for statistics or raw data, tell them to toggle "Marketplace Mode" (1 CR).
+3. Be warm and helpful in conversation.
+4. Never invent data or statistics.`;
+
+// ─── DOMAIN AGENT STUBS (placeholders for future build-out) ────────────────────
+const MEDICAL_AGENT_STUB = `You are the IDIA Medical Evidence Synthesis Agent.
+Framework: PICOTSS (Population, Intervention, Comparison, Outcome, Time, Setting, Study Design).
+Search Logic: Prioritize MeSH terms over natural language.
+Source Hierarchy: 1. Meta-analyses 2. Clinical Trials 3. CDC Knowledgebases.
+IMPORTANT: You are a research assistant. You do not diagnose. Every response must end with: "⚠️ Audit Required: This output is for research purposes only."`;
+
+const CONSTRUCTION_AGENT_STUB = `You are the IDIA Built-Environment Research Agent.
+Framework: ENR Indexing.
+Logic: Differentiate between BCI (skilled labor) and CCI (common labor).
+Task: Cross-reference US Census BPS data against localized municipal permit logs.
+IMPORTANT: Every cost estimate must cite its index source and date.`;
+
+const FINANCE_AGENT_STUB = `You are the IDIA Financial/Market Research Agent.
+Framework: RFM and CLV Analysis.
+Logic: Execute Exploratory Data Analysis on raw payloads.
+Task: Isolate forward-looking statements from SEC filings and cross-reference with sentiment clusters.
+IMPORTANT: Every financial projection must end with: "⚠️ Audit Required: Not investment advice."`;
+
+function getAgentPrompt(agent: AgentType): string {
+  switch (agent) {
+    case "MEDICAL_AGENT": return MEDICAL_AGENT_STUB;
+    case "CONSTRUCTION_AGENT": return CONSTRUCTION_AGENT_STUB;
+    case "FINANCE_AGENT": return FINANCE_AGENT_STUB;
+    default: return "";
+  }
+}
+
+// ─── DATA TRUNCATION ───────────────────────────────────────────────────────────
 const MAX_RECORDS_PER_TABLE = 200;
 const MAX_PAYLOAD_BYTES = 80_000;
 
@@ -33,6 +114,18 @@ function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; life
   return { health: h, lifestyle: l };
 }
 
+// ─── PII REDACTION ─────────────────────────────────────────────────────────────
+function redactPII(text: string): string {
+  // Email
+  let cleaned = text.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[EMAIL_REDACTED]");
+  // Phone numbers (US patterns)
+  cleaned = cleaned.replace(/(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, "[PHONE_REDACTED]");
+  // SSN patterns
+  cleaned = cleaned.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN_REDACTED]");
+  return cleaned;
+}
+
+// ─── MAIN HANDLER ──────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -47,7 +140,12 @@ serve(async (req) => {
 
     const isDataScientistMode = context?.isMarketplaceMode === true;
 
-    let systemPrompt = isDataScientistMode ? "" : STORE_CLERK_PERSONA;
+    // ── Step 1: Intent Triage ──────────────────────────────────────────────────
+    const detectedAgent = routeIntent(message);
+    const agentPrompt = getAgentPrompt(detectedAgent);
+
+    // ── Step 2: Build System Prompt ────────────────────────────────────────────
+    let systemPrompt: string;
 
     if (isDataScientistMode) {
       const rawHealth: any[] = context?.realPipelineData ?? [];
@@ -68,7 +166,6 @@ serve(async (req) => {
           : null,
       };
 
-      // Biometric cost analysis from lifestyle events
       const biometricCost = lifestyleEvents.map((e: any) => ({
         type: e.event_type,
         category: e.event_category,
@@ -77,7 +174,11 @@ serve(async (req) => {
         context: e.activity_context,
       }));
 
-      systemPrompt = `YOU ARE THE IDIA RAW DATA AUDITOR (OCCUPATIONAL ALPHA ENGINE).
+      // Orchestrator + domain agent layered prompt
+      systemPrompt = `${ORCHESTRATOR_PROMPT}
+
+ACTIVE DOMAIN AGENT: ${detectedAgent}
+${agentPrompt ? `\nDOMAIN-SPECIFIC INSTRUCTIONS:\n${agentPrompt}` : ""}
 
 PRIMARY DATA SOURCE: DIRECT STAGED TABLE INGESTION.
 - HEALTH SAMPLES: ${audit.health_records} records.
@@ -89,12 +190,12 @@ PRIMARY DATA SOURCE: DIRECT STAGED TABLE INGESTION.
 - DATA TRUST SCORE (avg quality): ${audit.avg_quality ?? "N/A"}.
 
 TASK:
-1. Perform a direct review of the provided health and lifestyle data tables below.
-2. Execute BIO-AI.9.6: Calculate the "Work Load Biometric Cost" for the user by analyzing the intersection of physiological data (heart rate, steps, calories, duration) and lifestyle activity logs (session durations, activity contexts, event types).
-3. Determine "Personal Alpha" readiness by reviewing raw heart rate volatility and session durations.
+1. Review the provided health and lifestyle data tables.
+2. Execute BIO-AI.9.6: Calculate "Work Load Biometric Cost" from the intersection of physiological and lifestyle data.
+3. Determine "Personal Alpha" readiness from heart rate volatility and session durations.
 4. Provide an objective audit of data veracity and reliability.
-5. Focus ONLY on the raw physiological and lifestyle logs provided. Use the ACTUAL numbers from the data below — do NOT invent statistics.
-6. Present signal-level metadata and aggregated statistics. NEVER return raw data records verbatim. Raw data access requires Enterprise T1P clearance.
+5. Use ONLY the actual numbers from the data below. Do NOT invent statistics.
+6. Present signal-level metadata and aggregated statistics. NEVER return raw data records verbatim.
 
 FULL HEALTH TABLE DATA (compact JSON):
 ${JSON.stringify(healthMetrics)}
@@ -102,7 +203,6 @@ ${JSON.stringify(healthMetrics)}
 BIOMETRIC COST ANALYSIS (lifestyle sessions):
 ${JSON.stringify(biometricCost)}`;
 
-      // Append marketplace bundle metadata if available
       if (marketplaceResults && Array.isArray(marketplaceResults) && marketplaceResults.length > 0) {
         systemPrompt += `\n\nMARKETPLACE BUNDLE METADATA:\n${JSON.stringify(marketplaceResults.map((b: any) => ({
           title: b.title, category: b.category, tier: b.tier, price: b.price, participant_count: b.participant_count, features: b.features,
@@ -110,11 +210,13 @@ ${JSON.stringify(biometricCost)}`;
       }
 
       if (audit.total_samples === 0 && (!marketplaceResults || marketplaceResults.length === 0)) {
-        systemPrompt += `\n\nNO PIPELINE DATA AVAILABLE: The query returned no staged data. Inform the user that no health or lifestyle data has been processed yet, and suggest they connect their devices via IDIA Life to start generating pipeline data.`;
+        systemPrompt += `\n\nNO PIPELINE DATA AVAILABLE: The query returned no staged data. Tell the user that no health or lifestyle data has been processed yet. Suggest they connect devices via IDIA Life.`;
       }
+    } else {
+      systemPrompt = STORE_CLERK_PERSONA;
     }
 
-    // Format conversation history
+    // ── Step 3: Format History ─────────────────────────────────────────────────
     const formattedHistory = Array.isArray(history)
       ? history
           .filter((h: any) => h.role === "user" || h.role === "assistant")
@@ -126,10 +228,11 @@ ${JSON.stringify(biometricCost)}`;
       ...formattedHistory,
       {
         role: "user",
-        content: `Current Context: ${context ? JSON.stringify({ currentPage: context.currentPage, isMarketplaceMode: context.isMarketplaceMode }) : "No additional context provided"}\n\nUser Request: "${message}"`,
+        content: `Current Context: ${context ? JSON.stringify({ currentPage: context.currentPage, isMarketplaceMode: context.isMarketplaceMode, agent: detectedAgent }) : "No additional context provided"}\n\nUser Request: "${message}"`,
       },
     ];
 
+    // ── Step 4: Call OpenAI ────────────────────────────────────────────────────
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -155,26 +258,39 @@ ${JSON.stringify(biometricCost)}`;
       throw new Error(`OpenAI returned an empty response.`);
     }
 
-    const aiResponse = data.choices[0].message?.content || "I processed the request, but couldn't format a text response.";
+    let aiResponse = data.choices[0].message?.content || "I processed the request but could not format a text response.";
 
-    console.log(`Best Friend AI [${isDataScientistMode ? "RAW_DATA_AUDITOR" : "STORE_CLERK"}] Response Success`);
+    // ── Step 5: Governance Filters ─────────────────────────────────────────────
+    aiResponse = applyLinguisticGovernance(aiResponse);
+    aiResponse = redactPII(aiResponse);
+
+    // Add mandatory audit footer for high-stakes domains
+    if (detectedAgent === "MEDICAL_AGENT" && !aiResponse.includes("Audit Required")) {
+      aiResponse += "\n\n⚠️ Audit Required: This output is for research purposes only.";
+    }
+    if (detectedAgent === "FINANCE_AGENT" && !aiResponse.includes("Audit Required")) {
+      aiResponse += "\n\n⚠️ Audit Required: Not investment advice.";
+    }
+
+    console.log(`Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`);
 
     return new Response(
       JSON.stringify({
         response: aiResponse,
         timestamp: new Date().toISOString(),
         agentStatus: "active",
-        persona: isDataScientistMode ? "Raw Data Auditor" : "Store Clerk",
+        persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
+        activeAgent: detectedAgent,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Error in Best Friend AI function:", error);
+    console.error("Chief Researcher Error:", error);
     return new Response(
       JSON.stringify({
         response: `⚠️ Diagnostics Alert: ${error.message}`,
         agentStatus: "error",
-        persona: "Best Friend",
+        persona: "Chief Researcher",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
