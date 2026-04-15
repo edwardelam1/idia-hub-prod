@@ -61,17 +61,17 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        // Query staged tables using the pseudo_user_id anchor (Platform GUID)
+        // 🚨 FIX: Explicitly list columns to resolve TS2589 "Excessively Deep" error
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
-            .select("*")
+            .select("id, pseudo_user_id, aca_hash_key, activity_type, payload, data_quality_score, processed_at")
             .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
           supabase
             .from("staged_lifestyle_data")
-            .select("*")
+            .select("id, pseudo_user_id, aca_hash_key, event_type, payload, data_quality_score, processed_at")
             .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
