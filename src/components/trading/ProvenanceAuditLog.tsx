@@ -16,6 +16,7 @@ interface ProvenanceLog {
   digiramp_anchor_id: string;
   egress_type: string;
   client_id: string;
+  user_id?: string;
 }
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
@@ -26,18 +27,20 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
 
   // Realtime subscription for instant updates
   useEffect(() => {
+    if (!userId) return;
+
     const channel = supabase
       .channel('egress-logs-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'egress_logs' },
+        { event: 'INSERT', schema: 'public', table: 'egress_logs', filter: `user_id=eq.${userId}` },
         (payload) => {
           queryClient.setQueryData<ProvenanceLog[]>(['provenance-logs', userId], (old = []) => {
             const newLog = payload.new as ProvenanceLog;
+            if (newLog.user_id && newLog.user_id !== userId) return old;
             if (old.some((l) => l.id === newLog.id)) return old;
             return [newLog, ...old];
           });
-          // Belt-and-suspenders: also invalidate to ensure full refetch
           queryClient.invalidateQueries({ queryKey: ['provenance-logs', userId] });
         }
       )
