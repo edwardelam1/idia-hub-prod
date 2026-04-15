@@ -1,33 +1,24 @@
 
 
-# Give Best Friend AI Full Staged Table Visibility
+# Fix Provenance Audit Log Realtime Updates
 
-## Problem
-The frontend currently fetches only 50 records with a subset of columns from each staged table. The edge function then only summarizes aggregates, losing granularity. The AI needs the full picture.
+## Root Cause
+The `egress_logs` table is not added to the Supabase `supabase_realtime` publication. Without this, the Postgres Changes subscription in `ProvenanceAuditLog.tsx` never receives INSERT events — the channel subscribes silently but gets nothing.
+
+Additionally, the "Total Records" badge shows `logs.length` (client-side count of fetched rows), not a true DB count. The counter going to 14 may be from a page reload fetching fresh data while the table rows stayed stale from a previous render.
 
 ## Plan
 
-### 1. Update `BestFriendPage.tsx` — Fetch all columns, increase limit
-- **staged_health_data**: Change `.select(...)` to `.select("*")` and increase `.limit(50)` to `.limit(500)` (covers all 219 records with headroom)
-- **staged_lifestyle_data**: Same — `.select("*")` and `.limit(500)` (covers all 136 records)
-- Remove the narrow column lists so the AI receives every field (vitals, sleep, nutrition, clinical, body composition, etc.)
+### 1. Database Migration — Enable Realtime on `egress_logs`
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE egress_logs;
+```
+This is the only fix needed to make the existing realtime subscription code work.
 
-### 2. Update `best-friend-ai` Edge Function — Raw Data Auditor mode
-Replace the current aggregation-only approach with the user's provided logic:
-
-- **Inject full record arrays** into the system prompt as structured JSON (not just averages)
-- **Calculate audit metrics** server-side: total samples, HR baseline, max HR, step volume, session count, avg quality score
-- **Biometric Cost Analysis**: Map lifestyle events with their durations, quality scores, and activity contexts
-- **New system prompt** for Data Scientist mode becomes the "IDIA Raw Data Auditor" persona that performs direct table analysis, Work Load Biometric Cost calculation, and Personal Alpha readiness assessment
-- Keep the Store Clerk persona unchanged for non-marketplace queries
-- Retain CORS headers, conversation history, error handling, and the existing response format
-- Keep `gpt-4o-mini` model (the user's snippet uses `gpt-4-turbo-preview` but that's more expensive; will use `gpt-4o-mini` unless you prefer otherwise)
-- Lower temperature to `0.3` for more deterministic analysis (compromise between current 0.7 and user's 0.1)
-
-### 3. Token Budget Consideration
-355 total records × ~20 fields each could push prompt size. The edge function will serialize records as compact JSON (no pretty-printing) and cap at the first 200 records per table if the combined payload exceeds ~80KB, to stay within the 128K context window of gpt-4o-mini.
+### 2. Add query invalidation as fallback
+The current realtime handler manually prepends to the cache via `setQueryData`. This works but can miss edge cases (e.g., if the component mounts after the event fires). Add `queryClient.invalidateQueries` as a belt-and-suspenders approach alongside the optimistic prepend — ensures a full refetch if the cache update fails.
 
 ## Files Changed
-- `src/pages/BestFriendPage.tsx` — widen select columns and raise limits
-- `supabase/functions/best-friend-ai/index.ts` — new Raw Data Auditor prompt with full record injection and audit metrics
+- DB migration: `ALTER PUBLICATION supabase_realtime ADD TABLE egress_logs`
+- `src/components/trading/ProvenanceAuditLog.tsx` — add `invalidateQueries` fallback in the realtime handler
 
