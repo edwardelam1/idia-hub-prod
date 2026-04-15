@@ -87,25 +87,26 @@ const BestFriendPage = () => {
           throw new Error("No auditable lineage found for this request.");
         }
 
-        // 2. DELT Protocol Execution
-        const { data: transferResult, error: transferError } = await supabase.functions.invoke(
-          "process-delt-transfer",
+        // 2. Synapse Controller — atomic gas metering + egress tokenization
+        const { data: controllerResult, error: controllerError } = await supabase.functions.invoke(
+          "synapse-controller",
           {
             body: {
               client_id: "chief_researcher_ui",
               aca_record_ids: acaHashes,
-              egress_type: "biometric_audit",
+              intent_type: "RESEARCH",
+              query_complexity: 1.0,
+              country_of_origin: "US",
             },
           },
         );
 
-        if (transferError) throw new Error(transferError.message);
-        liabilityTokenHash = transferResult?.liability_token_hash;
+        if (controllerError) throw new Error(controllerError.message);
+        if (controllerResult?.error) throw new Error(controllerResult.error);
+        liabilityTokenHash = controllerResult?.liability_token_hash;
 
-        // 3. Synapse Settlement
-        await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
         await refreshBalance();
-        queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["provenance-logs", user?.id] });
       }
 
       // 4. Agentic Orchestration (Chief Researcher)
