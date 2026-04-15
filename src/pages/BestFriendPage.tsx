@@ -1,21 +1,30 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
+interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+  liabilityTokenHash?: string | null;
+  creditDeducted?: boolean;
+}
+
 const BestFriendPage = () => {
-  const [conversation, setConversation] = useState<any[]>([]);
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { balanceData, refreshBalance } = useSynapseCredits();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -34,7 +43,6 @@ const BestFriendPage = () => {
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
-      // 1. Resolve Master Platform GUID (The local Person Anchor)
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -47,45 +55,51 @@ const BestFriendPage = () => {
       const platformGuid = profile?.platform_guid;
       if (!platformGuid) throw new Error("Platform Identity not found.");
 
-      let realPipelineData = [];
-      let realLifestyleData = [];
-      let queryEgressToken = null;
+      let realPipelineData: any[] = [];
+      let realLifestyleData: any[] = [];
+      let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        // 2. Hybrid Query: Map platform_guid to entity_id
-        const [health, lifestyle, aca] = await Promise.all([
+        // Fetch staged data with explicit columns to avoid TS2589
+        const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
-            .select("*")
+            .select("id, entity_id, aca_hash_key, activity_type, data_quality_score, data_completeness_score, processed_at")
             .eq("entity_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
           supabase
             .from("staged_lifestyle_data")
-            .select("*")
+            .select("id, entity_id, aca_hash_key, event_type, event_category, data_quality_score, processed_at")
             .eq("entity_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
-          supabase
-            .from("user_aca_records")
-            .select("aca_hash_key")
-            .eq("platform_guid", platformGuid)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
         ]);
 
-        realPipelineData = health.data || [];
-        realLifestyleData = lifestyle.data || [];
+        realPipelineData = healthResult.data || [];
+        realLifestyleData = lifestyleResult.data || [];
 
+        // Deduct 1 CR for marketplace query
         await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
         await refreshBalance();
 
-        if (aca?.data?.aca_hash_key) {
-          const { data: egress } = await supabase.functions.invoke("process-delt-transfer", {
-            body: { aca_hash: aca.data.aca_hash_key, egress_type: "ai_query_context", client_id: "BEST_FRIEND_UI" },
+        // Extract ACA hashes from both staged tables
+        const acaHashes: string[] = [
+          ...realPipelineData.map((r: any) => r.aca_hash_key).filter(Boolean),
+          ...realLifestyleData.map((r: any) => r.aca_hash_key).filter(Boolean),
+        ];
+
+        // Tokenize via Liability Shield if we have hashes
+        if (acaHashes.length > 0) {
+          const { data: transferResult } = await supabase.functions.invoke("process-delt-transfer", {
+            body: {
+              client_id: "BEST_FRIEND_UI",
+              aca_record_ids: acaHashes,
+              egress_type: "ai_query_context",
+              country_of_origin: "US",
+            },
           });
-          queryEgressToken = egress;
+          liabilityTokenHash = transferResult?.liability_token_hash || null;
         }
       }
 
@@ -102,7 +116,7 @@ const BestFriendPage = () => {
         {
           role: "assistant",
           content: chatResponse.response,
-          queryEgressToken,
+          liabilityTokenHash,
           creditDeducted: doMarketplace,
         },
       ]);
@@ -112,6 +126,11 @@ const BestFriendPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const truncateHash = (hash: string) => {
+    if (!hash || hash.length < 16) return hash || "—";
+    return `${hash.substring(0, 6)}…${hash.substring(hash.length - 6)}`;
   };
 
   return (
@@ -142,35 +161,59 @@ const BestFriendPage = () => {
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-white" : "bg-white border shadow-sm text-primary"}`}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
                 >
                   {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                 </div>
                 <div className="space-y-2">
                   <div
-                    className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-white" : "bg-white border text-slate-800"}`}
+                    className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border text-foreground"}`}
                   >
                     {msg.content}
                   </div>
-                  {msg.queryEgressToken && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 text-[10px] gap-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 border-none font-mono"
-                    >
-                      <FileKey size={12} className="text-emerald-600" />
-                      RECEIPT: {msg.queryEgressToken.liability_token_hash.substring(0, 12).toUpperCase()}
-                    </Button>
+                  {/* Egress Receipt Badges */}
+                  {msg.creditDeducted && msg.role === "assistant" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="h-6 text-[10px] gap-1 px-2 border-amber-300 text-amber-700 bg-amber-50 font-mono">
+                        -1 CRD SPENT
+                      </Badge>
+                      {msg.liabilityTokenHash && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1.5 px-2.5 bg-muted text-muted-foreground hover:bg-accent border-none font-mono"
+                          onClick={() => navigate(`/compliance?search=${msg.liabilityTokenHash}`)}
+                        >
+                          <FileKey size={12} className="text-emerald-600" />
+                          RECEIPT: {truncateHash(msg.liabilityTokenHash)}
+                        </Button>
+                      )}
+                      <Badge variant="outline" className="h-6 text-[10px] gap-1 px-2 border-emerald-300 text-emerald-700 bg-emerald-50 font-mono">
+                        <CheckCircle size={10} /> LIABILITY_SHIELD_ACTIVE
+                      </Badge>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
           ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="flex gap-3 max-w-[85%]">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-card border shadow-sm text-primary">
+                  <Bot size={16} />
+                </div>
+                <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground">
+                  <Loader2 className="animate-spin h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={scrollRef} className="h-2" />
         </div>
       </ScrollArea>
 
-      <div className="pt-4 border-t border-slate-200 max-w-3xl mx-auto w-full space-y-4">
+      <div className="pt-4 border-t border-border max-w-3xl mx-auto w-full space-y-4">
         <div className="flex gap-2 relative">
           <Input
             placeholder={marketplaceMode ? "Querying Pipeline via Person Anchor..." : "Message Synapse..."}
@@ -178,7 +221,7 @@ const BestFriendPage = () => {
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
             disabled={isLoading}
-            className="h-14 rounded-2xl pr-14 bg-white shadow-sm border-slate-200 focus-visible:ring-primary"
+            className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border focus-visible:ring-primary"
           />
           <Button
             onClick={handleSendMessage}
@@ -191,7 +234,7 @@ const BestFriendPage = () => {
         <div className="flex items-center justify-between px-1">
           <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
-            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-white border-primary" : "bg-white text-slate-500 border-slate-200 hover:border-primary/40"}`}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
           >
             <Search size={14} /> Marketplace Mode (1 CR)
           </button>
