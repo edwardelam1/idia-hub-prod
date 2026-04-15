@@ -65,33 +65,86 @@ const BestFriendPage = () => {
     return data || [];
   };
 
-  const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isLoading) return;
+  // src/pages/BestFriendPage.tsx
 
-    setIsLoading(true);
-    const userMessage = currentMessage;
-    const doMarketplace = isMarketplaceSearch(userMessage);
+const handleSendMessage = async () => {
+  if (!currentMessage.trim() || isLoading) return;
 
-    setCurrentMessage("");
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+  setIsLoading(true);
+  const userMessage = currentMessage;
+  const doMarketplace = isMarketplaceSearch(userMessage);
 
-    try {
-      let marketplaceResults: any[] | undefined;
-      let realPipelineData: any[] | undefined;
-      let realLifestyleData: any[] | undefined;
-      let queryEgressToken: any = undefined;
+  setCurrentMessage("");
+  setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
-      if (doMarketplace) {
-        const available = balanceData?.available_credits ?? 0;
-        if (available < 1) {
-          toast.error("Insufficient Synapse Credits");
-          setConversation((prev) => [
-            ...prev,
-            { role: "error", content: "Insufficient Synapse Credits (1 CR required)." },
-          ]);
-          setIsLoading(false);
-          return;
+  try {
+    // 1. RESOLVE ACA HASH FIRST
+    // We fetch the most recent hash to prove consent for this specific query
+    const { data: acaResult } = await supabase
+      .from("user_aca_records")
+      .select("aca_hash_key, platform_guid")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!acaResult?.aca_hash_key) {
+      throw new Error("DELT Protocol Error: No active ACA Hash found. Reconnect data source.");
+    }
+
+    const activeAcaHash = acaResult.aca_hash_key;
+
+    // 2. FETCH DATA VIA HASH-LINKED GUID
+    // We no longer query by auth.uid(), we query by the platform_guid linked to that hash
+    const [healthResult, lifestyleResult] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("*")
+        .eq("pseudo_user_id", acaResult.platform_guid) // Using the GUID resolved from the hash
+        .order("processed_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("*")
+        .eq("pseudo_user_id", acaResult.platform_guid)
+        .order("processed_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
+
+    // 3. AUTOMATIC EGRESS LOGGING (Using Hash, not UserID)
+    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
+      body: {
+        client_id: `HUB-AI-${searchId}`,
+        aca_hash: activeAcaHash, // Passing the Hash as the anchor
+        egress_type: "ai_query_context",
+        data_summary: { source: "best_friend_chat", query: userMessage },
+      },
+      headers: { Authorization: `Bearer ${sessionData?.session?.access_token}` },
+    });
+
+    // 4. AI Fulfillment (Contextualized by the Hash provenance)
+    const data = await fetchApi("/api/v1/best-friend/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        message: userMessage,
+        aca_hash: activeAcaHash, // The AI now uses the hash to prove context veracity
+        context: {
+          isMarketplaceMode: doMarketplace,
+          realPipelineData: healthResult.data || [],
+          realLifestyleData: lifestyleResult.data || [],
         }
+      }),
+    });
+
+    // ... rest of state updates
+  } catch (error: any) {
+    toast.error(`Provenance Error: ${error.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
