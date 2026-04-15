@@ -106,12 +106,11 @@ const BestFriendPage = () => {
       const chatResponse = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
-          message: userMessage.replace(/@search\s+marketplace/i, "").trim(),
+          message: userMessage,
           context: {
-            realPipelineData,
-            realLifestyleData,
-            isMarketplaceMode: doMarketplace,
-            userId: user?.id, // 🚨 CRITICAL: Ensure the actual Auth UUID is passed
+            isMarketplaceMode: marketplaceMode, // 🚨 The boolean from your toggle state
+            platformGuid: platformGuid, // 🚨 The anchor for the DELT Protocol
+            userId: user?.id,
           },
         }),
       });
