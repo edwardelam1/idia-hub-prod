@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, CheckCircle } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, CheckCircle, Coins } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ interface ConversationMessage {
   content: string;
   liabilityTokenHash?: string | null;
   creditDeducted?: boolean;
+  tokenSpend?: number;
 }
 
 const BestFriendPage = () => {
@@ -60,18 +61,18 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        // Fetch staged data with explicit columns to avoid TS2589
+        // 🚨 CRITICAL FIX: Query using pseudo_user_id to match Anonymization Processor logic
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
-            .select("id, entity_id, aca_hash_key, activity_type, data_quality_score, data_completeness_score, processed_at")
-            .eq("entity_id", platformGuid)
+            .select("*")
+            .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
           supabase
             .from("staged_lifestyle_data")
-            .select("id, entity_id, aca_hash_key, event_type, event_category, data_quality_score, processed_at")
-            .eq("entity_id", platformGuid)
+            .select("*")
+            .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
             .limit(50),
         ]);
@@ -79,17 +80,16 @@ const BestFriendPage = () => {
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        // Deduct 1 CR for marketplace query
+        // Deduct 1 CR for marketplace query authorization
         await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
         await refreshBalance();
 
-        // Extract ACA hashes from both staged tables
+        // Resolve ACA hashes to fulfill DELT Protocol Loop
         const acaHashes: string[] = [
           ...realPipelineData.map((r: any) => r.aca_hash_key).filter(Boolean),
           ...realLifestyleData.map((r: any) => r.aca_hash_key).filter(Boolean),
         ];
 
-        // Tokenize via Liability Shield if we have hashes
         if (acaHashes.length > 0) {
           const { data: transferResult } = await supabase.functions.invoke("process-delt-transfer", {
             body: {
@@ -107,7 +107,12 @@ const BestFriendPage = () => {
         method: "POST",
         body: JSON.stringify({
           message: userMessage.replace(/@search\s+marketplace/i, "").trim(),
-          context: { realPipelineData, realLifestyleData, isMarketplaceMode: doMarketplace },
+          context: {
+            realPipelineData,
+            realLifestyleData,
+            isMarketplaceMode: doMarketplace,
+            userId: user?.id,
+          },
         }),
       });
 
@@ -116,8 +121,9 @@ const BestFriendPage = () => {
         {
           role: "assistant",
           content: chatResponse.response,
-          liabilityTokenHash,
+          liabilityTokenHash: chatResponse.tokenHash || liabilityTokenHash,
           creditDeducted: doMarketplace,
+          tokenSpend: chatResponse.tokenSpend,
         },
       ]);
     } catch (error: any) {
@@ -130,11 +136,11 @@ const BestFriendPage = () => {
 
   const truncateHash = (hash: string) => {
     if (!hash || hash.length < 16) return hash || "—";
-    return `${hash.substring(0, 6)}…${hash.substring(hash.length - 6)}`;
+    return `${hash.substring(0, 8)}...`;
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30">
+    <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -158,7 +164,7 @@ const BestFriendPage = () => {
       <ScrollArea className="flex-1 py-4 pr-4">
         <div className="space-y-6 max-w-3xl mx-auto">
           {conversation.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
               <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
@@ -171,26 +177,36 @@ const BestFriendPage = () => {
                   >
                     {msg.content}
                   </div>
-                  {/* Egress Receipt Badges */}
-                  {msg.creditDeducted && msg.role === "assistant" && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="h-6 text-[10px] gap-1 px-2 border-amber-300 text-amber-700 bg-amber-50 font-mono">
-                        -1 CRD SPENT
-                      </Badge>
+
+                  {/* Token Spend & Egress Receipt Indicators */}
+                  {msg.role === "assistant" && (
+                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                      {msg.tokenSpend && (
+                        <Badge
+                          variant="secondary"
+                          className="h-5 text-[9px] gap-1 px-1.5 bg-slate-100 text-slate-600 border-none font-mono"
+                        >
+                          <Coins size={10} className="text-amber-500" /> {msg.tokenSpend} TOKENS
+                        </Badge>
+                      )}
                       {msg.liabilityTokenHash && (
                         <Button
-                          variant="secondary"
+                          variant="ghost"
                           size="sm"
-                          className="h-6 text-[10px] gap-1.5 px-2.5 bg-muted text-muted-foreground hover:bg-accent border-none font-mono"
+                          className="h-5 text-[9px] gap-1 px-1.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono p-0"
                           onClick={() => navigate(`/compliance?search=${msg.liabilityTokenHash}`)}
                         >
-                          <FileKey size={12} className="text-emerald-600" />
-                          RECEIPT: {truncateHash(msg.liabilityTokenHash)}
+                          <FileKey size={10} /> {truncateHash(msg.liabilityTokenHash)}
                         </Button>
                       )}
-                      <Badge variant="outline" className="h-6 text-[10px] gap-1 px-2 border-emerald-300 text-emerald-700 bg-emerald-50 font-mono">
-                        <CheckCircle size={10} /> LIABILITY_SHIELD_ACTIVE
-                      </Badge>
+                      {msg.creditDeducted && (
+                        <Badge
+                          variant="outline"
+                          className="h-5 text-[9px] gap-1 px-1.5 border-emerald-200 text-emerald-700 bg-emerald-50 font-mono"
+                        >
+                          <CheckCircle size={10} /> SHIELD_ACTIVE
+                        </Badge>
+                      )}
                     </div>
                   )}
                 </div>
@@ -203,8 +219,8 @@ const BestFriendPage = () => {
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-card border shadow-sm text-primary">
                   <Bot size={16} />
                 </div>
-                <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground">
-                  <Loader2 className="animate-spin h-4 w-4" />
+                <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
+                  Best Friend is auditing the pipeline...
                 </div>
               </div>
             </div>
