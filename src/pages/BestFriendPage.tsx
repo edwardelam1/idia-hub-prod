@@ -15,11 +15,9 @@ interface ChatMessage {
   content: string;
   creditDeducted?: boolean;
   queryEgressToken?: {
-    // Tracks the ACA token for the query itself
     liability_token_hash: string;
   };
   liabilityToken?: {
-    // Tracks the ACA token for full Secure Export
     liability_token_hash: string;
     digiramp_anchor_id: string;
     egress_log_id: string;
@@ -38,9 +36,7 @@ const BestFriendPage = () => {
   const { balanceData, refreshBalance } = useSynapseCredits();
   const [exportingIndex, setExportingIndex] = useState<number | null>(null);
 
-  const isMarketplaceSearch = (msg: string) => {
-    return marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
-  };
+  const isMarketplaceSearch = (msg: string) => marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
 
   const deductCredit = async (searchId: string) => {
     const {
@@ -99,29 +95,28 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Fetch Pipeline Data AND Real ACA Records for the Egress Log
+        // 1. Fetch Data & Real ACA Records
         const [healthResult, lifestyleResult, acaResult] = await Promise.all([
           supabase.from("staged_health_data").select("*").order("processed_at", { ascending: false }).limit(50),
           supabase.from("staged_lifestyle_data").select("*").order("processed_at", { ascending: false }).limit(50),
-          supabase.from("user_aca_records").select("aca_hash_key").order("created_at", { ascending: false }).limit(10), // 🚨 FETCH REAL ACA HASHES
+          supabase.from("user_aca_records").select("aca_hash_key").order("created_at", { ascending: false }).limit(10),
         ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        // Extract real ACA IDs, fallback only if db is totally empty
         const realAcaIds = acaResult.data?.map((a) => a.aca_hash_key) || [];
         const activeAcaIds = realAcaIds.length > 0 ? realAcaIds : [`ACA-SYS-${Date.now()}`];
 
         marketplaceResults = await queryMarketplace();
         await deductCredit(searchId);
 
-        // 2. 🚨 AUTOMATIC EGRESS LOGGING: Log the AI query itself to DELT Protocol 🚨
+        // 2. AUTOMATIC EGRESS LOGGING (0 CRD for Contexting)
         const { data: sessionData } = await supabase.auth.getSession();
         const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
           body: {
             client_id: `HUB-AI-${searchId}`,
-            aca_record_ids: activeAcaIds, // Attaching real ACA records to the query
+            aca_record_ids: activeAcaIds,
             country_of_origin: "US",
             egress_type: "ai_query_context",
             data_summary: { source: "best_friend_chat", query: userMessage },
@@ -136,7 +131,7 @@ const BestFriendPage = () => {
 
       const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
 
-      // 3. Ask Best Friend AI
+      // 3. AI Fulfillment
       const data = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -160,14 +155,12 @@ const BestFriendPage = () => {
           role: "assistant",
           content: data.response || "Synapse Orchestrator returned no data.",
           creditDeducted: doMarketplace,
-          queryEgressToken: queryEgressToken, // Pass the query egress token to the UI
+          queryEgressToken: queryEgressToken,
         },
       ]);
     } catch (error: any) {
-      console.error("Best Friend Execution Error:", error);
-      const errorMessage = error?.message || "An unknown execution error occurred.";
-      toast.error(`Error: ${errorMessage}`);
-      setConversation((prev) => [...prev, { role: "error", content: `⚠️ System Alert: ${errorMessage}` }]);
+      toast.error(`Error: ${error.message}`);
+      setConversation((prev) => [...prev, { role: "error", content: `⚠️ System Alert: ${error.message}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +172,6 @@ const BestFriendPage = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData?.session?.access_token) throw new Error("Authentication required");
 
-      // 🚨 FIX: Replaced mock generator with REAL ACA records from the database 🚨
       const { data: acaResult } = await supabase
         .from("user_aca_records")
         .select("aca_hash_key")
@@ -187,10 +179,11 @@ const BestFriendPage = () => {
         .limit(10);
       const realAcaIds = acaResult?.map((a) => a.aca_hash_key) || [`ACA-SYS-${Date.now()}`];
 
+      // 🚨 Full Egress Charge (250 CRD)
       const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
         body: {
           client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-          aca_record_ids: realAcaIds, // Using real chain-of-title records
+          aca_record_ids: realAcaIds,
           country_of_origin: "US",
           egress_type: "secure_export",
           data_summary: { source: "best_friend_chat_export", query_index: messageIndex },
@@ -198,8 +191,7 @@ const BestFriendPage = () => {
         headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
       });
 
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) throw new Error(error?.message || data?.error);
 
       setConversation((prev) =>
         prev.map((msg, i) =>
@@ -226,13 +218,6 @@ const BestFriendPage = () => {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6">
       <div className="flex items-center gap-3 pb-4 border-b border-border flex-shrink-0">
@@ -254,7 +239,7 @@ const BestFriendPage = () => {
             <p className="font-medium text-foreground text-lg">Connected to IDIA Synapse.</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md">
               Authorize Marketplace Search to audit raw data. Egress logs are automatically generated to preserve Chain
-              of Title.
+              of Title via the DELT Protocol.
             </p>
           </div>
         ) : (
@@ -276,15 +261,13 @@ const BestFriendPage = () => {
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
 
-                    {/* Automatic Query Egress Log Indicator */}
                     {message.queryEgressToken && (
                       <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background border px-2 py-1 rounded">
                         <Shield className="h-3 w-3 text-emerald-600" />
-                        Liability Token: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
+                        DELT Query Audit: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
                       </div>
                     )}
 
-                    {/* Secure Export Actions */}
                     {message.creditDeducted && !message.liabilityToken && (
                       <div className="mt-2 flex items-center gap-2">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
@@ -307,14 +290,13 @@ const BestFriendPage = () => {
                       </div>
                     )}
 
-                    {/* Complete Liability Token (Export) */}
                     {message.liabilityToken && (
                       <div className="mt-2 space-y-1">
                         <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
                           <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
                         </Badge>
                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
-                          <p className="text-emerald-700">🛡️ Liability Shield Active </p>
+                          <p className="text-emerald-700">🛡️ Liability Shield Active (DELT Protocol)</p>
                           <p className="text-muted-foreground truncate">
                             Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…
                           </p>
@@ -335,7 +317,7 @@ const BestFriendPage = () => {
             placeholder={marketplaceMode ? "Querying IDIA Pipeline Data..." : "Ask Best Friend AI anything..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
             disabled={isLoading}
             className="flex-1"
           />
