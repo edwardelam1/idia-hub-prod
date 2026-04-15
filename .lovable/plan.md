@@ -1,82 +1,48 @@
 
-What I verified in the current code
 
-- Done:
-  - `process-delt-transfer` now uses `auth.getUser()`
-  - zero-UUID rejection is present
-  - `BestFriendPage.tsx` calls `generate_pseudonym` via RPC
-  - Best Friend chat calls `supabase.functions.invoke("best-friend-ai")` directly
-- Only partially done:
-  - the provenance refresh from Best Friend invalidates `["provenance-logs"]`, but the audit screen queries `["provenance-logs", userId]`
-  - the realtime handler exists, but the Best Friend success path is not invalidating the exact cache key the log screen uses
-- Not actually done:
-  - no real verification loop exists in `best-friend-ai`
-  - no true research-plan decomposition layer exists
-  - no structured agent registry/workflow scaffold beyond prompt stubs
-  - no citation enforcement logic exists, only prompt instructions
-  - no real output normalization beyond banned-word stripping and PII regex cleanup
+# Deploy `synapse-controller` and Wire It to the Chief Researcher
 
-Plan
+## Summary
+Create the `synapse-controller` Edge Function as the centralized gas metering and egress tokenization engine. Then rewire `BestFriendPage.tsx` to call it instead of the current scattered `process-delt-transfer` + `deduct-synapse-credit` pattern. Finally, update `best-friend-ai` to return complexity metadata so the frontend can pass it to the controller.
 
-1. Fix the egress-log sync path first
-- Update `BestFriendPage.tsx` to invalidate the exact query key used by the audit screen: `["provenance-logs", userId]`
-- Also trigger a broader fallback invalidation/refetch for provenance queries after a successful transfer
-- Make the UI only show Shield-active state when the transfer truly succeeds
+## Schema Compatibility Check
+- `egress_logs` insert requires: `user_id`, `client_id`, `liability_token_hash`, `batch_checksum`, `digiramp_anchor_id`. The controller code provides all of these. `country_of_origin` has a default. Compatible.
+- `synapse_credit_ledger` insert requires: `user_id`, `amount`, `entry_type`. The controller provides these. `transaction_type` is nullable (enum: FEE fits best here). `status` defaults to null but the code sets "SETTLED". One fix needed: use `transaction_type: "FEE"` instead of omitting it, to match existing convention.
+- `entry_type` is a plain string — "USAGE" is valid but the existing deduction function uses "deduction". I will keep "USAGE" as the user specified, since it distinguishes controller-metered gas from flat 1-CR deductions.
 
-2. Tighten the DELT handoff from Best Friend
-- Ensure `aca_record_ids` is built only from non-empty `aca_hash_key` values
-- If no ACA hashes are found, stop the transfer and show a clear user-facing error instead of silently proceeding
-- Keep `client_id` stable and auditable for Best Friend egress rows
+## Implementation Steps
 
-3. Clean up the Best Friend AI payload
-- Pass the full conversation history consistently
-- Pass marketplace context in a single normalized shape
-- Either remove unused `marketplaceResults` support or wire it up properly from the page so the function receives the data it was designed for
+### 1. Create `supabase/functions/synapse-controller/index.ts`
+- Use the user's provided code with one adjustment: add `transaction_type: "FEE"` to the ledger insert to satisfy the enum convention.
+- The function handles: auth validation, zero-UUID rejection, dynamic gas calculation, SHA-256 tokenization, atomic ledger + egress write, and financial response payload.
 
-4. Replace the current “prompt blob” with an actual Core Orchestrator structure
-- Refactor `supabase/functions/best-friend-ai/index.ts` into clear stages:
-  - intent triage
-  - plan decomposition
-  - agent selection
-  - verification scaffold
-  - response synthesis
-  - governance post-processing
-- Keep Medical, Construction, and Finance as strict stubs for now
+### 2. Update `src/pages/BestFriendPage.tsx`
+- Replace the two-step marketplace flow (step 2: `process-delt-transfer` + step 3: `deduct-synapse-credit`) with a single call to `synapse-controller`.
+- Pass `intent_type`, `query_complexity` (default 1.0 for now), `client_id`, and `aca_record_ids`.
+- Read `financials.total_cr_deducted` from the response to display in the chat bubble.
+- Keep the `best-friend-ai` call unchanged — it runs after the controller succeeds.
+- Invalidate `["egress-logs"]` queries after success (already done).
 
-5. Add the missing verification layer
-- Implement a real `runVerificationLoop` scaffold instead of only telling the model to verify
-- For core-only mode, this will:
-  - inspect the drafted response
-  - flag unsupported numeric claims
-  - require a source marker for numbers
-  - downgrade unsupported claims to plain-language uncertainty
+### 3. Update `supabase/functions/best-friend-ai/index.ts` (minor)
+- Add `queryComplexity` to the response payload based on the detected agent:
+  - `GENERAL_NAVIGATOR`: 1.0
+  - `MEDICAL_AGENT` / `FINANCE_AGENT`: 2.0 (high-stakes)
+  - `CONSTRUCTION_AGENT`: 1.5
+- This allows a future iteration where the frontend calls the controller *after* the AI responds with complexity data, rather than before. For now, the frontend uses a default 1.0.
 
-6. Strengthen governance/output normalization
-- Keep banned lexicon filtering
-- Add sentence shaping so long responses are split more safely
-- Preserve the “no semicolons / no em dashes / simple vocabulary” rules
-- Apply mandatory audit footers for medical and finance outputs
-- Keep PII redaction as the final pass
+### 4. Deploy
+- Deploy `synapse-controller` edge function.
 
-7. Verify the audit screen behavior end to end
-- Confirm a Best Friend marketplace query creates:
-  - a visible `egress_logs` row under the authenticated user
-  - non-empty `aca_record_references`
-  - a matching `liability_token_hash`
-- Confirm the row appears immediately on the audit log screen without manual refresh
+## Files Changed
+| File | Action |
+|------|--------|
+| `supabase/functions/synapse-controller/index.ts` | Create — user's provided code + `transaction_type: "FEE"` |
+| `src/pages/BestFriendPage.tsx` | Modify — replace `process-delt-transfer` + `deduct-synapse-credit` with single `synapse-controller` call |
+| `supabase/functions/best-friend-ai/index.ts` | Minor — add `queryComplexity` to response |
 
-Files to update
-- `src/pages/BestFriendPage.tsx`
-- `src/components/trading/ProvenanceAuditLog.tsx`
-- `supabase/functions/best-friend-ai/index.ts`
-- optionally `src/lib/api.ts` only if there is leftover dead routing code to remove
+## Technical Notes
+- The controller uses `SUPABASE_SERVICE_ROLE_KEY` for the atomic write — this bypasses RLS intentionally since the function validates auth first and writes under the real `user_id`.
+- `SUPABASE_ANON_KEY` is used only for user auth verification via `getUser()`.
+- The `synapse_ledger_entry_id` linkage (egress → ledger) provides the financial audit trail the provenance log needs.
+- The `process-delt-transfer` function is NOT deleted — it remains available for non-AI egress paths. But Best Friend no longer calls it.
 
-Expected outcome
-- New Best Friend Liability Shield events will appear on the Provenance Audit Log immediately
-- Best Friend will stop creating “successful-looking” UI states when no auditable ACA lineage exists
-- The Chief Researcher backend will have a real core orchestration pipeline, not just prompt text that describes one
-
-Technical notes
-- The key cache bug is real: Best Friend currently invalidates `["provenance-logs"]`, while the audit log reads `["provenance-logs", userId]`
-- The current orchestrator is mostly descriptive prompt engineering, not a modular workflow yet
-- The current citation rule is only an instruction to the model, not an enforced post-check
