@@ -4080,11 +4080,13 @@ export type Database = {
           next_retry_at: string | null
           processed: boolean | null
           processing_completed_at: string | null
+          processing_started_at: string | null
           processing_status: string | null
           raw_payload: Json
           recorded_at: string | null
           retry_count: number | null
           source: string | null
+          step_count: number | null
           user_id: string | null
         }
         Insert: {
@@ -4096,11 +4098,13 @@ export type Database = {
           next_retry_at?: string | null
           processed?: boolean | null
           processing_completed_at?: string | null
+          processing_started_at?: string | null
           processing_status?: string | null
           raw_payload: Json
           recorded_at?: string | null
           retry_count?: number | null
           source?: string | null
+          step_count?: number | null
           user_id?: string | null
         }
         Update: {
@@ -4112,11 +4116,13 @@ export type Database = {
           next_retry_at?: string | null
           processed?: boolean | null
           processing_completed_at?: string | null
+          processing_started_at?: string | null
           processing_status?: string | null
           raw_payload?: Json
           recorded_at?: string | null
           retry_count?: number | null
           source?: string | null
+          step_count?: number | null
           user_id?: string | null
         }
         Relationships: []
@@ -4799,355 +4805,94 @@ export type Database = {
       }
       staged_health_data: {
         Row: {
+          aca_hash_key: string | null
           activity_type: string
-          anonymized_location_hash: string | null
-          anonymized_location_zone: string | null
-          average_heartrate: number | null
-          average_speed_mps: number | null
-          awake_duration_minutes: number | null
-          basal_body_temperature_celsius: number | null
-          blood_oxygen_saturation: number | null
-          body_fat_percentage: number | null
-          body_mass_index: number | null
-          body_temperature_celsius: number | null
-          caffeine_mg: number | null
-          calcium_mg: number | null
-          calories_burned: number | null
-          carbohydrates_g: number | null
-          cervical_mucus_quality: string | null
-          clinical_allergies: Json | null
-          clinical_conditions: Json | null
-          clinical_immunizations: Json | null
-          clinical_lab_results: Json | null
-          clinical_medications: Json | null
-          clinical_procedures: Json | null
-          clinical_vitals: Json | null
-          core_sleep_duration_minutes: number | null
-          created_at: string
-          data_completeness_score: number | null
+          created_at: string | null
           data_quality_score: number | null
-          deep_sleep_duration_minutes: number | null
-          device_type: string | null
-          diastolic_blood_pressure: number | null
-          dietary_energy_kcal: number | null
-          distance_cycling_meters: number | null
-          distance_meters: number | null
-          distance_walking_running_meters: number | null
-          double_support_time_percentage: number | null
-          duration_seconds: number | null
-          ecg_classification: string | null
-          effort_score: number | null
-          elevation_gain_meters: number | null
-          emotional_state: string | null
-          fiber_g: number | null
-          flights_climbed: number | null
-          healthkit_source_bundles: Json | null
-          heart_rate_variability_ms: number | null
-          height_cm: number | null
+          entity_id: string | null
           id: string
-          iron_mg: number | null
-          lean_body_mass_kg: number | null
-          max_heartrate: number | null
-          max_speed_mps: number | null
-          medication_adherence_score: number | null
-          medication_doses: Json | null
-          menstrual_flow: string | null
-          mindful_minutes: number | null
-          monounsaturated_fat_g: number | null
-          mood_score: number | null
-          ovulation_test_result: string | null
-          polyunsaturated_fat_g: number | null
-          potassium_mg: number | null
-          processed_at: string
-          protein_g: number | null
-          pseudo_user_id: string
+          payload: Json
+          processed_at: string | null
           raw_data_id: string | null
-          recovery_score: number | null
-          rem_duration_minutes: number | null
-          respiratory_rate_per_min: number | null
-          resting_heart_rate: number | null
-          reward_amount: number | null
           reward_calculated: boolean | null
-          saturated_fat_g: number | null
-          sexual_activity: boolean | null
-          sleep_duration: number | null
-          sleep_quality_score: number | null
-          sodium_mg: number | null
-          step_length_cm: number | null
-          steps_count: number | null
-          stress_level: number | null
-          sugar_g: number | null
-          symptoms_logged: Json | null
           synapse_weight_coefficient: number | null
-          systolic_blood_pressure: number | null
-          time_asleep_minutes: number | null
-          time_in_bed_minutes: number | null
-          total_fat_g: number | null
-          vitamin_c_mg: number | null
-          vitamin_d_mcg: number | null
-          vo2_max: number | null
-          waist_circumference_cm: number | null
-          walking_asymmetry_percentage: number | null
-          walking_speed_mps: number | null
-          water_ml: number | null
-          weather_conditions: Json | null
-          weight_kg: number | null
-          workout_intensity: number | null
+          user_id: string | null
         }
         Insert: {
+          aca_hash_key?: string | null
           activity_type: string
-          anonymized_location_hash?: string | null
-          anonymized_location_zone?: string | null
-          average_heartrate?: number | null
-          average_speed_mps?: number | null
-          awake_duration_minutes?: number | null
-          basal_body_temperature_celsius?: number | null
-          blood_oxygen_saturation?: number | null
-          body_fat_percentage?: number | null
-          body_mass_index?: number | null
-          body_temperature_celsius?: number | null
-          caffeine_mg?: number | null
-          calcium_mg?: number | null
-          calories_burned?: number | null
-          carbohydrates_g?: number | null
-          cervical_mucus_quality?: string | null
-          clinical_allergies?: Json | null
-          clinical_conditions?: Json | null
-          clinical_immunizations?: Json | null
-          clinical_lab_results?: Json | null
-          clinical_medications?: Json | null
-          clinical_procedures?: Json | null
-          clinical_vitals?: Json | null
-          core_sleep_duration_minutes?: number | null
-          created_at?: string
-          data_completeness_score?: number | null
+          created_at?: string | null
           data_quality_score?: number | null
-          deep_sleep_duration_minutes?: number | null
-          device_type?: string | null
-          diastolic_blood_pressure?: number | null
-          dietary_energy_kcal?: number | null
-          distance_cycling_meters?: number | null
-          distance_meters?: number | null
-          distance_walking_running_meters?: number | null
-          double_support_time_percentage?: number | null
-          duration_seconds?: number | null
-          ecg_classification?: string | null
-          effort_score?: number | null
-          elevation_gain_meters?: number | null
-          emotional_state?: string | null
-          fiber_g?: number | null
-          flights_climbed?: number | null
-          healthkit_source_bundles?: Json | null
-          heart_rate_variability_ms?: number | null
-          height_cm?: number | null
+          entity_id?: string | null
           id?: string
-          iron_mg?: number | null
-          lean_body_mass_kg?: number | null
-          max_heartrate?: number | null
-          max_speed_mps?: number | null
-          medication_adherence_score?: number | null
-          medication_doses?: Json | null
-          menstrual_flow?: string | null
-          mindful_minutes?: number | null
-          monounsaturated_fat_g?: number | null
-          mood_score?: number | null
-          ovulation_test_result?: string | null
-          polyunsaturated_fat_g?: number | null
-          potassium_mg?: number | null
-          processed_at?: string
-          protein_g?: number | null
-          pseudo_user_id: string
+          payload?: Json
+          processed_at?: string | null
           raw_data_id?: string | null
-          recovery_score?: number | null
-          rem_duration_minutes?: number | null
-          respiratory_rate_per_min?: number | null
-          resting_heart_rate?: number | null
-          reward_amount?: number | null
           reward_calculated?: boolean | null
-          saturated_fat_g?: number | null
-          sexual_activity?: boolean | null
-          sleep_duration?: number | null
-          sleep_quality_score?: number | null
-          sodium_mg?: number | null
-          step_length_cm?: number | null
-          steps_count?: number | null
-          stress_level?: number | null
-          sugar_g?: number | null
-          symptoms_logged?: Json | null
           synapse_weight_coefficient?: number | null
-          systolic_blood_pressure?: number | null
-          time_asleep_minutes?: number | null
-          time_in_bed_minutes?: number | null
-          total_fat_g?: number | null
-          vitamin_c_mg?: number | null
-          vitamin_d_mcg?: number | null
-          vo2_max?: number | null
-          waist_circumference_cm?: number | null
-          walking_asymmetry_percentage?: number | null
-          walking_speed_mps?: number | null
-          water_ml?: number | null
-          weather_conditions?: Json | null
-          weight_kg?: number | null
-          workout_intensity?: number | null
+          user_id?: string | null
         }
         Update: {
+          aca_hash_key?: string | null
           activity_type?: string
-          anonymized_location_hash?: string | null
-          anonymized_location_zone?: string | null
-          average_heartrate?: number | null
-          average_speed_mps?: number | null
-          awake_duration_minutes?: number | null
-          basal_body_temperature_celsius?: number | null
-          blood_oxygen_saturation?: number | null
-          body_fat_percentage?: number | null
-          body_mass_index?: number | null
-          body_temperature_celsius?: number | null
-          caffeine_mg?: number | null
-          calcium_mg?: number | null
-          calories_burned?: number | null
-          carbohydrates_g?: number | null
-          cervical_mucus_quality?: string | null
-          clinical_allergies?: Json | null
-          clinical_conditions?: Json | null
-          clinical_immunizations?: Json | null
-          clinical_lab_results?: Json | null
-          clinical_medications?: Json | null
-          clinical_procedures?: Json | null
-          clinical_vitals?: Json | null
-          core_sleep_duration_minutes?: number | null
-          created_at?: string
-          data_completeness_score?: number | null
+          created_at?: string | null
           data_quality_score?: number | null
-          deep_sleep_duration_minutes?: number | null
-          device_type?: string | null
-          diastolic_blood_pressure?: number | null
-          dietary_energy_kcal?: number | null
-          distance_cycling_meters?: number | null
-          distance_meters?: number | null
-          distance_walking_running_meters?: number | null
-          double_support_time_percentage?: number | null
-          duration_seconds?: number | null
-          ecg_classification?: string | null
-          effort_score?: number | null
-          elevation_gain_meters?: number | null
-          emotional_state?: string | null
-          fiber_g?: number | null
-          flights_climbed?: number | null
-          healthkit_source_bundles?: Json | null
-          heart_rate_variability_ms?: number | null
-          height_cm?: number | null
+          entity_id?: string | null
           id?: string
-          iron_mg?: number | null
-          lean_body_mass_kg?: number | null
-          max_heartrate?: number | null
-          max_speed_mps?: number | null
-          medication_adherence_score?: number | null
-          medication_doses?: Json | null
-          menstrual_flow?: string | null
-          mindful_minutes?: number | null
-          monounsaturated_fat_g?: number | null
-          mood_score?: number | null
-          ovulation_test_result?: string | null
-          polyunsaturated_fat_g?: number | null
-          potassium_mg?: number | null
-          processed_at?: string
-          protein_g?: number | null
-          pseudo_user_id?: string
+          payload?: Json
+          processed_at?: string | null
           raw_data_id?: string | null
-          recovery_score?: number | null
-          rem_duration_minutes?: number | null
-          respiratory_rate_per_min?: number | null
-          resting_heart_rate?: number | null
-          reward_amount?: number | null
           reward_calculated?: boolean | null
-          saturated_fat_g?: number | null
-          sexual_activity?: boolean | null
-          sleep_duration?: number | null
-          sleep_quality_score?: number | null
-          sodium_mg?: number | null
-          step_length_cm?: number | null
-          steps_count?: number | null
-          stress_level?: number | null
-          sugar_g?: number | null
-          symptoms_logged?: Json | null
           synapse_weight_coefficient?: number | null
-          systolic_blood_pressure?: number | null
-          time_asleep_minutes?: number | null
-          time_in_bed_minutes?: number | null
-          total_fat_g?: number | null
-          vitamin_c_mg?: number | null
-          vitamin_d_mcg?: number | null
-          vo2_max?: number | null
-          waist_circumference_cm?: number | null
-          walking_asymmetry_percentage?: number | null
-          walking_speed_mps?: number | null
-          water_ml?: number | null
-          weather_conditions?: Json | null
-          weight_kg?: number | null
-          workout_intensity?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
       staged_lifestyle_data: {
         Row: {
-          activity_context: Json | null
-          anonymized_from_event_id: number | null
-          app_usage_patterns: Json | null
+          aca_hash_key: string | null
           created_at: string | null
-          data_completeness_score: number | null
           data_quality_score: number | null
-          device_usage_metrics: Json | null
-          event_category: string
+          entity_id: string
+          event_category: string | null
           event_type: string
           id: string
-          location_zone: string | null
           processed_at: string | null
-          pseudo_user_id: string
           reward_amount: number | null
           reward_calculated: boolean | null
           session_duration: number | null
-          social_interactions: Json | null
           synapse_weight_coefficient: number | null
+          user_id: string | null
         }
         Insert: {
-          activity_context?: Json | null
-          anonymized_from_event_id?: number | null
-          app_usage_patterns?: Json | null
+          aca_hash_key?: string | null
           created_at?: string | null
-          data_completeness_score?: number | null
           data_quality_score?: number | null
-          device_usage_metrics?: Json | null
-          event_category?: string
+          entity_id: string
+          event_category?: string | null
           event_type: string
           id?: string
-          location_zone?: string | null
           processed_at?: string | null
-          pseudo_user_id: string
           reward_amount?: number | null
           reward_calculated?: boolean | null
           session_duration?: number | null
-          social_interactions?: Json | null
           synapse_weight_coefficient?: number | null
+          user_id?: string | null
         }
         Update: {
-          activity_context?: Json | null
-          anonymized_from_event_id?: number | null
-          app_usage_patterns?: Json | null
+          aca_hash_key?: string | null
           created_at?: string | null
-          data_completeness_score?: number | null
           data_quality_score?: number | null
-          device_usage_metrics?: Json | null
-          event_category?: string
+          entity_id?: string
+          event_category?: string | null
           event_type?: string
           id?: string
-          location_zone?: string | null
           processed_at?: string | null
-          pseudo_user_id?: string
           reward_amount?: number | null
           reward_calculated?: boolean | null
           session_duration?: number | null
-          social_interactions?: Json | null
           synapse_weight_coefficient?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -5372,6 +5117,7 @@ export type Database = {
           created_at: string
           description: string
           id: string
+          metadata: Json | null
           source: string | null
           status: string | null
           transaction_type: string
@@ -5382,6 +5128,7 @@ export type Database = {
           created_at?: string
           description: string
           id?: string
+          metadata?: Json | null
           source?: string | null
           status?: string | null
           transaction_type: string
@@ -5392,6 +5139,7 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          metadata?: Json | null
           source?: string | null
           status?: string | null
           transaction_type?: string
@@ -6208,6 +5956,15 @@ export type Database = {
         Returns: boolean
       }
       cleanup_orphaned_queue_items: { Args: never; Returns: number }
+      distribute_data_royalty: {
+        Args: {
+          p_amount: number
+          p_description: string
+          p_metadata: Json
+          p_user_id: string
+        }
+        Returns: number
+      }
       generate_pseudonym: { Args: { input_text: string }; Returns: string }
       get_all_user_health_data: {
         Args: { p_user_id: string }
@@ -6246,6 +6003,21 @@ export type Database = {
       }
       get_user_id_from_pseudonym: {
         Args: { p_pseudo_id: string }
+        Returns: string
+      }
+      increment_wallet_cash: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      log_delt_egress: {
+        Args: {
+          p_aca_hash: string
+          p_client_id: string
+          p_egress_type: string
+          p_liability_hash: string
+          p_metadata: Json
+          p_user_id: string
+        }
         Returns: string
       }
       process_backlog_data: {
