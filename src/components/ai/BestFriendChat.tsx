@@ -61,18 +61,23 @@ const BestFriendChat = () => {
         const sourceAcaHash = marketplaceData.find((row: any) => row.aca_hash_key)?.aca_hash_key;
 
         if (sourceAcaHash) {
-          // 3. TOKENIZATION: Generate the Egress Receipt for the Buyer
           const { data: deltResponse, error: deltError } = await supabase.functions.invoke("process-delt-transfer", {
             body: {
               aca_hash: sourceAcaHash,
               egress_type: "ai_query_context",
               client_id: "BEST_FRIEND_HUB_UI",
-              metadata: { query: userMessage },
+              // Aligning with the schema's 'data_payload_summary' field
+              metadata: {
+                query: userMessage,
+                context: "Marketplace AI Search",
+              },
             },
           });
 
           if (!deltError && deltResponse?.liability_token_hash) {
             liabilityToken = deltResponse.liability_token_hash;
+          } else {
+            console.error("Liability Token Transfer Error:", deltError);
           }
         }
 
