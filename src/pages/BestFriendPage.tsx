@@ -61,7 +61,7 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        // 🚨 CRITICAL FIX: Query using pseudo_user_id to match Anonymization Processor logic
+        // Query staged tables using the pseudo_user_id anchor (Platform GUID)
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
@@ -80,11 +80,11 @@ const BestFriendPage = () => {
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        // Deduct 1 CR for marketplace query authorization
+        // Deduct Synapse Credit for query authorization
         await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
         await refreshBalance();
 
-        // Resolve ACA hashes to fulfill DELT Protocol Loop
+        // Extract ACA hashes from records to fulfill DELT Protocol Loop
         const acaHashes: string[] = [
           ...realPipelineData.map((r: any) => r.aca_hash_key).filter(Boolean),
           ...realLifestyleData.map((r: any) => r.aca_hash_key).filter(Boolean),
@@ -178,7 +178,6 @@ const BestFriendPage = () => {
                     {msg.content}
                   </div>
 
-                  {/* Token Spend & Egress Receipt Indicators */}
                   {msg.role === "assistant" && (
                     <div className="flex items-center gap-2 flex-wrap mt-1">
                       {msg.tokenSpend && (
