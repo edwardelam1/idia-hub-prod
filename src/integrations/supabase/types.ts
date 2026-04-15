@@ -1842,6 +1842,39 @@ export type Database = {
           },
         ]
       }
+      fiat_ledger: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          description: string | null
+          id: string
+          source: string | null
+          status: string | null
+          transaction_type: string
+          user_id: string
+        }
+        Insert: {
+          amount_usd: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          source?: string | null
+          status?: string | null
+          transaction_type: string
+          user_id: string
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          source?: string | null
+          status?: string | null
+          transaction_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       franchise_agreements: {
         Row: {
           agreement_end_date: string | null
@@ -4047,13 +4080,11 @@ export type Database = {
           next_retry_at: string | null
           processed: boolean | null
           processing_completed_at: string | null
-          processing_started_at: string | null
           processing_status: string | null
           raw_payload: Json
           recorded_at: string | null
           retry_count: number | null
           source: string | null
-          step_count: number | null
           user_id: string | null
         }
         Insert: {
@@ -4065,13 +4096,11 @@ export type Database = {
           next_retry_at?: string | null
           processed?: boolean | null
           processing_completed_at?: string | null
-          processing_started_at?: string | null
           processing_status?: string | null
           raw_payload: Json
           recorded_at?: string | null
           retry_count?: number | null
           source?: string | null
-          step_count?: number | null
           user_id?: string | null
         }
         Update: {
@@ -4083,13 +4112,11 @@ export type Database = {
           next_retry_at?: string | null
           processed?: boolean | null
           processing_completed_at?: string | null
-          processing_started_at?: string | null
           processing_status?: string | null
           raw_payload?: Json
           recorded_at?: string | null
           retry_count?: number | null
           source?: string | null
-          step_count?: number | null
           user_id?: string | null
         }
         Relationships: []
@@ -6214,6 +6241,10 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
         }[]
       }
+      get_user_id_from_pseudonym: {
+        Args: { p_pseudo_id: string }
+        Returns: string
+      }
       process_backlog_data: {
         Args: never
         Returns: {
@@ -6286,6 +6317,8 @@ export type Database = {
         | "WITHDRAWAL"
         | "FEE"
         | "REWARD"
+        | "settlement"
+        | "fbo_dissemination"
       user_role: "owner" | "manager" | "employee" | "warehouse_associate"
     }
     CompositeTypes: {
@@ -6421,6 +6454,8 @@ export const Constants = {
         "WITHDRAWAL",
         "FEE",
         "REWARD",
+        "settlement",
+        "fbo_dissemination",
       ],
       user_role: ["owner", "manager", "employee", "warehouse_associate"],
     },
