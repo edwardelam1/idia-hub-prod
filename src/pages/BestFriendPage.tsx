@@ -3,10 +3,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2 } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2, FileKey } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
@@ -33,6 +33,7 @@ const BestFriendPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { balanceData, refreshBalance } = useSynapseCredits();
   const [exportingIndex, setExportingIndex] = useState<number | null>(null);
 
@@ -65,111 +66,79 @@ const BestFriendPage = () => {
     return data || [];
   };
 
-  // src/pages/BestFriendPage.tsx
+  // 🚨 FIX: Ensure the main handler is strictly async
+  const handleSendMessage = async () => {
+    if (!currentMessage.trim() || isLoading) return;
 
-const handleSendMessage = async () => {
-  if (!currentMessage.trim() || isLoading) return;
+    setIsLoading(true);
+    const userMessage = currentMessage;
+    const doMarketplace = isMarketplaceSearch(userMessage);
 
-  setIsLoading(true);
-  const userMessage = currentMessage;
-  const doMarketplace = isMarketplaceSearch(userMessage);
+    setCurrentMessage("");
+    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
-  setCurrentMessage("");
-  setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+    try {
+      let marketplaceResults: any[] | undefined;
+      let realPipelineData: any[] | undefined;
+      let realLifestyleData: any[] | undefined;
+      let queryEgressToken: any = undefined;
 
-  try {
-    // 1. RESOLVE ACA HASH FIRST
-    // We fetch the most recent hash to prove consent for this specific query
-    const { data: acaResult } = await supabase
-      .from("user_aca_records")
-      .select("aca_hash_key, platform_guid")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (!acaResult?.aca_hash_key) {
-      throw new Error("DELT Protocol Error: No active ACA Hash found. Reconnect data source.");
-    }
-
-    const activeAcaHash = acaResult.aca_hash_key;
-
-    // 2. FETCH DATA VIA HASH-LINKED GUID
-    // We no longer query by auth.uid(), we query by the platform_guid linked to that hash
-    const [healthResult, lifestyleResult] = await Promise.all([
-      supabase
-        .from("staged_health_data")
-        .select("*")
-        .eq("pseudo_user_id", acaResult.platform_guid) // Using the GUID resolved from the hash
-        .order("processed_at", { ascending: false })
-        .limit(50),
-      supabase
-        .from("staged_lifestyle_data")
-        .select("*")
-        .eq("pseudo_user_id", acaResult.platform_guid)
-        .order("processed_at", { ascending: false })
-        .limit(50),
-    ]);
-
-    const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
-
-    // 3. AUTOMATIC EGRESS LOGGING (Using Hash, not UserID)
-    const { data: sessionData } = await supabase.auth.getSession();
-    const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
-      body: {
-        client_id: `HUB-AI-${searchId}`,
-        aca_hash: activeAcaHash, // Passing the Hash as the anchor
-        egress_type: "ai_query_context",
-        data_summary: { source: "best_friend_chat", query: userMessage },
-      },
-      headers: { Authorization: `Bearer ${sessionData?.session?.access_token}` },
-    });
-
-    // 4. AI Fulfillment (Contextualized by the Hash provenance)
-    const data = await fetchApi("/api/v1/best-friend/chat", {
-      method: "POST",
-      body: JSON.stringify({
-        message: userMessage,
-        aca_hash: activeAcaHash, // The AI now uses the hash to prove context veracity
-        context: {
-          isMarketplaceMode: doMarketplace,
-          realPipelineData: healthResult.data || [],
-          realLifestyleData: lifestyleResult.data || [],
+      if (doMarketplace) {
+        const available = balanceData?.available_credits ?? 0;
+        if (available < 1) {
+          toast.error("Insufficient Synapse Credits");
+          setConversation((prev) => [
+            ...prev,
+            { role: "error", content: "Insufficient Synapse Credits (1 CR required)." },
+          ]);
+          setIsLoading(false);
+          return;
         }
-      }),
-    });
-
-    // ... rest of state updates
-  } catch (error: any) {
-    toast.error(`Provenance Error: ${error.message}`);
-  } finally {
-    setIsLoading(false);
-  }
-};
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Fetch Data & Real ACA Records
-        const [healthResult, lifestyleResult, acaResult] = await Promise.all([
-          supabase.from("staged_health_data").select("*").order("processed_at", { ascending: false }).limit(50),
-          supabase.from("staged_lifestyle_data").select("*").order("processed_at", { ascending: false }).limit(50),
-          supabase.from("user_aca_records").select("aca_hash_key").order("created_at", { ascending: false }).limit(10),
+        // 1. Resolve Hash-First Identity & Fetch Data
+        const { data: acaResult } = await supabase
+          .from("user_aca_records")
+          .select("aca_hash_key, platform_guid")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!acaResult?.aca_hash_key) {
+          throw new Error("DELT Protocol Error: No active ACA Hash found. Reconnect data source.");
+        }
+
+        const activeAcaHash = acaResult.aca_hash_key;
+
+        // Fetch Pipeline Data using resolved Hash GUID
+        const [healthResult, lifestyleResult] = await Promise.all([
+          supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", acaResult.platform_guid)
+            .order("processed_at", { ascending: false })
+            .limit(50),
+          supabase
+            .from("staged_lifestyle_data")
+            .select("*")
+            .eq("pseudo_user_id", acaResult.platform_guid)
+            .order("processed_at", { ascending: false })
+            .limit(50),
         ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        const realAcaIds = acaResult.data?.map((a) => a.aca_hash_key) || [];
-        const activeAcaIds = realAcaIds.length > 0 ? realAcaIds : [`ACA-SYS-${Date.now()}`];
-
         marketplaceResults = await queryMarketplace();
         await deductCredit(searchId);
 
-        // 2. AUTOMATIC EGRESS LOGGING (0 CRD for Contexting)
+        // 2. AUTOMATIC EGRESS LOGGING (Hash-First Logic)
         const { data: sessionData } = await supabase.auth.getSession();
         const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
           body: {
             client_id: `HUB-AI-${searchId}`,
-            aca_record_ids: activeAcaIds,
+            aca_hash: activeAcaHash,
             country_of_origin: "US",
             egress_type: "ai_query_context",
             data_summary: { source: "best_friend_chat", query: userMessage },
@@ -212,7 +181,7 @@ const handleSendMessage = async () => {
         },
       ]);
     } catch (error: any) {
-      toast.error(`Error: ${error.message}`);
+      toast.error(`Provenance Error: ${error.message}`);
       setConversation((prev) => [...prev, { role: "error", content: `⚠️ System Alert: ${error.message}` }]);
     } finally {
       setIsLoading(false);
@@ -229,14 +198,16 @@ const handleSendMessage = async () => {
         .from("user_aca_records")
         .select("aca_hash_key")
         .order("created_at", { ascending: false })
-        .limit(10);
-      const realAcaIds = acaResult?.map((a) => a.aca_hash_key) || [`ACA-SYS-${Date.now()}`];
+        .limit(1)
+        .single();
+
+      if (!acaResult?.aca_hash_key) throw new Error("No active ACA Hash found for export.");
 
       // 🚨 Full Egress Charge (250 CRD)
       const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
         body: {
           client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-          aca_record_ids: realAcaIds,
+          aca_hash: acaResult.aca_hash_key,
           country_of_origin: "US",
           egress_type: "secure_export",
           data_summary: { source: "best_friend_chat_export", query_index: messageIndex },
@@ -314,18 +285,20 @@ const handleSendMessage = async () => {
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
 
-                    {message.queryEgressToken && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground bg-background border px-2 py-1 rounded">
-                        <Shield className="h-3 w-3 text-emerald-600" />
-                        DELT Query Audit: {message.queryEgressToken.liability_token_hash.substring(0, 12)}...
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      {message.queryEgressToken && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2 text-emerald-600 border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100"
+                          onClick={() => navigate("/trading")}
+                        >
+                          <FileKey className="h-2.5 w-2.5" />
+                          Receipt: {message.queryEgressToken.liability_token_hash.substring(0, 8)}
+                        </Button>
+                      )}
 
-                    {message.creditDeducted && !message.liabilityToken && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
-                          <Coins className="h-2.5 w-2.5" />1 CR deducted
-                        </Badge>
+                      {message.creditDeducted && !message.liabilityToken && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -340,22 +313,8 @@ const handleSendMessage = async () => {
                           )}
                           Secure Export (250 CRD)
                         </Button>
-                      </div>
-                    )}
-
-                    {message.liabilityToken && (
-                      <div className="mt-2 space-y-1">
-                        <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
-                          <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD egress
-                        </Badge>
-                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono space-y-0.5">
-                          <p className="text-emerald-700">🛡️ Liability Shield Active (DELT Protocol)</p>
-                          <p className="text-muted-foreground truncate">
-                            Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
