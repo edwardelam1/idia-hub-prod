@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Copy, CheckCircle2, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +22,30 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const { user } = useAuth();
   const userId = user?.user_id;
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Realtime subscription for instant updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('egress-logs-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'egress_logs' },
+        (payload) => {
+          queryClient.setQueryData<ProvenanceLog[]>(['provenance-logs', userId], (old = []) => {
+            const newLog = payload.new as ProvenanceLog;
+            // Prepend new log, avoid duplicates
+            if (old.some((l) => l.id === newLog.id)) return old;
+            return [newLog, ...old];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, queryClient]);
 
   const { data: logs = [], isLoading, error } = useQuery({
     queryKey: ['provenance-logs', userId],
