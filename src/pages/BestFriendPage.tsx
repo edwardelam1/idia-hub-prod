@@ -68,91 +68,63 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        if (!pseudoUserId) {
-          throw new Error("Unable to resolve anonymized identity for auditable search.");
-        }
+        if (!pseudoUserId) throw new Error("Identity resolution failure.");
 
-        const lookupId = pseudoUserId;
-
-        const healthQuery = supabase
-          .from("staged_health_data")
-          .select("id, pseudo_user_id, aca_hash_key, activity_type, payload, data_quality_score, processed_at")
-          .eq("pseudo_user_id", lookupId)
-          .order("created_at", { ascending: false })
-          .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
-
-        const lifestyleQuery = supabase
-          .from("staged_lifestyle_data")
-          .select("id, pseudo_user_id, aca_hash_key, event_type, data_quality_score, processed_at")
-          .eq("pseudo_user_id", lookupId)
-          .order("created_at", { ascending: false })
-          .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
-
-        const [healthResult, lifestyleResult] = await Promise.all([healthQuery, lifestyleQuery]);
+        // Query staged tables
+        const [healthResult, lifestyleResult] = await Promise.all([
+          supabase.from("staged_health_data").select("*").eq("pseudo_user_id", pseudoUserId).limit(50),
+          supabase.from("staged_lifestyle_data").select("*").eq("pseudo_user_id", pseudoUserId).limit(50),
+        ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        // 1. Resolve everything associated with the user's identities
-        const acaHashes = Array.from(
-          new Set([
-            ...realPipelineData.map((r: any) => r.aca_hash_key),
-            ...realLifestyleData.map((r: any) => r.aca_hash_key),
-          ]),
-        ).filter(Boolean);
+        // 1. Resolve Auditable Lineage (Intersection of Staged Data + Source Artifacts)
+        const stagedHashes = [
+          ...realPipelineData.map((r: any) => r.aca_hash_key),
+          ...realLifestyleData.map((r: any) => r.aca_hash_key),
+        ].filter(Boolean);
 
-        // 2. 🚨 CRITICAL REPAIR: If the staged tables are empty,
-        // we must manually pull the artifacts from the source table using the Platform GUID
+        const { data: sourceArtifacts } = await supabase
+          .from("user_aca_records")
+          .select("aca_hash_key")
+          .eq("platform_guid", platformGuid);
+
+        const sourceHashes = sourceArtifacts?.map((a) => a.aca_hash_key) || [];
+
+        // Final deduplicated batch for tokenization
+        const acaHashes = Array.from(new Set([...stagedHashes, ...sourceHashes]));
+
         if (acaHashes.length === 0) {
-          const { data: sourceArtifacts } = await supabase
-            .from("user_aca_records")
-            .select("aca_hash_key")
-            .eq("platform_guid", platformGuid); // Use the GUID anchor here
-
-          if (sourceArtifacts && sourceArtifacts.length > 0) {
-            acaHashes.push(...sourceArtifacts.map((a) => a.aca_hash_key));
-          }
+          throw new Error(`No auditable lineage found for GUID: ${platformGuid}`);
         }
 
-        // 3. Final check before blocking the request
-        if (acaHashes.length === 0) {
-          throw new Error(
-            "No auditable lineage found. Please ensure your 169 ACAs are mapped to GUID: " + platformGuid,
-          );
-        }
-
+        // 2. DELT Protocol Execution (Pass REAL user_id to Edge Function)
         const { data: transferResult, error: transferError } = await supabase.functions.invoke(
           "process-delt-transfer",
           {
             body: {
-              client_id: "best_friend_ai",
+              client_id: "chief_researcher_ui",
               aca_record_ids: acaHashes,
-              egress_type: "ai_query_context",
+              egress_type: "biometric_audit",
               country_of_origin: "US",
-              data_summary: {
-                health_records: realPipelineData.length,
-                lifestyle_records: realLifestyleData.length,
-                lookup_id: lookupId,
-              },
             },
           },
         );
 
         if (transferError || !transferResult?.liability_token_hash) {
-          console.error("DELT Transfer Error:", transferError);
-          throw new Error(transferError?.message || "Failed to create Liability Shield receipt.");
+          throw new Error(transferError?.message || "Liability Shield initialization failed.");
         }
 
         liabilityTokenHash = transferResult.liability_token_hash;
 
+        // 3. Synapse Credit Settlement
         await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
-        await Promise.all([
-          refreshBalance(),
-          queryClient.invalidateQueries({ queryKey: ["provenance-logs", user?.id] }),
-          queryClient.invalidateQueries({ queryKey: ["provenance-logs"] }),
-        ]);
+        await refreshBalance();
+        queryClient.invalidateQueries({ queryKey: ["provenance-logs"] });
       }
 
+      // 4. Agentic Orchestration Call
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
@@ -160,13 +132,11 @@ const BestFriendPage = () => {
             isMarketplaceMode: doMarketplace,
             platformGuid,
             userId: user?.id,
-            currentPage: "/best-friend",
             marketplace: doMarketplace
               ? {
-                  healthRecords: realPipelineData,
-                  lifestyleRecords: realLifestyleData,
-                  lookupId: pseudoUserId,
-                  liabilityTokenHash,
+                  health: realPipelineData,
+                  lifestyle: realLifestyleData,
+                  tokenHash: liabilityTokenHash,
                 }
               : null,
           },
@@ -174,13 +144,13 @@ const BestFriendPage = () => {
         },
       });
 
-      if (chatError) throw new Error(chatError.message || "Failed to reach Best Friend AI");
+      if (chatError) throw new Error("Chief Researcher unavailable.");
 
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: chatResponse?.response || "No response received.",
+          content: chatResponse?.response || "Analysis complete.",
           liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
           creditDeducted: doMarketplace && !!liabilityTokenHash,
           tokenSpend: chatResponse?.tokenSpend,
@@ -194,10 +164,7 @@ const BestFriendPage = () => {
     }
   };
 
-  const truncateHash = (hash: string) => {
-    if (!hash || hash.length < 16) return hash || "—";
-    return `${hash.substring(0, 8)}...`;
-  };
+  const truncateHash = (hash: string) => (hash ? `${hash.substring(0, 8)}...` : "—");
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
@@ -237,7 +204,6 @@ const BestFriendPage = () => {
                   >
                     {msg.content}
                   </div>
-
                   {msg.role === "assistant" && (
                     <div className="flex items-center gap-2 flex-wrap mt-1">
                       {msg.tokenSpend && (
