@@ -40,6 +40,7 @@ const BestFriendPage = () => {
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
+    const conversationHistory = [...conversation, { role: "user" as const, content: userMessage }];
 
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
@@ -57,7 +58,6 @@ const BestFriendPage = () => {
       const platformGuid = profile?.platform_guid;
       if (!platformGuid) throw new Error("Platform Identity not found.");
 
-      // Resolve pseudonym for staged table lookup (matches generate_pseudonym DB function)
       const { data: pseudoData } = await supabase.rpc("generate_pseudonym", {
         input_text: user!.id,
       });
@@ -68,7 +68,11 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        const lookupId = pseudoUserId || platformGuid;
+        if (!pseudoUserId) {
+          throw new Error("Unable to resolve anonymized identity for auditable search.");
+        }
+
+        const lookupId = pseudoUserId;
 
         const healthQuery = supabase
           .from("staged_health_data")
@@ -92,32 +96,42 @@ const BestFriendPage = () => {
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        // Deduct Synapse Credit for query authorization
-        await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
-        await refreshBalance();
-
-        // Extract ACA hashes from records to fulfill DELT Protocol Loop
-        const acaHashes: string[] = [
+        const acaHashes = Array.from(new Set([
           ...realPipelineData.map((r: any) => r.aca_hash_key).filter(Boolean),
           ...realLifestyleData.map((r: any) => r.aca_hash_key).filter(Boolean),
-        ];
+        ].map((hash) => String(hash).trim()).filter(Boolean)));
 
-        if (acaHashes.length > 0) {
-          const { data: transferResult, error: transferError } = await supabase.functions.invoke("process-delt-transfer", {
-            body: {
-              client_id: "BEST_FRIEND_UI",
-              aca_record_ids: acaHashes,
-              egress_type: "ai_query_context",
-              country_of_origin: "US",
-            },
-          });
-          if (transferError) {
-            console.error("DELT Transfer Error:", transferError);
-          } else {
-            liabilityTokenHash = transferResult?.liability_token_hash || null;
-            queryClient.invalidateQueries({ queryKey: ["provenance-logs"] });
-          }
+        if (acaHashes.length === 0) {
+          throw new Error("No auditable lineage found for this request. Sync more staged data and try again.");
         }
+
+        const { data: transferResult, error: transferError } = await supabase.functions.invoke("process-delt-transfer", {
+          body: {
+            client_id: "best_friend_ai",
+            aca_record_ids: acaHashes,
+            egress_type: "ai_query_context",
+            country_of_origin: "US",
+            data_summary: {
+              health_records: realPipelineData.length,
+              lifestyle_records: realLifestyleData.length,
+              lookup_id: lookupId,
+            },
+          },
+        });
+
+        if (transferError || !transferResult?.liability_token_hash) {
+          console.error("DELT Transfer Error:", transferError);
+          throw new Error(transferError?.message || "Failed to create Liability Shield receipt.");
+        }
+
+        liabilityTokenHash = transferResult.liability_token_hash;
+
+        await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
+        await Promise.all([
+          refreshBalance(),
+          queryClient.invalidateQueries({ queryKey: ["provenance-logs", user?.id] }),
+          queryClient.invalidateQueries({ queryKey: ["provenance-logs"] }),
+        ]);
       }
 
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
@@ -128,10 +142,16 @@ const BestFriendPage = () => {
             platformGuid,
             userId: user?.id,
             currentPage: "/best-friend",
-            realPipelineData: doMarketplace ? realPipelineData : undefined,
-            realLifestyleData: doMarketplace ? realLifestyleData : undefined,
+            marketplace: doMarketplace
+              ? {
+                  healthRecords: realPipelineData,
+                  lifestyleRecords: realLifestyleData,
+                  lookupId: pseudoUserId,
+                  liabilityTokenHash,
+                }
+              : null,
           },
-          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+          history: conversationHistory.map((m) => ({ role: m.role, content: m.content })),
         },
       });
 
@@ -143,7 +163,7 @@ const BestFriendPage = () => {
           role: "assistant",
           content: chatResponse?.response || "No response received.",
           liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
-          creditDeducted: doMarketplace,
+          creditDeducted: doMarketplace && !!liabilityTokenHash,
           tokenSpend: chatResponse?.tokenSpend,
         },
       ]);

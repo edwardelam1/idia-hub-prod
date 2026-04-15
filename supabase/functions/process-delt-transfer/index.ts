@@ -56,19 +56,24 @@ serve(async (req) => {
       data_summary = null,
     } = body;
 
-    if (!client_id) throw new Error("client_id is required");
-    if (!Array.isArray(aca_record_ids) || aca_record_ids.length === 0) {
+    const normalizedClientId = typeof client_id === "string" ? client_id.trim() : "";
+    const normalizedAcaRecordIds = Array.isArray(aca_record_ids)
+      ? Array.from(new Set(aca_record_ids.map((id) => String(id ?? "").trim()).filter(Boolean)))
+      : [];
+
+    if (!normalizedClientId) throw new Error("client_id is required");
+    if (normalizedAcaRecordIds.length === 0) {
       throw new Error("aca_record_ids must be a non-empty array");
     }
 
     const timestamp = new Date().toISOString();
 
     // 3. Generate batch_checksum = SHA-256 of sorted aca_record_ids
-    const sortedIds = [...aca_record_ids].sort();
+    const sortedIds = [...normalizedAcaRecordIds].sort();
     const batchChecksum = await sha256(sortedIds.join("|"));
 
     // 4. Generate liability_token_hash = SHA-256 of {client_id}|{timestamp}|{batch_checksum}
-    const liabilityTokenHash = await sha256(`${client_id}|${timestamp}|${batchChecksum}`);
+    const liabilityTokenHash = await sha256(`${normalizedClientId}|${timestamp}|${batchChecksum}`);
 
     // 5. Generate DigiRAMP anchor (internal cryptographic anchor)
     const digiRampAnchorId = "DRA-" + await sha256(`${liabilityTokenHash}|${timestamp}`);
@@ -93,10 +98,10 @@ serve(async (req) => {
 
       adminClient.from("egress_logs").insert({
         user_id: userId,
-        client_id,
+        client_id: normalizedClientId,
         liability_token_hash: liabilityTokenHash,
         batch_checksum: batchChecksum,
-        aca_record_references: aca_record_ids,
+        aca_record_references: normalizedAcaRecordIds,
         country_of_origin,
         digiramp_anchor_id: digiRampAnchorId,
         egress_type,
@@ -128,7 +133,7 @@ serve(async (req) => {
       batch_checksum: batchChecksum,
       digiramp_anchor_id: digiRampAnchorId,
       egress_log_id: egressResult.data.id,
-      aca_record_references: aca_record_ids,
+      aca_record_references: normalizedAcaRecordIds,
       country_of_origin,
       timestamp,
       egress_fee_charged: Math.abs(egressFee),
