@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2, FileKey, Fingerprint, Activity } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Coins, Shield, Loader2, FileKey, Activity, Fingerprint } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -32,12 +32,35 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null); // 🚨 For auto-scroll
   const location = useLocation();
   const navigate = useNavigate();
   const { balanceData, refreshBalance } = useSynapseCredits();
   const [exportingIndex, setExportingIndex] = useState<number | null>(null);
 
   const isMarketplaceSearch = (msg: string) => marketplaceMode || MARKETPLACE_TRIGGER.test(msg);
+
+  // 🚨 Auto-scroll logic: triggered whenever conversation updates
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [conversation]);
+
+  const deductCredit = async (searchId: string) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Authentication required.");
+
+    const { data, error } = await supabase.functions.invoke("deduct-synapse-credit", {
+      body: { amount: 1, description: "Marketplace Search Query", referenceId: searchId },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (error) throw new Error(`Billing Error: ${data?.error || error?.message}`);
+    await refreshBalance();
+  };
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
@@ -55,18 +78,17 @@ const BestFriendPage = () => {
       let realLifestyleData: any[] | undefined;
       let queryEgressToken: any = undefined;
 
-      // 1. RESOLVE THE PLATFORM_GUID (The Person Anchor)
+      // 1. RESOLVE THE MASTER IDENTITY (The Platform GUID)
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unauthorized");
+      if (!user) throw new Error("Unauthorized Session");
 
       const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
 
       const platformGuid = profile?.platform_guid;
-      if (!platformGuid) throw new Error("Platform Identity not found.");
 
-      // 2. RESOLVE THE ACA HASH (The Action Receipt)
+      // 2. RESOLVE THE ACTIVE ACA HASH
       const { data: acaResult } = await supabase
         .from("user_aca_records")
         .select("aca_hash_key")
@@ -90,7 +112,7 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 3. FETCH DATA VIA PLATFORM_GUID (Non-disjointed Read)
+        // 3. FETCH DATA VIA PLATFORM_GUID (Strict DB Read)
         const [healthResult, lifestyleResult, bundleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
@@ -111,11 +133,7 @@ const BestFriendPage = () => {
         realLifestyleData = lifestyleResult.data || [];
         marketplaceResults = bundleResult.data || [];
 
-        // 4. DEDUCT CREDIT & LOG EGRESS
-        await supabase.functions.invoke("deduct-synapse-credit", {
-          body: { amount: 1, description: "Marketplace Search Query", referenceId: searchId },
-        });
-        await refreshBalance();
+        await deductCredit(searchId);
 
         if (activeAcaHash) {
           const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
@@ -131,7 +149,7 @@ const BestFriendPage = () => {
         }
       }
 
-      // 5. AI FULFILLMENT
+      // 4. AI FULFILLMENT
       const data = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -168,7 +186,6 @@ const BestFriendPage = () => {
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
-
       const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
         body: {
           client_id: `ENT-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
@@ -212,16 +229,16 @@ const BestFriendPage = () => {
         </Badge>
       </div>
 
-      <ScrollArea className="flex-1 py-4">
+      <ScrollArea className="flex-1 py-4 pr-4">
         {conversation.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
-            <div className="h-20 w-20 rounded-2xl bg-primary/5 flex items-center justify-center mb-6 animate-pulse">
+            <div className="h-20 w-20 rounded-2xl bg-primary/5 flex items-center justify-center mb-6">
               <Fingerprint className="h-10 w-10 text-primary/40" />
             </div>
-            <p className="font-bold text-foreground text-xl">Identity Anchored via Platform GUID.</p>
-            <p className="text-sm text-muted-foreground mt-2 max-w-sm leading-relaxed">
+            <p className="font-bold text-foreground text-xl">Identity Anchored.</p>
+            <p className="text-sm text-muted-foreground mt-2 max-w-sm">
               Use <code className="bg-muted px-1.5 py-0.5 rounded text-primary">@search marketplace</code> to verify
-              biometric veracity via the DELT Protocol.
+              biometric veracity.
             </p>
           </div>
         ) : (
@@ -295,6 +312,8 @@ const BestFriendPage = () => {
                 </div>
               </div>
             ))}
+            {/* 🚨 Dummy div to anchor the scroll */}
+            <div ref={scrollRef} />
           </div>
         )}
       </ScrollArea>
