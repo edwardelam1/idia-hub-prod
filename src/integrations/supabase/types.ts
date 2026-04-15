@@ -4813,6 +4813,7 @@ export type Database = {
           id: string
           payload: Json
           processed_at: string | null
+          pseudo_user_id: string | null
           raw_data_id: string | null
           reward_calculated: boolean | null
           synapse_weight_coefficient: number | null
@@ -4827,6 +4828,7 @@ export type Database = {
           id?: string
           payload?: Json
           processed_at?: string | null
+          pseudo_user_id?: string | null
           raw_data_id?: string | null
           reward_calculated?: boolean | null
           synapse_weight_coefficient?: number | null
@@ -4841,6 +4843,7 @@ export type Database = {
           id?: string
           payload?: Json
           processed_at?: string | null
+          pseudo_user_id?: string | null
           raw_data_id?: string | null
           reward_calculated?: boolean | null
           synapse_weight_coefficient?: number | null
@@ -4858,6 +4861,7 @@ export type Database = {
           event_type: string
           id: string
           processed_at: string | null
+          pseudo_user_id: string | null
           reward_amount: number | null
           reward_calculated: boolean | null
           session_duration: number | null
@@ -4873,6 +4877,7 @@ export type Database = {
           event_type: string
           id?: string
           processed_at?: string | null
+          pseudo_user_id?: string | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
           session_duration?: number | null
@@ -4888,6 +4893,7 @@ export type Database = {
           event_type?: string
           id?: string
           processed_at?: string | null
+          pseudo_user_id?: string | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
           session_duration?: number | null
