@@ -62,19 +62,20 @@ const BestFriendPage = () => {
 
       if (doMarketplace) {
         // 🚨 FIX: Explicitly list columns to resolve TS2589 "Excessively Deep" error
-        const healthQuery = supabase
+        const [healthResult, lifestyleResult] = await Promise.all([
+          supabase
             .from("staged_health_data")
             .select("id, pseudo_user_id, aca_hash_key, activity_type, payload, data_quality_score, processed_at")
             .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
-            .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
-        const lifestyleQuery = supabase
+            .limit(50),
+          supabase
             .from("staged_lifestyle_data")
             .select("id, pseudo_user_id, aca_hash_key, event_type, payload, data_quality_score, processed_at")
             .eq("pseudo_user_id", platformGuid)
             .order("created_at", { ascending: false })
-            .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
-        const [healthResult, lifestyleResult] = await Promise.all([healthQuery, lifestyleQuery]);
+            .limit(50),
+        ]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
@@ -110,7 +111,7 @@ const BestFriendPage = () => {
             realPipelineData,
             realLifestyleData,
             isMarketplaceMode: doMarketplace,
-            userId: user?.id,
+            userId: user?.id, // 🚨 CRITICAL: Ensure the actual Auth UUID is passed
           },
         }),
       });
