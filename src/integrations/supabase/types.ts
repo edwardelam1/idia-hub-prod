@@ -4878,6 +4878,7 @@ export type Database = {
           stress_level: number | null
           sugar_g: number | null
           symptoms_logged: Json | null
+          synapse_weight_coefficient: number | null
           systolic_blood_pressure: number | null
           time_asleep_minutes: number | null
           time_in_bed_minutes: number | null
@@ -4973,6 +4974,7 @@ export type Database = {
           stress_level?: number | null
           sugar_g?: number | null
           symptoms_logged?: Json | null
+          synapse_weight_coefficient?: number | null
           systolic_blood_pressure?: number | null
           time_asleep_minutes?: number | null
           time_in_bed_minutes?: number | null
@@ -5068,6 +5070,7 @@ export type Database = {
           stress_level?: number | null
           sugar_g?: number | null
           symptoms_logged?: Json | null
+          synapse_weight_coefficient?: number | null
           systolic_blood_pressure?: number | null
           time_asleep_minutes?: number | null
           time_in_bed_minutes?: number | null
