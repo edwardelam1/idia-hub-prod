@@ -88,36 +88,55 @@ const BestFriendPage = () => {
           .order("created_at", { ascending: false })
           .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
 
-        const [healthResult, lifestyleResult] = await Promise.all([
-          healthQuery,
-          lifestyleQuery,
-        ]);
+        const [healthResult, lifestyleResult] = await Promise.all([healthQuery, lifestyleQuery]);
 
         realPipelineData = healthResult.data || [];
         realLifestyleData = lifestyleResult.data || [];
 
-        const acaHashes = Array.from(new Set([
-          ...realPipelineData.map((r: any) => r.aca_hash_key).filter(Boolean),
-          ...realLifestyleData.map((r: any) => r.aca_hash_key).filter(Boolean),
-        ].map((hash) => String(hash).trim()).filter(Boolean)));
+        // 1. Resolve everything associated with the user's identities
+        const acaHashes = Array.from(
+          new Set([
+            ...realPipelineData.map((r: any) => r.aca_hash_key),
+            ...realLifestyleData.map((r: any) => r.aca_hash_key),
+          ]),
+        ).filter(Boolean);
 
+        // 2. 🚨 CRITICAL REPAIR: If the staged tables are empty,
+        // we must manually pull the artifacts from the source table using the Platform GUID
         if (acaHashes.length === 0) {
-          throw new Error("No auditable lineage found for this request. Sync more staged data and try again.");
+          const { data: sourceArtifacts } = await supabase
+            .from("user_aca_records")
+            .select("aca_hash_key")
+            .eq("platform_guid", platformGuid); // Use the GUID anchor here
+
+          if (sourceArtifacts && sourceArtifacts.length > 0) {
+            acaHashes.push(...sourceArtifacts.map((a) => a.aca_hash_key));
+          }
         }
 
-        const { data: transferResult, error: transferError } = await supabase.functions.invoke("process-delt-transfer", {
-          body: {
-            client_id: "best_friend_ai",
-            aca_record_ids: acaHashes,
-            egress_type: "ai_query_context",
-            country_of_origin: "US",
-            data_summary: {
-              health_records: realPipelineData.length,
-              lifestyle_records: realLifestyleData.length,
-              lookup_id: lookupId,
+        // 3. Final check before blocking the request
+        if (acaHashes.length === 0) {
+          throw new Error(
+            "No auditable lineage found. Please ensure your 169 ACAs are mapped to GUID: " + platformGuid,
+          );
+        }
+
+        const { data: transferResult, error: transferError } = await supabase.functions.invoke(
+          "process-delt-transfer",
+          {
+            body: {
+              client_id: "best_friend_ai",
+              aca_record_ids: acaHashes,
+              egress_type: "ai_query_context",
+              country_of_origin: "US",
+              data_summary: {
+                health_records: realPipelineData.length,
+                lifestyle_records: realLifestyleData.length,
+                lookup_id: lookupId,
+              },
             },
           },
-        });
+        );
 
         if (transferError || !transferResult?.liability_token_hash) {
           console.error("DELT Transfer Error:", transferError);
