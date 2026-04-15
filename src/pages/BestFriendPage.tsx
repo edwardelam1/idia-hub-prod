@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, CheckCircle, Coins } from "lucide-react";
 import { toast } from "sonner";
-import { fetchApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
@@ -26,6 +26,7 @@ const BestFriendPage = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { balanceData, refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -56,25 +57,36 @@ const BestFriendPage = () => {
       const platformGuid = profile?.platform_guid;
       if (!platformGuid) throw new Error("Platform Identity not found.");
 
+      // Resolve pseudonym for staged table lookup (matches generate_pseudonym DB function)
+      const { data: pseudoData } = await supabase.rpc("generate_pseudonym", {
+        input_text: user!.id,
+      });
+      const pseudoUserId = pseudoData as string | null;
+
       let realPipelineData: any[] = [];
       let realLifestyleData: any[] = [];
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
-        // 🚨 FIX: Explicitly list columns to resolve TS2589 "Excessively Deep" error
+        const lookupId = pseudoUserId || platformGuid;
+
+        const healthQuery = supabase
+          .from("staged_health_data")
+          .select("id, pseudo_user_id, aca_hash_key, activity_type, payload, data_quality_score, processed_at")
+          .eq("pseudo_user_id", lookupId)
+          .order("created_at", { ascending: false })
+          .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
+
+        const lifestyleQuery = supabase
+          .from("staged_lifestyle_data")
+          .select("id, pseudo_user_id, aca_hash_key, event_type, data_quality_score, processed_at")
+          .eq("pseudo_user_id", lookupId)
+          .order("created_at", { ascending: false })
+          .limit(50) as unknown as Promise<{ data: any[] | null; error: any }>;
+
         const [healthResult, lifestyleResult] = await Promise.all([
-          supabase
-            .from("staged_health_data")
-            .select("id, pseudo_user_id, aca_hash_key, activity_type, payload, data_quality_score, processed_at")
-            .eq("pseudo_user_id", platformGuid)
-            .order("created_at", { ascending: false })
-            .limit(50),
-          supabase
-            .from("staged_lifestyle_data")
-            .select("id, pseudo_user_id, aca_hash_key, event_type, payload, data_quality_score, processed_at")
-            .eq("pseudo_user_id", platformGuid)
-            .order("created_at", { ascending: false })
-            .limit(50),
+          healthQuery,
+          lifestyleQuery,
         ]);
 
         realPipelineData = healthResult.data || [];
@@ -91,7 +103,7 @@ const BestFriendPage = () => {
         ];
 
         if (acaHashes.length > 0) {
-          const { data: transferResult } = await supabase.functions.invoke("process-delt-transfer", {
+          const { data: transferResult, error: transferError } = await supabase.functions.invoke("process-delt-transfer", {
             body: {
               client_id: "BEST_FRIEND_UI",
               aca_record_ids: acaHashes,
@@ -99,30 +111,40 @@ const BestFriendPage = () => {
               country_of_origin: "US",
             },
           });
-          liabilityTokenHash = transferResult?.liability_token_hash || null;
+          if (transferError) {
+            console.error("DELT Transfer Error:", transferError);
+          } else {
+            liabilityTokenHash = transferResult?.liability_token_hash || null;
+            queryClient.invalidateQueries({ queryKey: ["provenance-logs"] });
+          }
         }
       }
 
-      const chatResponse = await fetchApi("/api/v1/best-friend/chat", {
-        method: "POST",
-        body: JSON.stringify({
+      const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
+        body: {
           message: userMessage,
           context: {
-            isMarketplaceMode: marketplaceMode, // 🚨 The boolean from your toggle state
-            platformGuid: platformGuid, // 🚨 The anchor for the DELT Protocol
+            isMarketplaceMode: doMarketplace,
+            platformGuid,
             userId: user?.id,
+            currentPage: "/best-friend",
+            realPipelineData: doMarketplace ? realPipelineData : undefined,
+            realLifestyleData: doMarketplace ? realLifestyleData : undefined,
           },
-        }),
+          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+        },
       });
+
+      if (chatError) throw new Error(chatError.message || "Failed to reach Best Friend AI");
 
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: chatResponse.response,
-          liabilityTokenHash: chatResponse.tokenHash || liabilityTokenHash,
+          content: chatResponse?.response || "No response received.",
+          liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
           creditDeducted: doMarketplace,
-          tokenSpend: chatResponse.tokenSpend,
+          tokenSpend: chatResponse?.tokenSpend,
         },
       ]);
     } catch (error: any) {
