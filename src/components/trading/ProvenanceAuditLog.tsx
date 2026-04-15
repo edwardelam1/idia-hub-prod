@@ -34,10 +34,11 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
         (payload) => {
           queryClient.setQueryData<ProvenanceLog[]>(['provenance-logs', userId], (old = []) => {
             const newLog = payload.new as ProvenanceLog;
-            // Prepend new log, avoid duplicates
             if (old.some((l) => l.id === newLog.id)) return old;
             return [newLog, ...old];
           });
+          // Belt-and-suspenders: also invalidate to ensure full refetch
+          queryClient.invalidateQueries({ queryKey: ['provenance-logs', userId] });
         }
       )
       .subscribe();
