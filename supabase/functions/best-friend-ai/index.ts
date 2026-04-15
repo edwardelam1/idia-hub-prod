@@ -391,6 +391,7 @@ serve(async (req) => {
         agentStatus: "active",
         persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
         activeAgent: detectedAgent,
+        queryComplexity: detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT" ? 2.0 : detectedAgent === "CONSTRUCTION_AGENT" ? 1.5 : 1.0,
         verificationIssues: verification.issues,
         orchestratorPlan: plan,
       }),
