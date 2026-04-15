@@ -64,42 +64,30 @@ const BestFriendPage = () => {
       const pseudoUserId = pseudoData as string | null;
 
       let realPipelineData: any[] = [];
-      let realLifestyleData: any[] = [];
       let liabilityTokenHash: string | null = null;
 
       if (doMarketplace) {
         if (!pseudoUserId) throw new Error("Identity resolution failure.");
 
-        // Query staged tables
-        const [healthResult, lifestyleResult] = await Promise.all([
+        // 1. Resolve Auditable Lineage (Multi-Identity Check)
+        const [healthResult, sourceArtifacts] = await Promise.all([
           supabase.from("staged_health_data").select("*").eq("pseudo_user_id", pseudoUserId).limit(50),
-          supabase.from("staged_lifestyle_data").select("*").eq("pseudo_user_id", pseudoUserId).limit(50),
+          supabase.from("user_aca_records").select("aca_hash_key").eq("platform_guid", platformGuid),
         ]);
 
         realPipelineData = healthResult.data || [];
-        realLifestyleData = lifestyleResult.data || [];
-
-        // 1. Resolve Auditable Lineage (Intersection of Staged Data + Source Artifacts)
-        const stagedHashes = [
-          ...realPipelineData.map((r: any) => r.aca_hash_key),
-          ...realLifestyleData.map((r: any) => r.aca_hash_key),
-        ].filter(Boolean);
-
-        const { data: sourceArtifacts } = await supabase
-          .from("user_aca_records")
-          .select("aca_hash_key")
-          .eq("platform_guid", platformGuid);
-
-        const sourceHashes = sourceArtifacts?.map((a) => a.aca_hash_key) || [];
-
-        // Final deduplicated batch for tokenization
-        const acaHashes = Array.from(new Set([...stagedHashes, ...sourceHashes]));
+        const acaHashes = Array.from(
+          new Set([
+            ...realPipelineData.map((r: any) => r.aca_hash_key),
+            ...(sourceArtifacts.data?.map((a) => a.aca_hash_key) || []),
+          ]),
+        ).filter((h) => h && String(h).trim() !== "");
 
         if (acaHashes.length === 0) {
-          throw new Error(`No auditable lineage found for GUID: ${platformGuid}`);
+          throw new Error("No auditable lineage found for this request.");
         }
 
-        // 2. DELT Protocol Execution (Pass REAL user_id to Edge Function)
+        // 2. DELT Protocol Execution
         const { data: transferResult, error: transferError } = await supabase.functions.invoke(
           "process-delt-transfer",
           {
@@ -107,24 +95,20 @@ const BestFriendPage = () => {
               client_id: "chief_researcher_ui",
               aca_record_ids: acaHashes,
               egress_type: "biometric_audit",
-              country_of_origin: "US",
             },
           },
         );
 
-        if (transferError || !transferResult?.liability_token_hash) {
-          throw new Error(transferError?.message || "Liability Shield initialization failed.");
-        }
+        if (transferError) throw new Error(transferError.message);
+        liabilityTokenHash = transferResult?.liability_token_hash;
 
-        liabilityTokenHash = transferResult.liability_token_hash;
-
-        // 3. Synapse Credit Settlement
+        // 3. Synapse Settlement
         await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
         await refreshBalance();
-        queryClient.invalidateQueries({ queryKey: ["provenance-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
       }
 
-      // 4. Agentic Orchestration Call
+      // 4. Agentic Orchestration (Chief Researcher)
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
@@ -135,7 +119,6 @@ const BestFriendPage = () => {
             marketplace: doMarketplace
               ? {
                   health: realPipelineData,
-                  lifestyle: realLifestyleData,
                   tokenHash: liabilityTokenHash,
                 }
               : null,
@@ -144,13 +127,13 @@ const BestFriendPage = () => {
         },
       });
 
-      if (chatError) throw new Error("Chief Researcher unavailable.");
+      if (chatError) throw new Error("Orchestrator timeout.");
 
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: chatResponse?.response || "Analysis complete.",
+          content: chatResponse?.response || "Analysis finalized.",
           liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
           creditDeducted: doMarketplace && !!liabilityTokenHash,
           tokenSpend: chatResponse?.tokenSpend,
@@ -174,9 +157,9 @@ const BestFriendPage = () => {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">Best Friend AI</h1>
+            <h1 className="text-xl font-bold">Chief Researcher</h1>
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
-              Liability Shield Terminal
+              Agentic Orchestration Layer
             </p>
           </div>
         </div>
@@ -206,20 +189,13 @@ const BestFriendPage = () => {
                   </div>
                   {msg.role === "assistant" && (
                     <div className="flex items-center gap-2 flex-wrap mt-1">
-                      {msg.tokenSpend && (
-                        <Badge
-                          variant="secondary"
-                          className="h-5 text-[9px] gap-1 px-1.5 bg-slate-100 text-slate-600 border-none font-mono"
-                        >
-                          <Coins size={10} className="text-amber-500" /> {msg.tokenSpend} TOKENS
-                        </Badge>
-                      )}
                       {msg.liabilityTokenHash && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-5 text-[9px] gap-1 px-1.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono p-0"
-                          onClick={() => navigate(`/compliance?search=${msg.liabilityTokenHash}`)}
+                          // 🚨 FIXED LINK: Points to egress-logs with search filter
+                          onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
                         >
                           <FileKey size={10} /> {truncateHash(msg.liabilityTokenHash)}
                         </Button>
@@ -245,7 +221,7 @@ const BestFriendPage = () => {
                   <Bot size={16} />
                 </div>
                 <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
-                  Best Friend is auditing the pipeline...
+                  Chief Researcher is auditing the pipeline...
                 </div>
               </div>
             </div>
