@@ -66,7 +66,6 @@ const BestFriendPage = () => {
     return data || [];
   };
 
-  // 🚨 FIX: Ensure the main handler is strictly async
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
 
@@ -97,7 +96,7 @@ const BestFriendPage = () => {
 
         const searchId = `SEARCH-${crypto.randomUUID().slice(0, 8)}`;
 
-        // 1. Resolve Hash-First Identity & Fetch Data
+        // 1. Hash-First Identity Resolution
         const { data: acaResult } = await supabase
           .from("user_aca_records")
           .select("aca_hash_key, platform_guid")
@@ -111,7 +110,7 @@ const BestFriendPage = () => {
 
         const activeAcaHash = acaResult.aca_hash_key;
 
-        // Fetch Pipeline Data using resolved Hash GUID
+        // 2. Fetch Context Data using Hash-linked GUID
         const [healthResult, lifestyleResult] = await Promise.all([
           supabase
             .from("staged_health_data")
@@ -133,7 +132,7 @@ const BestFriendPage = () => {
         marketplaceResults = await queryMarketplace();
         await deductCredit(searchId);
 
-        // 2. AUTOMATIC EGRESS LOGGING (Hash-First Logic)
+        // 3. AUTOMATIC EGRESS LOGGING
         const { data: sessionData } = await supabase.auth.getSession();
         const { data: egressData } = await supabase.functions.invoke("process-delt-transfer", {
           body: {
@@ -153,7 +152,7 @@ const BestFriendPage = () => {
 
       const cleanedMessage = userMessage.replace(MARKETPLACE_TRIGGER, "").trim() || userMessage;
 
-      // 3. AI Fulfillment
+      // 4. AI Fulfillment (Synapse Orchestration)
       const data = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -200,7 +199,6 @@ const BestFriendPage = () => {
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
-
       if (!acaResult?.aca_hash_key) throw new Error("No active ACA Hash found for export.");
 
       // 🚨 Full Egress Charge (250 CRD)
@@ -244,6 +242,7 @@ const BestFriendPage = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6">
+      {/* Header */}
       <div className="flex items-center gap-3 pb-4 border-b border-border flex-shrink-0">
         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
           <Brain className="h-5 w-5 text-primary" />
@@ -254,6 +253,7 @@ const BestFriendPage = () => {
         </div>
       </div>
 
+      {/* Chat Area */}
       <ScrollArea className="flex-1 py-4">
         {conversation.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-16">
@@ -278,14 +278,15 @@ const BestFriendPage = () => {
                   >
                     {message.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                   </div>
-                  <div>
+                  <div className="space-y-2">
                     <div
                       className={`rounded-lg px-4 py-3 ${message.role === "user" ? "bg-primary text-primary-foreground" : message.role === "error" ? "bg-destructive/10 text-destructive border border-destructive/20" : "bg-muted text-foreground"}`}
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
 
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {/* Action Bar */}
+                    <div className="flex items-center gap-2 flex-wrap">
                       {message.queryEgressToken && (
                         <Button
                           variant="outline"
@@ -315,6 +316,26 @@ const BestFriendPage = () => {
                         </Button>
                       )}
                     </div>
+
+                    {/* Liability Shield Result */}
+                    {message.liabilityToken && (
+                      <div className="space-y-1">
+                        <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5">
+                          <Coins className="h-2.5 w-2.5" />1 CR + {message.liabilityToken.egress_fee_charged} CRD
+                        </Badge>
+                        <div
+                          className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] font-mono cursor-pointer hover:bg-emerald-500/20"
+                          onClick={() => navigate("/trading")}
+                        >
+                          <p className="text-emerald-700 flex items-center gap-1">
+                            <Shield className="h-3 w-3" /> Liability Shield Active
+                          </p>
+                          <p className="text-muted-foreground truncate">
+                            Token: {message.liabilityToken.liability_token_hash.substring(0, 16)}…
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -323,6 +344,7 @@ const BestFriendPage = () => {
         )}
       </ScrollArea>
 
+      {/* Input Section */}
       <div className="pt-4 border-t border-border flex-shrink-0 max-w-3xl mx-auto w-full space-y-2">
         <div className="flex gap-2">
           <Input
