@@ -1,52 +1,99 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, User, Bot, Brain, Coins, ShieldCheck, ExternalLink } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { fetchApi } from "@/lib/api";
-import BestFriendAvatar from "./BestFriendAvatar";
+import { supabase } from "@/integrations/supabase/client";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
-interface BestFriendChatProps {
-  isOpen?: boolean;
-  onClose?: () => void;
-}
-
-interface ChatMessage {
-  role: string;
-  content: string;
-  tokenSpend?: number;
-  tokenHash?: string;
-}
-
-const BestFriendChat = ({ isOpen: externalOpen, onClose }: BestFriendChatProps = {}) => {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = externalOpen !== undefined ? externalOpen : internalOpen;
-  const setOpen = onClose
-    ? (value: boolean) => {
-        if (!value) onClose();
-      }
-    : setInternalOpen;
-  const [conversation, setConversation] = useState<ChatMessage[]>([]);
+const BestFriendPage = () => {
+  const [conversation, setConversation] = useState<any[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [emotion, setEmotion] = useState<"excited" | "calm" | "sad" | "neutral">("neutral");
+  const [marketplaceMode, setMarketplaceMode] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { balanceData, refreshBalance } = useSynapseCredits();
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [conversation, isLoading]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim()) return;
+    if (!currentMessage.trim() || isLoading) return;
 
     setIsLoading(true);
-    setEmotion("excited");
     const userMessage = currentMessage;
+    const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
+
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
-      const data = await fetchApi("/api/v1/best-friend/chat", {
+      // 1. Resolve Master Platform GUID (The local Person Anchor)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("platform_guid")
+        .eq("user_id", user?.id)
+        .single();
+
+      const platformGuid = profile?.platform_guid;
+      if (!platformGuid) throw new Error("Platform Identity not found.");
+
+      let realPipelineData = [];
+      let realLifestyleData = [];
+      let queryEgressToken = null;
+
+      if (doMarketplace) {
+        // 2. Hybrid Query: Map platform_guid to pseudo_user_id
+        const [health, lifestyle, aca] = await Promise.all([
+          supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", platformGuid)
+            .order("created_at", { ascending: false })
+            .limit(50),
+          supabase
+            .from("staged_lifestyle_data")
+            .select("*")
+            .eq("pseudo_user_id", platformGuid)
+            .order("created_at", { ascending: false })
+            .limit(50),
+          supabase
+            .from("user_aca_records")
+            .select("aca_hash_key")
+            .eq("platform_guid", platformGuid)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
+        realPipelineData = health.data || [];
+        realLifestyleData = lifestyle.data || [];
+
+        await supabase.functions.invoke("deduct-synapse-credit", { body: { amount: 1 } });
+        await refreshBalance();
+
+        if (aca?.data?.aca_hash_key) {
+          const { data: egress } = await supabase.functions.invoke("process-delt-transfer", {
+            body: { aca_hash: aca.data.aca_hash_key, egress_type: "ai_query_context", client_id: "BEST_FRIEND_UI" },
+          });
+          queryEgressToken = egress;
+        }
+      }
+
+      const chatResponse = await fetchApi("/api/v1/best-friend/chat", {
         method: "POST",
         body: JSON.stringify({
-          message: userMessage,
-          context: { currentPage: "super-admin-dashboard", timestamp: new Date().toISOString() },
+          message: userMessage.replace(/@search\s+marketplace/i, "").trim(),
+          context: { realPipelineData, realLifestyleData, isMarketplaceMode: doMarketplace },
         }),
       });
 
@@ -54,144 +101,104 @@ const BestFriendChat = ({ isOpen: externalOpen, onClose }: BestFriendChatProps =
         ...prev,
         {
           role: "assistant",
-          content: data.response,
-          tokenSpend: data.tokenSpend,
-          tokenHash: data.tokenHash,
+          content: chatResponse.response,
+          queryEgressToken,
+          creditDeducted: doMarketplace,
         },
       ]);
-      setEmotion("calm");
-    } catch (error) {
-      console.error("Best Friend AI Error:", error);
-      toast.error("Failed to connect to Best Friend AI");
-      setEmotion("sad");
-      setConversation((prev) => [
-        ...prev,
-        { role: "error", content: "Sorry, I encountered an issue. Please try again." },
-      ]);
+    } catch (error: any) {
+      toast.error(error.message);
+      setConversation((prev) => [...prev, { role: "assistant", content: `⚠️ System Alert: ${error.message}` }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <Brain className="h-6 w-6 text-purple-600" />
-            <span>Best Friend AI - Super Admin Assistant</span>
-          </DialogTitle>
-          <DialogDescription>
-            Your trusted AI colleague orchestrating the agent army for seamless operations
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 flex flex-col space-y-4">
-          <ScrollArea className="flex-1 h-96 border rounded-lg p-4">
-            {conversation.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <Brain className="h-12 w-12 mx-auto mb-4 text-purple-400" />
-                <p className="font-medium">Hey there! I'm Best Friend, your AI assistant.</p>
-                <p className="text-sm mt-2">I'm here to help you manage the platform. Just tell me what you need!</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {conversation.map((message, index) => (
-                  <div key={index} className="flex flex-col">
-                    <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`flex items-start space-x-2 max-w-[80%] ${message.role === "user" ? "flex-row-reverse space-x-reverse" : ""}`}
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${message.role === "user" ? "bg-blue-100 text-blue-600" : message.role === "error" ? "bg-red-100 text-red-600" : "bg-purple-100 text-purple-600"}`}
-                        >
-                          {message.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                        </div>
-                        <div
-                          className={`rounded-lg px-4 py-2 ${message.role === "user" ? "bg-blue-600 text-white" : message.role === "error" ? "bg-red-50 text-red-900 border border-red-200" : "bg-muted text-foreground"}`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Token Spend & Egress Hash Indicator */}
-                    {message.role === "assistant" && message.tokenHash && (
-                      <div className="flex items-center space-x-3 mt-1 ml-11 text-[11px] text-muted-foreground bg-gray-50/50 w-max px-2 py-1 rounded-md border border-gray-100">
-                        <div className="flex items-center text-emerald-600 font-medium" title="Tokens Spent">
-                          <Coins className="w-3 h-3 mr-1" />
-                          <span>{message.tokenSpend} Tokens</span>
-                        </div>
-                        <span className="text-gray-300">|</span>
-                        <a
-                          href={`/audit?search=${message.tokenHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center hover:text-purple-600 transition-colors"
-                          title="View in Egress Logs"
-                        >
-                          <ShieldCheck className="w-3 h-3 mr-1 text-purple-500" />
-                          <span className="font-mono">{message.tokenHash.substring(0, 12)}...</span>
-                          <ExternalLink className="w-3 h-3 ml-1 opacity-50" />
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="flex items-start space-x-2">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-100 text-purple-600">
-                        <Bot className="h-4 w-4" />
-                      </div>
-                      <div className="bg-muted rounded-lg px-4 py-2">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
-                          <div
-                            className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
-                            style={{ animationDelay: "0.1s" }}
-                          />
-                          <div
-                            className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
-                            style={{ animationDelay: "0.2s" }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </ScrollArea>
-
-          <div className="flex space-x-2">
-            <Input
-              placeholder="Ask Best Friend to help with platform management..."
-              value={currentMessage}
-              onChange={(e) => setCurrentMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || !currentMessage.trim()}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-md disabled:opacity-50 transition-all duration-200"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+    <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Brain className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Best Friend AI</h1>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
+              Liability Shield Terminal
+            </p>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        <Badge
+          variant="outline"
+          className="h-6 text-[10px] gap-1 px-2 border-emerald-200 text-emerald-700 bg-emerald-50"
+        >
+          <Activity className="h-3 w-3" /> PIPELINE_LIVE
+        </Badge>
+      </div>
+
+      <ScrollArea className="flex-1 py-4 pr-4">
+        <div className="space-y-6 max-w-3xl mx-auto">
+          {conversation.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-white" : "bg-white border shadow-sm text-primary"}`}
+                >
+                  {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
+                </div>
+                <div className="space-y-2">
+                  <div
+                    className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-white" : "bg-white border text-slate-800"}`}
+                  >
+                    {msg.content}
+                  </div>
+                  {msg.queryEgressToken && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-[10px] gap-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 border-none font-mono"
+                    >
+                      <FileKey size={12} className="text-emerald-600" />
+                      RECEIPT: {msg.queryEgressToken.liability_token_hash.substring(0, 12).toUpperCase()}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div ref={scrollRef} className="h-2" />
+        </div>
+      </ScrollArea>
+
+      <div className="pt-4 border-t border-slate-200 max-w-3xl mx-auto w-full space-y-4">
+        <div className="flex gap-2 relative">
+          <Input
+            placeholder={marketplaceMode ? "Querying Pipeline via Person Anchor..." : "Message Synapse..."}
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
+            disabled={isLoading}
+            className="h-14 rounded-2xl pr-14 bg-white shadow-sm border-slate-200 focus-visible:ring-primary"
+          />
+          <Button
+            onClick={handleSendMessage}
+            disabled={isLoading || !currentMessage.trim()}
+            className="absolute right-2 top-2 h-10 w-10 rounded-xl p-0"
+          >
+            {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+          </Button>
+        </div>
+        <div className="flex items-center justify-between px-1">
+          <button
+            onClick={() => setMarketplaceMode(!marketplaceMode)}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-white border-primary" : "bg-white text-slate-500 border-slate-200 hover:border-primary/40"}`}
+          >
+            <Search size={14} /> Marketplace Mode (1 CR)
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
-export default BestFriendChat;
+export default BestFriendPage;
