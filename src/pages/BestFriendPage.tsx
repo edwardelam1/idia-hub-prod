@@ -77,39 +77,41 @@ const BestFriendPage = () => {
       if (marketplaceMode && realPipelineData.length > 0) {
         const targetAcaHashes = realPipelineData.map((d) => d.aca_hash_key).filter(Boolean);
 
-        // Trigger the Synapse Controller to bundle ONLY these specific ACA references
-        const { data: transferResult, error: transferError } = await supabase.functions.invoke("synapse-controller", {
-          body: {
-            client_id: "best-friend-ai-ui",
-            aca_record_ids: targetAcaHashes, // Strict subset bundling
-            intent_type: "RESEARCH",
-          },
-        });
+        // 1. Ensure you have the activeGuid from the profile fetch earlier in the function
+const { data: { user } } = await supabase.auth.getUser();
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("platform_guid")
+  .eq("user_id", user?.id)
+  .single();
 
-        if (!transferError) {
-          liabilityTokenHash = transferResult?.liability_token_hash;
-          exactTokenSpend = transferResult?.financials?.total_cr_deducted;
-          await refreshBalance(); // Sync the new whole-number balance
-        }
-      }
+const activeGuid = profile?.platform_guid;
 
-      // 4. THE HANDSHAKE (Agentic Invocation)
-      const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
-        body: {
-          message: userMessage,
-          context: {
-            isMarketplaceMode: marketplaceMode,
-            platformGuid: activeGuid,
-            marketplace: marketplaceMode
-              ? {
-                  health: realPipelineData,
-                  tokenHash: liabilityTokenHash, // The SHA-256 link to the Egress Log
-                }
-              : null,
-          },
-          history: conversation.map((m) => ({ role: m.role, content: m.content })),
-        },
-      });
+// 2. Update the Controller Invoke
+const { data: transferResult } = await supabase.functions.invoke("synapse-controller", {
+  body: {
+    client_id: "best-friend-ai-ui",
+    aca_record_ids: realPipelineData.map(d => d.aca_hash_key),
+    platform_guid: activeGuid, // 🎯 MANDATORY: This unlocks the 30% payout
+    query_complexity: 1.0
+  }
+});
+
+// 3. Update the AI Invoke
+const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
+  body: {
+    message: userMessage,
+    context: {
+      isMarketplaceMode: marketplaceMode,
+      platformGuid: activeGuid, // 🎯 MANDATORY
+      marketplace: marketplaceMode ? {
+        health: realPipelineData,
+        tokenHash: transferResult?.liability_token_hash,
+      } : null,
+    },
+    history: conversation.map((m) => ({ role: m.role, content: m.content })),
+  },
+});
 
       if (chatError) throw new Error("Orchestrator timeout.");
 
