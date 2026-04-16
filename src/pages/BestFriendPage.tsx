@@ -101,6 +101,15 @@ const BestFriendPage = () => {
         if (marketplaceMode) {
           if (!platformGuid) throw new Error("Identity resolution failure.");
 
+          const { data: lineageData, error: lineageError } = await supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", platformGuid);
+
+          if (lineageError) console.error("Vault Leak:", lineageError);
+
+          realPipelineData = lineageData || [];
+
           // 1. Identify intent strictly to route the database query
           let queryActivity = null;
           if (/heart/i.test(userMessage)) queryActivity = "heartRate";
