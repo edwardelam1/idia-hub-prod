@@ -19,7 +19,7 @@ interface ConversationMessage {
 }
 
 const BestFriendPage = () => {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     (window as any).supabase = supabase;
   }
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
@@ -39,7 +39,7 @@ const BestFriendPage = () => {
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
-    
+
     // 1. Declare variables at the top of the function scope
     let realPipelineData: any[] = [];
     const userMessage = currentMessage;
@@ -58,7 +58,7 @@ const BestFriendPage = () => {
         .is("processed_at", null);
 
       if (vaultError) throw vaultError;
-      
+
       realPipelineData = healthData || [];
       console.log("📦 COURIER STATUS:", realPipelineData.length, "records grabbed.");
 
@@ -71,11 +71,11 @@ const BestFriendPage = () => {
             platformGuid: targetId,
             marketplace: {
               health: realPipelineData, // THE 115 BPM IS NOW PACKED
-              tokenHash: "MANUAL-AUDIT-" + Date.now()
-            }
+              tokenHash: "MANUAL-AUDIT-" + Date.now(),
+            },
           },
-          history: conversation.map(m => ({ role: m.role, content: m.content }))
-        }
+          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+        },
       });
 
       if (chatError) throw chatError;
@@ -85,20 +85,18 @@ const BestFriendPage = () => {
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis finalized.",
-          creditDeducted: marketplaceMode && realPipelineData.length > 0
-        }
+          creditDeducted: marketplaceMode && realPipelineData.length > 0,
+        },
       ]);
-
     } catch (err: any) {
       console.error("🚨 BARE METAL FAILURE:", err.message);
       toast.error(`Audit Failed: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
-  }; // <--- MAKE SURE THIS CLOSES THE FUNCTION
 
-console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
-toast.info(`Warehouse Signal: Detected ${liveCount} records in vault.`);
+    console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
+    toast.info(`Warehouse Signal: Detected ${liveCount} records in vault.`);
     try {
       const { data: healthData, error: vaultError } = await supabase
         .from("staged_health_data")
