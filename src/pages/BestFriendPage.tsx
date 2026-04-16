@@ -67,19 +67,21 @@ const BestFriendPage = () => {
       let liabilityTokenHash = null;
       if (marketplaceMode && realPipelineData.length > 0) {
         // 🎯 ENSURE this uses the supabase.functions.invoke method
-const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
-  body: {
-    client_id: "best-friend-ai-ui",
-    aca_record_ids: realPipelineData.map(d => d.aca_hash_key),
-    platform_guid: activeGuid, // Your GUID for the 30% payout
-    query_complexity: 1.0
-  }
-});
+        const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
+          body: {
+            client_id: "best-friend-ai-ui",
+            aca_record_ids: realPipelineData.map(d => d.aca_hash_key),
+            platform_guid: activeGuid,
+            query_complexity: 1.0
+          }
+        });
 
-if (tokenError) {
-  console.error("Ledger Settlement Failure:", tokenError.message);
-  // This will show if the apikey is still missing
-}
+        if (tokenError) {
+          console.error("Ledger Settlement Failure:", tokenError.message);
+        }
+
+        liabilityTokenHash = tokenResult?.liability_token_hash || null;
+      }
 
       // 4. THE AI CALL
       const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
