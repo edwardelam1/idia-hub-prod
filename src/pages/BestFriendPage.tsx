@@ -122,17 +122,6 @@ const BestFriendPage = () => {
             }
           }
         }
-
-        if (transferError) {
-          const actualError = (transferError as any).context?.json?.error || transferError.message;
-          throw new Error(`Controller: ${actualError}`);
-        }
-
-        liabilityTokenHash = transferResult?.liability_token_hash;
-        exactTokenSpend = transferResult?.financials?.total_cr_deducted;
-
-        await refreshBalance();
-        queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
       }
 
       // 3. AGENTIC ORCHESTRATION
