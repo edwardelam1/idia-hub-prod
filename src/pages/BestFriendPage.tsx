@@ -40,21 +40,6 @@ const BestFriendPage = () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
 
-    // 🎯 FIXED: Ensure we are grabbing the HASH KEYS, not the UUIDs
-    const acaIds = healthData?.map((d) => d.aca_hash_key).filter(Boolean) || [];
-
-    if (acaIds.length === 0) {
-      console.error("Protocol Error: No ACA Hash Keys found for settlement.");
-      // Fallback to standard mode if no verified records exist
-    }
-
-    const { data: settlement } = await supabase.functions.invoke("synapse-controller", {
-      body: {
-        aca_record_ids: acaIds, // Must be ['GHOST-TOKEN-001', ...]
-        researcher_id: user.id,
-      },
-    });
-
     try {
       // 1. DYNAMIC IDENTITY GRAB (Crucial for the 30% payout)
       const {
