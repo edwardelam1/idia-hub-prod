@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useBillingData, PLAN_PRICING } from "@/hooks/useBillingData";
 import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
@@ -12,10 +11,8 @@ import {
   ShieldCheck,
   Database,
   BrainCircuit,
-  Plug,
   Eye,
   Sparkles,
-  Bot,
   BarChart3,
   BookOpen,
 } from "lucide-react";
