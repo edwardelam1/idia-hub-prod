@@ -58,8 +58,8 @@ const BestFriendPage = () => {
       const { data: healthData } = await supabase
         .from("staged_health_data")
         .select("*")
-        .eq("pseudo_user_id", activeGuid)
-        .is("processed_at", null);
+        .eq("user_id", user?.id) // Direct identity link
+        .eq("reward_calculated", true); // Only pull data that has been paid for
 
       const realPipelineData = healthData || [];
 
