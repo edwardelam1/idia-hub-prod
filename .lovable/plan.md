@@ -1,36 +1,32 @@
 
 
-# Upgrade Provenance Bridge UI in BestFriendPage
+# Replace Identity Resolution with `life-pii-bridge`
 
-## What changes
+## Problem
+The `handleSendMessage` function currently resolves the user's `platform_guid` by making two separate client-side calls: `supabase.auth.getUser()` then querying the `profiles` table. The user wants to replace this with a single call to the `life-pii-bridge` Edge Function, which already returns `platform_guid` from the server side.
 
-Replace the existing assistant metadata block (lines 175–197) with the upgraded "Provenance Bridge" UI that has:
-- A styled pill button with purple background tint and rounded-full border for the liability token hash deep link
-- A `SHIELD_VERIFIED` badge with Shield icon instead of `SHIELD_ACTIVE` with CheckCircle
-- `animate-in fade-in slide-in-from-top-1` entrance animation
+## Change
 
-## Single file change
+**`src/pages/BestFriendPage.tsx`** — Replace lines 44–56 (the identity grab block) with:
 
-**`src/pages/BestFriendPage.tsx`** — Replace lines 175–197:
-
-```tsx
-{msg.role === "assistant" && msg.liabilityTokenHash && (
-  <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-6 text-[10px] gap-1.5 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono border border-purple-100 bg-purple-50/30 rounded-full"
-      onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
-    >
-      <FileKey size={12} className="text-purple-500" />
-      {truncateHash(msg.liabilityTokenHash)}
-    </Button>
-    <Badge variant="outline" className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter">
-      <Shield size={10} className="mr-1" /> SHIELD_VERIFIED
-    </Badge>
-  </div>
-)}
+```typescript
+      // 1. DYNAMIC IDENTITY GRAB via PII Bridge
+      const { data: identity, error: identityError } = await supabase.functions.invoke('life-pii-bridge', {
+        body: { action: 'RESOLVE_GUID' },
+      });
+      if (identityError || !identity?.platform_guid) {
+        throw new Error("Identity resolution failure: No platform_guid.");
+      }
+      const activeGuid = identity.platform_guid;
 ```
 
-The `handleSendMessage` function already correctly passes `liabilityTokenHash` into the conversation state (line 122), so no logic changes needed — the block will render whenever the synapse-controller returns a hash in Marketplace Mode.
+This replaces:
+- The `supabase.auth.getUser()` call
+- The `profiles` table query
+- The manual `activeGuid` derivation
+
+Everything downstream (`activeGuid` usage in warehouse grab, synapse-controller, and best-friend-ai) remains unchanged since `activeGuid` is still a `string`.
+
+## Note on `life-pii-bridge`
+The edge function already handles JWT auth via the `Authorization` header (auto-sent by `supabase.functions.invoke`), fetches the profile row server-side, and returns `platform_guid`. The `body: { action: 'RESOLVE_GUID' }` is informational — the function ignores the body and always returns the GUID. No edge function changes needed.
 
