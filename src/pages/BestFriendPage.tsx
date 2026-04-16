@@ -66,7 +66,7 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
       let exactTokenSpend: number | undefined;
 
-      if (requiresDataFetch) {
+      if (requiresAudit) {
         // 1. Unified Search (Check for both heart and steps)
         const { data: lineageData } = await supabase
           .from("staged_health_data")
