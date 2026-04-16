@@ -38,21 +38,66 @@ const BestFriendPage = () => {
   }, [conversation, isLoading]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isLoading) return;
-    let realPipelineData: any[] = [];
+  if (!currentMessage.trim() || isLoading) return;
+  setIsLoading(true);
 
-    setIsLoading(true);
-    const userMessage = currentMessage;
-    const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
-    const conversationHistory = [...conversation, { role: "user" as const, content: userMessage }];
+  const userMessage = currentMessage;
+  const targetId = "217c6224-d839-43b0-98cb-b4d1be267536"; // Verified Warehouse ID
+  
+  // Reset input and UI immediately
+  setCurrentMessage("");
+  setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
-    setCurrentMessage("");
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
-    // 🔍 BARE METAL MONITOR
-const { count: liveCount } = await supabase
-  .from("staged_health_data")
-  .select('*', { count: 'exact', head: true })
-  .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
+  try {
+    // 1. DIRECT DATA GRAB (No shadow variables)
+    const { data: vaultData } = await supabase
+      .from("staged_health_data")
+      .select("*")
+      .eq("pseudo_user_id", targetId)
+      .is("processed_at", null);
+
+    const finalHealthPayload = vaultData || [];
+    console.log("📦 COURIER STATUS:", finalHealthPayload.length, "records grabbed.");
+    
+    // Only toast if we actually have something
+    if (finalHealthPayload.length > 0) {
+      toast.success(`Pipeline Secure: ${finalHealthPayload.length} biometric records attached.`);
+    }
+
+    // 2. THE HANDSHAKE (Sealing the envelope)
+    const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
+      body: {
+        message: userMessage,
+        context: {
+          isMarketplaceMode: marketplaceMode,
+          platformGuid: targetId,
+          marketplace: {
+            health: finalHealthPayload, // DATA IS PHYSICALLY INJECTED HERE
+            tokenHash: "MANUAL-AUDIT-" + Date.now(),
+          }
+        },
+        history: conversation.map((m) => ({ role: m.role, content: m.content })),
+      },
+    });
+
+    if (chatError) throw chatError;
+
+    setConversation((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: chatResponse?.response || "Analysis complete.",
+        creditDeducted: marketplaceMode && finalHealthPayload.length > 0,
+      },
+    ]);
+
+  } catch (error: any) {
+    console.error("🚨 TRANSMISSION FAILURE:", error.message);
+    toast.error("Handshake Failed: Check console for logs.");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
 console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
 toast.info(`Warehouse Signal: Detected ${liveCount} records in vault.`);
