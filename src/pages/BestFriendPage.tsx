@@ -76,10 +76,12 @@ const { data: tokenResult, error: tokenError } = await supabase.functions.invoke
   }
 });
 
-if (tokenError) {
-  console.error("Ledger Settlement Failure:", tokenError.message);
-  // This will show if the apikey is still missing
-}
+        if (tokenError) {
+          console.error("Ledger Settlement Failure:", tokenError.message);
+        }
+
+        liabilityTokenHash = tokenResult?.liability_token_hash || null;
+      }
 
       // 4. THE AI CALL
       const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
