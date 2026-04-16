@@ -58,20 +58,9 @@ const BestFriendPage = () => {
       const platformGuid = profile?.platform_guid;
       if (!platformGuid) throw new Error("Platform Identity not found.");
 
-      const { data: pseudoData } = await supabase.rpc("generate_pseudonym", {
-        input_text: user!.id,
-      });
-      const pseudoUserId = pseudoData as string | null;
-
-      let realPipelineData: any[] = [];
-      let liabilityTokenHash: string | null = null;
-
-      if (doMarketplace) {
-        if (!pseudoUserId) throw new Error("Identity resolution failure.");
-
-        // 1. INTENT GATE: Only trigger the shield if the user asks for data
+      // 1. INTENT GATE
       const isBiometricQuery = /heart|step|sleep|health|biometric|data|audit|baseline|hrv/i.test(userMessage);
-      const requiresAudit = marketplaceMode && isBiometricQuery;
+      const requiresAudit = doMarketplace && isBiometricQuery;
 
       let realPipelineData: any[] = [];
       let liabilityTokenHash: string | null = null;
@@ -79,9 +68,6 @@ const BestFriendPage = () => {
 
       // 2. ONLY TOKENIZE IF INTENT IS MATCHED
       if (requiresAudit) {
-        if (!platformGuid) throw new Error("Identity resolution failure.");
-
-        // Fetch the Auditable Artifacts (The Permission Slips)
         const { data: sourceArtifacts } = await supabase
           .from("user_aca_records")
           .select("aca_hash_key")
@@ -93,11 +79,10 @@ const BestFriendPage = () => {
           throw new Error("No auditable lineage found for this request.");
         }
 
-        // 🚨 FIX FOR "BLINDNESS": Fetch data based directly on the ACA Hash Keys
         const { data: lineageData } = await supabase
           .from("staged_health_data")
           .select("*")
-          .in("aca_hash_key", acaHashes); // If the hash is tokenized, the data is pulled.
+          .in("aca_hash_key", acaHashes);
 
         realPipelineData = lineageData || [];
 
@@ -109,34 +94,34 @@ const BestFriendPage = () => {
               client_id: "chief_researcher_ui",
               aca_record_ids: acaHashes,
               intent_type: "RESEARCH",
-              query_complexity: 2.0 // Medical/Finance inference weight
+              query_complexity: 2.0,
             },
           }
         );
 
         if (transferError) {
-          const actualError = transferError.context?.json?.error || transferError.message;
+          const actualError = (transferError as any).context?.json?.error || transferError.message;
           throw new Error(`Controller: ${actualError}`);
         }
 
         liabilityTokenHash = transferResult?.liability_token_hash;
         exactTokenSpend = transferResult?.financials?.total_cr_deducted;
-        
+
         await refreshBalance();
         queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
       }
 
-      // 3. AGENTIC ORCHESTRATION (Send data to AI)
+      // 3. AGENTIC ORCHESTRATION
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
           context: {
-            isMarketplaceMode: requiresAudit, // Only true if the shield was activated
+            isMarketplaceMode: requiresAudit,
             platformGuid,
             userId: user?.id,
             marketplace: requiresAudit ? {
-              health: realPipelineData, // This now contains the 105 BPM test data!
-              tokenHash: liabilityTokenHash
+              health: realPipelineData,
+              tokenHash: liabilityTokenHash,
             } : null,
           },
           history: conversationHistory.map((m) => ({ role: m.role, content: m.content })),
@@ -152,7 +137,7 @@ const BestFriendPage = () => {
           content: chatResponse?.response || "Analysis finalized.",
           liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
           creditDeducted: doMarketplace && !!liabilityTokenHash,
-          tokenSpend: chatResponse?.tokenSpend,
+          tokenSpend: exactTokenSpend,
         },
       ]);
     } catch (error: any) {
