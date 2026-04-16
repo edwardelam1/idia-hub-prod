@@ -40,29 +40,53 @@ const BestFriendPage = () => {
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
 
+    // 1. Declare variables at the top of the function scope
+    let realPipelineData: any[] = [];
     const userMessage = currentMessage;
     const targetId = "217c6224-d839-43b0-98cb-b4d1be267536";
-    const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
-    const conversationHistory = [...conversation, { role: "user" as const, content: userMessage }];
-    let realPipelineData: any[] = [];
-    let liabilityTokenHash: string | null = null;
-    let exactTokenSpend: number | undefined;
 
     setIsLoading(true);
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+    const { data: realPipelineData } = await supabase
+      .from("staged_health_data")
+      .select("*")
+      .eq("pseudo_user_id", targetId)
+      .is("processed_at", null);
 
+    if (realPipelineData && realPipelineData.length > 0) {
+      // 2. Extract ACA hashes
+      const acaHashes = realPipelineData.map((d) => d.aca_hash_key).filter(Boolean);
+
+      // 3. CAPTURE & BUNDLE: Call the Synapse Controller
+      const { data: tokenResult } = await supabase.functions.invoke("synapse-controller", {
+        body: {
+          client_id: "best-friend-ai-ui",
+          aca_record_ids: acaHashes,
+          intent_type: "BIOMETRIC_REVEAL",
+        },
+      });
+
+      // 4. Capture the hash for the Egress Log
+      liabilityTokenHash = tokenResult?.liability_token_hash;
+    }
+
+    // 5. Invoke AI with the verified token
+    const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
+      body: {
+        message: userMessage,
+        context: {
+          isMarketplaceMode: true,
+          platformGuid: targetId,
+          marketplace: {
+            health: realPipelineData,
+            tokenHash: liabilityTokenHash, // This is now a real SHA-256 token
+          },
+        },
+      },
+    });
     try {
-      // 1. Warehouse Signal Check
-      const { count: liveCount } = await supabase
-        .from("staged_health_data")
-        .select("*", { count: "exact", head: true })
-        .eq("pseudo_user_id", targetId);
-
-      console.log("📡 WAREHOUSE SIGNAL:", (liveCount ?? 0) > 0 ? `ONLINE (${liveCount})` : "OFFLINE");
-      toast.info(`Warehouse Signal: Detected ${liveCount ?? 0} records in vault.`);
-
-      // 2. Warehouse Grab
+      // 2. The Warehouse Fetch (This is now safely inside the async function)
       const { data: healthData, error: vaultError } = await supabase
         .from("staged_health_data")
         .select("*")
@@ -70,22 +94,200 @@ const BestFriendPage = () => {
         .is("processed_at", null);
 
       if (vaultError) throw vaultError;
+
       realPipelineData = healthData || [];
       console.log("📦 COURIER STATUS:", realPipelineData.length, "records grabbed.");
 
-      // 3. Agentic Handshake
+      // 3. The Handshake (Invoke the Edge Function)
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
           context: {
-            isMarketplaceMode: doMarketplace,
+            isMarketplaceMode: marketplaceMode,
             platformGuid: targetId,
-            marketplace: doMarketplace
+            marketplace: {
+              health: realPipelineData, // THE 115 BPM IS NOW PACKED
+              tokenHash: "MANUAL-AUDIT-" + Date.now(),
+            },
+          },
+          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+        },
+      });
+
+      if (chatError) throw chatError;
+
+      setConversation((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: chatResponse?.response || "Analysis finalized.",
+          creditDeducted: marketplaceMode && realPipelineData.length > 0,
+        },
+      ]);
+    } catch (err: any) {
+      console.error("🚨 BARE METAL FAILURE:", err.message);
+      toast.error(`Audit Failed: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+
+    console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
+    toast.info(`Warehouse Signal: Detected ${liveCount} records in vault.`);
+    try {
+      const { data: healthData, error: vaultError } = await supabase
+        .from("staged_health_data")
+        .select("*")
+        .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
+
+      if (vaultError) throw vaultError;
+
+      // This ensures the 'envelope' is physically packed
+      realPipelineData = healthData || [];
+    } catch (err: any) {
+      console.error("🚨 BARE METAL FETCH FAILURE:", err?.message);
+      // If this hits, the AI will get an empty bag.
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("platform_guid")
+        .eq("user_id", user?.id)
+        .single();
+
+      const platformGuid = profile?.platform_guid;
+      if (!platformGuid) throw new Error("Platform Identity not found.");
+
+      // 1. INTENT GATE
+      const isBiometricQuery = /heart|step|sleep|health|biometric|data|audit|baseline|hrv/i.test(userMessage);
+      const requiresAudit = doMarketplace && isBiometricQuery;
+
+      let liabilityTokenHash: string | null = null;
+      let exactTokenSpend: number | undefined;
+
+      if (requiresAudit) {
+        // 1. Unified Search (Check for both heart and steps)
+        const { data: lineageData } = await supabase
+          .from("staged_health_data")
+          .select("*")
+          .eq("pseudo_user_id", platformGuid)
+          .order("created_at", { ascending: false });
+
+        realPipelineData = lineageData || [];
+        try {
+          console.log("🛠️ Attempting to grab vault data for target ID...");
+          const { data: healthData, error: vaultError } = await supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536")
+            .is("processed_at", null);
+
+          if (vaultError) throw vaultError;
+
+          // Now this assignment will work because the variable is declared above
+          realPipelineData = healthData || [];
+          console.log("📦 COURIER STATUS: Grabbed", realPipelineData.length, "rows");
+        } catch (err: any) {
+          console.error("🚨 BARE METAL FETCH FAILURE:", err.message);
+        }
+
+        // 2. Tokenize ONLY if marketplaceMode is active AND we actually found data
+        if (marketplaceMode && realPipelineData.length > 0) {
+          const acaHashes = [...new Set(realPipelineData.map((d) => d.aca_hash_key).filter(Boolean))];
+
+          const { data: transferResult, error: transferError } = await supabase.functions.invoke("synapse-controller", {
+            body: { client_id: "chief_researcher_ui", aca_record_ids: acaHashes, intent_type: "RESEARCH" },
+          });
+
+          if (!transferError) {
+            liabilityTokenHash = transferResult?.liability_token_hash;
+            exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+            await refreshBalance();
+          }
+        }
+      }
+
+      // 2. ONLY TOKENIZE IF INTENT IS MATCHED
+      if (requiresAudit) {
+        let liabilityTokenHash: string | null = null;
+        let exactTokenSpend: number | undefined;
+
+        if (marketplaceMode) {
+          if (!platformGuid) throw new Error("Identity resolution failure.");
+
+          const { data: lineageData, error: lineageError } = await supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", platformGuid);
+
+          if (lineageError) console.error("Vault Leak:", lineageError);
+
+          realPipelineData = lineageData || [];
+
+          // 1. Identify intent strictly to route the database query
+          let queryActivity = null;
+          if (/heart/i.test(userMessage)) queryActivity = "heartRate";
+          if (/step/i.test(userMessage)) queryActivity = "steps";
+
+          if (queryActivity) {
+            // 2. Look inside the vault FIRST
+            const { data: lineageData } = await supabase
+              .from("staged_health_data")
+              .select("*")
+              .eq("activity_type", queryActivity)
+              .eq("pseudo_user_id", platformGuid);
+
+            realPipelineData = lineageData || [];
+
+            // 3. Extract DNA strictly from the found rows
+            const acaHashes = [...new Set(realPipelineData.map((d) => d.aca_hash_key).filter(Boolean))];
+
+            // 4. The Absolute Gate: No Data Found = No Controller Called
+            if (acaHashes.length > 0) {
+              const { data: transferResult, error: transferError } = await supabase.functions.invoke(
+                "synapse-controller",
+                {
+                  body: {
+                    client_id: "chief_researcher_ui",
+                    aca_record_ids: acaHashes,
+                    intent_type: "RESEARCH",
+                    query_complexity: 2.0,
+                  },
+                },
+              );
+
+              if (transferError) {
+                const actualError = transferError.context?.json?.error || transferError.message;
+                throw new Error(`Controller: ${actualError}`);
+              }
+
+              liabilityTokenHash = transferResult?.liability_token_hash;
+              exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+
+              await refreshBalance();
+              queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
+            } else {
+              console.log(`Vault checked for ${queryActivity}: 0 rows found. Tokenization aborted.`);
+            }
+          }
+        }
+      }
+
+      // 3. AGENTIC ORCHESTRATION
+      const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
+        body: {
+          message: userMessage,
+          context: {
+            isMarketplaceMode: requiresAudit,
+            platformGuid,
+            userId: user?.id,
+            marketplace: requiresAudit
               ? {
-                  healthRecords: realPipelineData,
-                  lifestyleRecords: [],
-                  lookupId: targetId,
-                  liabilityTokenHash: "MANUAL-AUDIT-" + Date.now(),
+                  health: realPipelineData,
+                  tokenHash: liabilityTokenHash,
                 }
               : null,
           },
@@ -95,18 +297,17 @@ const BestFriendPage = () => {
 
       if (chatError) throw new Error("Orchestrator timeout.");
 
-      // 4. Finalize UI
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis finalized.",
-          creditDeducted: doMarketplace && realPipelineData.length > 0,
+          liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
+          creditDeducted: doMarketplace && !!liabilityTokenHash,
           tokenSpend: exactTokenSpend,
         },
       ]);
     } catch (error: any) {
-      console.error("🚨 SYSTEM FAILURE:", error.message);
       toast.error(error.message);
       setConversation((prev) => [...prev, { role: "assistant", content: `⚠️ System Alert: ${error.message}` }]);
     } finally {
