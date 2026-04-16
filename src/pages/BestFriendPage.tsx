@@ -40,73 +40,93 @@ const BestFriendPage = () => {
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
 
-    // 1. Unified Variable Declaration
+    setIsLoading(true);
     const userMessage = currentMessage;
-    const targetId = "217c6224-d839-43b0-98cb-b4d1be267536";
-    const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
-    const conversationHistory = [...conversation, { role: "user" as const, content: userMessage }];
+    setCurrentMessage("");
+    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+
     let realPipelineData: any[] = [];
     let liabilityTokenHash: string | null = null;
     let exactTokenSpend: number | undefined;
 
-    setIsLoading(true);
-    setCurrentMessage("");
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
-
     try {
-      // 2. Warehouse Signal Check
-      const { count: liveCount } = await supabase
-        .from("staged_health_data")
-        .select('*', { count: 'exact', head: true })
-        .eq("pseudo_user_id", targetId);
+      // 1. DYNAMIC IDENTITY RESOLUTION (Replaces the hard-coded GUID)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("platform_guid")
+        .eq("user_id", user?.id)
+        .single();
 
-      console.log("📡 WAREHOUSE SIGNAL:", (liveCount ?? 0) > 0 ? `ONLINE (${liveCount})` : "OFFLINE");
-      toast.info(`Warehouse Signal: Detected ${liveCount ?? 0} records in vault.`);
+      const activeGuid = profile?.platform_guid;
+      if (!activeGuid) throw new Error("Identity resolution failure: No Platform GUID found.");
 
-      // 3. Warehouse Grab (The 115 BPM record)
-      const { data: healthData, error: vaultError } = await supabase
+      // 2. TARGETED WAREHOUSE GRAB
+      const { data: exposedRecords } = await supabase
         .from("staged_health_data")
         .select("*")
-        .eq("pseudo_user_id", targetId)
+        .eq("pseudo_user_id", activeGuid)
         .is("processed_at", null);
 
-      if (vaultError) throw vaultError;
-      realPipelineData = healthData || [];
-      console.log("📦 COURIER STATUS:", realPipelineData.length, "records grabbed.");
+      realPipelineData = exposedRecords || [];
 
-      // 4. The Handshake (AI Invocation)
+      // 3. SELECTIVE EXPOSURE MINTING
+      // Only call the controller if data is actually being exposed in Marketplace Mode
+      if (marketplaceMode && realPipelineData.length > 0) {
+        const targetAcaHashes = realPipelineData.map((d) => d.aca_hash_key).filter(Boolean);
+
+        // Trigger the Synapse Controller to bundle ONLY these specific ACA references
+        const { data: transferResult, error: transferError } = await supabase.functions.invoke("synapse-controller", {
+          body: {
+            client_id: "best-friend-ai-ui",
+            aca_record_ids: targetAcaHashes, // Strict subset bundling
+            intent_type: "RESEARCH",
+          },
+        });
+
+        if (!transferError) {
+          liabilityTokenHash = transferResult?.liability_token_hash;
+          exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+          await refreshBalance(); // Sync the new whole-number balance
+        }
+      }
+
+      // 4. THE HANDSHAKE (Agentic Invocation)
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
           context: {
-            isMarketplaceMode: doMarketplace,
-            platformGuid: targetId,
-            marketplace: doMarketplace ? {
-              health: realPipelineData,
-              tokenHash: "MANUAL-AUDIT-" + Date.now(),
-            } : null,
+            isMarketplaceMode: marketplaceMode,
+            platformGuid: activeGuid,
+            marketplace: marketplaceMode
+              ? {
+                  health: realPipelineData,
+                  tokenHash: liabilityTokenHash, // The SHA-256 link to the Egress Log
+                }
+              : null,
           },
-          history: conversationHistory.map((m) => ({ role: m.role, content: m.content })),
+          history: conversation.map((m) => ({ role: m.role, content: m.content })),
         },
       });
 
       if (chatError) throw new Error("Orchestrator timeout.");
 
-      // 5. Finalize UI State
+      // 5. FINALIZE
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis finalized.",
           liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
-          creditDeducted: doMarketplace && realPipelineData.length > 0,
+          creditDeducted: marketplaceMode && !!liabilityTokenHash,
           tokenSpend: exactTokenSpend,
         },
       ]);
     } catch (error: any) {
       console.error("🚨 SYSTEM FAILURE:", error.message);
       toast.error(error.message);
-      setConversation((prev) => [...prev, { role: "assistant", content: `⚠️ System Alert: ${error.message}` }]);
     } finally {
       setIsLoading(false);
     }
