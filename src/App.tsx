@@ -25,6 +25,8 @@ const App = () => (
             <Route path="/best-friend" element={<BestFriendPage />} />
             <Route path="/security" element={<SecurityPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+
+            {/* This catch-all must remain at the very bottom */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
