@@ -89,8 +89,9 @@ const BestFriendPage = () => {
             platformGuid: activeGuid,
             marketplace: marketplaceMode
               ? {
-                  health: realPipelineData,
-                  tokenHash: liabilityTokenHash,
+                  // Changed from 'health' to 'healthRecords'
+                  healthRecords: realPipelineData,
+                  liabilityTokenHash: liabilityTokenHash,
                 }
               : null,
           },
