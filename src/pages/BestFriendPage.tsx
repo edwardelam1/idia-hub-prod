@@ -36,15 +36,6 @@ const BestFriendPage = () => {
     }
   }, [conversation, isLoading]);
 
-    // 🔍 BARE METAL MONITOR
-const { count: liveCount } = await supabase
-  .from("staged_health_data")
-  .select('*', { count: 'exact', head: true })
-  .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
-
-console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
-toast({ title: "Warehouse Signal", description: `Detected ${liveCount} records in vault.` });
-
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
 
@@ -55,7 +46,14 @@ toast({ title: "Warehouse Signal", description: `Detected ${liveCount} records i
 
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+    // 🔍 BARE METAL MONITOR
+const { count: liveCount } = await supabase
+  .from("staged_health_data")
+  .select('*', { count: 'exact', head: true })
+  .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
 
+console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
+toast({ title: "Warehouse Signal", description: `Detected ${liveCount} records in vault.` });
     try {
       const { data: healthData, error: vaultError } = await supabase
         .from("staged_health_data")
