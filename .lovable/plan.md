@@ -1,32 +1,29 @@
 
 
-# Replace Identity Resolution with `life-pii-bridge`
+## Plan: Compact IndividualDashboard
 
-## Problem
-The `handleSendMessage` function currently resolves the user's `platform_guid` by making two separate client-side calls: `supabase.auth.getUser()` then querying the `profiles` table. The user wants to replace this with a single call to the `life-pii-bridge` Edge Function, which already returns `platform_guid` from the server side.
+**File:** `src/components/dashboards/IndividualDashboard.tsx` (+ small tweaks to `SynapseGasGauge.tsx`)
 
-## Change
+### Changes
 
-**`src/pages/BestFriendPage.tsx`** — Replace lines 44–56 (the identity grab block) with:
+**1. `SynapseGasGauge.tsx` — shrink to fit the tag-sized card**
+- Reduce padding `p-5` → `p-3`, drop `shadow-lg`, remove `max-w-sm`.
+- Header text `text-sm` → `text-xs`; icon `w-5 h-5` → `w-4 h-4`.
+- Big number `text-4xl` → `text-2xl`.
+- FBO subtitle, burn-rate row, and footer (wallet + status pill) — keep but reduce to `text-[10px]` and tighten margins (`mt-1` / `pt-2`).
+- Result: matches the height/feel of the 3 sibling stat cards.
 
-```typescript
-      // 1. DYNAMIC IDENTITY GRAB via PII Bridge
-      const { data: identity, error: identityError } = await supabase.functions.invoke('life-pii-bridge', {
-        body: { action: 'RESOLVE_GUID' },
-      });
-      if (identityError || !identity?.platform_guid) {
-        throw new Error("Identity resolution failure: No platform_guid.");
-      }
-      const activeGuid = identity.platform_guid;
-```
+**2. `IndividualDashboard.tsx` — condense overview & make tabs fit without scroll**
+- **Stat row (lines 91–130):** Convert Data Sources / Synapse Score / Data Assets from full Card panels to compact "tag" cards: single-line `CardContent p-3`, small label + inline bold value (e.g. `text-lg font-bold`). Synapse balance card gets matching padding.
+- **Remove Quick Actions card (lines 184–200)** entirely (Connect Source / View Insights / Synapse Impact / Best Friend AI).
+- **Usage Stats tab (lines 204–273):** 
+  - Stat card values `text-2xl` → `text-xl`, headers `pb-2` → `pb-1`, content padding tightened.
+  - Current Plan card: reduce padding, render features as inline chips instead of 2-col grid.
+- **Ledger Audit tab:** Reduce empty-state `py-12` → `py-6`, icon `h-12 w-12` → `h-8 w-8`.
+- **Outer layout:** Remove the outer `ScrollArea` wrapping TabsContent (lines 87, 294) so each tab sits naturally inside the parent flex container; trim Visualizer card padding (`pb-2` header stays, content gets tighter height) so the 4-card row + merged performance card fit in one viewport.
 
-This replaces:
-- The `supabase.auth.getUser()` call
-- The `profiles` table query
-- The manual `activeGuid` derivation
-
-Everything downstream (`activeGuid` usage in warehouse grab, synapse-controller, and best-friend-ai) remains unchanged since `activeGuid` is still a `string`.
-
-## Note on `life-pii-bridge`
-The edge function already handles JWT auth via the `Authorization` header (auto-sent by `supabase.functions.invoke`), fetches the profile row server-side, and returns `platform_guid`. The `body: { action: 'RESOLVE_GUID' }` is informational — the function ignores the body and always returns the GUID. No edge function changes needed.
+### Outcome
+- Synapse Credit Balance card visually aligns with sibling stat cards (no oversized number).
+- Overview, Usage Stats, and Ledger Audit tabs each fit in the visible viewport without internal scroll.
+- Bottom action bar removed; stat cards become tag-style condensed.
 
