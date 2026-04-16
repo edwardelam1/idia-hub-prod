@@ -36,17 +36,6 @@ const BestFriendPage = () => {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [conversation, isLoading]);
-  // 1. DYNAMIC IDENTITY GRAB via PII Bridge
-  const { data: identity, error: identityError } = await supabase.functions.invoke("life-pii-bridge", {
-    body: { action: "RESOLVE_GUID" },
-  });
-
-  if (identityError || !identity?.platform_guid) {
-    console.error("Bridge Failure:", identityError);
-    throw new Error("Identity resolution failure: No platform_guid.");
-  }
-
-  const activeGuid = identity.platform_guid;
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
