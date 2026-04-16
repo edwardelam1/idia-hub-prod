@@ -93,7 +93,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
                 <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
                   <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
                   <span className="text-xs md:text-sm font-medium text-primary">
-                    {isLoading ? "..." : synapseCredits.toFixed(2)}
+                    {isLoading ? "..." : Math.floor(synapseCredits)}
                   </span>
                   <span className="text-xs text-primary/70">Cr</span>
                 </button>
