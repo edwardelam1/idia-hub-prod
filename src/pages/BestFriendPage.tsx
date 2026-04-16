@@ -20,8 +20,7 @@ interface ConversationMessage {
 
 const BestFriendPage = () => {
   if (typeof window !== 'undefined') {
-    (window as any).supabase = supabase;
-  }
+  (window as any).supabase = supabase;
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -37,9 +36,18 @@ const BestFriendPage = () => {
     }
   }, [conversation, isLoading]);
 
+    // 🔍 BARE METAL MONITOR
+const { count: liveCount } = await supabase
+  .from("staged_health_data")
+  .select('*', { count: 'exact', head: true })
+  .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
+
+console.log("📡 WAREHOUSE SIGNAL:", liveCount > 0 ? `ONLINE (${liveCount} records)` : "OFFLINE (0 records)");
+toast({ title: "Warehouse Signal", description: `Detected ${liveCount} records in vault.` });
+
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
-    let realPipelineData: any[] = [];
+
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
