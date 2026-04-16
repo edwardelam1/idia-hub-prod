@@ -50,7 +50,7 @@ const BestFriendPage = () => {
     let exactTokenSpend: number | undefined;
 
     try {
-      // 1. DYNAMIC IDENTITY RESOLUTION (Replaces the hard-coded GUID)
+      // 1. DYNAMIC IDENTITY RESOLUTION
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -71,47 +71,41 @@ const BestFriendPage = () => {
         .is("processed_at", null);
 
       realPipelineData = exposedRecords || [];
+      toast.info(`Warehouse Signal: Detected ${realPipelineData.length} records in vault.`);
 
-      // 3. SELECTIVE EXPOSURE MINTING
-      // Only call the controller if data is actually being exposed in Marketplace Mode
+      // 3. SELECTIVE EXPOSURE MINTING (Marketplace Mode only)
+      let transferResult: any = null;
       if (marketplaceMode && realPipelineData.length > 0) {
-        const targetAcaHashes = realPipelineData.map((d) => d.aca_hash_key).filter(Boolean);
+        const { data } = await supabase.functions.invoke("synapse-controller", {
+          body: {
+            client_id: "best-friend-ai-ui",
+            aca_record_ids: realPipelineData.map((d) => d.aca_hash_key),
+            platform_guid: activeGuid,
+            query_complexity: 1.0,
+          },
+        });
+        transferResult = data;
+        liabilityTokenHash = transferResult?.liability_token_hash || null;
+        exactTokenSpend = transferResult?.token_spend;
+      }
 
-        // 1. Ensure you have the activeGuid from the profile fetch earlier in the function
-const { data: { user } } = await supabase.auth.getUser();
-const { data: profile } = await supabase
-  .from("profiles")
-  .select("platform_guid")
-  .eq("user_id", user?.id)
-  .single();
-
-const activeGuid = profile?.platform_guid;
-
-// 2. Update the Controller Invoke
-const { data: transferResult } = await supabase.functions.invoke("synapse-controller", {
-  body: {
-    client_id: "best-friend-ai-ui",
-    aca_record_ids: realPipelineData.map(d => d.aca_hash_key),
-    platform_guid: activeGuid, // 🎯 MANDATORY: This unlocks the 30% payout
-    query_complexity: 1.0
-  }
-});
-
-// 3. Update the AI Invoke
-const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
-  body: {
-    message: userMessage,
-    context: {
-      isMarketplaceMode: marketplaceMode,
-      platformGuid: activeGuid, // 🎯 MANDATORY
-      marketplace: marketplaceMode ? {
-        health: realPipelineData,
-        tokenHash: transferResult?.liability_token_hash,
-      } : null,
-    },
-    history: conversation.map((m) => ({ role: m.role, content: m.content })),
-  },
-});
+      // 4. AI HANDSHAKE
+      const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
+        body: {
+          message: userMessage,
+          context: {
+            isMarketplaceMode: marketplaceMode,
+            platformGuid: activeGuid,
+            marketplace: marketplaceMode
+              ? {
+                  health: realPipelineData,
+                  tokenHash: liabilityTokenHash,
+                }
+              : null,
+          },
+          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+        },
+      });
 
       if (chatError) throw new Error("Orchestrator timeout.");
 
