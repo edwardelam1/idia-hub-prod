@@ -208,7 +208,7 @@ const BestFriendPage = () => {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">Chief Researcher</h1>
+            <h1 className="text-xl font-bold">Welcome to Best Friend AI</h1>
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
               Agentic Orchestration Layer
             </p>
