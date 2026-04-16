@@ -187,7 +187,7 @@ const BestFriendPage = () => {
                   <Bot size={16} />
                 </div>
                 <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
-                  Chief Researcher is auditing the pipeline...
+                  Best Friend AI is auditing the pipeline...
                 </div>
               </div>
             </div>
