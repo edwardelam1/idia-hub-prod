@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, CheckCircle, Coins } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Coins } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
@@ -172,27 +172,20 @@ const BestFriendPage = () => {
                   >
                     {msg.content}
                   </div>
-                  {msg.role === "assistant" && (
-                    <div className="flex items-center gap-2 flex-wrap mt-1">
-                      {msg.liabilityTokenHash && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 text-[9px] gap-1 px-1.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono p-0"
-                          // 🚨 FIXED LINK: Points to egress-logs with search filter
-                          onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
-                        >
-                          <FileKey size={10} /> {truncateHash(msg.liabilityTokenHash)}
-                        </Button>
-                      )}
-                      {msg.creditDeducted && (
-                        <Badge
-                          variant="outline"
-                          className="h-5 text-[9px] gap-1 px-1.5 border-emerald-200 text-emerald-700 bg-emerald-50 font-mono"
-                        >
-                          <CheckCircle size={10} /> SHIELD_ACTIVE
-                        </Badge>
-                      )}
+                  {msg.role === "assistant" && msg.liabilityTokenHash && (
+                    <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1.5 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono border border-purple-100 bg-purple-50/30 rounded-full"
+                        onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
+                      >
+                        <FileKey size={12} className="text-purple-500" />
+                        {truncateHash(msg.liabilityTokenHash)}
+                      </Button>
+                      <Badge variant="outline" className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter">
+                        <Shield size={10} className="mr-1" /> SHIELD_VERIFIED
+                      </Badge>
                     </div>
                   )}
                 </div>
