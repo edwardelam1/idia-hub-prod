@@ -68,36 +68,60 @@ const BestFriendPage = () => {
 
       // 2. ONLY TOKENIZE IF INTENT IS MATCHED
       if (requiresAudit) {
-        const { data: sourceArtifacts } = await supabase
-          .from("user_aca_records")
-          .select("aca_hash_key")
-          .eq("platform_guid", platformGuid);
+        let realPipelineData: any[] = [];
+        let liabilityTokenHash: string | null = null;
+        let exactTokenSpend: number | undefined;
 
-        const acaHashes = sourceArtifacts?.map(a => a.aca_hash_key).filter(Boolean) || [];
+        if (marketplaceMode) {
+          if (!platformGuid) throw new Error("Identity resolution failure.");
 
-        if (acaHashes.length === 0) {
-          throw new Error("No auditable lineage found for this request.");
-        }
+          // 1. Identify intent strictly to route the database query
+          let queryActivity = null;
+          if (/heart/i.test(userMessage)) queryActivity = "heartRate";
+          if (/step/i.test(userMessage)) queryActivity = "steps";
 
-        const { data: lineageData } = await supabase
-          .from("staged_health_data")
-          .select("*")
-          .in("aca_hash_key", acaHashes);
+          if (queryActivity) {
+            // 2. Look inside the vault FIRST
+            const { data: lineageData } = await supabase
+              .from("staged_health_data")
+              .select("*")
+              .eq("activity_type", queryActivity)
+              .eq("pseudo_user_id", platformGuid);
 
-        realPipelineData = lineageData || [];
+            realPipelineData = lineageData || [];
 
-        // Call the Universal Synapse Controller
-        const { data: transferResult, error: transferError } = await supabase.functions.invoke(
-          "synapse-controller",
-          {
-            body: {
-              client_id: "chief_researcher_ui",
-              aca_record_ids: acaHashes,
-              intent_type: "RESEARCH",
-              query_complexity: 2.0,
-            },
+            // 3. Extract DNA strictly from the found rows
+            const acaHashes = [...new Set(realPipelineData.map((d) => d.aca_hash_key).filter(Boolean))];
+
+            // 4. The Absolute Gate: No Data Found = No Controller Called
+            if (acaHashes.length > 0) {
+              const { data: transferResult, error: transferError } = await supabase.functions.invoke(
+                "synapse-controller",
+                {
+                  body: {
+                    client_id: "chief_researcher_ui",
+                    aca_record_ids: acaHashes,
+                    intent_type: "RESEARCH",
+                    query_complexity: 2.0,
+                  },
+                },
+              );
+
+              if (transferError) {
+                const actualError = transferError.context?.json?.error || transferError.message;
+                throw new Error(`Controller: ${actualError}`);
+              }
+
+              liabilityTokenHash = transferResult?.liability_token_hash;
+              exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+
+              await refreshBalance();
+              queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
+            } else {
+              console.log(`Vault checked for ${queryActivity}: 0 rows found. Tokenization aborted.`);
+            }
           }
-        );
+        }
 
         if (transferError) {
           const actualError = (transferError as any).context?.json?.error || transferError.message;
@@ -119,10 +143,12 @@ const BestFriendPage = () => {
             isMarketplaceMode: requiresAudit,
             platformGuid,
             userId: user?.id,
-            marketplace: requiresAudit ? {
-              health: realPipelineData,
-              tokenHash: liabilityTokenHash,
-            } : null,
+            marketplace: requiresAudit
+              ? {
+                  health: realPipelineData,
+                  tokenHash: liabilityTokenHash,
+                }
+              : null,
           },
           history: conversationHistory.map((m) => ({ role: m.role, content: m.content })),
         },
