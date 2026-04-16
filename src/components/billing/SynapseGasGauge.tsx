@@ -8,18 +8,18 @@ const SynapseGasGauge = () => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-6 bg-card rounded-xl border border-border animate-pulse w-full max-w-sm">
-        <RefreshCw className="w-8 h-8 text-primary animate-spin mb-3" />
-        <p className="text-muted-foreground font-mono text-sm">Querying Hub Enrollment...</p>
+      <div className="flex items-center justify-center p-3 animate-pulse w-full">
+        <RefreshCw className="w-4 h-4 text-primary animate-spin mr-2" />
+        <p className="text-muted-foreground font-mono text-[10px]">Loading...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-start p-4 bg-destructive/10 border border-destructive/50 rounded-xl w-full max-w-sm">
-        <AlertCircle className="w-5 h-5 text-destructive mr-3 flex-shrink-0 mt-0.5" />
-        <p className="text-destructive text-sm">{error}</p>
+      <div className="flex items-start p-2 bg-destructive/10 border border-destructive/50 rounded w-full">
+        <AlertCircle className="w-3 h-3 text-destructive mr-1.5 flex-shrink-0 mt-0.5" />
+        <p className="text-destructive text-[10px]">{error}</p>
       </div>
     );
   }
