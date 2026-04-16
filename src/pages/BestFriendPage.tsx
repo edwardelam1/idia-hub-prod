@@ -66,6 +66,32 @@ const BestFriendPage = () => {
       let liabilityTokenHash: string | null = null;
       let exactTokenSpend: number | undefined;
 
+      if (requiresDataFetch) {
+        // 1. Unified Search (Check for both heart and steps)
+        const { data: lineageData } = await supabase
+          .from("staged_health_data")
+          .select("*")
+          .eq("pseudo_user_id", platformGuid)
+          .order("created_at", { ascending: false });
+
+        realPipelineData = lineageData || [];
+
+        // 2. Tokenize ONLY if marketplaceMode is active AND we actually found data
+        if (marketplaceMode && realPipelineData.length > 0) {
+          const acaHashes = [...new Set(realPipelineData.map((d) => d.aca_hash_key).filter(Boolean))];
+
+          const { data: transferResult, error: transferError } = await supabase.functions.invoke("synapse-controller", {
+            body: { client_id: "chief_researcher_ui", aca_record_ids: acaHashes, intent_type: "RESEARCH" },
+          });
+
+          if (!transferError) {
+            liabilityTokenHash = transferResult?.liability_token_hash;
+            exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+            await refreshBalance();
+          }
+        }
+      }
+
       // 2. ONLY TOKENIZE IF INTENT IS MATCHED
       if (requiresAudit) {
         let realPipelineData: any[] = [];
