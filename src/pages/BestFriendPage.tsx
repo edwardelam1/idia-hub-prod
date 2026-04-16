@@ -20,7 +20,8 @@ interface ConversationMessage {
 
 const BestFriendPage = () => {
   if (typeof window !== 'undefined') {
-  (window as any).supabase = supabase;
+    (window as any).supabase = supabase;
+  }
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +39,7 @@ const BestFriendPage = () => {
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
-
+    let realPipelineData: any[] = [];
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
