@@ -46,6 +46,21 @@ const BestFriendPage = () => {
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
+      const { data: healthData, error: vaultError } = await supabase
+        .from("staged_health_data")
+        .select("*")
+        .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536");
+
+      if (vaultError) throw vaultError;
+
+      // This ensures the 'envelope' is physically packed
+      realPipelineData = healthData || [];
+    } catch (err) {
+      console.error("🚨 BARE METAL FETCH FAILURE:", err.message);
+      // If this hits, the AI will get an empty bag.
+    }
+
+    try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
