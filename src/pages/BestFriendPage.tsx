@@ -36,20 +36,34 @@ const BestFriendPage = () => {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [conversation, isLoading]);
+  // 1. DYNAMIC IDENTITY GRAB via PII Bridge
+  const { data: identity, error: identityError } = await supabase.functions.invoke("life-pii-bridge", {
+    body: { action: "RESOLVE_GUID" },
+  });
 
+  if (identityError || !identity?.platform_guid) {
+    console.error("Bridge Failure:", identityError);
+    throw new Error("Identity resolution failure: No platform_guid.");
+  }
+
+  const activeGuid = identity.platform_guid;
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
 
     try {
-      // 1. DYNAMIC IDENTITY GRAB via PII Bridge
-      const { data: identity, error: identityError } = await supabase.functions.invoke('life-pii-bridge', {
-        body: { action: 'RESOLVE_GUID' },
-      });
-      if (identityError || !identity?.platform_guid) {
-        throw new Error("Identity resolution failure: No platform_guid.");
-      }
-      const activeGuid = identity.platform_guid;
+      // 1. DYNAMIC IDENTITY GRAB (Crucial for the 30% payout)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("platform_guid")
+        .eq("user_id", user?.id)
+        .single();
+
+      const activeGuid = profile?.platform_guid;
+      if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
       // 2. WAREHOUSE GRAB
       const { data: healthData } = await supabase
