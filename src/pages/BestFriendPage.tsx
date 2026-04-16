@@ -20,7 +20,8 @@ interface ConversationMessage {
 
 const BestFriendPage = () => {
   if (typeof window !== 'undefined') {
-  (window as any).supabase = supabase;
+    (window as any).supabase = supabase;
+  }
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
