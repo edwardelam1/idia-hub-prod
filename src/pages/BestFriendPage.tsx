@@ -39,18 +39,10 @@ const BestFriendPage = () => {
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
-
     setIsLoading(true);
-    const userMessage = currentMessage;
-    setCurrentMessage("");
-    setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
-
-    let realPipelineData: any[] = [];
-    let liabilityTokenHash: string | null = null;
-    let exactTokenSpend: number | undefined;
 
     try {
-      // 1. DYNAMIC IDENTITY RESOLUTION
+      // 1. DYNAMIC IDENTITY GRAB (Crucial for the 30% payout)
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -61,38 +53,36 @@ const BestFriendPage = () => {
         .single();
 
       const activeGuid = profile?.platform_guid;
-      if (!activeGuid) throw new Error("Identity resolution failure: No Platform GUID found.");
+      if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
-      // 2. TARGETED WAREHOUSE GRAB
-      const { data: exposedRecords } = await supabase
+      // 2. WAREHOUSE GRAB
+      const { data: healthData } = await supabase
         .from("staged_health_data")
         .select("*")
         .eq("pseudo_user_id", activeGuid)
         .is("processed_at", null);
 
-      realPipelineData = exposedRecords || [];
-      toast.info(`Warehouse Signal: Detected ${realPipelineData.length} records in vault.`);
+      const realPipelineData = healthData || [];
 
-      // 3. SELECTIVE EXPOSURE MINTING (Marketplace Mode only)
-      let transferResult: any = null;
+      // 3. THE MINTING (Passing the GUID to unlock the 30% split)
+      let liabilityTokenHash = null;
       if (marketplaceMode && realPipelineData.length > 0) {
-        const { data } = await supabase.functions.invoke("synapse-controller", {
+        const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
           body: {
             client_id: "best-friend-ai-ui",
             aca_record_ids: realPipelineData.map((d) => d.aca_hash_key),
-            platform_guid: activeGuid,
+            platform_guid: activeGuid, // 🎯 UNLOCKS PAYOUT
             query_complexity: 1.0,
           },
         });
-        transferResult = data;
-        liabilityTokenHash = transferResult?.liability_token_hash || null;
-        exactTokenSpend = transferResult?.token_spend;
+        if (tokenError) throw new Error(`Controller: ${tokenError.message}`);
+        liabilityTokenHash = tokenResult?.liability_token_hash;
       }
 
-      // 4. AI HANDSHAKE
-      const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
+      // 4. THE AI CALL
+      const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
         body: {
-          message: userMessage,
+          message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
@@ -107,21 +97,19 @@ const BestFriendPage = () => {
         },
       });
 
-      if (chatError) throw new Error("Orchestrator timeout.");
-
-      // 5. FINALIZE
+      // 5. UPDATE UI
       setConversation((prev) => [
         ...prev,
+        { role: "user", content: currentMessage },
         {
           role: "assistant",
-          content: chatResponse?.response || "Analysis finalized.",
-          liabilityTokenHash: chatResponse?.tokenHash || liabilityTokenHash,
-          creditDeducted: marketplaceMode && !!liabilityTokenHash,
-          tokenSpend: exactTokenSpend,
+          content: chatResponse?.response || "Analysis complete.",
+          liabilityTokenHash: liabilityTokenHash,
+          creditDeducted: !!liabilityTokenHash,
         },
       ]);
+      setCurrentMessage("");
     } catch (error: any) {
-      console.error("🚨 SYSTEM FAILURE:", error.message);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
@@ -179,7 +167,10 @@ const BestFriendPage = () => {
                         <FileKey size={12} className="text-purple-500" />
                         {truncateHash(msg.liabilityTokenHash)}
                       </Button>
-                      <Badge variant="outline" className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter">
+                      <Badge
+                        variant="outline"
+                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
+                      >
                         <Shield size={10} className="mr-1" /> SHIELD_VERIFIED
                       </Badge>
                     </div>
