@@ -19,6 +19,7 @@ interface ConversationMessage {
 }
 
 const BestFriendPage = () => {
+  if (typeof window !== 'undefined') {
   (window as any).supabase = supabase;
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
@@ -46,7 +47,6 @@ const BestFriendPage = () => {
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
-    let realPipelineData: any[] = [];
     try {
       const { data: healthData, error: vaultError } = await supabase
         .from("staged_health_data")
