@@ -39,7 +39,7 @@ const BestFriendPage = () => {
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
-
+    let realPipelineData: any[] = [];
     setIsLoading(true);
     const userMessage = currentMessage;
     const doMarketplace = marketplaceMode || /@search\s+marketplace/i.test(userMessage);
