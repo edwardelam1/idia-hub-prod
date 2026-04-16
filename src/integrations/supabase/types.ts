@@ -5902,7 +5902,33 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      ai_audit_ledger: {
+        Row: {
+          activity_type: string | null
+          created_at: string | null
+          id: string | null
+          payload: Json | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          activity_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          payload?: Json | null
+          status?: never
+          user_id?: string | null
+        }
+        Update: {
+          activity_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          payload?: Json | null
+          status?: never
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       anonymize_location: {

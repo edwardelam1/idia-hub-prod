@@ -46,6 +46,7 @@ const BestFriendPage = () => {
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
 
+    let realPipelineData: any[] = [];
     try {
       const { data: healthData, error: vaultError } = await supabase
         .from("staged_health_data")
