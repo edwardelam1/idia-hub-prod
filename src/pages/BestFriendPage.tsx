@@ -66,8 +66,8 @@ toast.info(`Warehouse Signal: Detected ${liveCount} records in vault.`);
 
       // This ensures the 'envelope' is physically packed
       realPipelineData = healthData || [];
-    } catch (err) {
-      console.error("🚨 BARE METAL FETCH FAILURE:", err.message);
+    } catch (err: any) {
+      console.error("🚨 BARE METAL FETCH FAILURE:", err?.message);
       // If this hits, the AI will get an empty bag.
     }
 
