@@ -1,4 +1,4 @@
-import { Database, Zap, RefreshCw, AlertCircle, TrendingDown } from "lucide-react";
+import { Database, RefreshCw, AlertCircle, TrendingDown } from "lucide-react";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { Button } from "@/components/ui/button";
 import { formatCredits } from "@/lib/utils";
