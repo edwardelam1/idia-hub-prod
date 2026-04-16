@@ -66,17 +66,20 @@ const BestFriendPage = () => {
       // 3. THE MINTING (Passing the GUID to unlock the 30% split)
       let liabilityTokenHash = null;
       if (marketplaceMode && realPipelineData.length > 0) {
-        const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
-          body: {
-            client_id: "best-friend-ai-ui",
-            aca_record_ids: realPipelineData.map((d) => d.aca_hash_key),
-            platform_guid: activeGuid, // 🎯 UNLOCKS PAYOUT
-            query_complexity: 1.0,
-          },
-        });
-        if (tokenError) throw new Error(`Controller: ${tokenError.message}`);
-        liabilityTokenHash = tokenResult?.liability_token_hash;
-      }
+        // 🎯 ENSURE this uses the supabase.functions.invoke method
+const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
+  body: {
+    client_id: "best-friend-ai-ui",
+    aca_record_ids: realPipelineData.map(d => d.aca_hash_key),
+    platform_guid: activeGuid, // Your GUID for the 30% payout
+    query_complexity: 1.0
+  }
+});
+
+if (tokenError) {
+  console.error("Ledger Settlement Failure:", tokenError.message);
+  // This will show if the apikey is still missing
+}
 
       // 4. THE AI CALL
       const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
