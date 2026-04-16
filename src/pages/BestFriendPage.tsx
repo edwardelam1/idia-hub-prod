@@ -69,60 +69,75 @@ const BestFriendPage = () => {
       if (doMarketplace) {
         if (!pseudoUserId) throw new Error("Identity resolution failure.");
 
-        // 1. Resolve Auditable Lineage (Multi-Identity Check)
-        const [healthResult, sourceArtifacts] = await Promise.all([
-          supabase.from("staged_health_data").select("*").eq("pseudo_user_id", pseudoUserId).limit(50),
-          supabase.from("user_aca_records").select("aca_hash_key").eq("platform_guid", platformGuid),
-        ]);
+        // 1. INTENT GATE: Only trigger the shield if the user asks for data
+      const isBiometricQuery = /heart|step|sleep|health|biometric|data|audit|baseline|hrv/i.test(userMessage);
+      const requiresAudit = marketplaceMode && isBiometricQuery;
 
-        realPipelineData = healthResult.data || [];
-        const acaHashes = Array.from(
-          new Set([
-            ...realPipelineData.map((r: any) => r.aca_hash_key),
-            ...(sourceArtifacts.data?.map((a) => a.aca_hash_key) || []),
-          ]),
-        ).filter((h) => h && String(h).trim() !== "");
+      let realPipelineData: any[] = [];
+      let liabilityTokenHash: string | null = null;
+      let exactTokenSpend: number | undefined;
+
+      // 2. ONLY TOKENIZE IF INTENT IS MATCHED
+      if (requiresAudit) {
+        if (!platformGuid) throw new Error("Identity resolution failure.");
+
+        // Fetch the Auditable Artifacts (The Permission Slips)
+        const { data: sourceArtifacts } = await supabase
+          .from("user_aca_records")
+          .select("aca_hash_key")
+          .eq("platform_guid", platformGuid);
+
+        const acaHashes = sourceArtifacts?.map(a => a.aca_hash_key).filter(Boolean) || [];
 
         if (acaHashes.length === 0) {
           throw new Error("No auditable lineage found for this request.");
         }
 
-        // 2. Synapse Controller — atomic gas metering + egress tokenization
-        const { data: controllerResult, error: controllerError } = await supabase.functions.invoke(
+        // 🚨 FIX FOR "BLINDNESS": Fetch data based directly on the ACA Hash Keys
+        const { data: lineageData } = await supabase
+          .from("staged_health_data")
+          .select("*")
+          .in("aca_hash_key", acaHashes); // If the hash is tokenized, the data is pulled.
+
+        realPipelineData = lineageData || [];
+
+        // Call the Universal Synapse Controller
+        const { data: transferResult, error: transferError } = await supabase.functions.invoke(
           "synapse-controller",
           {
             body: {
               client_id: "chief_researcher_ui",
               aca_record_ids: acaHashes,
               intent_type: "RESEARCH",
-              query_complexity: 1.0,
-              country_of_origin: "US",
+              query_complexity: 2.0 // Medical/Finance inference weight
             },
-          },
+          }
         );
 
-        if (controllerError) throw new Error(controllerError.message);
-        if (controllerResult?.error) throw new Error(controllerResult.error);
-        liabilityTokenHash = controllerResult?.liability_token_hash;
+        if (transferError) {
+          const actualError = transferError.context?.json?.error || transferError.message;
+          throw new Error(`Controller: ${actualError}`);
+        }
 
+        liabilityTokenHash = transferResult?.liability_token_hash;
+        exactTokenSpend = transferResult?.financials?.total_cr_deducted;
+        
         await refreshBalance();
-        queryClient.invalidateQueries({ queryKey: ["provenance-logs", user?.id] });
+        queryClient.invalidateQueries({ queryKey: ["egress-logs"] });
       }
 
-      // 4. Agentic Orchestration (Chief Researcher)
+      // 3. AGENTIC ORCHESTRATION (Send data to AI)
       const { data: chatResponse, error: chatError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: userMessage,
           context: {
-            isMarketplaceMode: doMarketplace,
+            isMarketplaceMode: requiresAudit, // Only true if the shield was activated
             platformGuid,
             userId: user?.id,
-            marketplace: doMarketplace
-              ? {
-                  health: realPipelineData,
-                  tokenHash: liabilityTokenHash,
-                }
-              : null,
+            marketplace: requiresAudit ? {
+              health: realPipelineData, // This now contains the 105 BPM test data!
+              tokenHash: liabilityTokenHash
+            } : null,
           },
           history: conversationHistory.map((m) => ({ role: m.role, content: m.content })),
         },
