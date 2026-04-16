@@ -45,7 +45,6 @@ const BestFriendPage = () => {
 
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
-    let realPipelineData: any[] = [];
 
     try {
       const { data: healthData, error: vaultError } = await supabase
@@ -91,6 +90,22 @@ const BestFriendPage = () => {
           .order("created_at", { ascending: false });
 
         realPipelineData = lineageData || [];
+        try {
+          console.log("🛠️ Attempting to grab vault data for target ID...");
+          const { data: healthData, error: vaultError } = await supabase
+            .from("staged_health_data")
+            .select("*")
+            .eq("pseudo_user_id", "217c6224-d839-43b0-98cb-b4d1be267536")
+            .is("processed_at", null);
+
+          if (vaultError) throw vaultError;
+
+          // Now this assignment will work because the variable is declared above
+          realPipelineData = healthData || [];
+          console.log("📦 COURIER STATUS: Grabbed", realPipelineData.length, "rows");
+        } catch (err: any) {
+          console.error("🚨 BARE METAL FETCH FAILURE:", err.message);
+        }
 
         // 2. Tokenize ONLY if marketplaceMode is active AND we actually found data
         if (marketplaceMode && realPipelineData.length > 0) {
@@ -110,7 +125,6 @@ const BestFriendPage = () => {
 
       // 2. ONLY TOKENIZE IF INTENT IS MATCHED
       if (requiresAudit) {
-        let realPipelineData: any[] = [];
         let liabilityTokenHash: string | null = null;
         let exactTokenSpend: number | undefined;
 
