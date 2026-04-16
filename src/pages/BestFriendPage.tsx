@@ -45,6 +45,7 @@ const BestFriendPage = () => {
 
     setCurrentMessage("");
     setConversation((prev) => [...prev, { role: "user", content: userMessage }]);
+    let realPipelineData: any[] = [];
 
     try {
       const { data: healthData, error: vaultError } = await supabase
@@ -78,7 +79,6 @@ const BestFriendPage = () => {
       const isBiometricQuery = /heart|step|sleep|health|biometric|data|audit|baseline|hrv/i.test(userMessage);
       const requiresAudit = doMarketplace && isBiometricQuery;
 
-      let realPipelineData: any[] = [];
       let liabilityTokenHash: string | null = null;
       let exactTokenSpend: number | undefined;
 
