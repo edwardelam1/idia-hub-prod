@@ -1,45 +1,48 @@
 
 
-## Plan: Reverse `fiat_amount` change & split FBO into sibling tag
+## Plan: Add Apple & Google Sign-In to LoginScreen
 
 ### Context
-- `synapse_credit_ledger` table uses column `amount` (NOT `fiat_amount`) — confirmed by `get_synapse_balance` RPC: `SELECT COALESCE(SUM(amount), 0) FROM public.synapse_credit_ledger`.
-- The previous "fix" was wrong; revert to `amount`.
-- FBO Reservoir balance lives in a separate `fiat_balance` table — should be its own gauge tag, not embedded inside `SynapseGasGauge`.
+- OAuth secrets for Apple and Google are already configured in Supabase (per user).
+- Google OAuth requires the `prompt: 'select_account'` flow already wired in IDIA Life.
+- Supabase JS handles the OAuth redirect flow client-side via `supabase.auth.signInWithOAuth()`.
+- Current `LoginScreen.tsx` has email/password + an "Enterprise SSO" tab + quick-access prototype buttons.
 
 ### Changes
 
-**1. Revert ledger column name** (`amount`, not `fiat_amount`)
-- `src/contexts/SynapseCreditsContext.tsx` — change `.select("fiat_amount")` → `.select("amount")` and `Number(d.fiat_amount)` → `Number(d.amount)`.
-- `src/hooks/useBillingData.tsx` — same revert in the `user-usage-ledger` query.
+**`src/components/LoginScreen.tsx`** — add two branded OAuth buttons above the Standard/SSO tabs:
 
-**2. Extend `SynapseCreditsContext`** to expose FBO balance
-- Add `fbo_balance: number` to context return.
-- After fetching ledger balance, query `fiat_balance` table: `SELECT balance FROM fiat_balance WHERE user_id = uid` (need to verify exact column names — will use `supabase--read_query` once approved to confirm schema).
-- Expose via `balanceData.fbo_balance` (or new `fboBalance` field).
+1. **Apple Sign-In button** — black bg, white Apple logo (lucide `Apple` icon), label "Continue with Apple".
+2. **Google Sign-In button** — white bg with border, multi-color Google "G" SVG (inline), label "Continue with Google".
 
-**3. Create new `FBOReservoirGauge.tsx` sibling component**
-- New file: `src/components/billing/FBOReservoirGauge.tsx`.
-- Mirrors `SynapseGasGauge` styling/scale (compact tag, `text-lg` value, `p-3` padding).
-- Reads `fboBalance` from `useSynapseCredits()`.
-- Displays `$X,XXX.XX` with Wallet icon + "FBO Reservoir" label + "Airwallex FBO Settlement" subtitle.
+Both call:
+```ts
+await supabase.auth.signInWithOAuth({
+  provider: 'apple' | 'google',
+  options: {
+    redirectTo: `${window.location.origin}/`,
+    ...(provider === 'google' && { queryParams: { access_type: 'offline', prompt: 'select_account' } })
+  }
+});
+```
 
-**4. Strip FBO block from `SynapseGasGauge.tsx`**
-- Remove the FBO Reservoir section + `Separator` + Wallet import.
-- Keep only Synapse Gas (credit ledger) display.
+3. Add a divider ("or continue with email") between the OAuth buttons and the existing tabs.
+4. Handle errors via `toast.error()`; loading state per provider (`isAppleLoading`, `isGoogleLoading`) to disable buttons during redirect.
+5. On success, Supabase redirects back → existing `AuthContext.onAuthStateChange` picks up the session → `Index.tsx` auto-routes to `/dashboard`. No additional routing logic needed.
 
-**5. Add new FBO tag to dashboard stat row**
-- `src/components/dashboards/IndividualDashboard.tsx` — add `<FBOReservoirGauge />` as a sibling card next to `<SynapseGasGauge />` in the existing 4-column stat grid (may need to adjust grid to accommodate 5 cards, or replace one of the existing tags).
+### Layout
+```
+[Apple Sign-In Button — full width, black]
+[Google Sign-In Button — full width, white + border]
+─── or continue with email ───
+[Standard / Enterprise SSO tabs]  (existing)
+[Quick Access prototype buttons]  (existing)
+```
 
 ### Files Modified
-- `src/contexts/SynapseCreditsContext.tsx` — revert column + add FBO fetch
-- `src/hooks/useBillingData.tsx` — revert column
-- `src/components/billing/SynapseGasGauge.tsx` — remove embedded FBO block
-- `src/components/billing/FBOReservoirGauge.tsx` — NEW sibling component
-- `src/components/dashboards/IndividualDashboard.tsx` — add FBO gauge to stat row
+- `src/components/LoginScreen.tsx` — add 2 OAuth buttons + handlers + divider.
 
-### Outcome
-- Build error from incorrect `fiat_amount` column reverted.
-- FBO Reservoir becomes its own visible "tag" alongside Synapse Gas, sourced from `fiat_balance` table.
-- Both gauges visually consistent and live in the TopBar-style stat row.
+### Notes (verify before implementing)
+- Ensure Apple & Google providers are enabled in Supabase Dashboard → Authentication → Providers (user confirmed secrets exist; I'll add a chat note linking to the providers page in case re-verification is needed).
+- Site URL & Redirect URLs in Supabase must include `https://hub.thebigidia.com` and the preview URL — assumed already configured since IDIA Life uses the same Apple provider.
 
