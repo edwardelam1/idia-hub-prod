@@ -384,6 +384,16 @@ serve(async (req) => {
 
     console.log(`Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`);
 
+    // RECEIPT: which ACA records did the AI actually consume?
+    let consumedReceipt: string[] = [];
+    if (isDataScientistMode) {
+      if (detectedAgent === "MEDICAL_AGENT" && healthMetrics.length > 0) {
+        consumedReceipt = healthMetrics.map((r: any) => r.aca_hash_key).filter(Boolean);
+      } else if ((detectedAgent === "CONSTRUCTION_AGENT" || detectedAgent === "FINANCE_AGENT") && lifestyleEvents.length > 0) {
+        consumedReceipt = lifestyleEvents.map((r: any) => r.aca_hash_key).filter(Boolean);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         response: aiResponse,
@@ -394,6 +404,7 @@ serve(async (req) => {
         queryComplexity: detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT" ? 2.0 : detectedAgent === "CONSTRUCTION_AGENT" ? 1.5 : 1.0,
         verificationIssues: verification.issues,
         orchestratorPlan: plan,
+        consumed_records: consumedReceipt,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
