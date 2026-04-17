@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { formatCredits } from "@/lib/utils";
 
 interface BalanceData {
   wallet_address: string;
@@ -52,26 +51,26 @@ export const SynapseCreditsProvider = ({
         return;
       }
 
-      // 1. SUM-BASED BALANCE: Calculate from all ledger entries (robust, no running total)
+      // 1. RPC SUM: Recalculate total balance from all SETTLED rows
       const { data: balance, error: ledgerError } = await supabase.rpc("get_synapse_balance", { uid: userId });
 
       if (ledgerError) throw ledgerError;
-
       const credits = Number(balance ?? 0);
 
-      // 2. BURN RATE: Calculate from deduction entries for THIS user
+      // 2. UPDATED BURN RATE: Now includes both 'deduction' and 'USAGE' types
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from("synapse_credit_ledger")
         .select("amount")
         .eq("user_id", userId)
+        // Fixed: Controller writes 'USAGE', Context was looking for 'deduction'
         .in("entry_type", ["deduction", "USAGE"])
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
 
       const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
 
-      // 3. FBO RESERVOIR: Sum fiat_ledger entries for this user
+      // 3. FBO RESERVOIR: USD value calculation
       const { data: fboEntries } = await supabase
         .from("fiat_ledger")
         .select("amount_usd")
@@ -127,7 +126,7 @@ export const SynapseCreditsProvider = ({
           filter: `user_id=eq.${user.user_id}`,
         },
         () => {
-          fetchLedgerBalance(); // Refresh on any new entry
+          fetchLedgerBalance();
         },
       )
       .subscribe();
