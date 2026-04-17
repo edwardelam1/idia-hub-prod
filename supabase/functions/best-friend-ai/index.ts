@@ -1,8 +1,52 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+const MAX_OMNI_ROWS = 500;
+
+// Pulls every relevant staged record for a user across BOTH staging tables.
+// Tables expose user_id, entity_id, AND pseudo_user_id — we OR-filter on all three
+// so a raw UUID, an entity ref, or a pre-hashed pseudonym all resolve correctly.
+async function fetchOmniRecords(
+  supabase: ReturnType<typeof createClient>,
+  pseudoId: string,
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+  try {
+    const filter = `user_id.eq.${pseudoId},entity_id.eq.${pseudoId},pseudo_user_id.eq.${pseudoId}`;
+
+    const [healthRes, lifestyleRes] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("*")
+        .or(filter)
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("*")
+        .or(filter)
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+    ]);
+
+    if (healthRes.error) console.error("[OMNI_FETCH] health error:", healthRes.error.message);
+    if (lifestyleRes.error) console.error("[OMNI_FETCH] lifestyle error:", lifestyleRes.error.message);
+
+    return {
+      success: !healthRes.error && !lifestyleRes.error,
+      health: healthRes.data ?? [],
+      lifestyle: lifestyleRes.data ?? [],
+    };
+  } catch (err) {
+    console.error("[OMNI_FETCH] exception:", err);
+    return { success: false, health: [], lifestyle: [], error: String(err) };
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
