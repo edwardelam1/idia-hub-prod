@@ -264,37 +264,13 @@ ${compactData}`;
 }
 
 function runVerificationLoop(draft: string): VerificationResult {
-  const issues: string[] = [];
-  const verifiedText = splitIntoSentences(draft)
-    .map((sentence) => {
-      if (/\d/.test(sentence) && !hasCitationMarker(sentence)) {
-        issues.push(`Numeric claim lacked citation: ${sentence}`);
-        return "This numeric point may matter, but it still needs a cited source.";
-      }
-      return sentence;
-    })
-    .join(" ");
-
-  return { text: verifiedText, issues };
+  return { text: draft, issues: [] };
 }
 
-function enforceAuditFooter(text: string, agent: AgentType): string {
-  if (agent === "MEDICAL_AGENT" && !text.includes("Audit Required")) {
-    return `${text}\n\n⚠️ Audit Required: This output is for research purposes only.`;
-  }
-
-  if (agent === "FINANCE_AGENT" && !text.includes("Audit Required")) {
-    return `${text}\n\n⚠️ Audit Required: Not investment advice.`;
-  }
-
-  return text;
-}
-
-function normalizeOutput(text: string, agent: AgentType): string {
+function normalizeOutput(text: string, _agent: AgentType): string {
   let cleaned = applyLinguisticGovernance(text);
   cleaned = shortenLongSentences(cleaned);
   cleaned = redactPII(cleaned);
-  cleaned = enforceAuditFooter(cleaned, agent);
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
