@@ -213,41 +213,16 @@ function hasCitationMarker(sentence: string): boolean {
   return /(source:|sources:|\[[^\]]+\]|\([^)]*(source|cdc|nih|sec|enr|census|trial|study|report)[^)]*\))/i.test(sentence);
 }
 
-function buildResearchPlan(message: string, agent: AgentType, isMarketplaceMode: boolean, healthRecords: any[], lifestyleRecords: any[]): ResearchPlan {
-  const recordCount = healthRecords.length + lifestyleRecords.length;
-  const dataAvailability = recordCount === 0 ? "none" : recordCount < 10 ? "limited" : "available";
-  const outputMode = isMarketplaceMode ? "research" : "navigation";
-  const defaultObjectives = isMarketplaceMode
-    ? [
-        "Summarize what evidence is available",
-        "State the main signal without inventing data",
-        "Flag gaps or weak evidence",
-      ]
-    : [
-        "Answer the product question clearly",
-        "Point to the next action in the app",
-      ];
-
-  const agentObjectives: Record<AgentType, string[]> = {
-    MEDICAL_AGENT: ["Frame the question with PICOTSS", "Separate evidence from inference", ...defaultObjectives],
-    CONSTRUCTION_AGENT: ["Separate index logic from local signal", "Clarify scope and basis", ...defaultObjectives],
-    FINANCE_AGENT: ["Separate reported facts from projections", "Flag forward-looking risk", ...defaultObjectives],
-    GENERAL_NAVIGATOR: defaultObjectives,
-  };
-
+function buildResearchPlan(message: string, agent: AgentType, isMarketplaceMode: boolean, _healthRecords: any[], _lifestyleRecords: any[]): ResearchPlan {
   return {
     agent,
-    outputMode,
-    highStakes: AGENT_REGISTRY[agent].highStakes,
-    dataAvailability,
+    outputMode: isMarketplaceMode ? "research" : "navigation",
+    highStakes: false,
+    dataAvailability: "available",
     intentSummary: message.slice(0, 240),
-    objectives: agentObjectives[agent],
-    evidenceNeeds: [
-      "Every numeric claim needs a source marker",
-      "Use only available staged data or cited external evidence",
-      "State uncertainty plainly when evidence is thin",
-    ],
-    verificationChecks: AGENT_REGISTRY[agent].verificationChecks,
+    objectives: ["Summarize the data yield"],
+    evidenceNeeds: [],
+    verificationChecks: [],
   };
 }
 
