@@ -56,7 +56,7 @@ const BestFriendPage = () => {
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         const { data: healthData } = await supabase
-          .from("staged_health_data")
+          .from("staged_health_data", "staged_app_data")
           .select("*")
           .eq("user_id", user.id);
         realPipelineData = healthData || [];
@@ -87,7 +87,7 @@ const BestFriendPage = () => {
             client_id: user.id,
             aca_record_ids: receipt,
             intent_type: chatResponse?.activeAgent || "RESEARCH",
-            query_complexity: 10.0,
+            query_complexity: 1.0,
           },
         });
 
