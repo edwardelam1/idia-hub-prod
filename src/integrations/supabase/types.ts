@@ -4070,6 +4070,54 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_app_data: {
+        Row: {
+          aca_hash_key: string | null
+          anonymized_payload: Json
+          created_at: string | null
+          data_category: string
+          data_quality_score: number | null
+          device_aca_key: string | null
+          event_type: string
+          id: string
+          location_zone: string | null
+          processed_at: string
+          pseudo_user_id: string
+          raw_source: string | null
+          session_context: Json | null
+        }
+        Insert: {
+          aca_hash_key?: string | null
+          anonymized_payload: Json
+          created_at?: string | null
+          data_category: string
+          data_quality_score?: number | null
+          device_aca_key?: string | null
+          event_type: string
+          id?: string
+          location_zone?: string | null
+          processed_at?: string
+          pseudo_user_id: string
+          raw_source?: string | null
+          session_context?: Json | null
+        }
+        Update: {
+          aca_hash_key?: string | null
+          anonymized_payload?: Json
+          created_at?: string | null
+          data_category?: string
+          data_quality_score?: number | null
+          device_aca_key?: string | null
+          event_type?: string
+          id?: string
+          location_zone?: string | null
+          processed_at?: string
+          pseudo_user_id?: string
+          raw_source?: string | null
+          session_context?: Json | null
+        }
+        Relationships: []
+      }
       raw_health_data: {
         Row: {
           activity_type: string | null
@@ -4712,45 +4760,6 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
-      }
-      staged_app_data: {
-        Row: {
-          anonymized_payload: Json
-          created_at: string | null
-          data_category: string
-          data_quality_score: number | null
-          event_type: string
-          id: string
-          location_zone: string | null
-          processed_at: string
-          pseudo_user_id: string
-          session_context: Json | null
-        }
-        Insert: {
-          anonymized_payload: Json
-          created_at?: string | null
-          data_category: string
-          data_quality_score?: number | null
-          event_type: string
-          id?: string
-          location_zone?: string | null
-          processed_at?: string
-          pseudo_user_id: string
-          session_context?: Json | null
-        }
-        Update: {
-          anonymized_payload?: Json
-          created_at?: string | null
-          data_category?: string
-          data_quality_score?: number | null
-          event_type?: string
-          id?: string
-          location_zone?: string | null
-          processed_at?: string
-          pseudo_user_id?: string
-          session_context?: Json | null
-        }
-        Relationships: []
       }
       staged_business_data: {
         Row: {
