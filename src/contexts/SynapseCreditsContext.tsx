@@ -64,13 +64,13 @@ export const SynapseCreditsProvider = ({
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from("synapse_credit_ledger")
-        .select("fiat_amount")
+        .select("amount")
         .eq("user_id", userId)
         .eq("entry_type", "deduction")
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
 
-      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.fiat_amount)), 0);
+      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
 
       // 3. FBO RESERVOIR: Sum fiat_ledger entries for this user
       const { data: fboEntries } = await supabase
