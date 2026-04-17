@@ -1,24 +1,35 @@
 
 
-## Plan: Fix `anonymization-processor` schema mismatch
+## Plan: Restore `anonymization-processor` as the canonical handler, delete `anonymize-and-stage-data`
 
-### Investigation needed
-Need to read the actual `anonymization-processor/index.ts` to confirm where `healthkit_source_bundles` is referenced and what other columns it currently writes. Also verify `staged_health_data` real schema (the file isn't in the listed tree — may be named differently).
+### Investigation
+- Last turn I edited `anonymize-and-stage-data` thinking it was the live function. User confirms the **canonical function is `anonymization-processor`** — it's the one `apple-health-sync` calls and writes to `staged_health_data`.
+- `anonymize-and-stage-data` was supposed to be deleted but still exists.
+- DB function `direct_life_anonymization_trigger()` already calls `/functions/v1/anonymization-processor` — confirms that's the live endpoint.
+- The schema fix (only 6 columns, payload JSONB) needs to live in `anonymization-processor`, not the orphan file.
 
-### Assumed Changes (pending file read in implementation mode)
+### Changes
 
-**`supabase/functions/anonymization-processor/index.ts`**
-1. Remove `healthkit_source_bundles` from the `.insert()` object on `staged_health_data`.
-2. Move any source-bundle metadata (e.g. `com.apple.health` identifiers, original payload reference) into the `payload` JSONB field as a nested key: `payload.source_bundle = {...}`.
-3. Ensure `payload` is built as a plain JS object (not a pre-stringified string) so the Supabase client serializes it once — prevents "invalid input syntax for type json".
-4. Final insert columns limited to: `aca_hash_key`, `activity_type`, `entity_id`, `payload`, `processed_at`, `data_quality_score`.
-5. Any health metric fields (steps, heart rate, etc.) currently written as top-level columns get folded into `payload` as well, unless they map to existing schema columns confirmed at implementation time.
+**1. `supabase/functions/anonymization-processor/index.ts`**
+- Read current file to confirm what `apple-health-sync` posts to it (field names like `raw_payload`, `step_count`, `recorded_at`, `user_id`, `raw_data_id`).
+- Apply the same schema-correct insert logic:
+  - Build `payload` as a plain JS object containing: `health_metrics`, `source_bundle` (com.apple.health identifiers), `device_type`, `source`, and any Strava extras.
+  - Insert ONLY: `aca_hash_key`, `activity_type`, `entity_id`, `payload`, `processed_at`, `data_quality_score`.
+  - No `JSON.stringify` on payload — let Supabase client serialize once.
+- Preserve the existing `data_processing_queue` status update + `raw_health_data.processed=true` flagging that this function does (whatever the current file has).
+
+**2. Delete `supabase/functions/anonymize-and-stage-data/`**
+- Remove the directory and call `supabase--delete_edge_functions` to undeploy it.
+
+**3. Deploy `anonymization-processor`**
+- Use `supabase--deploy_edge_functions` so the fix is live immediately.
 
 ### Files Modified
-- `supabase/functions/anonymization-processor/index.ts`
+- `supabase/functions/anonymization-processor/index.ts` — rewrite insert logic
+- `supabase/functions/anonymize-and-stage-data/index.ts` — delete
 
 ### Outcome
-- No more `column "healthkit_source_bundles" does not exist` errors.
-- Source bundle metadata preserved inside `payload` JSONB for downstream queries.
-- Insert payload is a clean object — Supabase handles JSON serialization, eliminating the "invalid input syntax" error.
+- `anonymization-processor` (the real handler `apple-health-sync` talks to) inserts only valid columns.
+- No more `healthkit_source_bundles` or "invalid input syntax for type json" errors on the live pipeline.
+- Orphan `anonymize-and-stage-data` removed from codebase and Supabase.
 
