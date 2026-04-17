@@ -73,12 +73,6 @@ const BestFriendPage = () => {
       if (marketplaceMode && realPipelineData.length > 0) {
         const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
           body: {
-            const { data: { user } } = await supabase.auth.getUser();
-
-// 2. This 'id' is the 217c... UUID the ledger is looking for
-const client_id = user.id; 
-
-console.log(`Identity Resolved: ${client_id}`);
             aca_record_ids: realPipelineData.map((d) => d.aca_hash_key),
             platform_guid: activeGuid,
             query_complexity: 1.0,
