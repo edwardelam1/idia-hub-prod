@@ -105,18 +105,6 @@ const BestFriendPage = () => {
             // you update the message state here AFTER the AI has already moved on.
           }
         });
-      }
-
-      // 4. The AI immediately continues and updates the UI with its text response
-      // It does not wait for the block above to finish.
-      const aiMessage = {
-        role: "assistant",
-        content: chatResponse?.response || "Analysis complete.",
-        // liabilityTokenHash is initially null, the UI can hydrate it later if needed
-        liabilityTokenHash: null 
-      };
-      
-      setMessages(prev => [...prev, aiMessage]);
 
       // 5. RENDER
       setConversation((prev) => [
