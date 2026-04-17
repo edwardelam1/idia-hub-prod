@@ -47,11 +47,7 @@ const BestFriendPage = () => {
       } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("Not authenticated.");
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("platform_guid")
-        .eq("user_id", user.id)
-        .single();
+      const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
 
       const activeGuid = profile?.platform_guid;
       if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
@@ -74,9 +70,7 @@ const BestFriendPage = () => {
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
-            marketplace: marketplaceMode
-              ? { healthRecords: realPipelineData, lifestyleRecords: [] }
-              : null,
+            marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.map((m) => ({ role: m.role, content: m.content })),
         },
@@ -89,17 +83,14 @@ const BestFriendPage = () => {
       // 4. SYNAPSE CASHIER — only fire if AI actually consumed records (flat 1 CR)
       let liabilityTokenHash: string | null = null;
       if (marketplaceMode && receipt.length > 0) {
-        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke(
-          "synapse-controller",
-          {
-            body: {
-              client_id: user.id,
-              aca_record_ids: receipt,
-              intent_type: chatResponse?.activeAgent || "RESEARCH",
-              query_complexity: 1.0,
-            },
+        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
+          body: {
+            client_id: user.id,
+            aca_record_ids: receipt,
+            intent_type: chatResponse?.activeAgent || "RESEARCH",
+            query_complexity: 10.0,
           },
-        );
+        });
 
         if (!synapseError && tokenResult?.liability_token_hash) {
           liabilityTokenHash = tokenResult.liability_token_hash;
