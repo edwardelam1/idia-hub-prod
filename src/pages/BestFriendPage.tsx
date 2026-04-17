@@ -39,7 +39,12 @@ const BestFriendPage = () => {
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const client_id = user.id;
 
+    console.log(`Identity Resolved: ${client_id}`);
     try {
       // 1. DYNAMIC IDENTITY GRAB (Crucial for the 30% payout)
       const {
