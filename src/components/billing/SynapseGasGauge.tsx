@@ -1,8 +1,9 @@
 import { Database, RefreshCw } from "lucide-react";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
-export const SynapseGasGauge = () => {
+const SynapseGasGauge = () => {
   const { balanceData, refreshBalance } = useSynapseCredits();
+  const credits = balanceData?.available_credits ?? 0;
   return (
     <div className="p-3 bg-black/20 rounded-lg border border-primary/20">
       <div className="flex justify-between items-center text-primary mb-2">
@@ -16,10 +17,13 @@ export const SynapseGasGauge = () => {
       </div>
       <div className="flex items-baseline gap-1.5">
         <span className="text-2xl font-mono font-bold text-primary">
-          {Math.floor(balanceData.synapse).toLocaleString()}
+          {Math.floor(credits).toLocaleString()}
         </span>
         <span className="text-[10px] font-bold text-primary/70">UNITS</span>
       </div>
     </div>
   );
 };
+
+export default SynapseGasGauge;
+export { SynapseGasGauge };

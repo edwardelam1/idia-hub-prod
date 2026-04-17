@@ -4969,6 +4969,7 @@ export type Database = {
       }
       synapse_credit_ledger: {
         Row: {
+          amount: number
           amount_idia_beta: number | null
           balance_after: number
           balance_idia_beta: number | null
@@ -4977,7 +4978,6 @@ export type Database = {
           description: string | null
           destination_wallet: string | null
           entry_type: string
-          fiat_amount: number
           fiat_balance: number | null
           flare_tx_hash: string | null
           id: string
@@ -4991,6 +4991,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          amount: number
           amount_idia_beta?: number | null
           balance_after?: number
           balance_idia_beta?: number | null
@@ -4999,7 +5000,6 @@ export type Database = {
           description?: string | null
           destination_wallet?: string | null
           entry_type: string
-          fiat_amount: number
           fiat_balance?: number | null
           flare_tx_hash?: string | null
           id?: string
@@ -5013,6 +5013,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          amount?: number
           amount_idia_beta?: number | null
           balance_after?: number
           balance_idia_beta?: number | null
@@ -5021,7 +5022,6 @@ export type Database = {
           description?: string | null
           destination_wallet?: string | null
           entry_type?: string
-          fiat_amount?: number
           fiat_balance?: number | null
           flare_tx_hash?: string | null
           id?: string
