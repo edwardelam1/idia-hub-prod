@@ -76,7 +76,7 @@ serve(async (req) => {
           entry_type: "USAGE",
           transaction_type: "FEE",
           status: "SETTLED",
-          description: `Synapse Gas: ${intent_type} [Compute: ${query_complexity}x]`,
+          description: `Synapse Gas: ${intent_type} [Flat 1 CR]`,
           reference_id: referenceId,
         })
         .select("id")
