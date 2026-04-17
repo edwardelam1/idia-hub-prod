@@ -1,48 +1,22 @@
 
 
-## Plan: Add Apple & Google Sign-In to LoginScreen
+## Plan: Wire `refreshCredits` trigger into BestFriendPage
 
 ### Context
-- OAuth secrets for Apple and Google are already configured in Supabase (per user).
-- Google OAuth requires the `prompt: 'select_account'` flow already wired in IDIA Life.
-- Supabase JS handles the OAuth redirect flow client-side via `supabase.auth.signInWithOAuth()`.
-- Current `LoginScreen.tsx` has email/password + an "Enterprise SSO" tab + quick-access prototype buttons.
+`SynapseCreditsContext` already exports `refreshBalance` (the equivalent of the proposed `refreshCredits`) — no context refactor needed. The bug is simply that `BestFriendPage.tsx` doesn't call it after the AI response, so the gas gauge stays stale until next mount/realtime tick.
+
+The realtime `postgres_changes` subscription in the context *should* fire on ledger INSERT, but if the deduction happens server-side after the chat response returns, there can be a perceived lag. An explicit refresh call closes the gap.
 
 ### Changes
 
-**`src/components/LoginScreen.tsx`** — add two branded OAuth buttons above the Standard/SSO tabs:
+**`src/pages/BestFriendPage.tsx`** (one file, 2 small edits):
 
-1. **Apple Sign-In button** — black bg, white Apple logo (lucide `Apple` icon), label "Continue with Apple".
-2. **Google Sign-In button** — white bg with border, multi-color Google "G" SVG (inline), label "Continue with Google".
-
-Both call:
-```ts
-await supabase.auth.signInWithOAuth({
-  provider: 'apple' | 'google',
-  options: {
-    redirectTo: `${window.location.origin}/`,
-    ...(provider === 'google' && { queryParams: { access_type: 'offline', prompt: 'select_account' } })
-  }
-});
-```
-
-3. Add a divider ("or continue with email") between the OAuth buttons and the existing tabs.
-4. Handle errors via `toast.error()`; loading state per provider (`isAppleLoading`, `isGoogleLoading`) to disable buttons during redirect.
-5. On success, Supabase redirects back → existing `AuthContext.onAuthStateChange` picks up the session → `Index.tsx` auto-routes to `/dashboard`. No additional routing logic needed.
-
-### Layout
-```
-[Apple Sign-In Button — full width, black]
-[Google Sign-In Button — full width, white + border]
-─── or continue with email ───
-[Standard / Enterprise SSO tabs]  (existing)
-[Quick Access prototype buttons]  (existing)
-```
+1. Destructure `refreshBalance` from `useSynapseCredits()` (already imported, currently only pulling `balanceData`).
+2. After `setConversation(...)` in `handleSendMessage`, call `await refreshBalance()` so the gauge re-reads the ledger immediately.
 
 ### Files Modified
-- `src/components/LoginScreen.tsx` — add 2 OAuth buttons + handlers + divider.
+- `src/pages/BestFriendPage.tsx`
 
-### Notes (verify before implementing)
-- Ensure Apple & Google providers are enabled in Supabase Dashboard → Authentication → Providers (user confirmed secrets exist; I'll add a chat note linking to the providers page in case re-verification is needed).
-- Site URL & Redirect URLs in Supabase must include `https://hub.thebigidia.com` and the preview URL — assumed already configured since IDIA Life uses the same Apple provider.
+### Outcome
+Gas gauge updates the moment the AI response renders, no waiting on realtime debounce.
 
