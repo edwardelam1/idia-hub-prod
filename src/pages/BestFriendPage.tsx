@@ -81,20 +81,42 @@ const BestFriendPage = () => {
 
       // 4. SYNAPSE CASHIER — only fire if AI actually consumed records (flat 1 CR)
       let liabilityTokenHash: string | null = null;
-      if (marketplaceMode && receipt.length > 0) {
-        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
+      supabase.functions.invoke("synapse-controller", {
           body: {
             client_id: user.id,
             aca_record_ids: receipt,
             intent_type: chatResponse?.activeAgent || "RESEARCH",
             query_complexity: 1.0,
           },
+        }).then(({ data, error }) => {
+          // 3. The Synapse Controller fires the receipt back up independently
+          if (error) {
+            console.error("Synapse Engine Rejection:", error);
+            return;
+          }
+          
+          if (data?.success) {
+            console.log("Token Generated:", data.liability_token_hash);
+            
+            // Ping the global ledger listener to roll the Gas Gauge
+            refreshBalance(); 
+            
+            // Optional: If you need to attach the token to the specific chat bubble, 
+            // you update the message state here AFTER the AI has already moved on.
+          }
         });
-
-        if (!synapseError && tokenResult?.liability_token_hash) {
-          liabilityTokenHash = tokenResult.liability_token_hash;
-        }
       }
+
+      // 4. The AI immediately continues and updates the UI with its text response
+      // It does not wait for the block above to finish.
+      const aiMessage = {
+        role: "assistant",
+        content: chatResponse?.response || "Analysis complete.",
+        // liabilityTokenHash is initially null, the UI can hydrate it later if needed
+        liabilityTokenHash: null 
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
 
       // 5. RENDER
       setConversation((prev) => [
