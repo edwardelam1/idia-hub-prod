@@ -113,15 +113,15 @@ serve(async (req) => {
         success: true,
         liability_token_hash: liabilityTokenHash,
         financials: {
-          gas_consumed: Number(computeCost.toFixed(4)),
-          minting_fee: mintingFee,
-          total_cr_deducted: Number(Math.abs(totalSynapseDeduction).toFixed(4)),
-          fiat_equivalent_value: Number((Math.abs(totalSynapseDeduction) * 0.75).toFixed(4)),
+          gas_consumed: 1,
+          minting_fee: 0,
+          total_cr_deducted: 1,
+          fiat_equivalent_value: 0.75,
         },
         audit: {
           records_processed: aca_record_ids.length,
           intent: intent_type,
-          complexity_multiplier: query_complexity,
+          complexity_multiplier: 1.0,
         },
       }),
       {
