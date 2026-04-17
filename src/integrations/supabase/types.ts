@@ -1604,7 +1604,7 @@ export type Database = {
       egress_logs: {
         Row: {
           aca_record_references: string[]
-          batch_checksum: string
+          batch_checksum: string | null
           client_id: string
           country_of_origin: string
           created_at: string
@@ -1612,13 +1612,13 @@ export type Database = {
           digiramp_anchor_id: string
           egress_type: string
           id: string
-          liability_token_hash: string
+          liability_token_hash: string | null
           synapse_ledger_entry_id: string | null
           user_id: string
         }
         Insert: {
           aca_record_references?: string[]
-          batch_checksum: string
+          batch_checksum?: string | null
           client_id: string
           country_of_origin?: string
           created_at?: string
@@ -1626,13 +1626,13 @@ export type Database = {
           digiramp_anchor_id: string
           egress_type?: string
           id?: string
-          liability_token_hash: string
+          liability_token_hash?: string | null
           synapse_ledger_entry_id?: string | null
           user_id: string
         }
         Update: {
           aca_record_references?: string[]
-          batch_checksum?: string
+          batch_checksum?: string | null
           client_id?: string
           country_of_origin?: string
           created_at?: string
@@ -1640,7 +1640,7 @@ export type Database = {
           digiramp_anchor_id?: string
           egress_type?: string
           id?: string
-          liability_token_hash?: string
+          liability_token_hash?: string | null
           synapse_ledger_entry_id?: string | null
           user_id?: string
         }
@@ -4969,7 +4969,6 @@ export type Database = {
       }
       synapse_credit_ledger: {
         Row: {
-          amount: number
           amount_idia_beta: number | null
           balance_after: number
           balance_idia_beta: number | null
@@ -4978,6 +4977,8 @@ export type Database = {
           description: string | null
           destination_wallet: string | null
           entry_type: string
+          fiat_amount: number
+          fiat_balance: number | null
           flare_tx_hash: string | null
           id: string
           metadata: Json | null
@@ -4990,7 +4991,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          amount: number
           amount_idia_beta?: number | null
           balance_after?: number
           balance_idia_beta?: number | null
@@ -4999,6 +4999,8 @@ export type Database = {
           description?: string | null
           destination_wallet?: string | null
           entry_type: string
+          fiat_amount: number
+          fiat_balance?: number | null
           flare_tx_hash?: string | null
           id?: string
           metadata?: Json | null
@@ -5011,7 +5013,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          amount?: number
           amount_idia_beta?: number | null
           balance_after?: number
           balance_idia_beta?: number | null
@@ -5020,6 +5021,8 @@ export type Database = {
           description?: string | null
           destination_wallet?: string | null
           entry_type?: string
+          fiat_amount?: number
+          fiat_balance?: number | null
           flare_tx_hash?: string | null
           id?: string
           metadata?: Json | null
@@ -6126,6 +6129,7 @@ export type Database = {
         | "REWARD"
         | "settlement"
         | "fbo_dissemination"
+        | "FREE_COMPUTE"
       user_role: "owner" | "manager" | "employee" | "warehouse_associate"
     }
     CompositeTypes: {
@@ -6263,6 +6267,7 @@ export const Constants = {
         "REWARD",
         "settlement",
         "fbo_dissemination",
+        "FREE_COMPUTE",
       ],
       user_role: ["owner", "manager", "employee", "warehouse_associate"],
     },
