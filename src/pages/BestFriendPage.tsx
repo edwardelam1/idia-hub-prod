@@ -56,7 +56,7 @@ const BestFriendPage = () => {
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         const { data: healthData } = await supabase
-          .from("staged_health_data")
+          .from("staged_health_data", "staged_app_data")
           .select("*")
           .eq("user_id", user.id);
         realPipelineData = healthData || [];
@@ -89,11 +89,37 @@ const BestFriendPage = () => {
             query_complexity: 1.0,
           },
         }).then(({ data, error }) => {
-          // 3. The Synapse Controller fires the receipt back up independently
-          if (error) {
-            console.error("Synapse Engine Rejection:", error);
-            return;
-          }
+          
+       console.log("Preparing Hardened Payload for Synapse Engine...");
+        
+        // 1. Ensure we only have a clean array of strings. Fallback to a dummy ID if empty.
+        const cleanIdArray = (realPipelineData && realPipelineData.length > 0) 
+          ? realPipelineData.map((r: any) => String(r.id)) 
+          : ["FORCED-ACA-TEST-001"];
+
+        console.log("Clean ID Array:", cleanIdArray);
+
+        // 2. The exact, minimal payload the controller expects
+        const payloadBody = {
+          client_id: String(user.id), // Force string type
+          aca_record_ids: cleanIdArray, 
+          intent_type: "RESEARCH",    // Hardcode to avoid undefined errors
+          query_complexity: 1.0
+        };
+
+        console.log("Payload Body:", JSON.stringify(payloadBody));
+
+        // 3. Fire the request
+        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
+          body: payloadBody
+        });
+
+        console.log("Engine Response Data:", tokenResult);
+        console.log("Engine Response Error:", synapseError);
+        
+        if (!synapseError) {
+           await refreshBalance();
+        }
           
           if (data?.success) {
             console.log("Token Generated:", data.liability_token_hash);
@@ -105,6 +131,18 @@ const BestFriendPage = () => {
             // you update the message state here AFTER the AI has already moved on.
           }
         });
+      }
+
+      // 4. The AI immediately continues and updates the UI with its text response
+      // It does not wait for the block above to finish.
+      const aiMessage = {
+        role: "assistant",
+        content: chatResponse?.response || "Analysis complete.",
+        // liabilityTokenHash is initially null, the UI can hydrate it later if needed
+        liabilityTokenHash: null 
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
 
       // 5. RENDER
       setConversation((prev) => [
