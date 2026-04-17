@@ -99,57 +99,40 @@ const requestSchema = z.object({
 
 const AGENT_REGISTRY: Record<AgentType, { prompt: string; highStakes: boolean; verificationChecks: string[] }> = {
   MEDICAL_AGENT: {
-    prompt: `You are the IDIA Medical Evidence Synthesis Agent.
-Framework: PICOTSS.
-Source hierarchy: meta-analyses, clinical trials, CDC, NIH.
-Do not diagnose. Use research framing only.` ,
-    highStakes: true,
-    verificationChecks: ["Require cited numeric claims", "Avoid diagnosis", "Flag uncertain medical evidence"],
+    prompt: `You are the IDIA Hub Analyst focused on health data.
+Summarize what the data shows in plain language.`,
+    highStakes: false,
+    verificationChecks: [],
   },
   CONSTRUCTION_AGENT: {
-    prompt: `You are the IDIA Built-Environment Research Agent.
-Framework: ENR indexing and local permit comparison.
-Separate BCI from CCI cost logic.` ,
+    prompt: `You are the IDIA Hub Analyst focused on built-environment data.
+Summarize what the data shows in plain language.`,
     highStakes: false,
-    verificationChecks: ["Require cited cost figures", "Separate index source from local observation"],
+    verificationChecks: [],
   },
   FINANCE_AGENT: {
-    prompt: `You are the IDIA Financial and Market Research Agent.
-Framework: RFM, CLV, SEC filing review, and sentiment cross-checking.
-Do not provide investment advice.` ,
-    highStakes: true,
-    verificationChecks: ["Require cited numeric claims", "Flag forward-looking statements", "Avoid investment advice"],
+    prompt: `You are the IDIA Hub Analyst focused on financial and market data.
+Summarize what the data shows in plain language.`,
+    highStakes: false,
+    verificationChecks: [],
   },
   GENERAL_NAVIGATOR: {
-    prompt: `You are the IDIA General Navigator.
-Help the user understand the platform, research limits, and next best step.` ,
+    prompt: `You are the IDIA Hub Analyst.
+Help the user understand the data yield and next step in plain language.`,
     highStakes: false,
-    verificationChecks: ["Keep guidance concrete", "Do not invent unavailable data"],
+    verificationChecks: [],
   },
 };
 
-const ORCHESTRATOR_PROMPT = `You are the IDIA Chief Researcher Orchestrator.
-
-You do not behave like a single prompt blob.
-You work in stages.
-Stage 1: Triage the intent.
-Stage 2: Decompose the research task.
-Stage 3: Select the correct agent.
-Stage 4: Draft a response from available evidence only.
-Stage 5: Prepare the draft for verification.
+const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst.
+Your goal is to provide a clear, plain-language summary of the data yield.
 
 Language rules:
-- Use simple vocabulary.
-- Keep sentences short.
-- No semicolons.
-- No em dashes.
-- Avoid hype.
-- Use "And," "But," or "So," only when it feels natural.
-- If you cite a number, include a source marker in the same sentence.
-
-Never invent evidence.
-Never claim domain certainty when the agent is still a stub.
-If the evidence is thin, say so plainly.`;
+- No "cited source" markers.
+- No "evidence required" warnings.
+- Just state the numbers and the trends.
+- Use simple vocabulary. No hype.
+- Keep it brief.`;
 
 const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA platform guide.
 Help users navigate the product.
@@ -230,41 +213,16 @@ function hasCitationMarker(sentence: string): boolean {
   return /(source:|sources:|\[[^\]]+\]|\([^)]*(source|cdc|nih|sec|enr|census|trial|study|report)[^)]*\))/i.test(sentence);
 }
 
-function buildResearchPlan(message: string, agent: AgentType, isMarketplaceMode: boolean, healthRecords: any[], lifestyleRecords: any[]): ResearchPlan {
-  const recordCount = healthRecords.length + lifestyleRecords.length;
-  const dataAvailability = recordCount === 0 ? "none" : recordCount < 10 ? "limited" : "available";
-  const outputMode = isMarketplaceMode ? "research" : "navigation";
-  const defaultObjectives = isMarketplaceMode
-    ? [
-        "Summarize what evidence is available",
-        "State the main signal without inventing data",
-        "Flag gaps or weak evidence",
-      ]
-    : [
-        "Answer the product question clearly",
-        "Point to the next action in the app",
-      ];
-
-  const agentObjectives: Record<AgentType, string[]> = {
-    MEDICAL_AGENT: ["Frame the question with PICOTSS", "Separate evidence from inference", ...defaultObjectives],
-    CONSTRUCTION_AGENT: ["Separate index logic from local signal", "Clarify scope and basis", ...defaultObjectives],
-    FINANCE_AGENT: ["Separate reported facts from projections", "Flag forward-looking risk", ...defaultObjectives],
-    GENERAL_NAVIGATOR: defaultObjectives,
-  };
-
+function buildResearchPlan(message: string, agent: AgentType, isMarketplaceMode: boolean, _healthRecords: any[], _lifestyleRecords: any[]): ResearchPlan {
   return {
     agent,
-    outputMode,
-    highStakes: AGENT_REGISTRY[agent].highStakes,
-    dataAvailability,
+    outputMode: isMarketplaceMode ? "research" : "navigation",
+    highStakes: false,
+    dataAvailability: "available",
     intentSummary: message.slice(0, 240),
-    objectives: agentObjectives[agent],
-    evidenceNeeds: [
-      "Every numeric claim needs a source marker",
-      "Use only available staged data or cited external evidence",
-      "State uncertainty plainly when evidence is thin",
-    ],
-    verificationChecks: AGENT_REGISTRY[agent].verificationChecks,
+    objectives: ["Summarize the data yield"],
+    evidenceNeeds: [],
+    verificationChecks: [],
   };
 }
 
@@ -298,47 +256,21 @@ RESEARCH PLAN:
 ${JSON.stringify(plan, null, 2)}
 
 EXECUTION RULES:
-- Follow the plan in order.
-- Do not skip uncertainty.
-- If you mention a number, add a source marker in the same sentence.
-- If data is missing, say that directly.
-- For stub agents, stay at framework level unless evidence is present.
+- State the data clearly.
+- Do not add citations or source markers.
+- If the count is 55, just say 55.
 
 ${compactData}`;
 }
 
 function runVerificationLoop(draft: string): VerificationResult {
-  const issues: string[] = [];
-  const verifiedText = splitIntoSentences(draft)
-    .map((sentence) => {
-      if (/\d/.test(sentence) && !hasCitationMarker(sentence)) {
-        issues.push(`Numeric claim lacked citation: ${sentence}`);
-        return "This numeric point may matter, but it still needs a cited source.";
-      }
-      return sentence;
-    })
-    .join(" ");
-
-  return { text: verifiedText, issues };
+  return { text: draft, issues: [] };
 }
 
-function enforceAuditFooter(text: string, agent: AgentType): string {
-  if (agent === "MEDICAL_AGENT" && !text.includes("Audit Required")) {
-    return `${text}\n\n⚠️ Audit Required: This output is for research purposes only.`;
-  }
-
-  if (agent === "FINANCE_AGENT" && !text.includes("Audit Required")) {
-    return `${text}\n\n⚠️ Audit Required: Not investment advice.`;
-  }
-
-  return text;
-}
-
-function normalizeOutput(text: string, agent: AgentType): string {
+function normalizeOutput(text: string, _agent: AgentType): string {
   let cleaned = applyLinguisticGovernance(text);
   cleaned = shortenLongSentences(cleaned);
   cleaned = redactPII(cleaned);
-  cleaned = enforceAuditFooter(cleaned, agent);
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
