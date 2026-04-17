@@ -1,8 +1,52 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+const MAX_OMNI_ROWS = 500;
+
+// Pulls every relevant staged record for a user across BOTH staging tables.
+// Tables expose user_id, entity_id, AND pseudo_user_id — we OR-filter on all three
+// so a raw UUID, an entity ref, or a pre-hashed pseudonym all resolve correctly.
+async function fetchOmniRecords(
+  supabase: ReturnType<typeof createClient>,
+  pseudoId: string,
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+  try {
+    const filter = `user_id.eq.${pseudoId},entity_id.eq.${pseudoId},pseudo_user_id.eq.${pseudoId}`;
+
+    const [healthRes, lifestyleRes] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("*")
+        .or(filter)
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("*")
+        .or(filter)
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+    ]);
+
+    if (healthRes.error) console.error("[OMNI_FETCH] health error:", healthRes.error.message);
+    if (lifestyleRes.error) console.error("[OMNI_FETCH] lifestyle error:", lifestyleRes.error.message);
+
+    return {
+      success: !healthRes.error && !lifestyleRes.error,
+      health: healthRes.data ?? [],
+      lifestyle: lifestyleRes.data ?? [],
+    };
+  } catch (err) {
+    console.error("[OMNI_FETCH] exception:", err);
+    return { success: false, health: [], lifestyle: [], error: String(err) };
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -321,9 +365,29 @@ serve(async (req) => {
     const isDataScientistMode = context?.isMarketplaceMode === true;
     const detectedAgent = routeIntent(message);
     const agentPrompt = getAgentPrompt(detectedAgent);
-    const rawHealth = context?.marketplace?.healthRecords ?? [];
-    const rawLifestyle = context?.marketplace?.lifestyleRecords ?? [];
-    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(rawHealth, rawLifestyle);
+
+    // Frontend payload (may be empty or partial)
+    let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
+    let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
+
+    // OMNI-FETCH: override frontend payload with the full DB record set for this user.
+    // Runs in marketplace mode whenever we have an identifier to resolve.
+    const pseudoId = context?.platformGuid || context?.userId;
+    if (isDataScientistMode && pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const audit = await fetchOmniRecords(supabase, pseudoId);
+      if (audit.success) {
+        if (audit.health.length > 0) sourceHealth = audit.health;
+        if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
+        console.log(
+          `[HUB_ANALYST] DB override for ${pseudoId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records (frontend payload had ${context?.marketplace?.healthRecords?.length ?? 0}h/${context?.marketplace?.lifestyleRecords?.length ?? 0}l).`,
+        );
+      } else {
+        console.warn(`[HUB_ANALYST] Omni-fetch failed for ${pseudoId}: ${audit.error ?? "see prior logs"}`);
+      }
+    }
+
+    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(sourceHealth, sourceLifestyle);
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
     const marketplaceSummary = isDataScientistMode ? summarizeMarketplaceData(healthMetrics, lifestyleEvents) : null;
 
