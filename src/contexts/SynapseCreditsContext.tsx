@@ -45,7 +45,7 @@ export const SynapseCreditsProvider = ({
     setError(null);
 
     try {
-      const userId = user?.user_id;
+      const userId = user?.id;
       if (!userId) {
         setIsLoading(false);
         return;
