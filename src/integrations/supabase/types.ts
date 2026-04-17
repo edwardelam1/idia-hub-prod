@@ -5500,6 +5500,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_passkeys: {
+        Row: {
+          created_at: string | null
+          credential_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          credential_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          credential_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_payment_methods: {
         Row: {
           created_at: string | null
