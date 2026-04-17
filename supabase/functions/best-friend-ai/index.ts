@@ -380,14 +380,14 @@ serve(async (req) => {
 
     console.log(`Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`);
 
-    // RECEIPT: which ACA records did the AI actually consume?
+    // RECEIPT: every record actually shown to the AI counts as consumed.
+    // Agent-agnostic — fall back to row id when aca_hash_key is null so the
+    // synapse-controller still fires and the ledger/egress logs move.
     let consumedReceipt: string[] = [];
     if (isDataScientistMode) {
-      if (detectedAgent === "MEDICAL_AGENT" && healthMetrics.length > 0) {
-        consumedReceipt = healthMetrics.map((r: any) => r.aca_hash_key).filter(Boolean);
-      } else if ((detectedAgent === "CONSTRUCTION_AGENT" || detectedAgent === "FINANCE_AGENT") && lifestyleEvents.length > 0) {
-        consumedReceipt = lifestyleEvents.map((r: any) => r.aca_hash_key).filter(Boolean);
-      }
+      const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+      const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+      consumedReceipt = [...healthIds, ...lifeIds];
     }
 
     return new Response(
