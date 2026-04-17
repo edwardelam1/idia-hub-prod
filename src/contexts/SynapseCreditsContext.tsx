@@ -53,8 +53,7 @@ export const SynapseCreditsProvider = ({
       }
 
       // 1. SUM-BASED BALANCE: Calculate from all ledger entries (robust, no running total)
-      const { data: balance, error: ledgerError } = await supabase
-        .rpc("get_synapse_balance", { uid: userId });
+      const { data: balance, error: ledgerError } = await supabase.rpc("get_synapse_balance", { uid: userId });
 
       if (ledgerError) throw ledgerError;
 
@@ -66,7 +65,7 @@ export const SynapseCreditsProvider = ({
         .from("synapse_credit_ledger")
         .select("amount")
         .eq("user_id", userId)
-        .eq("entry_type", "deduction")
+        .in("entry_type", ["deduction", "USAGE"])
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
 
