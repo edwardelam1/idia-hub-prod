@@ -56,7 +56,7 @@ const BestFriendPage = () => {
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         const { data: healthData } = await supabase
-          .from("staged_health_data", "staged_app_data")
+          .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id);
         realPipelineData = healthData || [];
