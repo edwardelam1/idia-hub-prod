@@ -98,7 +98,7 @@ export const useBillingData = () => {
       if (!userId) return { used: 0 };
       let query = supabase
         .from('synapse_credit_ledger')
-        .select('amount')
+        .select('fiat_amount')
         .eq('user_id', userId)
         .eq('entry_type', 'deduction');
       
