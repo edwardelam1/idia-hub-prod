@@ -115,6 +115,7 @@ const BestFriendPage = () => {
         },
       ]);
       setCurrentMessage("");
+      await refreshBalance();
     } catch (error: any) {
       toast.error(error.message);
     } finally {
