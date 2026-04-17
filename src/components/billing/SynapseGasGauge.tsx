@@ -8,8 +8,8 @@ const SynapseGasGauge = () => {
 
   if (isLoading) return <div className="p-3 animate-pulse font-mono text-[10px] text-primary">SYNCING_LEDGERS...</div>;
 
-  const synapseCredits = balanceData?.synapse ?? 0; // Value is now e.g. 950
-  const fboLiquidity = balanceData?.fbo ?? 0; // Value is e.g. 15000.00
+  const synapseCredits = balanceData?.available_credits ?? 0;
+  const fboLiquidity = 0; // FBO reservoir not yet exposed via context
 
   return (
     <div className="w-full space-y-4 p-1">
