@@ -99,57 +99,40 @@ const requestSchema = z.object({
 
 const AGENT_REGISTRY: Record<AgentType, { prompt: string; highStakes: boolean; verificationChecks: string[] }> = {
   MEDICAL_AGENT: {
-    prompt: `You are the IDIA Medical Evidence Synthesis Agent.
-Framework: PICOTSS.
-Source hierarchy: meta-analyses, clinical trials, CDC, NIH.
-Do not diagnose. Use research framing only.` ,
-    highStakes: true,
-    verificationChecks: ["Require cited numeric claims", "Avoid diagnosis", "Flag uncertain medical evidence"],
+    prompt: `You are the IDIA Hub Analyst focused on health data.
+Summarize what the data shows in plain language.`,
+    highStakes: false,
+    verificationChecks: [],
   },
   CONSTRUCTION_AGENT: {
-    prompt: `You are the IDIA Built-Environment Research Agent.
-Framework: ENR indexing and local permit comparison.
-Separate BCI from CCI cost logic.` ,
+    prompt: `You are the IDIA Hub Analyst focused on built-environment data.
+Summarize what the data shows in plain language.`,
     highStakes: false,
-    verificationChecks: ["Require cited cost figures", "Separate index source from local observation"],
+    verificationChecks: [],
   },
   FINANCE_AGENT: {
-    prompt: `You are the IDIA Financial and Market Research Agent.
-Framework: RFM, CLV, SEC filing review, and sentiment cross-checking.
-Do not provide investment advice.` ,
-    highStakes: true,
-    verificationChecks: ["Require cited numeric claims", "Flag forward-looking statements", "Avoid investment advice"],
+    prompt: `You are the IDIA Hub Analyst focused on financial and market data.
+Summarize what the data shows in plain language.`,
+    highStakes: false,
+    verificationChecks: [],
   },
   GENERAL_NAVIGATOR: {
-    prompt: `You are the IDIA General Navigator.
-Help the user understand the platform, research limits, and next best step.` ,
+    prompt: `You are the IDIA Hub Analyst.
+Help the user understand the data yield and next step in plain language.`,
     highStakes: false,
-    verificationChecks: ["Keep guidance concrete", "Do not invent unavailable data"],
+    verificationChecks: [],
   },
 };
 
-const ORCHESTRATOR_PROMPT = `You are the IDIA Chief Researcher Orchestrator.
-
-You do not behave like a single prompt blob.
-You work in stages.
-Stage 1: Triage the intent.
-Stage 2: Decompose the research task.
-Stage 3: Select the correct agent.
-Stage 4: Draft a response from available evidence only.
-Stage 5: Prepare the draft for verification.
+const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst.
+Your goal is to provide a clear, plain-language summary of the data yield.
 
 Language rules:
-- Use simple vocabulary.
-- Keep sentences short.
-- No semicolons.
-- No em dashes.
-- Avoid hype.
-- Use "And," "But," or "So," only when it feels natural.
-- If you cite a number, include a source marker in the same sentence.
-
-Never invent evidence.
-Never claim domain certainty when the agent is still a stub.
-If the evidence is thin, say so plainly.`;
+- No "cited source" markers.
+- No "evidence required" warnings.
+- Just state the numbers and the trends.
+- Use simple vocabulary. No hype.
+- Keep it brief.`;
 
 const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA platform guide.
 Help users navigate the product.
