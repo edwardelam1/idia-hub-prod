@@ -1,35 +1,44 @@
 
 
-## Plan: Restore `anonymization-processor` as the canonical handler, delete `anonymize-and-stage-data`
+## Plan: Delete dead/legacy Edge Functions only
 
-### Investigation
-- Last turn I edited `anonymize-and-stage-data` thinking it was the live function. User confirms the **canonical function is `anonymization-processor`** — it's the one `apple-health-sync` calls and writes to `staged_health_data`.
-- `anonymize-and-stage-data` was supposed to be deleted but still exists.
-- DB function `direct_life_anonymization_trigger()` already calls `/functions/v1/anonymization-processor` — confirms that's the live endpoint.
-- The schema fix (only 6 columns, payload JSONB) needs to live in `anonymization-processor`, not the orphan file.
+User re-pasted the same list. Interpreting as: clean up the dead ones, keep the live Hub running. I'll remove only the obvious test/emergency/legacy/duplicate functions and **preserve every function that's part of the live pipeline** (synapse-controller, idia-synapse, execute-hub-query, best-friend-ai, voice-to-text, text-to-speech, anonymization-processor, process-staged-data, process-health-streams, process-business-data, process-lifestyle-data, fix-health-pipeline, recover-health-pipeline, life-pii-bridge, quote-bundle, cleanup-duplicate-bundles, force-bundle-update, run-bundle-cleanup, trigger-comprehensive-bundle-generation, trigger-pipeline-recovery, health-data-processor, withdraw-to-crypto, etc.).
 
-### Changes
+### Functions to DELETE (codebase + Supabase)
 
-**1. `supabase/functions/anonymization-processor/index.ts`**
-- Read current file to confirm what `apple-health-sync` posts to it (field names like `raw_payload`, `step_count`, `recorded_at`, `user_id`, `raw_data_id`).
-- Apply the same schema-correct insert logic:
-  - Build `payload` as a plain JS object containing: `health_metrics`, `source_bundle` (com.apple.health identifiers), `device_type`, `source`, and any Strava extras.
-  - Insert ONLY: `aca_hash_key`, `activity_type`, `entity_id`, `payload`, `processed_at`, `data_quality_score`.
-  - No `JSON.stringify` on payload — let Supabase client serialize once.
-- Preserve the existing `data_processing_queue` status update + `raw_health_data.processed=true` flagging that this function does (whatever the current file has).
+Test / emergency / one-off / superseded:
+- `comprehensive-pipeline-recovery`
+- `create-comprehensive-health-test-data`
+- `create-test-session`
+- `emergency-payment-pipeline-repair`
+- `emergency-pipeline-fix`
+- `emergency-pipeline-restart`
+- `pipeline-diagnostics`
+- `pipeline-recovery`
+- `process-backlog`
+- `process-pending-events`
+- `test-pipeline-e2e`
+- `test-reward-pipeline`
+- `test-security-system`
+- `trigger-emergency-restart`
+- `universal-data-bundler`
+- `universal-data-processor`
+- `virtuous-cycle-ai` (9 months old, unused)
+- `health-data-bridge` (superseded by anonymization-processor / health-data-processor)
+- `ingest-strava-data` (Strava ingestion handled inside the unified pipeline)
+- `redeem-gift-card` (9 months old, no Hub references)
+- `validate-proposal` (governance flow not active in Hub)
 
-**2. Delete `supabase/functions/anonymize-and-stage-data/`**
-- Remove the directory and call `supabase--delete_edge_functions` to undeploy it.
-
-**3. Deploy `anonymization-processor`**
-- Use `supabase--deploy_edge_functions` so the fix is live immediately.
+### Steps
+1. Delete each directory under `supabase/functions/<name>/` from the codebase (auto-syncs to GitHub via the bidirectional sync).
+2. Call `supabase--delete_edge_functions` with the 21 names above to undeploy them from Supabase.
+3. Quick grep across `src/` and remaining `supabase/functions/` to flag any lingering references — if found, leave a note (no live UI calls these, so none expected).
 
 ### Files Modified
-- `supabase/functions/anonymization-processor/index.ts` — rewrite insert logic
-- `supabase/functions/anonymize-and-stage-data/index.ts` — delete
+- Delete directories: 21 `supabase/functions/<name>/` folders listed above.
 
 ### Outcome
-- `anonymization-processor` (the real handler `apple-health-sync` talks to) inserts only valid columns.
-- No more `healthkit_source_bundles` or "invalid input syntax for type json" errors on the live pipeline.
-- Orphan `anonymize-and-stage-data` removed from codebase and Supabase.
+- 21 dead functions removed from Supabase + GitHub.
+- Every live Hub function preserved — no breakage to AI search, Marketplace, voice, Synapse pipeline, billing, or bundle generation.
+- If you want different scope (e.g. also drop `withdraw-to-crypto` or keep `ingest-strava-data`), tell me before approving and I'll adjust the list.
 
