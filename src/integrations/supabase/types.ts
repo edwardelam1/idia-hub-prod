@@ -4980,7 +4980,8 @@ export type Database = {
         Row: {
           amount: number
           amount_idia_beta: number | null
-          balance_after: number
+          amount_idia_usd: number | null
+          balance_after: number | null
           balance_idia_beta: number | null
           circle_transfer_id: string | null
           created_at: string | null
@@ -5002,7 +5003,8 @@ export type Database = {
         Insert: {
           amount: number
           amount_idia_beta?: number | null
-          balance_after?: number
+          amount_idia_usd?: number | null
+          balance_after?: number | null
           balance_idia_beta?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
@@ -5024,7 +5026,8 @@ export type Database = {
         Update: {
           amount?: number
           amount_idia_beta?: number | null
-          balance_after?: number
+          amount_idia_usd?: number | null
+          balance_after?: number | null
           balance_idia_beta?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
