@@ -39,83 +39,90 @@ const BestFriendPage = () => {
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const client_id = user.id;
 
-    console.log(`Identity Resolved: ${client_id}`);
     try {
-      // 1. DYNAMIC IDENTITY GRAB (Crucial for the 30% payout)
+      // 1. IDENTITY
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error("Not authenticated.");
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("platform_guid")
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .single();
 
       const activeGuid = profile?.platform_guid;
       if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
-      // 2. WAREHOUSE GRAB
-      const { data: healthData } = await supabase
-        .from("staged_health_data")
-        .select("*")
-        .eq("user_id", user?.id) // Direct identity link
-        .eq("reward_calculated", true); // Only pull data that has been paid for
-
-      const realPipelineData = healthData || [];
-
-      // 3. THE MINTING (Passing the GUID to unlock the 30% split)
-      let liabilityTokenHash = null;
-      if (marketplaceMode && realPipelineData.length > 0) {
-        const { data: tokenResult, error: tokenError } = await supabase.functions.invoke("synapse-controller", {
-          body: {
-            aca_record_ids: realPipelineData.map((d) => d.aca_hash_key),
-            platform_guid: activeGuid,
-            query_complexity: 1.0,
-          },
-        });
-
-        if (tokenError) throw new Error(`Synapse Error: ${tokenError.message}`);
-
-        liabilityTokenHash = tokenResult?.liability_token_hash ?? null;
+      // 2. WAREHOUSE GRAB (only when in marketplace mode)
+      let realPipelineData: any[] = [];
+      if (marketplaceMode) {
+        const { data: healthData } = await supabase
+          .from("staged_health_data")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("reward_calculated", true);
+        realPipelineData = healthData || [];
       }
 
-      // 4. THE AI CALL
-      const { data: chatResponse } = await supabase.functions.invoke("best-friend-ai", {
+      // 3. AI CALL FIRST — get the answer + the consumption receipt
+      const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
             marketplace: marketplaceMode
-              ? {
-                  // Changed from 'health' to 'healthRecords'
-                  healthRecords: realPipelineData,
-                  liabilityTokenHash: liabilityTokenHash,
-                }
+              ? { healthRecords: realPipelineData, lifestyleRecords: [] }
               : null,
           },
           history: conversation.map((m) => ({ role: m.role, content: m.content })),
         },
       });
 
-      // 5. UPDATE UI
+      if (aiError) throw aiError;
+
+      const receipt: string[] = chatResponse?.consumed_records || [];
+
+      // 4. SYNAPSE CASHIER — only fire if AI actually consumed records (flat 1 CR)
+      let liabilityTokenHash: string | null = null;
+      if (marketplaceMode && receipt.length > 0) {
+        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke(
+          "synapse-controller",
+          {
+            body: {
+              client_id: user.id,
+              aca_record_ids: receipt,
+              intent_type: chatResponse?.activeAgent || "RESEARCH",
+              query_complexity: 1.0,
+            },
+          },
+        );
+
+        if (!synapseError && tokenResult?.liability_token_hash) {
+          liabilityTokenHash = tokenResult.liability_token_hash;
+        }
+      }
+
+      // 5. RENDER
       setConversation((prev) => [
         ...prev,
         { role: "user", content: currentMessage },
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis complete.",
-          liabilityTokenHash: liabilityTokenHash,
+          liabilityTokenHash,
           creditDeducted: !!liabilityTokenHash,
         },
       ]);
       setCurrentMessage("");
-      await refreshBalance();
+
+      // 6. Refresh gauge only when a real deduction occurred
+      if (liabilityTokenHash) {
+        await refreshBalance();
+      }
     } catch (error: any) {
       toast.error(error.message);
     } finally {
