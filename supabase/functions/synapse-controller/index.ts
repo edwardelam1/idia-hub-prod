@@ -50,12 +50,11 @@ serve(async (req) => {
 
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
-    // 1. DYNAMIC SYNAPSE GAS CALCULATION
-    const baseDataWeight = 1;
-    const volumeCost = aca_record_ids.length * baseDataWeight;
-    const computeCost = volumeCost * query_complexity;
-    const mintingFee = 2;
-    const totalSynapseDeduction = -(computeCost + mintingFee);
+    // FLAT RATE: Every AI search that touches data costs exactly 1 CR ($0.75 fiat).
+    // Record receipt is preserved for egress logging + downstream IDIA Life payout attribution,
+    // but is decoupled from the fee itself.
+    const FLAT_FEE_CR = 1;
+    const totalSynapseDeduction = -FLAT_FEE_CR;
 
     // 2. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
