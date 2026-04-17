@@ -365,9 +365,29 @@ serve(async (req) => {
     const isDataScientistMode = context?.isMarketplaceMode === true;
     const detectedAgent = routeIntent(message);
     const agentPrompt = getAgentPrompt(detectedAgent);
-    const rawHealth = context?.marketplace?.healthRecords ?? [];
-    const rawLifestyle = context?.marketplace?.lifestyleRecords ?? [];
-    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(rawHealth, rawLifestyle);
+
+    // Frontend payload (may be empty or partial)
+    let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
+    let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
+
+    // OMNI-FETCH: override frontend payload with the full DB record set for this user.
+    // Runs in marketplace mode whenever we have an identifier to resolve.
+    const pseudoId = context?.platformGuid || context?.userId;
+    if (isDataScientistMode && pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const audit = await fetchOmniRecords(supabase, pseudoId);
+      if (audit.success) {
+        if (audit.health.length > 0) sourceHealth = audit.health;
+        if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
+        console.log(
+          `[HUB_ANALYST] DB override for ${pseudoId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records (frontend payload had ${context?.marketplace?.healthRecords?.length ?? 0}h/${context?.marketplace?.lifestyleRecords?.length ?? 0}l).`,
+        );
+      } else {
+        console.warn(`[HUB_ANALYST] Omni-fetch failed for ${pseudoId}: ${audit.error ?? "see prior logs"}`);
+      }
+    }
+
+    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(sourceHealth, sourceLifestyle);
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
     const marketplaceSummary = isDataScientistMode ? summarizeMarketplaceData(healthMetrics, lifestyleEvents) : null;
 
