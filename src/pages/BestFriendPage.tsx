@@ -56,7 +56,7 @@ const BestFriendPage = () => {
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         const { data: healthData } = await supabase
-          .from("staged_health_data", "staged_app_data")
+          .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id);
         realPipelineData = healthData || [];
@@ -79,70 +79,36 @@ const BestFriendPage = () => {
 
       const receipt: string[] = chatResponse?.consumed_records || [];
 
-      // 4. SYNAPSE CASHIER — only fire if AI actually consumed records (flat 1 CR)
+      // 4. SYNAPSE CASHIER — fire-and-forget burn + ledger write
       let liabilityTokenHash: string | null = null;
-      supabase.functions.invoke("synapse-controller", {
-          body: {
-            client_id: user.id,
-            aca_record_ids: receipt,
-            intent_type: chatResponse?.activeAgent || "RESEARCH",
-            query_complexity: 1.0,
-          },
-        }).then(({ data, error }) => {
-          
-       console.log("Preparing Hardened Payload for Synapse Engine...");
-        
-        // 1. Ensure we only have a clean array of strings. Fallback to a dummy ID if empty.
-        const cleanIdArray = (realPipelineData && realPipelineData.length > 0) 
-          ? realPipelineData.map((r: any) => String(r.id)) 
-          : ["FORCED-ACA-TEST-001"];
+      const cleanIdArray =
+        receipt.length > 0
+          ? receipt.map((r: any) => String(r))
+          : realPipelineData.length > 0
+          ? realPipelineData.map((r: any) => String(r.id))
+          : [];
 
-        console.log("Clean ID Array:", cleanIdArray);
-
-        // 2. The exact, minimal payload the controller expects
-        const payloadBody = {
-          client_id: String(user.id), // Force string type
-          aca_record_ids: cleanIdArray, 
-          intent_type: "RESEARCH",    // Hardcode to avoid undefined errors
-          query_complexity: 1.0
-        };
-
-        console.log("Payload Body:", JSON.stringify(payloadBody));
-
-        // 3. Fire the request
-        const { data: tokenResult, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
-          body: payloadBody
-        });
-
-        console.log("Engine Response Data:", tokenResult);
-        console.log("Engine Response Error:", synapseError);
-        
-        if (!synapseError) {
-           await refreshBalance();
-        }
-          
-          if (data?.success) {
-            console.log("Token Generated:", data.liability_token_hash);
-            
-            // Ping the global ledger listener to roll the Gas Gauge
-            refreshBalance(); 
-            
-            // Optional: If you need to attach the token to the specific chat bubble, 
-            // you update the message state here AFTER the AI has already moved on.
-          }
-        });
+      if (cleanIdArray.length > 0) {
+        supabase.functions
+          .invoke("synapse-controller", {
+            body: {
+              client_id: String(user.id),
+              aca_record_ids: cleanIdArray,
+              intent_type: chatResponse?.activeAgent || "RESEARCH",
+              query_complexity: 1.0,
+            },
+          })
+          .then(({ data, error: synapseError }) => {
+            if (synapseError) {
+              console.error("Synapse error:", synapseError);
+              return;
+            }
+            if (data?.success) {
+              console.log("Token Generated:", data.liability_token_hash);
+              refreshBalance();
+            }
+          });
       }
-
-      // 4. The AI immediately continues and updates the UI with its text response
-      // It does not wait for the block above to finish.
-      const aiMessage = {
-        role: "assistant",
-        content: chatResponse?.response || "Analysis complete.",
-        // liabilityTokenHash is initially null, the UI can hydrate it later if needed
-        liabilityTokenHash: null 
-      };
-      
-      setMessages(prev => [...prev, aiMessage]);
 
       // 5. RENDER
       setConversation((prev) => [
