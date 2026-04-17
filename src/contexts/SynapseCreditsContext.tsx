@@ -7,6 +7,7 @@ import { formatCredits } from "@/lib/utils";
 interface BalanceData {
   wallet_address: string;
   available_credits: number;
+  fbo_balance: number;
   currency: string;
   last_updated: string;
 }
@@ -63,13 +64,22 @@ export const SynapseCreditsProvider = ({
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: deductions } = await supabase
         .from("synapse_credit_ledger")
-        .select("fiat_amount")
+        .select("amount")
         .eq("user_id", userId)
         .eq("entry_type", "deduction")
         .neq("status", "FAILED")
         .gte("created_at", thirtyDaysAgo);
 
-      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.fiat_amount)), 0);
+      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
+
+      // 3. FBO RESERVOIR: Sum fiat_ledger entries for this user
+      const { data: fboEntries } = await supabase
+        .from("fiat_ledger")
+        .select("amount_usd")
+        .eq("user_id", userId)
+        .neq("status", "FAILED");
+
+      const fboBalance = (fboEntries || []).reduce((sum, e) => sum + Number(e.amount_usd ?? 0), 0);
       const dailyAvg = totalDeductions / 30;
 
       let burnStatus: "healthy" | "warning" | "critical" = "healthy";
@@ -87,6 +97,7 @@ export const SynapseCreditsProvider = ({
       setBalanceData({
         wallet_address: walletAddress,
         available_credits: credits,
+        fbo_balance: fboBalance,
         currency: "SYNAPSE_CREDITS",
         last_updated: new Date().toISOString(),
       });

@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useBillingData, PLAN_PRICING } from "@/hooks/useBillingData";
 import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
+import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
 import {
   Activity,
   ShieldCheck,
@@ -83,10 +84,16 @@ const IndividualDashboard = () => {
 
         {/* ──── OVERVIEW TAB ──── */}
         <TabsContent value="overview" className="flex-1 mt-3 space-y-3 overflow-hidden">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <Card>
               <CardContent className="p-3">
                 <SynapseGasGauge />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-3">
+                <FBOReservoirGauge />
               </CardContent>
             </Card>
 
