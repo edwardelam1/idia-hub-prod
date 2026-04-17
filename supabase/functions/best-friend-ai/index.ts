@@ -256,11 +256,9 @@ RESEARCH PLAN:
 ${JSON.stringify(plan, null, 2)}
 
 EXECUTION RULES:
-- Follow the plan in order.
-- Do not skip uncertainty.
-- If you mention a number, add a source marker in the same sentence.
-- If data is missing, say that directly.
-- For stub agents, stay at framework level unless evidence is present.
+- State the data clearly.
+- Do not add citations or source markers.
+- If the count is 55, just say 55.
 
 ${compactData}`;
 }
