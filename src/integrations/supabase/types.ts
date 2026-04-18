@@ -930,6 +930,27 @@ export type Database = {
           },
         ]
       }
+      community_pool_ledger: {
+        Row: {
+          id: string
+          pool_type: string
+          total_value: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          pool_type: string
+          total_value?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          pool_type?: string
+          total_value?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       competitive_analysis: {
         Row: {
           analysis_date: string
@@ -1255,7 +1276,7 @@ export type Database = {
         }
         Insert: {
           access_token?: string | null
-          connection_name: string
+          connection_name?: string
           connection_type: string
           created_at?: string
           id?: string
@@ -1443,6 +1464,30 @@ export type Database = {
           },
         ]
       }
+      decentralized_community_pool: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          fiat_amount: number
+          id: string
+          pool_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          fiat_amount?: number
+          id?: string
+          pool_type: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          fiat_amount?: number
+          id?: string
+          pool_type?: string
+        }
+        Relationships: []
+      }
       demographic_clusters: {
         Row: {
           behavior_patterns: Json
@@ -1603,46 +1648,79 @@ export type Database = {
       }
       egress_logs: {
         Row: {
+          aca_record_ids: string[] | null
           aca_record_references: string[]
           batch_checksum: string | null
-          client_id: string
+          client_id: string | null
+          consumption_weight: number | null
           country_of_origin: string
           created_at: string
           data_payload_summary: Json | null
           digiramp_anchor_id: string
           egress_type: string
           id: string
+          intent_type: string | null
+          liability_token: string | null
           liability_token_hash: string | null
+          manifest_hashes: string[] | null
+          pseudo_user_id: string | null
+          query_complexity: number | null
+          settlement_status: string | null
+          staged_data_ids: string[] | null
+          status: string | null
           synapse_ledger_entry_id: string | null
           user_id: string
+          verification_status: string | null
         }
         Insert: {
+          aca_record_ids?: string[] | null
           aca_record_references?: string[]
           batch_checksum?: string | null
-          client_id: string
+          client_id?: string | null
+          consumption_weight?: number | null
           country_of_origin?: string
           created_at?: string
           data_payload_summary?: Json | null
           digiramp_anchor_id: string
           egress_type?: string
           id?: string
+          intent_type?: string | null
+          liability_token?: string | null
           liability_token_hash?: string | null
+          manifest_hashes?: string[] | null
+          pseudo_user_id?: string | null
+          query_complexity?: number | null
+          settlement_status?: string | null
+          staged_data_ids?: string[] | null
+          status?: string | null
           synapse_ledger_entry_id?: string | null
           user_id: string
+          verification_status?: string | null
         }
         Update: {
+          aca_record_ids?: string[] | null
           aca_record_references?: string[]
           batch_checksum?: string | null
-          client_id?: string
+          client_id?: string | null
+          consumption_weight?: number | null
           country_of_origin?: string
           created_at?: string
           data_payload_summary?: Json | null
           digiramp_anchor_id?: string
           egress_type?: string
           id?: string
+          intent_type?: string | null
+          liability_token?: string | null
           liability_token_hash?: string | null
+          manifest_hashes?: string[] | null
+          pseudo_user_id?: string | null
+          query_complexity?: number | null
+          settlement_status?: string | null
+          staged_data_ids?: string[] | null
+          status?: string | null
           synapse_ledger_entry_id?: string | null
           user_id?: string
+          verification_status?: string | null
         }
         Relationships: []
       }
@@ -2287,6 +2365,36 @@ export type Database = {
           recorded_at?: string | null
           step_count?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      idia_life_accounts: {
+        Row: {
+          created_at: string | null
+          id: string
+          last_deposit_at: string | null
+          liquid_balance: number | null
+          pseudo_user_id: string
+          total_earned: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          last_deposit_at?: string | null
+          liquid_balance?: number | null
+          pseudo_user_id: string
+          total_earned?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          last_deposit_at?: string | null
+          liquid_balance?: number | null
+          pseudo_user_id?: string
+          total_earned?: number | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -3730,6 +3838,7 @@ export type Database = {
           interests: string[] | null
           is_501c3_verified: boolean | null
           is_seed_backed_up: boolean | null
+          is_sovereign: boolean | null
           kyc_status: string | null
           kyc_submitted_at: string | null
           kyc_tier: number
@@ -3738,6 +3847,7 @@ export type Database = {
           location: string | null
           motivational_phase: string | null
           occupation: string | null
+          onboarding_completed: boolean | null
           platform_guid: string
           quiet_time_enabled: boolean | null
           quiet_time_end: string | null
@@ -3763,6 +3873,7 @@ export type Database = {
           interests?: string[] | null
           is_501c3_verified?: boolean | null
           is_seed_backed_up?: boolean | null
+          is_sovereign?: boolean | null
           kyc_status?: string | null
           kyc_submitted_at?: string | null
           kyc_tier?: number
@@ -3771,6 +3882,7 @@ export type Database = {
           location?: string | null
           motivational_phase?: string | null
           occupation?: string | null
+          onboarding_completed?: boolean | null
           platform_guid?: string
           quiet_time_enabled?: boolean | null
           quiet_time_end?: string | null
@@ -3796,6 +3908,7 @@ export type Database = {
           interests?: string[] | null
           is_501c3_verified?: boolean | null
           is_seed_backed_up?: boolean | null
+          is_sovereign?: boolean | null
           kyc_status?: string | null
           kyc_submitted_at?: string | null
           kyc_tier?: number
@@ -3804,6 +3917,7 @@ export type Database = {
           location?: string | null
           motivational_phase?: string | null
           occupation?: string | null
+          onboarding_completed?: boolean | null
           platform_guid?: string
           quiet_time_enabled?: boolean | null
           quiet_time_end?: string | null
@@ -4172,6 +4286,45 @@ export type Database = {
           source?: string | null
           step_count?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      raw_health_data_flat: {
+        Row: {
+          avg_heart_rate: number | null
+          device_type: string | null
+          full_sync_payload: Json
+          id: string
+          processed: boolean | null
+          recorded_at: string | null
+          sync_session_id: string | null
+          total_calories_burned: number | null
+          total_steps_in_sync: number | null
+          user_id: string
+        }
+        Insert: {
+          avg_heart_rate?: number | null
+          device_type?: string | null
+          full_sync_payload: Json
+          id?: string
+          processed?: boolean | null
+          recorded_at?: string | null
+          sync_session_id?: string | null
+          total_calories_burned?: number | null
+          total_steps_in_sync?: number | null
+          user_id: string
+        }
+        Update: {
+          avg_heart_rate?: number | null
+          device_type?: string | null
+          full_sync_payload?: Json
+          id?: string
+          processed?: boolean | null
+          recorded_at?: string | null
+          sync_session_id?: string | null
+          total_calories_burned?: number | null
+          total_steps_in_sync?: number | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -4818,12 +4971,14 @@ export type Database = {
           activity_type: string
           created_at: string | null
           data_quality_score: number | null
+          effort_score: number | null
           entity_id: string | null
           id: string
           payload: Json
           processed_at: string | null
           pseudo_user_id: string | null
           raw_data_id: string | null
+          reward_amount: number | null
           reward_calculated: boolean | null
           synapse_weight_coefficient: number | null
           user_id: string | null
@@ -4833,12 +4988,14 @@ export type Database = {
           activity_type: string
           created_at?: string | null
           data_quality_score?: number | null
+          effort_score?: number | null
           entity_id?: string | null
           id?: string
           payload?: Json
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
+          reward_amount?: number | null
           reward_calculated?: boolean | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
@@ -4848,15 +5005,89 @@ export type Database = {
           activity_type?: string
           created_at?: string | null
           data_quality_score?: number | null
+          effort_score?: number | null
           entity_id?: string | null
           id?: string
           payload?: Json
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
+          reward_amount?: number | null
           reward_calculated?: boolean | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      staged_health_data_daily: {
+        Row: {
+          active_energy_kcal: number | null
+          blood_oxygen_saturation_avg: number | null
+          body_mass_index: number | null
+          caffeine_mg: number | null
+          data_completeness_score: number | null
+          dietary_energy_kcal: number | null
+          distance_walking_running_meters: number | null
+          heart_rate_avg: number | null
+          height_cm: number | null
+          id: string
+          rem_sleep_minutes: number | null
+          resting_heart_rate_avg: number | null
+          reward_amount: number | null
+          reward_calculated: boolean | null
+          step_count: number | null
+          sync_date: string
+          total_sleep_minutes: number | null
+          updated_at: string | null
+          user_id: string
+          water_ml: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          active_energy_kcal?: number | null
+          blood_oxygen_saturation_avg?: number | null
+          body_mass_index?: number | null
+          caffeine_mg?: number | null
+          data_completeness_score?: number | null
+          dietary_energy_kcal?: number | null
+          distance_walking_running_meters?: number | null
+          heart_rate_avg?: number | null
+          height_cm?: number | null
+          id?: string
+          rem_sleep_minutes?: number | null
+          resting_heart_rate_avg?: number | null
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
+          step_count?: number | null
+          sync_date: string
+          total_sleep_minutes?: number | null
+          updated_at?: string | null
+          user_id: string
+          water_ml?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          active_energy_kcal?: number | null
+          blood_oxygen_saturation_avg?: number | null
+          body_mass_index?: number | null
+          caffeine_mg?: number | null
+          data_completeness_score?: number | null
+          dietary_energy_kcal?: number | null
+          distance_walking_running_meters?: number | null
+          heart_rate_avg?: number | null
+          height_cm?: number | null
+          id?: string
+          rem_sleep_minutes?: number | null
+          resting_heart_rate_avg?: number | null
+          reward_amount?: number | null
+          reward_calculated?: boolean | null
+          step_count?: number | null
+          sync_date?: string
+          total_sleep_minutes?: number | null
+          updated_at?: string | null
+          user_id?: string
+          water_ml?: number | null
+          weight_kg?: number | null
         }
         Relationships: []
       }
@@ -5745,6 +5976,7 @@ export type Database = {
           created_at: string
           id: string
           idia_beta_balance: number | null
+          platform_guid: string | null
           total_earned: number | null
           updated_at: string
           user_id: string
@@ -5754,6 +5986,7 @@ export type Database = {
           created_at?: string
           id?: string
           idia_beta_balance?: number | null
+          platform_guid?: string | null
           total_earned?: number | null
           updated_at?: string
           user_id: string
@@ -5763,6 +5996,7 @@ export type Database = {
           created_at?: string
           id?: string
           idia_beta_balance?: number | null
+          platform_guid?: string | null
           total_earned?: number | null
           updated_at?: string
           user_id?: string
@@ -5938,26 +6172,23 @@ export type Database = {
       ai_audit_ledger: {
         Row: {
           activity_type: string | null
-          created_at: string | null
           id: string | null
-          payload: Json | null
-          status: string | null
+          processed_at: string | null
+          reward_amount: number | null
           user_id: string | null
         }
         Insert: {
           activity_type?: string | null
-          created_at?: string | null
           id?: string | null
-          payload?: Json | null
-          status?: never
+          processed_at?: string | null
+          reward_amount?: number | null
           user_id?: string | null
         }
         Update: {
           activity_type?: string | null
-          created_at?: string | null
           id?: string | null
-          payload?: Json | null
-          status?: never
+          processed_at?: string | null
+          reward_amount?: number | null
           user_id?: string | null
         }
         Relationships: []
@@ -6021,6 +6252,10 @@ export type Database = {
         Returns: boolean
       }
       cleanup_orphaned_queue_items: { Args: never; Returns: number }
+      community_pool_ledger: {
+        Args: { p_fiat_amount: number; p_pseudo_id: string }
+        Returns: undefined
+      }
       distribute_data_royalty: {
         Args: {
           p_amount: number
@@ -6069,6 +6304,14 @@ export type Database = {
       get_user_id_from_pseudonym: {
         Args: { p_pseudo_id: string }
         Returns: string
+      }
+      increment_community_pool: {
+        Args: { p_fiat_amount: number; p_pool_type: string }
+        Returns: undefined
+      }
+      increment_idia_life_balance: {
+        Args: { p_fiat_amount: number; p_pseudo_id: string }
+        Returns: undefined
       }
       increment_wallet_cash: {
         Args: { p_amount: number; p_user_id: string }
@@ -6121,6 +6364,16 @@ export type Database = {
           error_count: number
           recovered_count: number
         }[]
+      }
+      settle_synapse_consumption: {
+        Args: {
+          p_aca_hashes: string[]
+          p_agent_type: string
+          p_liability_hash: string
+          p_pseudo_id: string
+          p_weight_coefficient: number
+        }
+        Returns: Json
       }
       trigger_daily_apple_health_sync: {
         Args: never

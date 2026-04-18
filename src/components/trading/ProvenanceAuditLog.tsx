@@ -33,7 +33,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
       .channel('egress-logs-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'egress_logs` },
+        { event: 'INSERT', schema: 'public', table: 'egress_logs' },
         (payload) => {
           queryClient.setQueryData<ProvenanceLog[]>(['provenance-logs', userId], (old = []) => {
             const newLog = payload.new as ProvenanceLog;
