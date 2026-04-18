@@ -37,8 +37,8 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
             </main>
           </div>
           
-          {/* Floating Best Friend - appears on all pages */}
-          <FloatingBestFriend userRole={userRole} />
+          {/* Floating Best Friend - hidden */}
+          {/* <FloatingBestFriend userRole={userRole} /> */}
         </div>
       </SidebarProvider>
     </SynapseCreditsProvider>
