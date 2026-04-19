@@ -453,6 +453,36 @@ export type Database = {
           },
         ]
       }
+      auditable_consent_artifacts: {
+        Row: {
+          aca_record_id: string
+          affirmative_action_type: string
+          consent_timestamp: string
+          created_at: string | null
+          data_types_granted: string[]
+          id: string
+          user_id: string
+        }
+        Insert: {
+          aca_record_id: string
+          affirmative_action_type: string
+          consent_timestamp: string
+          created_at?: string | null
+          data_types_granted: string[]
+          id?: string
+          user_id: string
+        }
+        Update: {
+          aca_record_id?: string
+          affirmative_action_type?: string
+          consent_timestamp?: string
+          created_at?: string | null
+          data_types_granted?: string[]
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       bin_assignments: {
         Row: {
           created_at: string | null
@@ -1672,11 +1702,13 @@ export type Database = {
           aca_record_ids: string[] | null
           aca_record_references: string[]
           batch_checksum: string | null
+          bundle_id: string | null
           client_id: string | null
           consumption_weight: number | null
           country_of_origin: string
           created_at: string
           data_payload_summary: Json | null
+          data_points_count: number | null
           digiramp_anchor_id: string
           egress_type: string
           id: string
@@ -1685,6 +1717,7 @@ export type Database = {
           liability_token_hash: string | null
           manifest_hashes: string[] | null
           pseudo_user_id: string | null
+          purchaser_id: string | null
           query_complexity: number | null
           settlement_status: string | null
           staged_data_ids: string[] | null
@@ -1697,11 +1730,13 @@ export type Database = {
           aca_record_ids?: string[] | null
           aca_record_references?: string[]
           batch_checksum?: string | null
+          bundle_id?: string | null
           client_id?: string | null
           consumption_weight?: number | null
           country_of_origin?: string
           created_at?: string
           data_payload_summary?: Json | null
+          data_points_count?: number | null
           digiramp_anchor_id: string
           egress_type?: string
           id?: string
@@ -1710,6 +1745,7 @@ export type Database = {
           liability_token_hash?: string | null
           manifest_hashes?: string[] | null
           pseudo_user_id?: string | null
+          purchaser_id?: string | null
           query_complexity?: number | null
           settlement_status?: string | null
           staged_data_ids?: string[] | null
@@ -1722,11 +1758,13 @@ export type Database = {
           aca_record_ids?: string[] | null
           aca_record_references?: string[]
           batch_checksum?: string | null
+          bundle_id?: string | null
           client_id?: string | null
           consumption_weight?: number | null
           country_of_origin?: string
           created_at?: string
           data_payload_summary?: Json | null
+          data_points_count?: number | null
           digiramp_anchor_id?: string
           egress_type?: string
           id?: string
@@ -1735,6 +1773,7 @@ export type Database = {
           liability_token_hash?: string | null
           manifest_hashes?: string[] | null
           pseudo_user_id?: string | null
+          purchaser_id?: string | null
           query_complexity?: number | null
           settlement_status?: string | null
           staged_data_ids?: string[] | null
@@ -4265,7 +4304,7 @@ export type Database = {
           processed: boolean | null
           processing_completed_at: string | null
           processing_started_at: string | null
-          processing_status: string | null
+          processing_status: Database["public"]["Enums"]["sync_status"] | null
           raw_payload: Json
           recorded_at: string | null
           retry_count: number | null
@@ -4284,7 +4323,7 @@ export type Database = {
           processed?: boolean | null
           processing_completed_at?: string | null
           processing_started_at?: string | null
-          processing_status?: string | null
+          processing_status?: Database["public"]["Enums"]["sync_status"] | null
           raw_payload: Json
           recorded_at?: string | null
           retry_count?: number | null
@@ -4303,7 +4342,7 @@ export type Database = {
           processed?: boolean | null
           processing_completed_at?: string | null
           processing_started_at?: string | null
-          processing_status?: string | null
+          processing_status?: Database["public"]["Enums"]["sync_status"] | null
           raw_payload?: Json
           recorded_at?: string | null
           retry_count?: number | null
@@ -4997,13 +5036,20 @@ export type Database = {
           data_quality_score: number | null
           effort_score: number | null
           entity_id: string | null
+          faculty: string | null
+          heart_rate_variability_ms: number | null
           id: string
+          is_settled: boolean | null
           payload: Json
+          platform_guid: string | null
           processed_at: string | null
           pseudo_user_id: string | null
           raw_data_id: string | null
           reward_amount: number | null
           reward_calculated: boolean | null
+          settled_at: string | null
+          status: string | null
+          steps_count: number | null
           synapse_weight_coefficient: number | null
           user_id: string | null
         }
@@ -5014,13 +5060,20 @@ export type Database = {
           data_quality_score?: number | null
           effort_score?: number | null
           entity_id?: string | null
+          faculty?: string | null
+          heart_rate_variability_ms?: number | null
           id?: string
+          is_settled?: boolean | null
           payload?: Json
+          platform_guid?: string | null
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
+          settled_at?: string | null
+          status?: string | null
+          steps_count?: number | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
         }
@@ -5031,13 +5084,20 @@ export type Database = {
           data_quality_score?: number | null
           effort_score?: number | null
           entity_id?: string | null
+          faculty?: string | null
+          heart_rate_variability_ms?: number | null
           id?: string
+          is_settled?: boolean | null
           payload?: Json
+          platform_guid?: string | null
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
+          settled_at?: string | null
+          status?: string | null
+          steps_count?: number | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
         }
@@ -5238,6 +5298,7 @@ export type Database = {
           amount_idia_usd: number | null
           balance_after: number | null
           balance_idia_beta: number | null
+          balance_previous: number | null
           circle_transfer_id: string | null
           created_at: string | null
           description: string | null
@@ -5263,6 +5324,7 @@ export type Database = {
           amount_idia_usd?: number | null
           balance_after?: number | null
           balance_idia_beta?: number | null
+          balance_previous?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -5288,6 +5350,7 @@ export type Database = {
           amount_idia_usd?: number | null
           balance_after?: number | null
           balance_idia_beta?: number | null
+          balance_previous?: number | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -6226,6 +6289,24 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_reality_view: {
+        Row: {
+          current_war_chest: number | null
+          system_integrity_score: number | null
+          total_biometric_records: number | null
+        }
+        Relationships: []
+      }
+      global_reality_manifest: {
+        Row: {
+          actual_row_count: number | null
+          anchored_census_count: number | null
+          chronic_hrv_avg: number | null
+          lifetime_steps: number | null
+          war_chest_total: number | null
+        }
+        Relationships: []
+      }
       library_actuals: {
         Row: {
           data_category: string | null
@@ -6406,6 +6487,7 @@ export type Database = {
         | "settlement"
         | "fbo_dissemination"
         | "FREE_COMPUTE"
+      sync_status: "pending" | "processing" | "completed" | "failed"
       user_role: "owner" | "manager" | "employee" | "warehouse_associate"
     }
     CompositeTypes: {
@@ -6545,6 +6627,7 @@ export const Constants = {
         "fbo_dissemination",
         "FREE_COMPUTE",
       ],
+      sync_status: ["pending", "processing", "completed", "failed"],
       user_role: ["owner", "manager", "employee", "warehouse_associate"],
     },
   },
