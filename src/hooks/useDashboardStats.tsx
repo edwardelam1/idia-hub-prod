@@ -27,7 +27,7 @@ export const useDashboardStats = (): DashboardStats => {
   } = useQuery({
     queryKey: ["pipeline-health"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("check_health_data_pipeline_status");
+      const { data, error } = await (supabase.rpc as any)("check_health_data_pipeline_status");
       if (error) throw error;
       return (data as unknown as PipelineHealth[])?.[0] ?? null;
     },
