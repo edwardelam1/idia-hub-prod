@@ -118,7 +118,7 @@ export default function ComplianceDashboard() {
                   <span className="font-medium text-foreground">Controlling Partner Linkage</span>
                   <span className="text-green-600 font-bold">Compliant</span>
                 </div>
-                <Progress value={100} className="h-2 bg-muted" indicatorClassName="bg-green-500" />
+                <Progress value={100} className="h-2 bg-muted [&>div]:bg-green-500" />
                 <p className="text-xs text-muted-foreground">The enterprise record is securely anchored to an IDIA Life verified owner.</p>
               </div>
 
@@ -127,7 +127,7 @@ export default function ComplianceDashboard() {
                   <span className="font-medium text-foreground">User ACA (Auditable Consent Artifact) Coverage</span>
                   <span className="text-blue-600 font-bold">95%</span>
                 </div>
-                <Progress value={95} className="h-2 bg-muted" indicatorClassName="bg-blue-500" />
+                <Progress value={95} className="h-2 bg-muted [&>div]:bg-blue-500" />
                 <p className="text-xs text-muted-foreground">95% of invited enterprise users have completed sovereign onboarding. 5% pending.</p>
               </div>
 

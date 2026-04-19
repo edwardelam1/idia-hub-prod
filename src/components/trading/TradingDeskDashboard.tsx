@@ -19,9 +19,9 @@ import {
 } from "lucide-react";
 import { APIKeyManagement } from "./APIKeyManagement";
 import { APIEndpoints } from "./APIEndpoints";
-import { APIMonitoring } from "./APIMonitoring";
+import APIMonitoring from "./APIMonitoring";
 import { APIBilling } from "./APIBilling";
-import { FeatureFeedAccess } from "./FeatureFeedAccess";
+import FeatureFeedAccess from "./FeatureFeedAccess";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { Skeleton } from "@/components/ui/skeleton";
 
