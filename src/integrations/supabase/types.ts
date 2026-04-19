@@ -14,6 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_conversion_requests: {
+        Row: {
+          company_name: string
+          contact_name: string
+          contact_role: string
+          created_at: string | null
+          id: string
+          industry: string | null
+          request_type: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company_name: string
+          contact_name: string
+          contact_role: string
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          request_type?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company_name?: string
+          contact_name?: string
+          contact_role?: string
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          request_type?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      api_keys: {
+        Row: {
+          created_at: string | null
+          environment: string | null
+          id: string
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          environment?: string | null
+          id?: string
+          key_hash: string
+          key_prefix: string
+          last_used_at?: string | null
+          name: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          environment?: string | null
+          id?: string
+          key_hash?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      api_metrics: {
+        Row: {
+          endpoint: string
+          id: string
+          key_id: string | null
+          latency_ms: number
+          status_code: number
+          timestamp: string | null
+        }
+        Insert: {
+          endpoint: string
+          id?: string
+          key_id?: string | null
+          latency_ms: number
+          status_code: number
+          timestamp?: string | null
+        }
+        Update: {
+          endpoint?: string
+          id?: string
+          key_id?: string | null
+          latency_ms?: number
+          status_code?: number
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_metrics_key_id_fkey"
+            columns: ["key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ar_campaign_performance: {
         Row: {
           business_id: string
@@ -1539,6 +1649,47 @@ export type Database = {
         }
         Relationships: []
       }
+      delt_transfers: {
+        Row: {
+          aca_hash: string
+          action_type: string
+          created_at: string | null
+          credit_cost: number
+          enterprise_id: string | null
+          id: string
+          payload_summary: string | null
+          user_id: string | null
+        }
+        Insert: {
+          aca_hash: string
+          action_type: string
+          created_at?: string | null
+          credit_cost: number
+          enterprise_id?: string | null
+          id?: string
+          payload_summary?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          aca_hash?: string
+          action_type?: string
+          created_at?: string | null
+          credit_cost?: number
+          enterprise_id?: string | null
+          id?: string
+          payload_summary?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delt_transfers_enterprise_id_fkey"
+            columns: ["enterprise_id"]
+            isOneToOne: false
+            referencedRelation: "enterprises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       demographic_clusters: {
         Row: {
           behavior_patterns: Json
@@ -1948,6 +2099,92 @@ export type Database = {
           },
         ]
       }
+      enterprise_users: {
+        Row: {
+          created_at: string | null
+          email: string
+          enterprise_id: string | null
+          id: string
+          idia_verified: boolean | null
+          last_active: string | null
+          name: string
+          platform_guid: string | null
+          role: string
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          enterprise_id?: string | null
+          id?: string
+          idia_verified?: boolean | null
+          last_active?: string | null
+          name: string
+          platform_guid?: string | null
+          role: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          enterprise_id?: string | null
+          id?: string
+          idia_verified?: boolean | null
+          last_active?: string | null
+          name?: string
+          platform_guid?: string | null
+          role?: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enterprise_users_enterprise_id_fkey"
+            columns: ["enterprise_id"]
+            isOneToOne: false
+            referencedRelation: "enterprises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enterprises: {
+        Row: {
+          available_credits: number | null
+          created_at: string | null
+          id: string
+          industry: string | null
+          kyb_status: string | null
+          name: string
+          tier: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          available_credits?: number | null
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          kyb_status?: string | null
+          name: string
+          tier?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          available_credits?: number | null
+          created_at?: string | null
+          id?: string
+          industry?: string | null
+          kyb_status?: string | null
+          name?: string
+          tier?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       facility_assignments: {
         Row: {
           assigned_at: string | null
@@ -1979,6 +2216,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      feature_feeds: {
+        Row: {
+          description: string | null
+          id: string
+          latency: string | null
+          name: string
+          status: string | null
+          subscribers: number | null
+          topic: string
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          latency?: string | null
+          name: string
+          status?: string | null
+          subscribers?: number | null
+          topic: string
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          latency?: string | null
+          name?: string
+          status?: string | null
+          subscribers?: number | null
+          topic?: string
+        }
+        Relationships: []
       }
       fiat_ledger: {
         Row: {
@@ -6350,6 +6617,10 @@ export type Database = {
       }
       community_pool_ledger: {
         Args: { p_fiat_amount: number; p_pseudo_id: string }
+        Returns: undefined
+      }
+      deduct_synapse_credit: {
+        Args: { amount_to_deduct: number; target_enterprise_id: string }
         Returns: undefined
       }
       distribute_data_royalty: {
