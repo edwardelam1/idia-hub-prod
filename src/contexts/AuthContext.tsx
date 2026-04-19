@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
-// --- Types & Interfaces ---
 export type AccountType = "individual" | "business";
 export type SubscriptionTier = "none" | "base" | "analyst" | "professional" | "enterprise";
 
@@ -14,13 +13,12 @@ interface AuthUser {
   email?: string;
 }
 
-/** In-memory PII — NEVER persisted to database or localStorage */
 export interface PiiData {
   displayName: string | null;
   fullName: string | null;
   email: string | null;
   avatarUrl: string | null;
-  platformGuid: string | null; // Fixed naming to resolve TS2551
+  platformGuid: string | null;
   source: "secure_enclave" | "auth_metadata_stub" | "mock";
 }
 
@@ -38,7 +36,7 @@ interface AuthContextType {
   isAdminRole: boolean;
   isLoading: boolean;
   subscriptionTier: SubscriptionTier;
-  activePerspective: AccountType; // Restored to resolve TS2339
+  activePerspective: AccountType;
   switchPerspective: (type: AccountType) => void;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
@@ -76,7 +74,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { data, error } = await supabase.functions.invoke("life-pii-bridge");
       if (error) return null;
-      // Map platform_guid (DB) to platformGuid (Frontend)
       return {
         displayName: data.display_name ?? null,
         fullName: data.full_name ?? null,
@@ -109,9 +106,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           profileRow = retryRow;
         }
 
+        // --- THE FIX: REDIRECT TO SOVEREIGN ONBOARDING ---
         if (!profileRow || !profileRow.platform_guid) {
-          await supabase.auth.signOut();
-          window.location.href = "https://life.thebigidia.com";
+          console.log("No Sovereign Identity found, redirecting to IDIA Life...");
+          window.location.href = `https://thebigidia.com/auth?mode=signup&return_to=hub`;
           return;
         }
 
