@@ -1,61 +1,133 @@
 
 
-## Plan: Unfreeze the Synapse settlement loop (corrected to actual schema)
+## Plan: Make Best Friend AI cite the Library (honesty mode)
 
-The user's audit is directionally right but references tables/columns that don't exist (`synapse_ledger`, `pseudo_id`, `owner_id`, `status`). The real schema is `synapse_credit_ledger` + `egress_logs`, and `synapse-controller` already writes both atomically with service role. No RPC or RLS policy needed.
+Modify `supabase/functions/best-friend-ai/index.ts` to remove the suppression layer and force citation of `aca_hash_key` / data categories from the staged tables.
 
-The actual blockers are in `best-friend-ai`:
+### Changes
 
-1. **Receipt is agent-gated.** Only `MEDICAL_AGENT` returns health hashes; `CONSTRUCTION_AGENT`/`FINANCE_AGENT` return only lifestyle hashes; `GENERAL_NAVIGATOR` returns nothing. Any ambiguous question routes to NAVIGATOR → empty receipt → no burn.
-2. **Lifestyle hashes are all NULL** in DB (64/64). Even when LIFESTYLE branch fires, `.filter(Boolean)` drops every row.
-3. **Fallback identifier missing.** When `aca_hash_key` is null, we should fall back to the row `id` so the controller still records what was consumed.
-
-### Fix in `supabase/functions/best-friend-ai/index.ts` (receipt block, lines 383-391)
-
-Replace agent-gated logic with: in marketplace mode, build the receipt from **every record actually shown to the AI**, using `aca_hash_key` when present and falling back to `id`:
+**1. Replace `ORCHESTRATOR_PROMPT` (lines ~109-117)**
 
 ```ts
-let consumedReceipt: string[] = [];
-if (isDataScientistMode) {
-  const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-  const lifeIds   = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-  consumedReceipt = [...healthIds, ...lifeIds];
+const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst speaking from the Library of Data.
+
+CITATION RULES (MANDATORY):
+- Every quantitative claim must cite its source. Use the format [src: <table>:<aca_hash_key prefix 8 chars>] or [src: <table> n=<count>].
+- When summarizing aggregates, cite the row count and table, e.g. "average HR 72 bpm [src: staged_health_data n=277]".
+- If a metric is not present in the attached Library payload, say "not in Library" — do not infer.
+- Reference data_category and activity_type fields verbatim when relevant.
+
+Language rules:
+- Plain vocabulary, no hype.
+- Brief, but never omit a citation to save space.
+- Numbers first, then the citation, then the trend.`;
+```
+
+**2. Replace `STORE_CLERK_PERSONA` (lines ~119-123)**
+
+```ts
+const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA Hub guide with read access to the Library of Data summary.
+
+You may answer questions about what data exists in the user's Library (counts, categories, last sync) by citing the attached summary.
+For raw row inspection or research-grade analysis, recommend Marketplace Mode.
+When you cite a number, append [src: <table> n=<count>] so the user knows it came from the Library, not a guess.
+Keep it warm, plain, and brief — but always cite.`;
+```
+
+Then in the `serve` handler, when building the Store Clerk prompt, attach a lightweight Library summary so it has something to cite even outside Marketplace Mode. Update the `else` branch (around line 320):
+
+```ts
+} else {
+  // Even in navigation mode, give the clerk the Library summary so it can answer "what's in my data?" honestly.
+  const navSummary = (healthMetrics.length || lifestyleEvents.length)
+    ? `\n\nLIBRARY SNAPSHOT:\n${JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents))}`
+    : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
+  systemPrompt = STORE_CLERK_PERSONA + navSummary;
 }
 ```
 
-This guarantees the frontend's `receipt.length > 0` gate fires whenever the AI actually saw data (the 55 + 64 case the user keeps hitting), regardless of which agent the router picked.
+And lift the omni-fetch gate so it also runs in navigation mode (change `if (isDataScientistMode && pseudoId ...)` to `if (pseudoId && ...)`).
 
-### Backfill `aca_hash_key` for lifestyle records (one-shot SQL via insert tool)
+**3. Activate `runVerificationLoop` (lines ~257-259)**
 
-So future receipts carry real ACA hashes instead of row IDs:
+Replace the pass-through with a real cross-check against the Library payload:
 
-```sql
-UPDATE public.staged_lifestyle_data
-SET aca_hash_key = encode(sha256((id::text || COALESCE(entity_id::text,'') || COALESCE(event_type,''))::bytea), 'hex')
-WHERE aca_hash_key IS NULL;
+```ts
+function runVerificationLoop(
+  draft: string,
+  healthRecords: any[],
+  lifestyleRecords: any[],
+): VerificationResult {
+  const issues: string[] = [];
+  const totalRows = healthRecords.length + lifestyleRecords.length;
+
+  // Check 1: any number-bearing sentence must carry a [src: ...] citation
+  const numericSentences = splitIntoSentences(draft).filter((s) => /\d/.test(s));
+  const uncited = numericSentences.filter((s) => !/\[src:\s*[^\]]+\]/i.test(s));
+  if (uncited.length > 0) {
+    issues.push(`uncited_numeric_claims:${uncited.length}`);
+  }
+
+  // Check 2: if the draft cites a row count, it must match the Library
+  const countMatch = draft.match(/n=(\d+)/);
+  if (countMatch) {
+    const claimed = Number(countMatch[1]);
+    if (claimed !== healthRecords.length && claimed !== lifestyleRecords.length && claimed !== totalRows) {
+      issues.push(`row_count_mismatch:claimed=${claimed},library_health=${healthRecords.length},library_lifestyle=${lifestyleRecords.length}`);
+    }
+  }
+
+  // Check 3: forbid invented aca_hash_key prefixes
+  const hashRefs = [...draft.matchAll(/\[src:\s*\w+:([a-f0-9]{6,})\]/gi)].map((m) => m[1].toLowerCase());
+  if (hashRefs.length > 0) {
+    const validHashes = new Set(
+      [...healthRecords, ...lifestyleRecords]
+        .map((r: any) => String(r.aca_hash_key || "").toLowerCase())
+        .filter(Boolean),
+    );
+    const fabricated = hashRefs.filter((prefix) => ![...validHashes].some((h) => h.startsWith(prefix)));
+    if (fabricated.length > 0) {
+      issues.push(`fabricated_hashes:${fabricated.join(",")}`);
+    }
+  }
+
+  // Append a transparency footer so the user sees the verification result
+  const footer = issues.length === 0
+    ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
+    : `\n\n_Library check flagged: ${issues.join("; ")}._`;
+
+  return { text: draft + footer, issues };
+}
 ```
 
-### What we are NOT doing (and why)
+Update the call site (line ~376) to pass the records:
+```ts
+const verification = runVerificationLoop(draftResponse, healthMetrics, lifestyleEvents);
+```
 
-- **Not creating `trigger_synapse_settlement` RPC.** `synapse-controller` already does the atomic ledger + egress write. Adding a parallel RPC would double-charge.
-- **Not creating `"Synapse Service Access"` RLS policy.** Service role bypasses RLS by definition. Egress writes already succeed when the controller is reached.
-- **Not touching a `synapse_ledger` table.** It doesn't exist. The financial ledger is `synapse_credit_ledger` (already populated by the controller).
+**4. Soften `applyLinguisticGovernance` (lines ~125-134)**
 
-### Verification after deploy
+Keep the banned-hype wordlist but stop flattening punctuation — semicolons and em-dashes carry list/citation structure:
 
-1. Open `/best-friend` in Marketplace Mode, ask any data question.
-2. Confirm `consumed_records` is non-empty in the response.
-3. Run:
-   ```sql
-   SELECT created_at, amount, description FROM synapse_credit_ledger ORDER BY created_at DESC LIMIT 5;
-   SELECT created_at, egress_type, array_length(aca_record_references,1) FROM egress_logs ORDER BY created_at DESC LIMIT 5;
-   ```
-   Expect a fresh `-1` ledger entry and a matching egress row.
+```ts
+function applyLinguisticGovernance(text: string): string {
+  let cleaned = text;
+  for (const phrase of BANNED_WORDS) {
+    const re = new RegExp(phrase, "gi");
+    cleaned = cleaned.replace(re, "");
+  }
+  // Preserve ; and — so cited lists and dashed clauses survive.
+  cleaned = cleaned.replace(/ {2,}/g, " ").trim();
+  return cleaned;
+}
+```
 
 ### Files Modified
-- `supabase/functions/best-friend-ai/index.ts` — receipt construction (lines ~383-391).
-- Migration: backfill `staged_lifestyle_data.aca_hash_key`.
+- `supabase/functions/best-friend-ai/index.ts` — prompt blocks, verification loop, linguistic governance, Store Clerk Library injection, omni-fetch gate.
 
 ### Outcome
-- Every marketplace AI query that touches data fires `synapse-controller` → 1 CR burn + egress log + liability token → ledger and provenance UI move.
+- AI must cite `[src: <table> n=<count>]` or `[src: <table>:<hash-prefix>]` on every numeric claim.
+- Drafts get audited against the actual Library payload; mismatches and fabricated hashes appear in `verificationIssues` and as a footer.
+- Store Clerk mode now sees a Library snapshot and can answer "what's in my data?" honestly instead of punting.
+- Punctuation no longer flattened, so cited lists render cleanly.
 
