@@ -1182,7 +1182,7 @@ export const PayAppBlueprint = () => {
   );
 };
 
-export default PayAppBlueprint;  type LucideIcon
+export default PayAppBlueprint;
 } from 'lucide-react';
 
 // Types

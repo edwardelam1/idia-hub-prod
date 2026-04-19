@@ -442,7 +442,7 @@ const OrganizationManagement = () => {
   );
 };
 
-export default OrganizationManagement;      users: 45,
+export default OrganizationManagement;
       status: 'active',
       credits: 12500,
       monthlySpend: 4250,
