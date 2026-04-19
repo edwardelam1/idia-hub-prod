@@ -124,20 +124,25 @@ Help the user understand the data yield and next step in plain language.`,
   },
 };
 
-const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst.
-Your goal is to provide a clear, plain-language summary of the data yield.
+const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst speaking from the Library of Data.
+
+CITATION RULES (MANDATORY):
+- Every quantitative claim must cite its source. Use the format [src: <table>:<aca_hash_key prefix 8 chars>] or [src: <table> n=<count>].
+- When summarizing aggregates, cite the row count and table, e.g. "average HR 72 bpm [src: staged_health_data n=277]".
+- If a metric is not present in the attached Library payload, say "not in Library" — do not infer.
+- Reference data_category and activity_type fields verbatim when relevant.
 
 Language rules:
-- No "cited source" markers.
-- No "evidence required" warnings.
-- Just state the numbers and the trends.
-- Use simple vocabulary. No hype.
-- Keep it brief.`;
+- Plain vocabulary, no hype.
+- Brief, but never omit a citation to save space.
+- Numbers first, then the citation, then the trend.`;
 
-const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA platform guide.
-Help users navigate the product.
-If they need raw data or research mode, tell them to use Marketplace Mode.
-Keep it warm, plain, and brief.`;
+const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA Hub guide with read access to the Library of Data summary.
+
+You may answer questions about what data exists in the user's Library (counts, categories, last sync) by citing the attached summary.
+For raw row inspection or research-grade analysis, recommend Marketplace Mode.
+When you cite a number, append [src: <table> n=<count>] so the user knows it came from the Library, not a guess.
+Keep it warm, plain, and brief — but always cite.`;
 
 function applyLinguisticGovernance(text: string): string {
   let cleaned = text;
@@ -145,7 +150,7 @@ function applyLinguisticGovernance(text: string): string {
     const re = new RegExp(phrase, "gi");
     cleaned = cleaned.replace(re, "");
   }
-  cleaned = cleaned.replace(/;/g, ".").replace(/—/g, ",");
+  // Preserve ; and — so cited lists and dashed clauses survive.
   cleaned = cleaned.replace(/ {2,}/g, " ").trim();
   return cleaned;
 }
@@ -263,8 +268,49 @@ EXECUTION RULES:
 ${compactData}`;
 }
 
-function runVerificationLoop(draft: string): VerificationResult {
-  return { text: draft, issues: [] };
+function runVerificationLoop(
+  draft: string,
+  healthRecords: any[],
+  lifestyleRecords: any[],
+): VerificationResult {
+  const issues: string[] = [];
+  const totalRows = healthRecords.length + lifestyleRecords.length;
+
+  // Check 1: any number-bearing sentence must carry a [src: ...] citation
+  const numericSentences = splitIntoSentences(draft).filter((s) => /\d/.test(s));
+  const uncited = numericSentences.filter((s) => !/\[src:\s*[^\]]+\]/i.test(s));
+  if (uncited.length > 0) {
+    issues.push(`uncited_numeric_claims:${uncited.length}`);
+  }
+
+  // Check 2: if the draft cites a row count, it must match the Library
+  const countMatch = draft.match(/n=(\d+)/);
+  if (countMatch) {
+    const claimed = Number(countMatch[1]);
+    if (claimed !== healthRecords.length && claimed !== lifestyleRecords.length && claimed !== totalRows) {
+      issues.push(`row_count_mismatch:claimed=${claimed},library_health=${healthRecords.length},library_lifestyle=${lifestyleRecords.length}`);
+    }
+  }
+
+  // Check 3: forbid invented aca_hash_key prefixes
+  const hashRefs = [...draft.matchAll(/\[src:\s*\w+:([a-f0-9]{6,})\]/gi)].map((m) => m[1].toLowerCase());
+  if (hashRefs.length > 0) {
+    const validHashes = new Set(
+      [...healthRecords, ...lifestyleRecords]
+        .map((r: any) => String(r.aca_hash_key || "").toLowerCase())
+        .filter(Boolean),
+    );
+    const fabricated = hashRefs.filter((prefix) => ![...validHashes].some((h) => h.startsWith(prefix)));
+    if (fabricated.length > 0) {
+      issues.push(`fabricated_hashes:${fabricated.join(",")}`);
+    }
+  }
+
+  const footer = issues.length === 0
+    ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
+    : `\n\n_Library check flagged: ${issues.join("; ")}._`;
+
+  return { text: draft + footer, issues };
 }
 
 function normalizeOutput(text: string, _agent: AgentType): string {
@@ -305,7 +351,7 @@ serve(async (req) => {
     // OMNI-FETCH: override frontend payload with the full DB record set for this user.
     // Runs in marketplace mode whenever we have an identifier to resolve.
     const pseudoId = context?.platformGuid || context?.userId;
-    if (isDataScientistMode && pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    if (pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const audit = await fetchOmniRecords(supabase, pseudoId);
       if (audit.success) {
@@ -327,7 +373,10 @@ serve(async (req) => {
     if (isDataScientistMode) {
       systemPrompt = buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents);
     } else {
-      systemPrompt = STORE_CLERK_PERSONA;
+      const navSummary = (healthMetrics.length || lifestyleEvents.length)
+        ? `\n\nLIBRARY SNAPSHOT:\n${JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents))}`
+        : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
+      systemPrompt = STORE_CLERK_PERSONA + navSummary;
     }
 
     const formattedHistory = Array.isArray(history)
@@ -375,7 +424,7 @@ serve(async (req) => {
     }
 
     const draftResponse = data.choices[0].message?.content || "I processed the request but could not format a text response.";
-    const verification = runVerificationLoop(draftResponse);
+    const verification = runVerificationLoop(draftResponse, healthMetrics, lifestyleEvents);
     const aiResponse = normalizeOutput(verification.text, detectedAgent);
 
     console.log(`Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`);
