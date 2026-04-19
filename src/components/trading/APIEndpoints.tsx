@@ -19,7 +19,7 @@ export const APIEndpoints = () => {
       tier: "Analyst",
       latency: "< 100ms",
       credits: 5,
-      auth: "OAuth 2.0 + API Key"
+      auth: "OAuth 2.0 + API Key",
     },
     {
       method: "GET",
@@ -28,7 +28,7 @@ export const APIEndpoints = () => {
       tier: "Professional",
       latency: "< 100ms",
       credits: 15,
-      auth: "OAuth 2.0 + API Key"
+      auth: "OAuth 2.0 + API Key",
     },
     {
       method: "GET",
@@ -37,7 +37,7 @@ export const APIEndpoints = () => {
       tier: "Enterprise",
       latency: "< 100ms",
       credits: 50,
-      auth: "OAuth 2.0 + API Key"
+      auth: "OAuth 2.0 + API Key",
     },
     {
       method: "POST",
@@ -46,8 +46,8 @@ export const APIEndpoints = () => {
       tier: "Enterprise",
       latency: "< 100ms",
       credits: 50,
-      auth: "OAuth 2.0 + API Key"
-    }
+      auth: "OAuth 2.0 + API Key",
+    },
   ];
 
   const mcpConfigExample = `{
@@ -85,6 +85,23 @@ response = requests.get(
 data = response.json()
 print(data)`;
 
+  const nodejsExample = `const axios = require('axios');
+
+const config = {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  }
+};
+
+axios.get('https://api.idiahub.com/v1/features/market-data', config)
+  .then(response => {
+    console.log(response.data);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+  });`;
+
   const responseExample = `{
   "data": {
     "feature_id": "market-data-2025-10-27",
@@ -113,7 +130,6 @@ print(data)`;
 
   return (
     <div className="space-y-4">
-      {/* Agentic MCP Access Section */}
       <Card className="border-primary/50 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -121,7 +137,8 @@ print(data)`;
             Agentic MCP Access (Model Context Protocol)
           </CardTitle>
           <CardDescription className="text-foreground/80">
-            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle DELT wrapping and Synapse credit burns for autonomous agents.
+            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle DELT wrapping and Synapse
+            credit burns for autonomous agents.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -131,9 +148,18 @@ print(data)`;
                 <Terminal className="h-4 w-4" /> Available MCP Tools
               </h4>
               <ul className="text-sm space-y-2 text-muted-foreground">
-                <li><code className="text-primary bg-primary/10 px-1 py-0.5 rounded">query_market_features</code> - Pull real-time algo trading telemetry</li>
-                <li><code className="text-primary bg-primary/10 px-1 py-0.5 rounded">execute_delt_transfer</code> - Autonomous consent artifact generation</li>
-                <li><code className="text-primary bg-primary/10 px-1 py-0.5 rounded">verify_digiramp_anchor</code> - Check blockchain provenance</li>
+                <li>
+                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">query_market_features</code> - Pull
+                  real-time algo trading telemetry
+                </li>
+                <li>
+                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">execute_delt_transfer</code> -
+                  Autonomous consent artifact generation
+                </li>
+                <li>
+                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">verify_digiramp_anchor</code> - Check
+                  blockchain provenance
+                </li>
               </ul>
             </div>
             <div className="space-y-2">
@@ -156,16 +182,13 @@ print(data)`;
         </CardContent>
       </Card>
 
-      {/* Standard REST API Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5 text-primary" />
             REST API Consumption Matrix
           </CardTitle>
-          <CardDescription>
-            Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption
-          </CardDescription>
+          <CardDescription>Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -174,10 +197,10 @@ print(data)`;
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2">
-                      <Badge 
+                      <Badge
                         variant="outline"
                         className={
-                          endpoint.method === "GET" 
+                          endpoint.method === "GET"
                             ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
                             : "bg-green-500/10 text-green-500 border-green-500/20"
                         }
@@ -202,14 +225,14 @@ print(data)`;
                   <Badge variant="outline" className="text-xs">
                     {endpoint.credits} credits/call
                   </Badge>
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className={
                       endpoint.tier === "Enterprise"
                         ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-xs"
                         : endpoint.tier === "Professional"
-                        ? "bg-primary/10 text-primary border-primary/20 text-xs"
-                        : "bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs"
+                          ? "bg-primary/10 text-primary border-primary/20 text-xs"
+                          : "bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs"
                     }
                   >
                     {endpoint.tier} Tier
@@ -224,9 +247,7 @@ print(data)`;
       <Card>
         <CardHeader>
           <CardTitle>REST Code Examples</CardTitle>
-          <CardDescription>
-            Integration examples for popular programming languages
-          </CardDescription>
+          <CardDescription>Integration examples for popular programming languages</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="curl">
@@ -290,7 +311,9 @@ print(data)`;
       <Card>
         <CardHeader>
           <CardTitle>Institutional Response Format</CardTitle>
-          <CardDescription>All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance</CardDescription>
+          <CardDescription>
+            All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm text-muted-foreground">
@@ -301,5 +324,3 @@ print(data)`;
     </div>
   );
 };
-
-export default APIEndpoints;
