@@ -1,13 +1,21 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, Copy, CheckCircle2, FileText, AlertCircle, Loader2, Search, Filter, ArrowUpDown } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+  ShieldCheck,
+  Copy,
+  CheckCircle2,
+  FileText,
+  AlertCircle,
+  Loader2,
+  Search,
+  Filter,
+  ArrowUpDown,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ProvenanceLog {
   id: string;
@@ -27,30 +35,24 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  // Search and Filter State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [egressFilter, setEgressFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [egressFilter, setEgressFilter] = useState<string>("all");
 
-  // Realtime subscription for instant updates
   useEffect(() => {
     if (!userId) return;
 
     const channel = supabase
-      .channel('egress-logs-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'egress_logs' },
-        (payload) => {
-          queryClient.setQueryData<ProvenanceLog[]>(['provenance-logs', userId], (old = []) => {
-            const newLog = payload.new as ProvenanceLog;
-            if (newLog.user_id && newLog.user_id !== userId) return old;
-            if (old.some((l) => l.id === newLog.id)) return old;
-            return [newLog, ...old];
-          });
-          queryClient.invalidateQueries({ queryKey: ['provenance-logs', userId] });
-        }
-      )
+      .channel("egress-logs-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
+        queryClient.setQueryData<ProvenanceLog[]>(["provenance-logs", userId], (old = []) => {
+          const newLog = payload.new as ProvenanceLog;
+          if (newLog.user_id && newLog.user_id !== userId) return old;
+          if (old.some((l) => l.id === newLog.id)) return old;
+          return [newLog, ...old];
+        });
+        queryClient.invalidateQueries({ queryKey: ["provenance-logs", userId] });
+      })
       .subscribe();
 
     return () => {
@@ -58,15 +60,20 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     };
   }, [userId, queryClient]);
 
-  // Fetch larger set to allow effective client-side filtering
-  const { data: logs = [], isLoading, error } = useQuery({
-    queryKey: ['provenance-logs', userId],
+  const {
+    data: logs = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["provenance-logs", userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('egress_logs')
-        .select('id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id')
-        .order('created_at', { ascending: false })
-        .limit(500); 
+        .from("egress_logs")
+        .select(
+          "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id",
+        )
+        .order("created_at", { ascending: false })
+        .limit(500);
 
       if (error) throw error;
       return (data || []) as ProvenanceLog[];
@@ -74,30 +81,28 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     enabled: !!userId,
   });
 
-  // Client-side filtering and sorting logic
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
 
-    // 1. Search Filter (ACA Hash, Digiramp Anchor, Tokens)
     if (searchTerm.trim()) {
       const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter(log => 
-        (log.liability_token_hash && log.liability_token_hash.toLowerCase().includes(lowerSearch)) ||
-        (log.digiramp_anchor_id && log.digiramp_anchor_id.toLowerCase().includes(lowerSearch)) ||
-        (log.aca_record_references && log.aca_record_references.some(ref => ref.toLowerCase().includes(lowerSearch)))
+      result = result.filter(
+        (log) =>
+          (log.liability_token_hash && log.liability_token_hash.toLowerCase().includes(lowerSearch)) ||
+          (log.digiramp_anchor_id && log.digiramp_anchor_id.toLowerCase().includes(lowerSearch)) ||
+          (log.aca_record_references &&
+            log.aca_record_references.some((ref) => ref.toLowerCase().includes(lowerSearch))),
       );
     }
 
-    // 2. Type Filter
-    if (egressFilter !== 'all') {
-      result = result.filter(log => log.egress_type === egressFilter);
+    if (egressFilter !== "all") {
+      result = result.filter((log) => log.egress_type === egressFilter);
     }
 
-    // 3. Sort Order
     result.sort((a, b) => {
       const dateA = new Date(a.created_at).getTime();
       const dateB = new Date(b.created_at).getTime();
-      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+      return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
     });
 
     return result;
@@ -110,13 +115,12 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   };
 
   const truncateHash = (hash: string) => {
-    if (!hash || hash.length < 16) return hash || '—';
+    if (!hash || hash.length < 16) return hash || "—";
     return `${hash.substring(0, 8)}…${hash.substring(hash.length - 8)}`;
   };
 
-  // Derive unique egress types from data for the filter dropdown
   const uniqueEgressTypes = useMemo(() => {
-    const types = new Set(logs.map(log => log.egress_type).filter(Boolean));
+    const types = new Set(logs.map((log) => log.egress_type).filter(Boolean));
     return Array.from(types);
   }, [logs]);
 
@@ -140,18 +144,17 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
 
   return (
     <div className="p-6 space-y-4">
-      {/* Toolbar */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-xl border border-border shadow-sm">
         <div className="relative w-full md:w-96 flex-shrink-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input 
-            placeholder="Search ACA Hashes, DigiRAMP anchors..." 
+          <Input
+            placeholder="Search ACA Hashes, DigiRAMP anchors..."
             className="pl-9 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
+
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2 w-full md:w-auto">
             <Filter className="w-4 h-4 text-muted-foreground" />
@@ -161,8 +164,10 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {uniqueEgressTypes.map(type => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                {uniqueEgressTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -170,7 +175,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
 
           <div className="flex items-center gap-2 w-full md:w-auto">
             <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
-            <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'desc' | 'asc')}>
+            <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as "desc" | "asc")}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Sort" />
               </SelectTrigger>
@@ -196,7 +201,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
           </div>
           <div className="bg-background px-4 py-2 rounded-lg border border-border flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" />
-            <span className="text-foreground font-mono text-sm">Showing {filteredAndSortedLogs.length} of {logs.length}</span>
+            <span className="text-foreground font-mono text-sm">
+              Showing {filteredAndSortedLogs.length} of {logs.length}
+            </span>
           </div>
         </div>
 
@@ -215,12 +222,14 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               {filteredAndSortedLogs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
-                    {searchTerm ? "No records found matching your search." : "No Liability Shield transfers recorded yet."}
+                    {searchTerm
+                      ? "No records found matching your search."
+                      : "No Liability Shield transfers recorded yet."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredAndSortedLogs.map((log) => {
-                  const acaJoined = (log.aca_record_references || []).join(', ');
+                  const acaJoined = (log.aca_record_references || []).join(", ");
                   return (
                     <TableRow key={log.id}>
                       <TableCell className="text-foreground whitespace-nowrap">
@@ -228,7 +237,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </TableCell>
                       <TableCell>
                         <span className="text-xs font-medium px-2 py-1 bg-secondary rounded-md whitespace-nowrap">
-                          {log.egress_type || 'Standard'}
+                          {log.egress_type || "Standard"}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -236,8 +245,16 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                           <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
                             {truncateHash(log.liability_token_hash)}
                           </span>
-                          <button onClick={() => handleCopy(log.liability_token_hash)} className="text-muted-foreground hover:text-foreground transition-colors" title="Copy Full Hash">
-                            {copiedHash === log.liability_token_hash ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          <button
+                            onClick={() => handleCopy(log.liability_token_hash)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Copy Full Hash"
+                          >
+                            {copiedHash === log.liability_token_hash ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </TableCell>
@@ -247,8 +264,15 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             {truncateHash(acaJoined)}
                           </span>
                           {acaJoined && (
-                            <button onClick={() => handleCopy(acaJoined)} className="text-muted-foreground hover:text-foreground transition-colors">
-                              {copiedHash === acaJoined ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            <button
+                              onClick={() => handleCopy(acaJoined)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {copiedHash === acaJoined ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
                             </button>
                           )}
                         </div>
@@ -259,8 +283,15 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             {truncateHash(log.digiramp_anchor_id)}
                           </span>
                           {log.digiramp_anchor_id && (
-                            <button onClick={() => handleCopy(log.digiramp_anchor_id)} className="text-muted-foreground hover:text-foreground transition-colors">
-                              {copiedHash === log.digiramp_anchor_id ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            <button
+                              onClick={() => handleCopy(log.digiramp_anchor_id)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {copiedHash === log.digiramp_anchor_id ? (
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
                             </button>
                           )}
                         </div>
