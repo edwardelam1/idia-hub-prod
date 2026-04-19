@@ -300,5 +300,6 @@ print(data)`;
       </Card>
     </div>
   );
+};
 
 export default APIEndpoints;
