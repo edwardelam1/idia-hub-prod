@@ -1,196 +1,262 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
-import { Key, Copy, Check, Plus, Trash2, ShieldAlert, Loader2 } from 'lucide-react';
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Copy, Eye, EyeOff, Key, Plus, Trash2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
-interface APIKey {
-  id: string;
-  name: string;
-  key_prefix: string;
-  environment: string;
-  status: string;
-  created_at: string;
-  last_used_at: string | null;
+function generateApiKey(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let key = "idia_";
+  for (let i = 0; i < 32; i++) key += chars[Math.floor(Math.random() * chars.length)];
+  return key;
 }
 
-export default function APIKeyManagement() {
-  const [keys, setKeys] = useState<APIKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [showNewKeyModal, setShowNewKeyModal] = useState(false);
-  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const { toast } = useToast();
+async function hashKey(key: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
-  useEffect(() => {
-    fetchKeys();
-  }, []);
+export const APIKeyManagement = () => {
+  const { user } = useAuth();
+  const userId = user?.user_id;
+  const queryClient = useQueryClient();
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+  const [newKeyName, setNewKeyName] = useState("");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null);
 
-  const fetchKeys = async () => {
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  const { data: apiKeys = [], isLoading } = useQuery({
+    queryKey: ["api-keys", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase.from("api_keys").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!userId,
+  });
 
-    const { data, error } = await supabase
-      .from('api_keys')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+  const createKey = useMutation({
+    mutationFn: async (keyName: string) => {
+      if (!userId) throw new Error("Not authenticated");
+      const fullKey = generateApiKey();
+      const keyHash = await hashKey(fullKey);
+      const keyPrefix = fullKey.slice(0, 13);
 
-    if (!error && data) setKeys(data);
-    setLoading(false);
-  };
+      // Using the new 'api_keys' table schema
+      const { error } = await supabase.from("api_keys").insert([
+        {
+          created_by: userId,
+          name: keyName,
+          key_prefix: keyPrefix,
+          key_hash: keyHash,
+          environment: "production",
+        },
+      ]);
 
-  const handleCreateKey = async () => {
-    if (!newKeyName.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+      if (error) throw error;
+      return fullKey;
+    },
+    onSuccess: (fullKey) => {
+      setJustCreatedKey(fullKey);
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      toast.success("API key generated — copy it now, it won't be shown again");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
-    // Generate secure key components
-    const rawKey = `idia_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '')}`;
-    const prefix = rawKey.substring(0, 12);
-    
-    // In production, the rawKey should be hashed before saving to the DB.
-    // For this demo, we store a mock hash.
-    const { data, error } = await supabase.from('api_keys').insert({
-      user_id: user.id,
-      name: newKeyName,
-      key_prefix: prefix,
-      key_hash: 'hashed_value_hidden', 
-      environment: 'production'
-    }).select().single();
+  const revokeKey = useMutation({
+    mutationFn: async (keyId: string) => {
+      const { error } = await supabase.from("api_keys").update({ status: "revoked" }).eq("id", keyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      toast.success("API key revoked");
+    },
+  });
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+  const handleCreate = () => {
+    if (!newKeyName.trim()) {
+      toast.error("Enter a key name");
       return;
     }
-
-    setKeys([data, ...keys]);
-    setGeneratedKey(rawKey);
-    setNewKeyName('');
-    toast({ title: 'API Key Created', description: 'Store this key securely. It will not be shown again.' });
+    createKey.mutate(newKeyName.trim());
+    setNewKeyName("");
+    setShowCreateDialog(false);
   };
 
-  const handleRevokeKey = async (id: string) => {
-    const { error } = await supabase.from('api_keys').delete().eq('id', id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      setKeys(keys.filter(k => k.id !== id));
-      toast({ title: 'Key Revoked', description: 'The API key has been permanently disabled.' });
-    }
-  };
-
-  const copyToClipboard = () => {
-    if (generatedKey) {
-      navigator.clipboard.writeText(generatedKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">API Key Management</h2>
-          <p className="text-muted-foreground">Manage your authentication keys for Vault access.</p>
-        </div>
-        <Dialog open={showNewKeyModal} onOpenChange={(open) => {
-          setShowNewKeyModal(open);
-          if (!open) setGeneratedKey(null);
-        }}>
-          <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" /> Generate New Key</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create API Key</DialogTitle>
-              <DialogDescription>Create a new key to authenticate requests against the Data Vault.</DialogDescription>
-            </DialogHeader>
-            {!generatedKey ? (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Key Name</Label>
-                  <Input 
-                    placeholder="e.g., Production Backend Sync" 
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                  />
-                </div>
-                <Button className="w-full" onClick={handleCreateKey}>Generate Secure Key</Button>
+    <div className="space-y-4">
+      {justCreatedKey && (
+        <Card className="border-primary bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1 flex-1">
+                <p className="text-sm font-semibold text-primary">🔑 New API Key — Copy Now (shown only once)</p>
+                <code className="text-xs bg-background p-2 rounded block break-all">{justCreatedKey}</code>
               </div>
-            ) : (
-              <div className="space-y-4 py-4">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
-                  <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-sm text-amber-800">
-                    <strong>Copy this key now.</strong> For security reasons, you will not be able to view it again after closing this window.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg font-mono text-sm break-all">
-                  <span className="flex-1">{generatedKey}</span>
-                  <Button variant="outline" size="icon" onClick={copyToClipboard}>
-                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => copyToClipboard(justCreatedKey, "API Key")}>
+                  <Copy className="h-4 w-4 mr-1" /> Copy
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setJustCreatedKey(null)}>
+                  Dismiss
+                </Button>
               </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : keys.length === 0 ? (
-            <div className="text-center p-8 text-muted-foreground">No API keys generated yet.</div>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                API Key Management
+              </CardTitle>
+              <CardDescription>Secure cryptographic keys for API authentication</CardDescription>
+            </div>
+            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" /> Generate New Key
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Generate New API Key</DialogTitle>
+                  <DialogDescription>Give your key a descriptive name for easy identification.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Key Name</Label>
+                    <Input
+                      placeholder="e.g. Production Trading System"
+                      value={newKeyName}
+                      onChange={(e) => setNewKeyName(e.target.value)}
+                    />
+                  </div>
+                  <Button onClick={handleCreate} disabled={createKey.isPending} className="w-full">
+                    {createKey.isPending ? "Generating..." : "Generate Key"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-28 w-full" />
+              ))}
+            </div>
+          ) : apiKeys.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Key className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No API keys yet. Generate your first key to get started.</p>
+            </div>
           ) : (
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground bg-muted/50 uppercase">
-                <tr>
-                  <th className="px-6 py-4 font-medium">Name</th>
-                  <th className="px-6 py-4 font-medium">Prefix</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Created</th>
-                  <th className="px-6 py-4 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {keys.map((key) => (
-                  <tr key={key.id} className="bg-background">
-                    <td className="px-6 py-4 font-medium flex items-center gap-2">
-                      <Key className="w-4 h-4 text-muted-foreground" />
-                      {key.name}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-muted-foreground">{key.key_prefix}••••••••</td>
-                    <td className="px-6 py-4">
-                      <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
-                        {key.status}
+            <div className="space-y-4">
+              {apiKeys.map((keyData: any) => {
+                const isVisible = visibleKeys[keyData.id] ?? false;
+                return (
+                  <div key={keyData.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-semibold text-foreground">{keyData.name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Created: {new Date(keyData.created_at).toLocaleDateString()} • Last used:{" "}
+                          {keyData.last_used_at ? new Date(keyData.last_used_at).toLocaleString() : "Never"}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          keyData.status === "active"
+                            ? "bg-green-500/10 text-green-500 border-green-500/20"
+                            : "bg-destructive/10 text-destructive border-destructive/20"
+                        }
+                      >
+                        {keyData.status}
                       </Badge>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {new Date(key.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleRevokeKey(key.id)}>
-                        <Trash2 className="w-4 h-4 mr-2" /> Revoke
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type={isVisible ? "text" : "password"}
+                        value={keyData.key_prefix + "•••••••••••••••••••••••"}
+                        readOnly
+                        className="font-mono text-sm"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setVisibleKeys((v) => ({ ...v, [keyData.id]: !isVisible }))}
+                      >
+                        {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(keyData.key_prefix, keyData.name)}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">API Status:</span> {keyData.status}
+                      </div>
+                      <div className="flex gap-2">
+                        {keyData.status === "active" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-destructive hover:text-destructive"
+                            onClick={() => revokeKey.mutate(keyData.id)}
+                            disabled={revokeKey.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" /> Revoke
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
     </div>
   );
-}
+};
