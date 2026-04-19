@@ -23,7 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const TradingInterface = () => {
   const { tokens, portfolio, orders, priceHistory, executeOrder, cancelOrder } = useTradingData();
-  const { balanceData, deductCredits } = useSynapseCredits(); // Assuming deductCredits is exposed
+  const { balanceData } = useSynapseCredits();
   const credits = balanceData?.available_credits ?? 0;
   const { pipelineHealth } = useDashboardStats();
   const { toast } = useToast();
@@ -61,10 +61,7 @@ const TradingInterface = () => {
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
 
-      // 2. Deduct Synapse Credits locally/contextually
-      if (deductCredits) {
-        await deductCredits(cost);
-      }
+      // 2. Synapse Credits (Handled securely by backend RPC on actual execution)
 
       // 3. Log DELT Transfer to Database
       const {
