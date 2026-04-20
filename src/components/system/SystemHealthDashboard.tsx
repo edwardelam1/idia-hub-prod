@@ -56,15 +56,18 @@ export const SystemHealthDashboard = () => {
       })
       // STAGE 2, 4, 5: Real-time Economic Ledger
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
-        const { transaction_type, entry_type, description } = payload.new;
-        if (transaction_type === "FEE") pulseNode("synapse-controller", "GAS_SETTLED");
-        if (transaction_type === "DATA_SALE") pulseNode("process-data-sale", "SETTLEMENT_EXECUTED");
+        const { entry_type, description } = payload.new;
+
+        // Mapped directly to the IDIA 10/30/60 Law ledger constraints
+        if (entry_type === "USAGE") pulseNode("synapse-controller", "GAS_SETTLED");
+        if (entry_type === "SETTLEMENT") pulseNode("process-data-sale", "SETTLEMENT_EXECUTED");
         if (entry_type === "ROYALTY") pulseNode("royalty-distribution", "ROYALTY_PAID");
-        setActiveLog(description);
+
+        setActiveLog(description || `LEDGER UPDATE: ${entry_type}`);
       })
       // STAGE 3: Real-time AI Egress
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
-        pulseNode("best-friend-ai", `EGRESS: ${payload.new.egress_type}`);
+        pulseNode("best-friend-ai", `EGRESS: ${payload.new.egress_type || "OMNI-FETCH"}`);
       })
       .subscribe();
 
