@@ -1,21 +1,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -58,7 +50,6 @@ const ClientOrganizations = () => {
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Verification Modal State
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [aiParsing, setAiParsing] = useState(false);
@@ -66,7 +57,6 @@ const ClientOrganizations = () => {
   const [t1pDecision, setT1pDecision] = useState<"pending" | "approved" | "denied">("pending");
   const [idiaPayDecision, setIdiaPayDecision] = useState<"pending" | "approved" | "denied">("pending");
 
-  // Master-Detail State
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
@@ -74,7 +64,6 @@ const ClientOrganizations = () => {
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
 
-  // Manual Provisioning Form State
   const [formData, setFormData] = useState({
     legalName: "",
     taxId: "",
@@ -102,7 +91,6 @@ const ClientOrganizations = () => {
       }));
       setBusinesses(enrichedData);
 
-      // Update selected business if one is already selected to reflect fresh data
       if (selectedBusiness) {
         const updatedSelected = enrichedData.find((b) => b.id === selectedBusiness.id);
         if (updatedSelected && !isEditingCard) setSelectedBusiness(updatedSelected);
@@ -113,7 +101,6 @@ const ClientOrganizations = () => {
 
   useEffect(() => {
     fetchBusinesses();
-
     const fetchRequests = async () => {
       const { data, error } = await supabase
         .from("account_conversion_requests" as any)
@@ -165,10 +152,9 @@ const ClientOrganizations = () => {
         ])
         .select()
         .single();
-
       if (businessError) throw businessError;
 
-      const { error: locationError } = await supabase.from("business_locations").insert([
+      await supabase.from("business_locations").insert([
         {
           business_id: businessData.id,
           name: "Primary Headquarters",
@@ -178,8 +164,6 @@ const ClientOrganizations = () => {
           is_active: true,
         },
       ]);
-
-      if (locationError) throw locationError;
 
       toast({ title: "Organization Added", description: `${formData.legalName} provisioned successfully.` });
       setShowNewOrgModal(false);
@@ -220,10 +204,9 @@ const ClientOrganizations = () => {
           data_coop_enabled: editForm.data_coop_enabled,
         })
         .eq("id", selectedBusiness.id);
-
       if (error) throw error;
 
-      toast({ title: "Record Updated", description: "Enterprise profile modifications committed to ledger." });
+      toast({ title: "Record Updated", description: "Enterprise profile modifications saved." });
       setIsEditingCard(false);
       fetchBusinesses();
     } catch (error: any) {
@@ -322,116 +305,128 @@ const ClientOrganizations = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "approved":
-        return <CheckCircle className="w-2.5 h-2.5 text-emerald-500" />;
+        return <CheckCircle className="w-6 h-6 text-emerald-500" />;
       case "denied":
-        return <XCircle className="w-2.5 h-2.5 text-red-500" />;
+        return <XCircle className="w-6 h-6 text-red-500" />;
       default:
-        return <Clock className="w-2.5 h-2.5 text-amber-500" />;
+        return <Clock className="w-6 h-6 text-amber-500" />;
     }
   };
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto h-[calc(100vh-8rem)] flex flex-col">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
+    <div className="space-y-6 max-w-[1400px] mx-auto h-[calc(100vh-6rem)] flex flex-col p-4">
+      {/* HEADER & ADD BUTTON 
+        Notice the huge button on the right side of the header.
+      */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Client Organizations</h1>
-          <p className="text-[11px] text-gray-500 mt-0.5">Enterprise Registry & Platform Provisioning</p>
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Client Organizations</h1>
+          <p className="text-lg text-gray-500 mt-1">Enterprise Registry & Platform Provisioning</p>
         </div>
 
         <Dialog open={showNewOrgModal} onOpenChange={setShowNewOrgModal}>
           <DialogTrigger asChild>
-            <Button size="sm" className="h-7 text-[11px] gap-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm">
-              <Plus className="h-3 w-3" /> Add Organization
+            <Button
+              size="lg"
+              className="gap-3 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg text-xl py-6 px-8 rounded-xl"
+            >
+              <Plus className="h-6 w-6" /> Add Organization
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
-            {/* Manual Provisioning Form (Omitted for brevity in this snippet as it is unchanged from previous) */}
-            <DialogHeader className="px-5 py-3 border-b bg-slate-50/50">
-              <DialogTitle className="text-sm font-bold flex items-center gap-2">
-                <Plus className="w-4 h-4 text-primary" /> Manual Organization Entry
+          <DialogContent className="sm:max-w-3xl p-0 overflow-hidden">
+            <DialogHeader className="px-8 py-6 border-b bg-slate-50/50">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                <Plus className="w-6 h-6 text-indigo-600" /> Manual Organization Entry
               </DialogTitle>
             </DialogHeader>
-            <ScrollArea className="max-h-[60vh] px-5 py-4">
-              {/* Same form grid as previously provided */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-[10px] font-semibold text-slate-600">
+            <ScrollArea className="max-h-[70vh] px-8 py-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="col-span-2 space-y-2">
+                  <Label className="text-lg font-bold text-slate-700">
                     Legal Entity Name <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     value={formData.legalName}
                     onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
-                    className="h-7 text-xs"
+                    className="h-14 text-xl"
+                    placeholder="Enter business name"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold text-slate-600">Blueprint Category</Label>
+                <div className="space-y-2">
+                  <Label className="text-lg font-bold text-slate-700">Blueprint Category</Label>
                   <Select
                     value={formData.businessType}
                     onValueChange={(v) => setFormData({ ...formData, businessType: v })}
                   >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-14 text-xl">
                       <SelectValue placeholder="Select..." />
                     </SelectTrigger>
                     <SelectContent>
                       {DETAILED_BUSINESS_TYPES.map((type) => (
-                        <SelectItem key={type} value={type} className="text-xs">
+                        <SelectItem key={type} value={type} className="text-lg">
                           {type}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-semibold text-slate-600">Headquarters Address</Label>
+                <div className="space-y-2">
+                  <Label className="text-lg font-bold text-slate-700">Headquarters Address</Label>
                   <Input
                     value={formData.hqAddress}
                     onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
-                    className="h-7 text-xs"
+                    className="h-14 text-xl"
+                    placeholder="123 Main St..."
                   />
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="px-5 py-3 border-t bg-slate-50/50 gap-2">
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowNewOrgModal(false)}>
+            <DialogFooter className="px-8 py-6 border-t bg-slate-50/50 gap-4">
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-xl py-6 px-8"
+                onClick={() => setShowNewOrgModal(false)}
+              >
                 Cancel
               </Button>
               <Button
-                size="sm"
-                className="h-7 text-xs bg-indigo-600"
+                size="lg"
+                className="text-xl py-6 px-8 bg-indigo-600 hover:bg-indigo-700 text-white"
                 onClick={handleCreateBusiness}
                 disabled={isSubmitting}
               >
-                Force Provision
+                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Force Provision"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Pending Applications (Conditionally Rendered) */}
+      {/* PENDING APPLICATIONS */}
       {pendingRequests.length > 0 && (
-        <Card className="border-blue-100 shadow-sm shrink-0">
-          <CardHeader className="bg-blue-50/50 border-b border-blue-50 py-2 px-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-[11px] font-bold flex items-center gap-1.5 text-blue-900">
-              <ShieldCheck className="w-3.5 h-3.5" /> Pending Verifications
+        <Card className="border-blue-200 shadow-md shrink-0">
+          <CardHeader className="bg-blue-50 border-b border-blue-100 py-4 px-6 flex flex-row items-center justify-between">
+            <CardTitle className="text-xl font-bold flex items-center gap-2 text-blue-900">
+              <ShieldCheck className="w-6 h-6" /> Pending Verifications
             </CardTitle>
-            <Badge className="bg-blue-600 text-[9px] px-1.5 py-0 h-4">{pendingRequests.length}</Badge>
+            <Badge className="bg-blue-600 text-base px-3 py-1">{pendingRequests.length} Pending</Badge>
           </CardHeader>
-          <CardContent className="p-0 max-h-32 overflow-y-auto">
-            <div className="divide-y divide-blue-50">
+          <CardContent className="p-0 max-h-48 overflow-y-auto">
+            <div className="divide-y divide-blue-100">
               {pendingRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex items-center justify-between p-2 gap-3 bg-white hover:bg-slate-50"
+                  className="flex items-center justify-between p-4 gap-4 bg-white hover:bg-slate-50"
                 >
-                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <h4 className="font-semibold text-xs text-gray-900 truncate">{request.companyName}</h4>
-                    <span className="text-[9px] text-gray-500">Req: {request.requestedBy}</span>
+                  <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <h4 className="font-bold text-lg text-gray-900 truncate">{request.companyName}</h4>
+                    <span className="text-sm text-gray-500 font-medium bg-slate-100 px-2 py-1 rounded">
+                      Req: {request.requestedBy}
+                    </span>
                   </div>
-                  <Button size="sm" className="h-6 text-[10px] shrink-0" onClick={() => openReviewModal(request)}>
-                    Process
+                  <Button size="lg" className="text-base shrink-0" onClick={() => openReviewModal(request)}>
+                    Process Application
                   </Button>
                 </div>
               ))}
@@ -440,66 +435,73 @@ const ClientOrganizations = () => {
         </Card>
       )}
 
-      {/* Verification Modal Placeholder */}
+      {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-        <DialogContent className="sm:max-w-md p-5">
+        <DialogContent className="sm:max-w-2xl p-6">
           <DialogHeader>
-            <DialogTitle className="text-sm">Verification App</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">Verification Actions</DialogTitle>
           </DialogHeader>
+          <div className="py-4 text-lg text-slate-600">
+            Please review documents and apply T-1-P and IDIA Pay policies.
+          </div>
           <DialogFooter>
-            <Button onClick={handleProcessApplication}>Approve</Button>
+            <Button size="lg" className="text-lg" onClick={handleProcessApplication}>
+              Approve Organization
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Master-Detail Registry Layout */}
-      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        {/* Left Panel: Container List */}
-        <div className="w-full lg:w-[35%] flex flex-col bg-slate-50/50 border-r border-slate-200 min-h-0">
-          <div className="p-3 border-b border-slate-200 bg-white flex flex-col gap-2 shrink-0">
+      {/* SPLIT LAYOUT: MASTER LIST AND DETAIL VIEW */}
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 bg-white border border-slate-300 rounded-2xl overflow-hidden shadow-lg">
+        {/* LEFT PANEL: LIST CONTAINER */}
+        <div className="w-full lg:w-[35%] flex flex-col bg-slate-50 border-r border-slate-300 min-h-0">
+          <div className="p-5 border-b border-slate-300 bg-white flex flex-col gap-4 shrink-0">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">Master Registry</span>
-              <Badge variant="outline" className="text-[9px] h-4 bg-slate-50">
+              <span className="text-2xl font-bold text-slate-900">Registry List</span>
+              <Badge variant="outline" className="text-sm px-2 py-1 bg-slate-100">
                 {filteredBusinesses.length} active
               </Badge>
             </div>
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
               <Input
                 placeholder="Search records..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-6 h-7 text-[10px] bg-slate-50 border-slate-200"
+                className="pl-10 h-14 text-lg border-slate-300"
               />
             </div>
           </div>
 
           <ScrollArea className="flex-1">
             {isLoadingOrgs ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
             ) : filteredBusinesses.length === 0 ? (
-              <div className="p-6 text-center text-[10px] text-slate-500">No organizations found.</div>
+              <div className="p-8 text-center text-lg text-slate-500">No organizations found.</div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-200">
                 {filteredBusinesses.map((org) => (
                   <button
                     key={org.id}
                     onClick={() => handleSelectBusiness(org)}
-                    className={`w-full text-left p-3 hover:bg-white transition-colors border-l-2 focus:outline-none ${selectedBusiness?.id === org.id ? "bg-white border-primary shadow-sm relative z-10" : "border-transparent"}`}
+                    className={`w-full text-left p-6 hover:bg-slate-100 transition-colors border-l-4 focus:outline-none ${selectedBusiness?.id === org.id ? "bg-white border-indigo-600 shadow-md relative z-10" : "border-transparent"}`}
                   >
-                    <div className="flex justify-between items-start mb-1">
-                      <h4 className="text-xs font-bold text-slate-900 truncate pr-2">{org.name}</h4>
-                      <Badge variant="secondary" className="text-[8px] h-3.5 px-1 py-0 shrink-0 capitalize">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-xl font-bold text-slate-900 truncate pr-3">{org.name}</h4>
+                      <Badge variant="secondary" className="text-sm px-2 py-1 shrink-0 capitalize">
                         {org.subscription_tier}
                       </Badge>
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate mb-1.5">{org.business_type || "Unspecified"}</p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {org.t1p_status === "approved" && <ShieldCheck className="w-3 h-3 text-emerald-500" />}
-                      {org.idia_pay_status === "approved" && <Smartphone className="w-3 h-3 text-indigo-500" />}
-                      {org.data_coop_enabled && <Network className="w-3 h-3 text-blue-500" />}
+                    <p className="text-base font-medium text-slate-600 truncate mb-4">
+                      {org.business_type || "Unspecified"}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {org.t1p_status === "approved" && <ShieldCheck className="w-6 h-6 text-emerald-500" />}
+                      {org.idia_pay_status === "approved" && <Smartphone className="w-6 h-6 text-indigo-500" />}
+                      {org.data_coop_enabled && <Network className="w-6 h-6 text-blue-500" />}
                     </div>
                   </button>
                 ))}
@@ -508,135 +510,132 @@ const ClientOrganizations = () => {
           </ScrollArea>
         </div>
 
-        {/* Right Panel: Business Card */}
-        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50/30 overflow-y-auto">
+        {/* RIGHT PANEL: BUSINESS DETAIL CARD */}
+        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50 overflow-y-auto">
           {selectedBusiness ? (
-            <div className="p-6 animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                {/* Card Header */}
-                <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-5 flex items-start justify-between relative">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-white/10 backdrop-blur-md p-3 rounded-lg border border-white/20 shadow-inner">
-                      <Building2 className="h-6 w-6 text-white" />
+            <div className="p-8 animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white border border-slate-300 rounded-2xl shadow-lg overflow-hidden">
+                {/* CARD HEADER */}
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-8 flex flex-col xl:flex-row xl:items-start justify-between relative gap-6">
+                  <div className="flex items-center gap-6 w-full">
+                    <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20 shadow-inner shrink-0">
+                      <Building2 className="h-12 w-12 text-white" />
                     </div>
-                    <div>
+                    <div className="w-full min-w-0">
                       {isEditingCard ? (
                         <Input
                           value={editForm.name}
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="h-8 text-sm font-bold bg-white/20 border-white/30 text-white placeholder:text-white/50 mb-1"
+                          className="h-14 text-2xl font-bold bg-white/20 border-white/40 text-white placeholder:text-white/50 mb-2 w-full"
                         />
                       ) : (
-                        <h2 className="text-lg font-bold text-white tracking-tight">{selectedBusiness.name}</h2>
+                        <h2 className="text-4xl font-extrabold text-white tracking-tight truncate">
+                          {selectedBusiness.name}
+                        </h2>
                       )}
-
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-[9px] border-none">
+                      <div className="flex items-center gap-3 mt-3">
+                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-base px-3 py-1 border-none">
                           {selectedBusiness.subscription_tier}
                         </Badge>
-                        <span className="text-[10px] text-slate-300 flex items-center gap-1">
-                          <MapPin className="w-2.5 h-2.5" /> {selectedBusiness.address?.split(",")[0]}
+                        <span className="text-base font-medium text-slate-300 flex items-center gap-2">
+                          <MapPin className="w-5 h-5" /> {selectedBusiness.address?.split(",")[0]}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
+                  {/* EDIT/SAVE ACTIONS */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
                     {isEditingCard ? (
                       <>
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="lg"
                           onClick={() => {
                             setIsEditingCard(false);
                             setEditForm({ ...selectedBusiness });
                           }}
-                          className="h-7 text-[10px] text-white hover:bg-white/20"
+                          className="w-full text-lg text-white hover:bg-white/20"
                         >
-                          <X className="w-3 h-3 mr-1" /> Cancel
+                          <X className="w-5 h-5 mr-2" /> Cancel
                         </Button>
                         <Button
-                          size="sm"
+                          size="lg"
                           onClick={handleUpdateBusiness}
                           disabled={isSubmitting}
-                          className="h-7 text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white"
+                          className="w-full text-lg bg-emerald-500 hover:bg-emerald-600 text-white"
                         >
-                          <Save className="w-3 h-3 mr-1" /> Save
+                          <Save className="w-5 h-5 mr-2" /> Save
                         </Button>
                       </>
                     ) : (
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="lg"
                         onClick={() => setIsEditingCard(true)}
-                        className="h-7 text-[10px] text-white hover:bg-white/20 border border-white/20"
+                        className="w-full text-lg text-white hover:bg-white/20 border border-white/30 bg-white/5"
                       >
-                        <Edit2 className="w-3 h-3 mr-1" /> Edit Profile
+                        <Edit2 className="w-5 h-5 mr-2" /> Edit Profile
                       </Button>
                     )}
                   </div>
                 </div>
 
-                {/* Card Body */}
-                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Operations Identity */}
-                  <div className="space-y-4">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b pb-1">
+                {/* CARD BODY (EDITABLE SECTIONS) */}
+                <div className="p-8 grid grid-cols-1 xl:grid-cols-2 gap-10">
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-bold uppercase tracking-widest text-slate-500 border-b-2 border-slate-100 pb-2">
                       Operational Profile
                     </h3>
-
-                    <div className="space-y-3">
+                    <div className="space-y-5">
                       <div>
-                        <Label className="text-[9px] text-slate-500 uppercase">Blueprint Classification</Label>
+                        <Label className="text-sm font-bold text-slate-500 uppercase">Blueprint Classification</Label>
                         {isEditingCard ? (
                           <Select
                             value={editForm.business_type}
                             onValueChange={(v) => setEditForm({ ...editForm, business_type: v })}
                           >
-                            <SelectTrigger className="h-7 text-[11px] mt-1">
+                            <SelectTrigger className="h-14 text-xl mt-2">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               {DETAILED_BUSINESS_TYPES.map((t) => (
-                                <SelectItem key={t} value={t} className="text-[10px]">
+                                <SelectItem key={t} value={t} className="text-lg">
                                   {t}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <p className="text-xs font-medium text-slate-900 mt-0.5">
+                          <p className="text-2xl font-bold text-slate-900 mt-2">
                             {selectedBusiness.business_type || "Uncategorized"}
                           </p>
                         )}
                       </div>
-
                       <div>
-                        <Label className="text-[9px] text-slate-500 uppercase">Tax Identification</Label>
+                        <Label className="text-sm font-bold text-slate-500 uppercase">Tax Identification</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.tax_id}
                             onChange={(e) => setEditForm({ ...editForm, tax_id: e.target.value })}
-                            className="h-7 text-[11px] font-mono mt-1"
+                            className="h-14 text-xl font-mono mt-2"
                           />
                         ) : (
-                          <p className="text-xs font-mono text-slate-900 mt-0.5">
+                          <p className="text-2xl font-mono font-medium text-slate-900 mt-2">
                             {selectedBusiness.tax_id || "Not on file"}
                           </p>
                         )}
                       </div>
-
                       <div>
-                        <Label className="text-[9px] text-slate-500 uppercase">Headquarters Address</Label>
+                        <Label className="text-sm font-bold text-slate-500 uppercase">Headquarters Address</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.address}
                             onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            className="h-7 text-[11px] mt-1"
+                            className="h-14 text-xl mt-2"
                           />
                         ) : (
-                          <p className="text-xs text-slate-900 mt-0.5">
+                          <p className="text-xl font-medium text-slate-900 mt-2">
                             {selectedBusiness.address || "No location set"}
                           </p>
                         )}
@@ -644,125 +643,86 @@ const ClientOrganizations = () => {
                     </div>
                   </div>
 
-                  {/* Contact & Sub */}
-                  <div className="space-y-4">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b pb-1">
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-bold uppercase tracking-widest text-slate-500 border-b-2 border-slate-100 pb-2">
                       Communication
                     </h3>
-
-                    <div className="space-y-3">
+                    <div className="space-y-5">
                       <div>
-                        <Label className="text-[9px] text-slate-500 uppercase">Corporate Email</Label>
+                        <Label className="text-sm font-bold text-slate-500 uppercase">Corporate Email</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.email}
                             onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            className="h-7 text-[11px] mt-1"
+                            className="h-14 text-xl mt-2"
                           />
                         ) : (
-                          <p className="text-xs text-slate-900 mt-0.5 flex items-center gap-1.5">
-                            <Mail className="w-3 h-3 text-slate-400" /> {selectedBusiness.email || "N/A"}
+                          <p className="text-xl font-medium text-slate-900 mt-2 flex items-center gap-3">
+                            <Mail className="w-6 h-6 text-slate-400" /> {selectedBusiness.email || "N/A"}
                           </p>
                         )}
                       </div>
-
                       <div>
-                        <Label className="text-[9px] text-slate-500 uppercase">Corporate Phone</Label>
+                        <Label className="text-sm font-bold text-slate-500 uppercase">Corporate Phone</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.phone}
                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                            className="h-7 text-[11px] mt-1"
+                            className="h-14 text-xl mt-2"
                           />
                         ) : (
-                          <p className="text-xs text-slate-900 mt-0.5 flex items-center gap-1.5">
-                            <Phone className="w-3 h-3 text-slate-400" /> {selectedBusiness.phone || "N/A"}
+                          <p className="text-xl font-medium text-slate-900 mt-2 flex items-center gap-3">
+                            <Phone className="w-6 h-6 text-slate-400" /> {selectedBusiness.phone || "N/A"}
                           </p>
                         )}
                       </div>
-
-                      {isEditingCard && (
-                        <div>
-                          <Label className="text-[9px] text-slate-500 uppercase">Service Tier Override</Label>
-                          <Select
-                            value={editForm.subscription_tier}
-                            onValueChange={(v) => setEditForm({ ...editForm, subscription_tier: v })}
-                          >
-                            <SelectTrigger className="h-7 text-[11px] mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Enterprise" className="text-[10px]">
-                                Enterprise
-                              </SelectItem>
-                              <SelectItem value="Professional" className="text-[10px]">
-                                Professional
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {/* System Capabilities Matrix */}
-                  <div className="col-span-1 md:col-span-2 pt-2">
-                    <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b pb-1 mb-3">
+                  <div className="col-span-1 xl:col-span-2 pt-4">
+                    <h3 className="text-lg font-bold uppercase tracking-widest text-slate-500 border-b-2 border-slate-100 pb-2 mb-4">
                       Network Capabilities
                     </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {/* T-1-P Card */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                       <div
-                        className={`p-3 rounded-lg border ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50/50 border-emerald-100" : "bg-slate-50 border-slate-200"}`}
+                        className={`p-6 rounded-xl border-2 ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-[10px] font-bold flex items-center gap-1.5 text-slate-800">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> T-1-P Shield
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-lg font-bold flex items-center gap-2 text-slate-800">
+                            <ShieldCheck className="w-6 h-6 text-emerald-600" /> T-1-P Shield
                           </Label>
                           {getStatusIcon(selectedBusiness.t1p_status)}
                         </div>
-                        <p className="text-[9px] text-slate-500 leading-tight">
-                          Liability protocol deployment capability.
-                        </p>
                       </div>
 
-                      {/* IDIA Pay Card */}
                       <div
-                        className={`p-3 rounded-lg border ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50/50 border-indigo-100" : "bg-slate-50 border-slate-200"}`}
+                        className={`p-6 rounded-xl border-2 ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50 border-indigo-200" : "bg-slate-50 border-slate-200"}`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-[10px] font-bold flex items-center gap-1.5 text-slate-800">
-                            <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> IDIA Pay UI
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-lg font-bold flex items-center gap-2 text-slate-800">
+                            <Smartphone className="w-6 h-6 text-indigo-600" /> IDIA Pay UI
                           </Label>
                           {getStatusIcon(selectedBusiness.idia_pay_status)}
                         </div>
-                        <p className="text-[9px] text-slate-500 leading-tight">
-                          POS blueprint application builder access.
-                        </p>
                       </div>
 
-                      {/* Co-op Card */}
                       <div
-                        className={`p-3 rounded-lg border ${selectedBusiness.data_coop_enabled ? "bg-blue-50/50 border-blue-100" : "bg-slate-50 border-slate-200"}`}
+                        className={`p-6 rounded-xl border-2 ${selectedBusiness.data_coop_enabled ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-[10px] font-bold flex items-center gap-1.5 text-slate-800">
-                            <Network className="w-3.5 h-3.5 text-blue-600" /> Data Co-op
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-lg font-bold flex items-center gap-2 text-slate-800">
+                            <Network className="w-6 h-6 text-blue-600" /> Data Co-op
                           </Label>
                           {isEditingCard ? (
                             <Switch
                               checked={editForm.data_coop_enabled}
                               onCheckedChange={(v) => setEditForm({ ...editForm, data_coop_enabled: v })}
-                              className="scale-75"
+                              className="scale-125 ml-4"
                             />
                           ) : (
                             getStatusIcon(selectedBusiness.data_coop_enabled ? "approved" : "denied")
                           )}
                         </div>
-                        <p className="text-[9px] text-slate-500 leading-tight">
-                          Federated verification network enrollment.
-                        </p>
                       </div>
                     </div>
                   </div>
@@ -770,9 +730,9 @@ const ClientOrganizations = () => {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
-              <Building2 className="w-12 h-12 opacity-20" />
-              <p className="text-xs font-medium">Select an organization from the registry</p>
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-4">
+              <Building2 className="w-24 h-24 opacity-20" />
+              <p className="text-xl font-medium">Select an organization to view details</p>
             </div>
           )}
         </div>
