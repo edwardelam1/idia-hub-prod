@@ -80,34 +80,42 @@ const BestFriendPage = () => {
       const receipt: string[] = chatResponse?.consumed_records || [];
 
       // 4. SYNAPSE CASHIER — fire-and-forget burn + ledger write
-      let liabilityTokenHash: string | null = null;
-      const cleanIdArray =
-        receipt.length > 0
-          ? receipt.map((r: any) => String(r))
-          : realPipelineData.length > 0
-          ? realPipelineData.map((r: any) => String(r.id))
-          : [];
+      // 4. SYNAPSE CASHIER — Change from fire-and-forget to AWAIT
+let liabilityTokenHash: string | null = null;
+const cleanIdArray = receipt.length > 0 ? receipt : (marketplaceMode ? realPipelineData.map(r => String(r.id)) : []);
 
-      if (cleanIdArray.length > 0) {
-        supabase.functions
-          .invoke("synapse-controller", {
-            body: {
-              client_id: String(user.id),
-              aca_record_ids: cleanIdArray,
-              intent_type: chatResponse?.activeAgent || "RESEARCH",
-              query_complexity: 1.0,
-            },
-          })
-          .then(({ data, error: synapseError }) => {
-            if (synapseError) {
-              console.error("Synapse error:", synapseError);
-              return;
-            }
-            if (data?.success) {
-              console.log("Token Generated:", data.liability_token_hash);
-              refreshBalance();
-            }
-          });
+if (cleanIdArray.length > 0) {
+  try {
+    const { data: synapseData, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
+      body: {
+        client_id: String(user.id),
+        aca_record_ids: cleanIdArray,
+        intent_type: chatResponse?.activeAgent || "RESEARCH",
+      },
+    });
+
+    if (!synapseError && synapseData?.success) {
+      // CAPTURE THE HASH: This turns the "lights" on in the UI
+      liabilityTokenHash = synapseData.liability_token_hash;
+      // TRIGGER REFRESH: Force the gauge to pull the new balance
+      await refreshBalance(); 
+    }
+  } catch (e) {
+    console.error("Synapse connection failed", e);
+  }
+}
+
+// 5. RENDER — Now msg.liabilityTokenHash will be populated
+setConversation((prev) => [
+  ...prev,
+  { role: "user", content: currentMessage },
+  {
+    role: "assistant",
+    content: chatResponse?.response || "Analysis complete.",
+    liabilityTokenHash, // Now correctly populated
+    creditDeducted: !!liabilityTokenHash,
+  },
+]);
       }
 
       // 5. RENDER
