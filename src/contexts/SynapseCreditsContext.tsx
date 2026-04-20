@@ -51,24 +51,20 @@ export const SynapseCreditsProvider = ({
         return;
       }
 
-      // 1. RPC SUM: Recalculate total balance from all SETTLED rows
-      const { data: balance, error: ledgerError } = await supabase.rpc("get_synapse_balance", { uid: userId });
+      // 1. RPC SUM: Ensure the RPC itself filters for the correct types
+      // If you can't edit the RPC, filter the data here.
+      const { data: balance, error: ledgerError } = await supabase.rpc("get_synapse_balance", {
+        uid: userId,
+      });
 
-      if (ledgerError) throw ledgerError;
-      const credits = Number(balance ?? 0);
-
-      // 2. UPDATED BURN RATE: Now includes both 'deduction' and 'USAGE' types
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: deductions } = await supabase
-        .from("synapse_credit_ledger")
-        .select("amount")
+      // 2. FBO RESERVOIR (This is where the money actually is)
+      const { data: fboEntries } = await supabase
+        .from("fiat_ledger")
+        .select("amount_usd")
         .eq("user_id", userId)
-        // Fixed: Controller writes 'USAGE', Context was looking for 'deduction'
-        .in("entry_type", ["deduction", "USAGE"])
-        .neq("status", "FAILED")
-        .gte("created_at", thirtyDaysAgo);
+        .eq("status", "COMPLETED"); // Only count successful payouts
 
-      const totalDeductions = (deductions || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
+      const fboBalance = (fboEntries || []).reduce((sum, e) => sum + Number(e.amount_usd ?? 0), 0);
 
       // 3. FBO RESERVOIR: USD value calculation
       const { data: fboEntries } = await supabase
