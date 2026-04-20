@@ -79,7 +79,6 @@ const BestFriendPage = () => {
 
       const receipt: string[] = chatResponse?.consumed_records || [];
 
-      // 4. SYNAPSE CASHIER — fire-and-forget burn + ledger write
       // 4. SYNAPSE CASHIER — Change from fire-and-forget to AWAIT
 let liabilityTokenHash: string | null = null;
 const cleanIdArray = receipt.length > 0 ? receipt : (marketplaceMode ? realPipelineData.map(r => String(r.id)) : []);
@@ -103,7 +102,7 @@ if (cleanIdArray.length > 0) {
   } catch (e) {
     console.error("Synapse connection failed", e);
   }
-}
+};
 
 // 5. RENDER — Now msg.liabilityTokenHash will be populated
 setConversation((prev) => [
