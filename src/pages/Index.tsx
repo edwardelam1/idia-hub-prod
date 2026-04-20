@@ -1,89 +1,98 @@
-import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import SplashScreen from '@/components/SplashScreen';
-import LoginScreen from '@/components/LoginScreen';
-import AppLayout from '@/components/layout/AppLayout';
-import SuperAdminDashboard from '@/components/dashboards/SuperAdminDashboard';
-import OrganizationAdminDashboard from '@/components/dashboards/OrganizationAdminDashboard';
-import TeamLeadDashboard from '@/components/dashboards/TeamLeadDashboard';
-import TeamMemberDashboard from '@/components/dashboards/TeamMemberDashboard';
-import IndividualDashboard from '@/components/dashboards/IndividualDashboard';
-import DataMarketplace from '@/components/marketplace/DataMarketplace';
-import OrganizationManagement from '@/components/management/OrganizationManagement';
-import AIManagement from '@/components/ai/AIManagement';
-import DataViewer from '@/components/data/DataViewer';
-import MyReports from '@/components/reports/MyReports';
-import SecurityPage from './SecurityPage';
-import SystemHealthDashboard from '@/components/system/SystemHealthDashboard';
-import TradingInterface from '@/components/trading/TradingInterface';
-import { TradingDeskDashboard } from '@/components/trading/TradingDeskDashboard';
-import { PayAppBlueprint } from '@/components/trading/PayAppBlueprint';
-import LiquidityPools from '@/components/liquidity/LiquidityPools';
-import BillingCredits from '@/components/billing/BillingCredits';
-import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
-import TeamManagement from '@/components/teams/TeamManagement';
-import ProvenanceAuditLog from '@/components/trading/ProvenanceAuditLog';
-import SynapseTopUp from '@/components/billing/SynapseTopUp';
-import EcosystemOnboarding from '@/components/onboarding/EcosystemOnboarding';
-import EarningsSettlement from '@/components/billing/EarningsSettlement';
-import UpdateBankingDetails from '@/components/billing/UpdateBankingDetails';
-import UniversalPurchaseScreen from '@/components/billing/UniversalPurchaseScreen';
-import SettingsPage from './SettingsPage';
-import BestFriendPage from './BestFriendPage';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import SplashScreen from "@/components/SplashScreen";
+import LoginScreen from "@/components/LoginScreen";
+import AppLayout from "@/components/layout/AppLayout";
+import SuperAdminDashboard from "@/components/dashboards/SuperAdminDashboard";
+import OrganizationAdminDashboard from "@/components/dashboards/OrganizationAdminDashboard";
+import TeamLeadDashboard from "@/components/dashboards/TeamLeadDashboard";
+import TeamMemberDashboard from "@/components/dashboards/TeamMemberDashboard";
+import IndividualDashboard from "@/components/dashboards/IndividualDashboard";
+import DataMarketplace from "@/components/marketplace/DataMarketplace";
+import OrganizationManagement from "@/components/management/OrganizationManagement";
+import AIManagement from "@/components/ai/AIManagement";
+import DataViewer from "@/components/data/DataViewer";
+import MyReports from "@/components/reports/MyReports";
+import SecurityPage from "./SecurityPage";
+import { SystemHealthDashboard } from "@/components/system/SystemHealthDashboard";
+import TradingInterface from "@/components/trading/TradingInterface";
+import { TradingDeskDashboard } from "@/components/trading/TradingDeskDashboard";
+import { PayAppBlueprint } from "@/components/trading/PayAppBlueprint";
+import LiquidityPools from "@/components/liquidity/LiquidityPools";
+import BillingCredits from "@/components/billing/BillingCredits";
+import ComplianceDashboard from "@/components/compliance/ComplianceDashboard";
+import TeamManagement from "@/components/teams/TeamManagement";
+import ProvenanceAuditLog from "@/components/trading/ProvenanceAuditLog";
+import SynapseTopUp from "@/components/billing/SynapseTopUp";
+import EcosystemOnboarding from "@/components/onboarding/EcosystemOnboarding";
+import EarningsSettlement from "@/components/billing/EarningsSettlement";
+import UpdateBankingDetails from "@/components/billing/UpdateBankingDetails";
+import UniversalPurchaseScreen from "@/components/billing/UniversalPurchaseScreen";
+import SettingsPage from "./SettingsPage";
+import BestFriendPage from "./BestFriendPage";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const { user, isAuthenticated, isLoading, logout: authLogout, activePerspective } = useAuth();
-  const [currentView, setCurrentView] = useState<'splash' | 'login' | 'app'>('splash');
-  const [userRole, setUserRole] = useState<string>('');
+  const [currentView, setCurrentView] = useState<"splash" | "login" | "app">("splash");
+  const [userRole, setUserRole] = useState<string>("");
 
   // When Supabase auth resolves, skip splash/login
   useEffect(() => {
-    if (!isLoading && isAuthenticated && currentView !== 'app') {
-      setUserRole(user?.role ?? 'team-member');
-      setCurrentView('app');
+    if (!isLoading && isAuthenticated && currentView !== "app") {
+      setUserRole(user?.role ?? "team-member");
+      setCurrentView("app");
     }
   }, [isLoading, isAuthenticated, user, currentView]);
 
   const handleSplashComplete = () => {
     if (isAuthenticated) {
-      setUserRole(user?.role ?? 'team-member');
-      setCurrentView('app');
+      setUserRole(user?.role ?? "team-member");
+      setCurrentView("app");
     } else {
-      setCurrentView('login');
+      setCurrentView("login");
     }
   };
 
-  const handleLogin = (role: string) => { setUserRole(role); setCurrentView('app'); };
+  const handleLogin = (role: string) => {
+    setUserRole(role);
+    setCurrentView("app");
+  };
   const handleRealLogin = () => {
     // Auth state change in AuthContext will set user; we just switch view
-    setCurrentView('app');
+    setCurrentView("app");
   };
-  const handleLogout = async () => { 
+  const handleLogout = async () => {
     await authLogout();
-    setUserRole(''); 
-    setCurrentView('login'); 
+    setUserRole("");
+    setCurrentView("login");
   };
 
   const renderDashboard = () => {
-    if (activePerspective === 'individual') {
+    if (activePerspective === "individual") {
       return <IndividualDashboard />;
     }
     const role = user?.role || userRole;
     switch (role) {
-      case 'super-admin': return <SuperAdminDashboard />;
-      case 'organization-admin': return <OrganizationAdminDashboard />;
-      case 'team-lead': return <TeamLeadDashboard />;
-      case 'team-member': return <TeamMemberDashboard />;
-      default: return <TeamMemberDashboard />;
+      case "super-admin":
+        return <SuperAdminDashboard />;
+      case "organization-admin":
+        return <OrganizationAdminDashboard />;
+      case "team-lead":
+        return <TeamLeadDashboard />;
+      case "team-member":
+        return <TeamMemberDashboard />;
+      default:
+        return <TeamMemberDashboard />;
     }
   };
 
-  if (currentView === 'splash' && !isAuthenticated) return <SplashScreen onComplete={handleSplashComplete} />;
-  if (currentView === 'splash' && isLoading) return <SplashScreen onComplete={handleSplashComplete} />;
-  if (currentView === 'login' && !isAuthenticated) return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
+  if (currentView === "splash" && !isAuthenticated) return <SplashScreen onComplete={handleSplashComplete} />;
+  if (currentView === "splash" && isLoading) return <SplashScreen onComplete={handleSplashComplete} />;
+  if (currentView === "login" && !isAuthenticated)
+    return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
 
-  const effectiveRole = user?.role || userRole || 'team-member';
+  const effectiveRole = user?.role || userRole || "team-member";
 
   return (
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
@@ -113,7 +122,17 @@ const Index = () => {
         <Route path="/liquidity" element={<LiquidityPools />} />
         <Route path="/egress-logs" element={<ProvenanceAuditLog />} />
         <Route path="/top-up" element={<SynapseTopUp />} />
-        <Route path="/auth-settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1><p className="text-muted-foreground mt-2">Authentication configuration — awaiting AWS Cognito integration.</p></div>} />
+        <Route
+          path="/auth-settings"
+          element={
+            <div className="p-6">
+              <h1 className="text-2xl font-bold">Ecosystem Auth Settings</h1>
+              <p className="text-muted-foreground mt-2">
+                Authentication configuration — awaiting AWS Cognito integration.
+              </p>
+            </div>
+          }
+        />
         <Route path="/onboarding" element={<EcosystemOnboarding isLifeAppVerified={true} />} />
         <Route path="/earnings" element={<EarningsSettlement />} />
         <Route path="/earnings/banking" element={<UpdateBankingDetails />} />
