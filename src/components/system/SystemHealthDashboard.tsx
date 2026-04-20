@@ -1,83 +1,83 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Activity, Cpu, Library, Database, Wallet, CheckCircle2, ArrowRight } from "lucide-react";
+import { Activity, Cpu, Library, Database, Wallet, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Define the precise indicators based on scheduled edge functions
 const INDICATORS = [
   {
-    id: "health_sync",
+    id: "apple-health-sync",
     name: "Apple Health Sync",
-    description: "Ingesting user health metrics",
+    description: "DELT-Verified HK Normalization",
     icon: Activity,
+    activeColor: "bg-rose-500",
+    ringColor: "ring-rose-100",
   },
   {
-    id: "synapse_controller",
+    id: "synapse-controller",
     name: "Synapse Controller",
-    description: "Processing & normalization",
+    description: "Flat-Rate Gas & Egress Billing",
     icon: Cpu,
+    activeColor: "bg-indigo-600",
+    ringColor: "ring-indigo-100",
   },
   {
-    id: "university_library",
-    name: "University Library",
-    description: "Best Friend AI shopping curation",
+    id: "best-friend-ai",
+    name: "Best Friend AI",
+    description: "Library Omni-Fetch & Analysis",
     icon: Library,
+    activeColor: "bg-amber-500",
+    ringColor: "ring-amber-100",
   },
   {
-    id: "process_delt",
-    name: "Process Delt Transfer / Data Sale",
-    description: "Executing secure transactions",
+    id: "process-data-sale",
+    name: "Data Sale / DELT",
+    description: "60/30/10 Protocol Settlement",
     icon: Database,
+    activeColor: "bg-cyan-500",
+    ringColor: "ring-cyan-100",
   },
   {
-    id: "wallet_payment",
-    name: "User Wallet Royalty Payment",
-    description: "Distributing user royalties",
+    id: "royalty-distribution",
+    name: "Royalty Payment",
+    description: "Settling User Ledger Rewards",
     icon: Wallet,
+    activeColor: "bg-emerald-500",
+    ringColor: "ring-emerald-100",
   },
 ];
 
-type NodeState = "idle" | "active" | "success" | "error";
+type NodeState = "idle" | "active" | "success";
 
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeState>>(
     INDICATORS.reduce((acc, ind) => ({ ...acc, [ind.id]: "idle" }), {}),
   );
 
-  // Simulation for demonstration of real-time firing (scheduler sequence)
   useEffect(() => {
     let isMounted = true;
-
     const simulateFlow = () => {
       if (!isMounted) return;
-      // Reset previous states to idle
       setNodeStates(INDICATORS.reduce((acc, ind) => ({ ...acc, [ind.id]: "idle" }), {}));
 
       const fireNode = (index: number) => {
-        if (!isMounted) return;
-        if (index >= INDICATORS.length) {
-          // Wait a few seconds after a full pipeline cycle, then restart
+        if (!isMounted || index >= INDICATORS.length) {
           setTimeout(simulateFlow, 4000);
           return;
         }
 
-        const nodeId = INDICATORS[index].id;
+        const node = INDICATORS[index];
+        setNodeStates((prev) => ({ ...prev, [node.id]: "active" }));
 
-        // 1. Turn the light ON (firing condition)
-        setNodeStates((prev) => ({ ...prev, [nodeId]: "active" }));
-
-        // 2. Mark as success, then proceed to the next edge function
         setTimeout(
           () => {
             if (!isMounted) return;
-            setNodeStates((prev) => ({ ...prev, [nodeId]: "success" }));
+            setNodeStates((prev) => ({ ...prev, [node.id]: "success" }));
             fireNode(index + 1);
           },
-          1200 + Math.random() * 800,
-        ); // Random offset for realistic network jitter
+          1500 + Math.random() * 1000,
+        );
       };
 
-      // Initial delay before starting the sequence
       setTimeout(() => fireNode(0), 1000);
     };
 
@@ -87,117 +87,89 @@ export const SystemHealthDashboard = () => {
     };
   }, []);
 
-  const getStateColor = (state: NodeState) => {
-    switch (state) {
-      case "active":
-        return "bg-blue-600 shadow-[0_0_30px_rgba(37,99,235,0.8)] ring-4 ring-blue-500/50 scale-110 border-transparent";
-      case "success":
-        return "bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.5)] ring-2 ring-emerald-400/50 border-transparent";
-      case "error":
-        return "bg-destructive shadow-[0_0_20px_rgba(220,38,38,0.6)] ring-2 ring-destructive/50 border-transparent";
-      default:
-        return "bg-slate-900 border-slate-700 text-slate-500 shadow-none scale-100"; // Idle
-    }
-  };
-
-  const getIconColor = (state: NodeState) => {
-    switch (state) {
-      case "active":
-        return "text-white animate-pulse";
-      case "success":
-        return "text-emerald-50";
-      case "error":
-        return "text-white";
-      default:
-        return "text-slate-500";
-    }
-  };
-
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-2 mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-          System Health
-          <div className="relative flex h-3 w-3 mt-1">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-          </div>
+    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto bg-white min-h-screen">
+      <div className="flex flex-col gap-2 mb-10">
+        <h1 className="text-4xl font-black tracking-tighter text-slate-900 flex items-center gap-3">
+          IDIA Pipeline Monitor
+          <span className="flex h-4 w-4 relative">
+            <span className="animate-ping absolute h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span className="relative rounded-full h-4 w-4 bg-indigo-600"></span>
+          </span>
         </h1>
-        <p className="text-muted-foreground text-lg">
-          Live visualization map tracking automated edge function executions.
+        <p className="text-slate-500 text-xl font-medium">
+          Live visualization of automated DELT-Protocol data streams.
         </p>
       </div>
 
-      <Card className="w-full bg-slate-950 border-slate-800 overflow-hidden shadow-2xl relative">
-        <CardHeader className="border-b border-slate-800/80 pb-5 bg-slate-900/30">
-          <CardTitle className="text-xl">Active Pipeline Graph</CardTitle>
-          <CardDescription>Monitoring distributed scheduler operations across the IDIA ecosystem.</CardDescription>
+      <Card className="w-full bg-white border-slate-200 overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.1)] rounded-[3rem]">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-10">
+          <CardTitle className="text-2xl font-bold text-slate-800">Edge Function Orchestration</CardTitle>
+          <CardDescription className="text-slate-500 font-medium">
+            Active session tracking for {INDICATORS.length} core pipeline nodes.
+          </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-8 md:p-16 relative">
-          {/* Main Visualizer Container */}
-          <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center min-h-[600px] md:min-h-[300px]">
-            {/* Background Connection Line (Desktop) */}
-            <div className="hidden md:block absolute top-[40px] left-[5%] right-[5%] h-1 bg-slate-800/60 rounded-full z-0" />
+        <CardContent className="p-12 md:p-24 relative bg-white">
+          <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center min-h-[500px] md:min-h-[240px]">
+            {/* Connector Track */}
+            <div className="hidden md:block absolute top-[60px] left-[10%] right-[10%] h-2 bg-slate-100 rounded-full z-0" />
 
-            {INDICATORS.map((indicator, index) => {
+            {INDICATORS.map((indicator) => {
               const state = nodeStates[indicator.id];
               const Icon = indicator.icon;
-              const isActive = state === "active";
 
               return (
                 <div
                   key={indicator.id}
-                  className="relative z-10 flex flex-row md:flex-col items-start md:items-center w-full md:w-[18%] gap-6 md:gap-5 group"
+                  className="relative z-10 flex flex-row md:flex-col items-center w-full md:w-[18%] gap-8"
                 >
-                  {/* Background Connection Line (Mobile) */}
-                  {index < INDICATORS.length - 1 && (
-                    <div className="md:hidden absolute left-[39px] top-[80px] bottom-[-40px] w-1 bg-slate-800/60 rounded-full z-0" />
-                  )}
-
-                  {/* Indicator Light / Node */}
-                  <div className="relative flex-shrink-0 flex justify-center items-center h-20 w-20">
-                    {/* Pulsing ring effect when active */}
-                    {isActive && (
-                      <div className="absolute inset-0 rounded-full border-2 border-blue-500 animate-ping opacity-70 pointer-events-none" />
+                  {/* Process Node */}
+                  <div
+                    className={cn(
+                      "w-28 h-28 rounded-[2.5rem] flex items-center justify-center transition-all duration-700 shadow-2xl border-[6px]",
+                      state === "active"
+                        ? `${indicator.activeColor} scale-110 border-white ring-[16px] ${indicator.ringColor}`
+                        : state === "success"
+                          ? "bg-white border-emerald-500 shadow-emerald-50"
+                          : "bg-white border-slate-50 text-slate-200",
                     )}
-
-                    {/* Circle Node */}
-                    <div
+                  >
+                    <Icon
                       className={cn(
-                        "w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center border-2 transition-all duration-500 ease-in-out relative z-10",
-                        getStateColor(state),
+                        "w-12 h-12 transition-all duration-500",
+                        state === "active"
+                          ? "text-white scale-110 animate-pulse"
+                          : state === "success"
+                            ? "text-emerald-500"
+                            : "text-slate-200",
                       )}
-                    >
-                      <Icon
-                        className={cn("w-7 h-7 md:w-8 md:h-8 transition-colors duration-300", getIconColor(state))}
-                      />
-                    </div>
+                    />
                   </div>
 
-                  {/* Text Details & Live Labels */}
-                  <div className="flex flex-col md:text-center mt-2 flex-1">
-                    <h3 className="font-semibold text-slate-200 text-base md:text-lg leading-tight">
-                      {indicator.name}
-                    </h3>
-                    <p className="text-sm text-slate-400 mt-1.5 md:px-2 leading-relaxed">{indicator.description}</p>
+                  <div className="flex flex-col md:text-center space-y-2">
+                    <h3 className="font-extrabold text-slate-900 text-xl tracking-tight">{indicator.name}</h3>
+                    <p className="text-sm text-slate-400 font-bold uppercase tracking-widest">
+                      {indicator.description}
+                    </p>
 
-                    {/* Status Badge */}
-                    <div className="mt-3 text-xs font-medium md:mx-auto inline-flex items-center gap-1.5 min-h-[24px]">
-                      {state === "active" && (
-                        <span className="text-blue-400 bg-blue-400/10 px-3 py-1 rounded-full border border-blue-400/20 flex items-center gap-1.5">
-                          <Activity className="w-3 h-3 animate-spin" /> Processing...
-                        </span>
-                      )}
-                      {state === "success" && (
-                        <span className="text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3 h-3" /> Complete
-                        </span>
-                      )}
-                      {state === "idle" && (
-                        <span className="text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 flex items-center gap-1.5">
-                          Awaiting Signal
-                        </span>
+                    <div className="pt-4 flex justify-center">
+                      {state === "active" ? (
+                        <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-5 py-2 rounded-2xl border border-indigo-100 animate-bounce">
+                          <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
+                          <span className="text-xs font-black uppercase tracking-tighter">Running</span>
+                        </div>
+                      ) : state === "success" ? (
+                        <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 px-5 py-2 rounded-2xl border border-emerald-100">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-xs font-black uppercase tracking-tighter">Settled</span>
+                        </div>
+                      ) : (
+                        <div className="text-slate-300 bg-slate-50 px-5 py-2 rounded-2xl border border-slate-100">
+                          <span className="text-xs font-black uppercase tracking-tighter text-slate-300">
+                            Awaiting Signal
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -210,3 +182,5 @@ export const SystemHealthDashboard = () => {
     </div>
   );
 };
+
+export default SystemHealthDashboard;
