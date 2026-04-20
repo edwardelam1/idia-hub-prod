@@ -1,66 +1,103 @@
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
-import { useEffect, useRef, useState } from 'react';
-import { usePipelineActivity } from '@/hooks/usePipelineActivity';
+export interface PipelineActivity {
+  id: string;
+  type: 'bundle_created' | 'data_processed' | 'user_connected' | 'delt_transfer' | 'api_call';
+  details: any;
+  timestamp: number;
+}
 
-const SynapseVisualizer = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<any>(null);
-  const rendererRef = useRef<any>(null);
-  const animationRef = useRef<number>(0);
-  const [showLabel, setShowLabel] = useState(true);
-  
-  // Connect to real pipeline activity
-  const { activities, isActive, activityCount } = usePipelineActivity();
+export const usePipelineActivity = () => {
+  const [activities, setActivities] = useState<PipelineActivity[]>([]);
+  const [isActive, setIsActive] = useState(false);
+  const [activityCount, setActivityCount] = useState(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper to trigger the visualizer's "Active" animation state
+  const triggerActiveState = () => {
+    setIsActive(true);
+    
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Return to idle state after 2.5 seconds of no activity
+    timeoutRef.current = setTimeout(() => {
+      setIsActive(false);
+    }, 2500);
+  };
+
+  const addActivity = (newActivity: Omit<PipelineActivity, 'timestamp'>) => {
+    setActivities(prev => {
+      // Keep only the last 50 activities in memory to prevent DOM lag
+      const updated = [{ ...newActivity, timestamp: Date.now() }, ...prev].slice(0, 50);
+      return updated;
+    });
+    setActivityCount(prev => prev + 1);
+    triggerActiveState();
+  };
 
   useEffect(() => {
-    // Label animation cycle: show for 10s, hide for 50s (1min total cycle)
-    const labelCycle = () => {
-      setShowLabel(true);
-      
-      // Hide after 10 seconds
-      setTimeout(() => {
-        setShowLabel(false);
-      }, 10000);
-      
-      // Show again after 60 seconds (total cycle)
-      setTimeout(() => {
-        labelCycle();
-      }, 60000);
-    };
+    // 1. Listen for DELT Liability Transfers (e.g., Trades, Data Unlocks)
+    const deltChannel = supabase.channel('visualizer-delt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'delt_transfers' }, payload => {
+        addActivity({
+          id: payload.new.id,
+          type: 'delt_transfer',
+          details: { 
+            activityType: `DELT Minted: ${payload.new.aca_hash.substring(0, 8)}...`,
+            action: payload.new.action_type 
+          }
+        });
+      }).subscribe();
 
-    labelCycle();
+    // 2. Listen for DigiRAMP Provenance Egress (e.g., Immutable Anchoring)
+    const egressChannel = supabase.channel('visualizer-egress')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'egress_logs' }, payload => {
+        addActivity({
+          id: payload.new.id,
+          type: 'bundle_created', // Maps to the purple dot in your visualizer UI
+          details: { 
+            title: `Egress Anchor: ${payload.new.digiramp_anchor_id?.substring(0, 8)}` 
+          }
+        });
+      }).subscribe();
+
+    // 3. Listen for API Vault Queries (e.g., Agentic MCP or REST traffic)
+    const apiChannel = supabase.channel('visualizer-api')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'api_metrics' }, payload => {
+        addActivity({
+          id: payload.new.id,
+          type: 'data_processed', // Maps to the blue dot in your visualizer UI
+          details: { 
+            activityType: `${payload.new.endpoint} (${payload.new.latency_ms}ms)` 
+          }
+        });
+      }).subscribe();
+
+    // 4. Listen for User Authentication/Logins
+    const authChannel = supabase.channel('visualizer-users')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'enterprise_users' }, payload => {
+        addActivity({
+          id: payload.new.id,
+          type: 'user_connected',
+          details: { user: payload.new.email }
+        });
+      }).subscribe();
+
+    return () => {
+      supabase.removeChannel(deltChannel);
+      supabase.removeChannel(egressChannel);
+      supabase.removeChannel(apiChannel);
+      supabase.removeChannel(authChannel);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Import THREE.js dynamically
-    const initVisualizer = async () => {
-      // Add THREE.js script to document head if not already present
-      if (!window.THREE) {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-        script.async = true;
-        document.head.appendChild(script);
-        
-        await new Promise((resolve) => {
-          script.onload = resolve;
-        });
-      }
-
-      const THREE = window.THREE;
-      if (!THREE) return;
-
-      // Scene setup
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, containerRef.current!.clientWidth / containerRef.current!.clientHeight, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      
-      renderer.setSize(containerRef.current!.clientWidth, containerRef.current!.clientHeight);
-      renderer.setClearColor(0x000000, 0);
-      containerRef.current!.appendChild(renderer.domElement);
-
-      // Enhanced particle system with pipeline activity influence
+  return { activities, isActive, activityCount };
+};      // Enhanced particle system with pipeline activity influence
       const particleCount = 5000;
       const particles = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
