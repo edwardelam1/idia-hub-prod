@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+export type ProtocolActivityType =
+  | "apple_health_sync"
+  | "synapse_controller"
+  | "best_friend_ai"
+  | "data_sale"
+  | "royalty_payment";
+
 export interface PipelineActivity {
   id: string;
- type: ProtocolActivityType;
+  type: ProtocolActivityType;
   details: any;
   timestamp: number;
-}
-export type ProtocolActivityType = 
-  | "apple_health_sync" 
-  | "synapse_controller" 
-  | "best_friend_ai" 
-  | "data_sale" 
-  | "royalty_payment";
 }
 export const usePipelineActivity = () => {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
