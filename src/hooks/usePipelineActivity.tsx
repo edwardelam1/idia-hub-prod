@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "../integrations/supabase/client";
 
 export interface PipelineActivity {
   id: string;
@@ -10,15 +10,28 @@ export interface PipelineActivity {
 
 export const usePipelineActivity = () => {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
-  const [activeStages, setActiveStages] = useState<Record<string, boolean>>({});
+  const [activeStages, setActiveStages] = useState<Record<string, boolean>>({
+    ingest: false,
+    synapse: false,
+    library: false,
+    delt: false,
+    settle: false,
+  });
   const [activityCount, setActivityCount] = useState(0);
 
-  // Triggers a 3-second visual pulse for a specific pipeline stage
+  // Timeouts to individually control the glow of each node
+  const timeouts = useRef<Record<string, NodeJS.Timeout>>({});
+
   const lightUpStage = (stage: string) => {
     setActiveStages((prev) => ({ ...prev, [stage]: true }));
-    setTimeout(() => {
+
+    if (timeouts.current[stage]) {
+      clearTimeout(timeouts.current[stage]);
+    }
+
+    timeouts.current[stage] = setTimeout(() => {
       setActiveStages((prev) => ({ ...prev, [stage]: false }));
-    }, 3000);
+    }, 3500); // 3.5 seconds of illumination per node
   };
 
   const addActivity = (newActivity: Omit<PipelineActivity, "timestamp">, stageKey: string) => {
@@ -28,7 +41,7 @@ export const usePipelineActivity = () => {
   };
 
   useEffect(() => {
-    // 1. Apple Health Ingestion
+    // 1. Apple Health Ingestion -> ACA Record
     const syncChannel = supabase
       .channel("live-ingestion")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "user_aca_records" }, (payload) => {
@@ -43,7 +56,7 @@ export const usePipelineActivity = () => {
       })
       .subscribe();
 
-    // 2. Synapse Controller
+    // 2. Synapse Valuation Staging
     const synapseChannel = supabase
       .channel("live-synapse")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "staged_health_data" }, (payload) => {
@@ -58,7 +71,7 @@ export const usePipelineActivity = () => {
       })
       .subscribe();
 
-    // 3. Best Friend AI Library / Consumption
+    // 3. University Library Cataloging (Marketplace Bundles)
     const libraryChannel = supabase
       .channel("live-library")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "marketplace_bundles" }, (payload) => {
@@ -73,7 +86,7 @@ export const usePipelineActivity = () => {
       })
       .subscribe();
 
-    // 4. DELT Egress / Sale
+    // 4. DELT Egress Transfer
     const deltChannel = supabase
       .channel("live-delt")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
@@ -88,7 +101,7 @@ export const usePipelineActivity = () => {
       })
       .subscribe();
 
-    // 5. Final Settlement / Royalty
+    // 5. User Wallet Royalty Payment
     const royaltyChannel = supabase
       .channel("live-royalty")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
@@ -111,6 +124,7 @@ export const usePipelineActivity = () => {
       supabase.removeChannel(libraryChannel);
       supabase.removeChannel(deltChannel);
       supabase.removeChannel(royaltyChannel);
+      Object.values(timeouts.current).forEach(clearTimeout);
     };
   }, []);
 
