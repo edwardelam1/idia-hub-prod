@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Apple, Loader2 } from "lucide-react";
+import { Building2, Apple } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -49,18 +49,12 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
     setIsSigningIn(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
       if (error) throw error;
 
       if (data.session) {
-        toast.success("Identity Verified. Syncing Hub...");
-        // Explicitly trigger the navigation callback passed from App.tsx
-        if (onRealLogin) {
-          onRealLogin();
-        } else {
-          // Fallback if prop isn't passed: Hard redirect to dashboard
-          window.location.href = "/dashboard";
-        }
+        toast.success("Signed in successfully");
+        // Surgical Fix: Call the login trigger immediately to avoid landing on Site URL
+        onRealLogin?.();
       }
     } catch (err: any) {
       toast.error(err.message || "Sign in failed");
@@ -76,7 +70,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          // Ensure this points specifically to the dashboard for the Hub
+          // Surgical Fix: Explicitly redirect to /dashboard for OAuth success
           redirectTo: `${window.location.origin}/dashboard`,
           ...(provider === "google" && {
             queryParams: { access_type: "offline", prompt: "select_account" },
@@ -95,136 +89,106 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-4 font-sans">
-      <div className="w-full max-w-[400px]">
-        <div className="text-center mb-6">
-          <div className="inline-flex p-3 rounded-2xl bg-primary/10 mb-4 border border-primary/20">
-            <img src="/images/hub-logo.png" alt="IDIA Hub Logo" className="w-12 h-12" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">IDIA Hub</h1>
-          <p className="text-sm text-muted-foreground">Verification Economy & Data Rights Management</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <img src="/images/hub-logo.png" alt="IDIA Hub Logo" className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">IDIA Hub</h1>
+          <p className="text-gray-600 mt-2">Professional Data Intelligence Platform</p>
         </div>
 
-        <Card className="border-border/40 bg-card/50 backdrop-blur-xl shadow-2xl">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl">Authentication</CardTitle>
-            <CardDescription className="text-xs">Enter credentials to access the sovereign data vault</CardDescription>
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome Back</CardTitle>
+            <CardDescription>Sign in to access your IDIA Hub dashboard</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
+          <CardContent>
+            <div className="space-y-3 mb-6">
               <Button
                 type="button"
                 onClick={() => handleOAuthLogin("apple")}
                 disabled={isAppleLoading}
-                variant="outline"
-                className="h-9 text-xs border-border/60 hover:bg-white hover:text-black"
+                className="w-full bg-black text-white hover:bg-black/90"
               >
-                {isAppleLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Apple className="mr-2 h-3.5 w-3.5" />}
-                Apple
+                <Apple className="mr-2 h-4 w-4 fill-white" />
+                {isAppleLoading ? "Redirecting..." : "Continue with Apple"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleOAuthLogin("google")}
                 disabled={isGoogleLoading}
-                className="h-9 text-xs border-border/60"
+                className="w-full bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
               >
-                {isGoogleLoading ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <div className="mr-2">
-                    <GoogleIcon />
-                  </div>
-                )}
-                Google
+                <GoogleIcon />
+                <span className="ml-2">{isGoogleLoading ? "Redirecting..." : "Continue with Google"}</span>
               </Button>
             </div>
 
-            <div className="relative py-2">
+            <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border/40" />
+                <span className="w-full border-t border-gray-200" />
               </div>
-              <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                <span className="bg-card px-2 text-muted-foreground">Sovereign Link</span>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">or continue with email</span>
               </div>
             </div>
 
             <Tabs defaultValue="standard" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 h-9 mb-4 bg-muted/50">
-                <TabsTrigger value="standard" className="text-xs">
-                  Standard
-                </TabsTrigger>
-                <TabsTrigger value="sso" className="text-xs">
-                  SSO
-                </TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="standard">Standard Login</TabsTrigger>
+                <TabsTrigger value="sso">Enterprise SSO</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="standard" className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-[11px] uppercase font-bold text-muted-foreground">
-                    Email
-                  </Label>
+              <TabsContent value="standard" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="name@enterprise.com"
+                    placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-9 text-sm bg-background/50"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-[11px] uppercase font-bold text-muted-foreground">
-                    Password
-                  </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleRealLogin()}
-                    className="h-9 text-sm bg-background/50"
                   />
                 </div>
-                <Button className="w-full h-9 font-bold mt-2" onClick={handleRealLogin} disabled={isSigningIn}>
-                  {isSigningIn ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  {isSigningIn ? "Authenticating..." : "Access Hub"}
+                <Button className="w-full" onClick={handleRealLogin} disabled={isSigningIn}>
+                  {isSigningIn ? "Signing In..." : "Sign In"}
                 </Button>
               </TabsContent>
 
-              <TabsContent value="sso" className="space-y-3">
-                <Button
-                  variant="outline"
-                  className="w-full h-10 text-sm border-dashed border-primary/30 hover:border-primary/60"
-                  onClick={() => handleQuickLogin("organization-admin")}
-                >
-                  <Building2 className="mr-2 h-4 w-4 text-primary" />
-                  Connect via Enterprise SSO
+              <TabsContent value="sso" className="space-y-4">
+                <Button variant="outline" className="w-full" onClick={() => handleQuickLogin("organization-admin")}>
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Continue with Enterprise SSO
                 </Button>
               </TabsContent>
             </Tabs>
 
-            <div className="mt-4 pt-4 border-t border-border/40">
-              <p className="text-[10px] uppercase font-bold text-muted-foreground mb-3 tracking-wider">
-                Dev Sandbox Access
-              </p>
+            <div className="mt-6 pt-4 border-t">
+              <p className="text-sm text-gray-600 mb-4">Quick Access (Prototype):</p>
               <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-[10px] bg-muted/30 hover:bg-primary/20"
-                  onClick={() => handleQuickLogin("super-admin")}
-                >
-                  SUPER ADMIN
+                <Button variant="outline" size="sm" onClick={() => handleQuickLogin("super-admin")}>
+                  Super Admin
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-[10px] bg-muted/30 hover:bg-primary/20"
-                  onClick={() => handleQuickLogin("organization-admin")}
-                >
-                  ORG ADMIN
+                <Button variant="outline" size="sm" onClick={() => handleQuickLogin("organization-admin")}>
+                  Org Admin
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleQuickLogin("team-lead")}>
+                  Team Lead
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleQuickLogin("team-member")}>
+                  Team Member
                 </Button>
               </div>
             </div>
