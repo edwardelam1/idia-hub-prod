@@ -3,11 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface PipelineActivity {
   id: string;
-  type: "apple_health_sync" | "synapse_controller" | "best_friend_ai" | "data_sale" | "royalty_payment";
+ type: ProtocolActivityType;
   details: any;
   timestamp: number;
 }
-
+export type ProtocolActivityType = 
+  | "apple_health_sync" 
+  | "synapse_controller" 
+  | "best_friend_ai" 
+  | "data_sale" 
+  | "royalty_payment";
+}
 export const usePipelineActivity = () => {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
   const [isActive, setIsActive] = useState(false);
