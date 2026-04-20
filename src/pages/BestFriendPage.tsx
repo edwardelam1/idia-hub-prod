@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Coins } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
@@ -27,15 +27,15 @@ const BestFriendPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { balanceData, refreshBalance } = useSynapseCredits();
+  const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [conversation, isLoading]);
+
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
     setIsLoading(true);
@@ -48,17 +48,13 @@ const BestFriendPage = () => {
       if (!user?.id) throw new Error("Not authenticated.");
 
       const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
-
       const activeGuid = profile?.platform_guid;
       if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
       // 2. WAREHOUSE GRAB (only when in marketplace mode)
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
-        const { data: healthData } = await supabase
-          .from("staged_health_data")
-          .select("*")
-          .eq("user_id", user.id);
+        const { data: healthData } = await supabase.from("staged_health_data").select("*").eq("user_id", user.id);
         realPipelineData = healthData || [];
       }
 
@@ -79,42 +75,28 @@ const BestFriendPage = () => {
 
       const receipt: string[] = chatResponse?.consumed_records || [];
 
-      // 4. SYNAPSE CASHIER — Change from fire-and-forget to AWAIT
-let liabilityTokenHash: string | null = null;
-const cleanIdArray = receipt.length > 0 ? receipt : (marketplaceMode ? realPipelineData.map(r => String(r.id)) : []);
+      // 4. SYNAPSE CASHIER — Fixed syntax and AWAIT logic
+      let liabilityTokenHash: string | null = null;
+      const cleanIdArray =
+        receipt.length > 0 ? receipt : marketplaceMode ? realPipelineData.map((r) => String(r.id)) : [];
 
-if (cleanIdArray.length > 0) {
-  try {
-    const { data: synapseData, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
-      body: {
-        client_id: String(user.id),
-        aca_record_ids: cleanIdArray,
-        intent_type: chatResponse?.activeAgent || "RESEARCH",
-      },
-    });
+      if (cleanIdArray.length > 0) {
+        try {
+          const { data: synapseData, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
+            body: {
+              client_id: String(user.id),
+              aca_record_ids: cleanIdArray,
+              intent_type: chatResponse?.activeAgent || "RESEARCH",
+            },
+          });
 
-    if (!synapseError && synapseData?.success) {
-      // CAPTURE THE HASH: This turns the "lights" on in the UI
-      liabilityTokenHash = synapseData.liability_token_hash;
-      // TRIGGER REFRESH: Force the gauge to pull the new balance
-      await refreshBalance(); 
-    }
-  } catch (e) {
-    console.error("Synapse connection failed", e);
-  }
-};
-
-// 5. RENDER — Now msg.liabilityTokenHash will be populated
-setConversation((prev) => [
-  ...prev,
-  { role: "user", content: currentMessage },
-  {
-    role: "assistant",
-    content: chatResponse?.response || "Analysis complete.",
-    liabilityTokenHash, // Now correctly populated
-    creditDeducted: !!liabilityTokenHash,
-  },
-]);
+          if (!synapseError && synapseData?.success) {
+            liabilityTokenHash = synapseData.liability_token_hash;
+            await refreshBalance();
+          }
+        } catch (e) {
+          console.error("Synapse connection failed", e);
+        }
       }
 
       // 5. RENDER
@@ -128,12 +110,8 @@ setConversation((prev) => [
           creditDeducted: !!liabilityTokenHash,
         },
       ]);
-      setCurrentMessage("");
 
-      // 6. Refresh gauge only when a real deduction occurred
-      if (liabilityTokenHash) {
-        await refreshBalance();
-      }
+      setCurrentMessage("");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
