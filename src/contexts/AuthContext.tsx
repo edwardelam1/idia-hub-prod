@@ -109,7 +109,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // --- THE FIX: REDIRECT TO SOVEREIGN ONBOARDING ---
         if (!profileRow || !profileRow.platform_guid) {
           console.log("No Sovereign Identity found, redirecting to IDIA Life...");
-          window.location.href = `https://thebigidia.com/auth?mode=signup&return_to=hub`;
+          // Change thebigidia.com to life.thebigidia.com
+          window.location.href = `https://life.thebigidia.com`;
           return;
         }
 
