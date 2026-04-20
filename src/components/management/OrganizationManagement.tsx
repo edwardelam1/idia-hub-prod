@@ -20,7 +20,6 @@ import {
   Building2,
   Search,
   CheckCircle,
-  Clock,
   AlertTriangle,
   FileText,
   Bot,
@@ -29,6 +28,7 @@ import {
   Smartphone,
   Database,
   Plus,
+  MoreVertical,
 } from "lucide-react";
 
 const SystemAdminManagement = () => {
@@ -48,7 +48,7 @@ const SystemAdminManagement = () => {
   const [newOrgData, setNewOrgData] = useState({
     name: "",
     industry: "",
-    tier: "Enterprise", // Defaulting to Enterprise for this view
+    tier: "Enterprise",
   });
 
   const { toast } = useToast();
@@ -110,23 +110,20 @@ const SystemAdminManagement = () => {
 
           toast({
             title: "New IDIA Life Business Request",
-            description: `${req.company_name} requires System Administrator verification.`,
+            description: `${req.company_name} requires verification.`,
           });
         },
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [toast]);
 
   const handleCreateOrganization = async () => {
     if (!newOrgData.name) {
-      toast({ title: "Validation Error", description: "Organization name is required.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "Name required.", variant: "destructive" });
       return;
     }
-
     try {
       const { error } = await supabase.from("enterprises").insert([
         {
@@ -137,10 +134,8 @@ const SystemAdminManagement = () => {
           available_credits: 0,
         },
       ]);
-
       if (error) throw error;
-
-      toast({ title: "Enterprise Created", description: `${newOrgData.name} has been provisioned manually.` });
+      toast({ title: "Enterprise Created", description: `${newOrgData.name} provisioned.` });
       setShowNewOrgModal(false);
       setNewOrgData({ name: "", industry: "", tier: "Enterprise" });
       fetchEnterprises();
@@ -154,8 +149,6 @@ const SystemAdminManagement = () => {
     setReviewModalOpen(true);
     setAiParsing(true);
     setParsedData(null);
-
-    // Simulate AI parsing the uploaded document from IDIA Life
     setTimeout(() => {
       setAiParsing(false);
       setParsedData({
@@ -166,7 +159,7 @@ const SystemAdminManagement = () => {
         guidValidated: !!request.platformGuid,
         confidence: 99.1,
       });
-    }, 2500);
+    }, 1500);
   };
 
   const handleApproveRequest = async () => {
@@ -176,8 +169,6 @@ const SystemAdminManagement = () => {
         .from("account_conversion_requests" as any)
         .update({ status: "approved" })
         .eq("id", selectedRequest.id);
-
-      // Auto-provision enterprise record upon approval, unlocking IDIA Pay Builder & T-1-P eligibility
       await supabase.from("enterprises").insert([
         {
           name: selectedRequest.companyName,
@@ -186,16 +177,12 @@ const SystemAdminManagement = () => {
           available_credits: 0,
         },
       ]);
-
       setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
       setReviewModalOpen(false);
       fetchEnterprises();
-      toast({
-        title: "Enterprise Provisioned",
-        description: `${selectedRequest.companyName} now has access to the App Builder.`,
-      });
+      toast({ title: "Enterprise Provisioned", description: `${selectedRequest.companyName} is active.` });
     } catch (err: any) {
-      toast({ title: "Provisioning Error", description: err.message, variant: "destructive" });
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   };
 
@@ -206,9 +193,9 @@ const SystemAdminManagement = () => {
         .update({ status: "rejected" })
         .eq("id", requestId);
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
-      toast({ title: "Verification Rejected", variant: "destructive" });
+      toast({ title: "Rejected", variant: "destructive" });
     } catch (err: any) {
-      toast({ title: "Error Rejecting Request", description: err.message, variant: "destructive" });
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   };
 
@@ -219,280 +206,250 @@ const SystemAdminManagement = () => {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-4 max-w-[1400px] mx-auto">
+      {/* Header - Compacted */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">System Administrator</h1>
-          <p className="text-gray-600 mt-2">Enterprise Client & App Builder Management</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">System Admin</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Client & App Builder Management</p>
         </div>
 
         <Dialog open={showNewOrgModal} onOpenChange={setShowNewOrgModal}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto gap-2">
-              <Plus className="h-4 w-4" />
-              Add Enterprise Client
+            <Button size="sm" className="w-full sm:w-auto h-8 text-xs gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> Provision Client
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md w-[95vw]">
+          <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>Manually Provision Enterprise</DialogTitle>
-              <DialogDescription>
-                Create a new enterprise account. Gating rules are currently disabled for testing.
-              </DialogDescription>
+              <DialogTitle className="text-lg">Provision Enterprise</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-2">
+            <div className="space-y-3 py-2">
               <div>
-                <Label htmlFor="orgName">Enterprise Name</Label>
+                <Label className="text-xs">Enterprise Name</Label>
                 <Input
-                  id="orgName"
+                  size={1}
                   value={newOrgData.name}
                   onChange={(e) => setNewOrgData({ ...newOrgData, name: e.target.value })}
-                  placeholder="Enter organization name"
-                  className="mt-1"
+                  className="h-8 mt-1 text-sm"
                 />
               </div>
               <div>
-                <Label htmlFor="industry">Industry</Label>
+                <Label className="text-xs">Industry</Label>
                 <Select
                   value={newOrgData.industry}
                   onValueChange={(value) => setNewOrgData({ ...newOrgData, industry: value })}
                 >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select industry" />
+                  <SelectTrigger className="h-8 mt-1 text-sm">
+                    <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Technology">Technology</SelectItem>
                     <SelectItem value="Healthcare">Healthcare</SelectItem>
-                    <SelectItem value="Financial Services">Financial Services</SelectItem>
-                    <SelectItem value="Manufacturing">Manufacturing</SelectItem>
-                    <SelectItem value="Hospitality">Hospitality</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="tier">Account Tier</Label>
-                <Select
-                  value={newOrgData.tier}
-                  onValueChange={(value) => setNewOrgData({ ...newOrgData, tier: value })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select tier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Enterprise">Enterprise (App Builder Access)</SelectItem>
-                    <SelectItem value="Professional">Professional</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowNewOrgModal(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowNewOrgModal(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateOrganization}>Provision Client</Button>
+              <Button size="sm" onClick={handleCreateOrganization}>
+                Create
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Pending Account Conversion Requests (IDIA Life Signal) */}
-      <Card className="border-blue-100">
-        <CardHeader className="bg-blue-50/30 border-b border-blue-50">
-          <CardTitle className="flex items-center gap-2 text-blue-900">
-            Pending IDIA Life Business Requests
-            <Badge className="bg-blue-600">{pendingRequests.length}</Badge>
-          </CardTitle>
-          <CardDescription>
-            Review and process business conversions initiated from biological identities
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {pendingRequests.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-gray-500 space-y-2">
-              <ShieldCheck className="w-8 h-8 opacity-50" />
-              <p>No pending enterprise requests from IDIA Life</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
+      {/* Pending Requests - High Density List */}
+      {pendingRequests.length > 0 && (
+        <Card className="border-blue-100 shadow-sm">
+          <CardHeader className="bg-blue-50/50 border-b border-blue-50 py-2.5 px-4 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-blue-900">
+              <ShieldCheck className="w-4 h-4" /> Pending Approvals
+            </CardTitle>
+            <Badge className="bg-blue-600 hover:bg-blue-600 text-[10px] px-1.5 py-0 h-4">
+              {pendingRequests.length}
+            </Badge>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-blue-50">
               {pendingRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-blue-100 bg-white rounded-lg shadow-sm gap-4"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-3 bg-white hover:bg-slate-50 transition-colors"
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-lg">{request.companyName}</h4>
-                      <Badge variant="outline" className="text-[10px] font-mono bg-slate-50">
-                        GUID: {request.platformGuid.substring(0, 8)}...
+                      <h4 className="font-semibold text-sm text-gray-900 truncate">{request.companyName}</h4>
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] font-mono bg-slate-50 px-1 py-0 h-4 border-slate-200"
+                      >
+                        GUID: {request.platformGuid.substring(0, 8)}
                       </Badge>
                     </div>
-                    <p className="text-sm font-medium text-gray-700">{request.requestType}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Submitted by: <span className="font-semibold">{request.requestedBy}</span> on{" "}
-                      {request.requestDate}
+                    <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+                      {request.requestType} • Req by{" "}
+                      <span className="font-medium text-gray-700">{request.requestedBy}</span> ({request.requestDate})
                     </p>
                   </div>
-                  <div className="flex space-x-2 w-full sm:w-auto">
-                    <Button className="flex-1 sm:flex-none" size="sm" onClick={() => openReviewModal(request)}>
-                      <FileText className="w-4 h-4 mr-2" /> Verify Documents
-                    </Button>
-                  </div>
+                  <Button size="sm" className="h-7 text-xs shrink-0" onClick={() => openReviewModal(request)}>
+                    <FileText className="w-3 h-3 mr-1.5" /> Verify
+                  </Button>
                 </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Document Parsing & Review Modal */}
+      {/* Document Review Modal - Tightened */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-        <DialogContent className="sm:max-w-md w-[95vw]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-primary" />
-              T-1-P Document Verification
+            <DialogTitle className="text-lg flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-primary" /> T-1-P Verification
             </DialogTitle>
-            <DialogDescription>{selectedRequest?.companyName}</DialogDescription>
           </DialogHeader>
-
-          <div className="py-4 space-y-4">
+          <div className="py-2">
             {aiParsing ? (
-              <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <div className="text-center">
-                  <p className="font-medium">AI Parsing Biological & Legal Binding</p>
-                  <p className="text-xs text-muted-foreground">Validating IDIA Life origin request...</p>
-                </div>
+              <div className="flex flex-col items-center justify-center py-6 space-y-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-xs text-muted-foreground">Validating IDIA Life origin...</p>
               </div>
             ) : parsedData ? (
-              <div className="space-y-4 animate-in fade-in zoom-in duration-300">
-                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Bot className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold text-green-700">Verification Score</span>
+              <div className="space-y-3 animate-in fade-in duration-200 text-sm">
+                <div className="flex items-center justify-between p-2 bg-green-500/10 border border-green-500/20 rounded">
+                  <div className="flex items-center gap-1.5">
+                    <Bot className="w-4 h-4 text-green-600" />
+                    <span className="font-semibold text-xs text-green-700">Confidence Match</span>
                   </div>
-                  <Badge className="bg-green-600">{parsedData.confidence}% Validated</Badge>
+                  <Badge className="bg-green-600 text-[10px] h-5">{parsedData.confidence}%</Badge>
                 </div>
-
-                <div className="grid gap-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start sm:items-center gap-1 sm:gap-4">
-                    <Label className="text-left sm:text-right text-muted-foreground">Legal Name</Label>
-                    <span className="col-span-1 sm:col-span-2 font-medium">{parsedData.legalName}</span>
+                <div className="grid gap-2 text-xs">
+                  <div className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">Legal Name</span>
+                    <span className="font-medium">{parsedData.legalName}</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start sm:items-center gap-1 sm:gap-4">
-                    <Label className="text-left sm:text-right text-muted-foreground">IDIA Life GUID</Label>
-                    <span className="col-span-1 sm:col-span-2 font-medium font-mono text-xs flex items-center gap-2">
-                      {parsedData.guidValidated ? (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 text-orange-500" />
-                      )}
+                  <div className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">IDIA Life GUID</span>
+                    <span className="font-medium font-mono flex items-center gap-1">
+                      {parsedData.guidValidated && <CheckCircle className="w-3 h-3 text-green-500" />}
                       {selectedRequest?.platformGuid}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 items-start sm:items-center gap-1 sm:gap-4">
-                    <Label className="text-left sm:text-right text-muted-foreground">T-1-P Clearance</Label>
-                    <span className="col-span-1 sm:col-span-2 font-medium flex items-center gap-2">
-                      <Database className="w-4 h-4 text-blue-500" /> Eligible for Local Storage
+                  <div className="flex justify-between pb-1">
+                    <span className="text-muted-foreground">T-1-P Status</span>
+                    <span className="font-medium flex items-center gap-1 text-blue-600">
+                      <Database className="w-3 h-3" /> Eligible
                     </span>
                   </div>
                 </div>
               </div>
             ) : null}
           </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              className="w-full sm:w-auto"
+              size="sm"
               onClick={() => {
                 setReviewModalOpen(false);
                 handleRejectRequest(selectedRequest.id);
               }}
             >
-              Reject Application
+              Reject
             </Button>
-            <Button onClick={handleApproveRequest} className="w-full sm:w-auto" disabled={aiParsing}>
-              Approve Enterprise
+            <Button size="sm" onClick={handleApproveRequest} disabled={aiParsing}>
+              Approve
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Enterprise Roster */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* Roster - Flush Table-like List for Thousands of Records */}
+      <Card className="shadow-sm">
+        <CardHeader className="py-3 px-4 border-b bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <CardTitle>Active Enterprise Clients</CardTitle>
-              <CardDescription>Accounts eligible for IDIA Pay App Builder & IDIA Liability Shield</CardDescription>
+              <CardTitle className="text-base">Active Enterprises</CardTitle>
+              <CardDescription className="text-[11px] mt-0.5">
+                Total: {filteredEnterprises.length} records
+              </CardDescription>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <Input
-                placeholder="Search enterprises..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-8 h-8 text-xs bg-white"
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 p-0 sm:p-6 sm:pt-0">
+
+        <CardContent className="p-0">
           {isLoadingOrgs ? (
-            <div className="flex justify-center p-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           ) : filteredEnterprises.length === 0 ? (
-            <p className="text-gray-500 text-center p-8">No active enterprise organizations found.</p>
+            <p className="text-xs text-gray-500 text-center py-10">No active enterprises found.</p>
           ) : (
-            filteredEnterprises.map((org) => (
-              <div
-                key={org.id}
-                className="flex flex-col lg:flex-row items-start lg:items-center justify-between p-4 sm:p-6 border-b sm:border border-border sm:rounded-xl gap-4 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center space-x-4 w-full lg:w-auto">
-                  <div className="bg-slate-100 border border-slate-200 p-3 rounded-lg flex-shrink-0 h-12 w-12 flex items-center justify-center">
-                    <Building2 className="h-6 w-6 text-slate-600" />
+            <div className="divide-y divide-border">
+              {filteredEnterprises.map((org) => (
+                <div
+                  key={org.id}
+                  className="flex items-center justify-between p-3 gap-4 hover:bg-slate-50/80 transition-colors group"
+                >
+                  {/* Client Info Core */}
+                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className="bg-slate-100 border border-slate-200 rounded shrink-0 h-8 w-8 flex items-center justify-center">
+                      <Building2 className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">{org.name}</h3>
+                        {org.tier === "Enterprise" && <CheckCircle className="w-3 h-3 text-emerald-500 shrink-0" />}
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate">{org.industry || "Unspecified"}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-foreground truncate">{org.name}</h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      {org.tier === "Enterprise" && <CheckCircle className="w-3 h-3 text-emerald-500" />}
-                      {org.industry || "Unspecified Industry"}
-                    </p>
+
+                  {/* Flags & Controls - Compact layout */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {org.tier === "Enterprise" && (
+                      <div className="hidden md:flex items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className="bg-indigo-50 text-indigo-700 border-indigo-100/50 px-1.5 py-0 h-5 text-[10px] font-medium tracking-wide flex items-center gap-1 shadow-sm"
+                        >
+                          <Smartphone className="w-3 h-3" /> App Builder
+                        </Badge>
+                        <Badge
+                          variant="secondary"
+                          className="bg-emerald-50 text-emerald-700 border-emerald-100/50 px-1.5 py-0 h-5 text-[10px] font-medium tracking-wide flex items-center gap-1 shadow-sm"
+                        >
+                          <ShieldCheck className="w-3 h-3" /> T-1-P
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Action Button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto">
-                  {/* IDIA Pay Builder Eligibility Flag */}
-                  {org.tier === "Enterprise" && (
-                    <Badge
-                      variant="secondary"
-                      className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border-indigo-100 px-2.5 py-1"
-                    >
-                      <Smartphone className="w-3.5 h-3.5" />
-                      IDIA Pay App Builder
-                    </Badge>
-                  )}
-
-                  {/* IDIA Liability Shield (T-1-P) Flag */}
-                  {org.tier === "Enterprise" && (
-                    <Badge
-                      variant="secondary"
-                      className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-100 px-2.5 py-1"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      T-1-P Verification Active
-                    </Badge>
-                  )}
-
-                  <Button variant="outline" size="sm" className="ml-auto lg:ml-0 mt-2 sm:mt-0 w-full sm:w-auto">
-                    Manage Access
-                  </Button>
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
