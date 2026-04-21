@@ -180,27 +180,15 @@ const SynapseVisualizer = () => {
             {activities.slice(0, 3).map((activity) => (
               <div key={activity.id} className="flex items-center gap-3">
                 <div
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0 shadow-sm",
-                    activity.type === "apple_health_sync"
-                      ? "bg-rose-400"
-                      : activity.type === "synapse_controller"
-                        ? "bg-indigo-400"
-                        : activity.type === "best_friend_ai"
-                          ? "bg-amber-400"
-                          : activity.type === "data_sale"
-                            ? "bg-cyan-400"
-                            : "bg-emerald-400",
-                  )}
-                />
-                <span className="text-[11px] text-gray-200 truncate font-medium">
-                  {activity.type === "apple_health_sync" && "Ingestion: Apple Health DELT-Verified"}
-                  {activity.type === "synapse_controller" && `Synapse: ${activity.details?.desc || "Gas Billed"}`}
-                  {activity.type === "best_friend_ai" && `Research: ${activity.details?.type || "Omni-Fetch"}`}
-                  {activity.type === "data_sale" && "Settlement: 60/30/10 Law Executed"}
-                  {activity.type === "royalty_payment" && "Royalty: IDIA Life Wallet Settled"}
-                </span>
-              </div>
+  className={`w-1 h-1 rounded-full ${
+    activity.type === "bundle_created" ? "bg-purple-400" :
+    activity.type === "data_processed" ? "bg-blue-400" :
+    activity.type === "delt_transfer" ? "bg-emerald-400" :
+    activity.type === "apple_health_sync" ? "bg-rose-400" : // New Color Mapping
+    activity.type === "royalty_payment" ? "bg-emerald-500" : // New Color Mapping
+    "bg-green-400"
+  }`}
+></div>
             ))}
           </div>
         </div>
