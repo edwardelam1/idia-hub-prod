@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-// Add "delt_transfer" to the allowed ProtocolActivityType
+// Add the missing pipeline stages to the ProtocolActivityType union
 export type ProtocolActivityType =
   | "bundle_created"
   | "data_processed"
   | "user_connected"
-  | "delt_transfer" // Add this
-  | "api_call";
+  | "delt_transfer"
+  | "api_call"
+  | "apple_health_sync" // Added for Ingestion Ingest
+  | "synapse_controller" // Added for Processing Logic
+  | "best_friend_ai" // Added for AI Egress
+  | "data_sale" // Added for Economic Settlement
+  | "royalty_payment"; // Added for Contributor Payout
 
 export interface PipelineActivity {
   id: string;
-  type: ProtocolActivityType;
+  type: ProtocolActivityType; // Now recognizes all ironclad stages
   details: any;
   timestamp: number;
 }
