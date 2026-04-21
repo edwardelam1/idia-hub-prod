@@ -16,10 +16,8 @@ const SynapseGasGauge = () => {
         </button>
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-mono font-bold text-primary">
-          {Math.floor(credits).toLocaleString()}
-        </span>
-        <span className="text-[10px] font-bold text-primary/70">UNITS</span>
+        <span className="text-2xl font-mono font-bold text-primary">{Math.floor(credits).toLocaleString()}</span>
+        <span className="text-[10px] font-bold text-primary/70">Credits</span>
       </div>
     </div>
   );
