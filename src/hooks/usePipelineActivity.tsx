@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Add "delt_transfer" to the allowed ProtocolActivityType
 export type ProtocolActivityType =
-  | "apple_health_sync"
-  | "synapse_controller"
-  | "best_friend_ai"
-  | "data_sale"
-  | "royalty_payment";
+  | "bundle_created"
+  | "data_processed"
+  | "user_connected"
+  | "delt_transfer" // Add this
+  | "api_call";
 
 export interface PipelineActivity {
   id: string;
@@ -14,6 +15,7 @@ export interface PipelineActivity {
   details: any;
   timestamp: number;
 }
+
 export const usePipelineActivity = () => {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
   const [isActive, setIsActive] = useState(false);
