@@ -53,7 +53,26 @@ export const usePipelineActivity = () => {
         addActivity({ id: payload.new.id, type: "best_friend_ai", details: { type: payload.new.egress_type } });
       })
       .subscribe();
-
+    // Inside usePipelineActivity.tsx
+    const deltChannel = supabase
+      .channel("visualizer-delt")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "delt_transfers",
+        },
+        (payload) => {
+          // The attributes are now coming directly from the DB trigger
+          addActivity({
+            id: payload.new.id,
+            type: "delt_transfer",
+            details: payload.new.details,
+          });
+        },
+      )
+      .subscribe();
     return () => {
       supabase.removeChannel(healthChannel);
       supabase.removeChannel(ledgerChannel);
