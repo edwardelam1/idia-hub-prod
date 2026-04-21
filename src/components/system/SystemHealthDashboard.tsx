@@ -14,7 +14,7 @@ const INDICATORS = [
   },
   {
     id: "synapse-controller",
-    name: "Synapse Controller",
+    name: "Synapse Engine",
     icon: Cpu,
     activeColor: "bg-indigo-600",
     ringColor: "ring-indigo-200",
@@ -28,7 +28,7 @@ const INDICATORS = [
   },
   {
     id: "process-data-sale",
-    name: "Data Sale / DELT",
+    name: "Shielding",
     icon: Database,
     activeColor: "bg-cyan-500",
     ringColor: "ring-cyan-200",
