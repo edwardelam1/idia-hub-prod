@@ -49,21 +49,28 @@ export const SystemHealthDashboard = () => {
   useEffect(() => {
     const channel = supabase
       .channel("protocol-realtime-v5")
-      // STAGE 1: Ingestion Heartbeat
+      // STAGE 1: Ingestion
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_health_data" }, () => {
         pulseNode("apple-health-sync", "INGESTION_STAGED");
       })
-      // STAGE 2, 4, 5: The Economic Ledger (10/30/60 Law Enforcement)
+      // STAGE 2 & 5: The Economic Ledger
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
         const { entry_type, description } = payload.new;
         if (entry_type === "USAGE") pulseNode("synapse-controller", "GAS_SETTLED");
-        if (entry_type === "SETTLEMENT") pulseNode("process-data-sale", "SETTLEMENT_EXECUTED");
         if (entry_type === "ROYALTY") pulseNode("royalty-distribution", "ROYALTY_PAID");
         setActiveLog(description || `LEDGER UPDATE: ${entry_type}`);
       })
-      // STAGE 3: AI Egress Logs
+      // STAGE 3 & 4: Egress & DELT (The Liability Handshake)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
-        pulseNode("best-friend-ai", `EGRESS: ${payload.new.egress_type || "OMNI-FETCH"}`);
+        const { egress_type, liability_token_hash } = payload.new;
+
+        if (egress_type === "PURCHASE" || egress_type === "DATA_SALE") {
+          // STAGE 4: Cyan light pulses for the Atomic Receipt / DELT Minting
+          pulseNode("process-data-sale", `DELT MINTED: ${liability_token_hash?.slice(0, 8)}`);
+        } else {
+          // STAGE 3: Amber light pulses for AI Research/Navigation
+          pulseNode("best-friend-ai", `AI_EGRESS: ${egress_type || "OMNI-FETCH"}`);
+        }
       })
       .subscribe();
 
