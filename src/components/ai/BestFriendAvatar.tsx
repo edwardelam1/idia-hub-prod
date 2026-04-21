@@ -1,27 +1,28 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { MessageCircle, Mic, MicOff } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useRef, useState, useCallback } from "react";
+import { MessageCircle, Mic, MicOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BestFriendAvatarProps {
   onChatClick: () => void;
   onVoiceToggle: (isActive: boolean) => void;
   isListening?: boolean;
   isSpeaking?: boolean;
-  emotion?: 'excited' | 'calm' | 'sad' | 'neutral';
+  emotion?: "excited" | "calm" | "sad" | "neutral";
   className?: string;
   feedbackText?: string;
   onAudioResponse?: (text: string) => void;
 }
 
-const BestFriendAvatar = ({ 
-  onChatClick, 
-  onVoiceToggle, 
+const BestFriendAvatar = ({
+  onChatClick,
+  onVoiceToggle,
   isListening = false,
   isSpeaking = false,
-  emotion = 'neutral',
-  className = '',
-  feedbackText = '',
-  onAudioResponse
+  emotion = "neutral",
+  className = "",
+  feedbackText = "",
+  onAudioResponse,
 }: BestFriendAvatarProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<any>(null);
@@ -33,7 +34,7 @@ const BestFriendAvatar = ({
   const handleVoiceClick = async () => {
     const newState = !isVoiceActive;
     setIsVoiceActive(newState);
-    
+
     // Add haptic feedback and visual indication
     if (newState) {
       // Request microphone permission first
@@ -41,7 +42,7 @@ const BestFriendAvatar = ({
         await navigator.mediaDevices.getUserMedia({ audio: true });
         onVoiceToggle(newState);
       } catch (error) {
-        console.error('Microphone permission denied:', error);
+        console.error("Microphone permission denied:", error);
         setIsVoiceActive(false);
       }
     } else {
@@ -74,11 +75,11 @@ const BestFriendAvatar = ({
 
     const initVisualizer = async () => {
       if (!window.THREE) {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
         script.async = true;
         document.head.appendChild(script);
-        
+
         await new Promise((resolve) => {
           script.onload = resolve;
         });
@@ -90,7 +91,7 @@ const BestFriendAvatar = ({
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(75, 200 / 200, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      
+
       renderer.setSize(200, 200);
       renderer.setClearColor(0x000000, 0);
       containerRef.current!.appendChild(renderer.domElement);
@@ -108,26 +109,26 @@ const BestFriendAvatar = ({
         const radius = Math.random() * 30 + 20;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.random() * Math.PI;
-        
+
         positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
         positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
         positions[i3 + 2] = radius * Math.cos(phi);
-        
+
         sizes[i] = Math.random() * 2 + 1;
       }
 
-      particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      particles.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      particles.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      particles.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
 
       const particleMaterial = new THREE.PointsMaterial({
         size: 1.5,
         vertexColors: true,
         transparent: true,
         opacity: 0.9,
-        sizeAttenuation: true
+        sizeAttenuation: true,
       });
-      
+
       const particleSystem = new THREE.Points(particles, particleMaterial);
       scene.add(particleSystem);
 
@@ -141,11 +142,11 @@ const BestFriendAvatar = ({
         animationRef.current = requestAnimationFrame(animate);
 
         const time = Date.now() * 0.001;
-        
+
         // Movement speed based on emotion
         let speedMultiplier = 1.0;
-        if (emotion === 'excited') speedMultiplier = 3.0;
-        else if (emotion === 'sad') speedMultiplier = 0.3;
+        if (emotion === "excited") speedMultiplier = 3.0;
+        else if (emotion === "sad") speedMultiplier = 0.3;
         else if (isListening || isSpeaking) speedMultiplier = 2.0;
 
         particleSystem.rotation.x += 0.002 * speedMultiplier;
@@ -155,24 +156,24 @@ const BestFriendAvatar = ({
         const colors = particleSystem.geometry.attributes.color.array;
         const sizes = particleSystem.geometry.attributes.size.array;
         const color = new THREE.Color();
-        
+
         for (let i = 0; i < colors.length; i += 3) {
           const particleIndex = i / 3;
-          
-          if (emotion === 'excited' || (isSpeaking && Math.random() > 0.3)) {
+
+          if (emotion === "excited" || (isSpeaking && Math.random() > 0.3)) {
             // Every particle different color when excited or speaking
             const hue = Math.random();
             const saturation = 0.8 + Math.random() * 0.2;
             const lightness = 0.5 + Math.random() * 0.3;
             color.setHSL(hue, saturation, lightness);
-            
+
             // Rapid size changes
             sizes[particleIndex] = Math.sin(time * 5 + particleIndex) * 2 + 2;
-          } else if (emotion === 'sad') {
+          } else if (emotion === "sad") {
             // Single calm color - deep blue
             color.setHSL(0.6, 0.8, 0.4);
             sizes[particleIndex] = 1.5;
-          } else if (emotion === 'calm') {
+          } else if (emotion === "calm") {
             // Few colors - gentle greens and blues
             const baseHue = 0.3 + Math.sin(time + particleIndex * 0.1) * 0.2;
             color.setHSL(baseHue, 0.6, 0.5);
@@ -183,7 +184,7 @@ const BestFriendAvatar = ({
             color.setHSL(hue, 0.7, 0.6);
             sizes[particleIndex] = Math.sin(time + particleIndex) * 1 + 1.5;
           }
-          
+
           colors[i] = color.r;
           colors[i + 1] = color.g;
           colors[i + 2] = color.b;
@@ -213,12 +214,12 @@ const BestFriendAvatar = ({
   return (
     <div className={`relative ${className}`}>
       {/* Particle Avatar */}
-      <div 
-        ref={containerRef} 
+      <div
+        ref={containerRef}
         className="w-[200px] h-[200px] cursor-pointer rounded-full overflow-hidden"
         onClick={handleVoiceClick}
       />
-      
+
       {/* Thought Bubble for Chat */}
       <div className="absolute -top-8 left-1/2 transform -translate-x-1/2">
         <Button
