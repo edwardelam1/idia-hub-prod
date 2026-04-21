@@ -70,16 +70,21 @@ export const SystemHealthDashboard = () => {
         setActiveLog(description || `LEDGER: ${entry_type}`);
       })
 
-      // STAGES 3 & 4: Egress & DELT (Amber & Cyan)
+      // STAGES 3 & 4: Egress & DELT (Amber & Cyan Handshake)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
-        const { egress_type, liability_token_hash } = payload.new;
+        const { egress_type, liability_token_hash, aca_record_references } = payload.new;
 
-        if (egress_type === "PURCHASE") {
-          // STAGE 4: Cyan pulses for the DELT Minting event
-          pulseNode("process-data-sale", `DELT MINTED: ${liability_token_hash?.slice(0, 8)}`);
-        } else {
-          // STAGE 3: Amber pulses for standard AI Query
-          pulseNode("best-friend-ai", "AI_EGRESS_VERIFIED");
+        // 1. If it has ACA references or an Egress type, the AI did work (Amber)
+        if (egress_type || aca_record_references) {
+          pulseNode("best-friend-ai", "AI_OMNI_FETCH_COMPLETE");
+        }
+
+        // 2. If it has a Liability Token or is a Purchase, the Shielding is active (Cyan)
+        if (liability_token_hash || egress_type === "PURCHASE" || egress_type === "DATA_SALE") {
+          // Delay slightly so the user sees the Amber pulse first as the data moves through the AI
+          setTimeout(() => {
+            pulseNode("process-data-sale", `DELT MINTED: ${liability_token_hash?.slice(0, 8)}`);
+          }, 800);
         }
       })
       .subscribe();
