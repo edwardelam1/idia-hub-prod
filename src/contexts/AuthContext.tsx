@@ -151,7 +151,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSubscriptionTier(deriveTier(sub));
         setUser(buildUserFromSession(session, sub, prof));
 
-        const pii = await fetchPiiData();
+        const pii = await fetchPiiData(session);
         setPiiData(pii);
       } catch (err) {
         console.error("Auth init failed:", err);
