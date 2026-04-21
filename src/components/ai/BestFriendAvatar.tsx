@@ -44,14 +44,7 @@ const BestFriendAvatar = ({
         throw new Error("Sovereign Client (supabase) is not defined in current scope.");
       }
 
-      // 2. Log Egress event to trigger the Hub Dashboard Pulse (Stage 3)
-      await supabase.from("egress_logs").insert({
-        event_type: "AI_WAKE_WORD",
-        description: "Best Friend AI Voice Interface Activated",
-        metadata: { emotion_state: emotion },
-      });
-
-      // 3. Optional: Initial greeting from Edge Function
+      // 2. Optional: Initial greeting from Edge Function
       const { data, error } = await supabase.functions.invoke("best-friend-ai", {
         body: { intent: "GREETING", context: "voice_active" },
       });
