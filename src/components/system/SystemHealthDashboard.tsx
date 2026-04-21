@@ -44,7 +44,7 @@ const INDICATORS = [
 
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
-  const [activeLog, setActiveLog] = useState<string>("PIPELINE_STANDBY");
+  const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
 
   useEffect(() => {
     const channel = supabase
