@@ -189,6 +189,7 @@ const SynapseVisualizer = () => {
     "bg-green-400"
   }`}
 ></div>
+              </div>
             ))}
           </div>
         </div>
