@@ -70,10 +70,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setActivePerspective(type);
   }, []);
 
-  const fetchPiiData = useCallback(async () => {
+  // src/contexts/AuthContext.tsx
+
+  const fetchPiiData = useCallback(async (session: Session) => {
     try {
-      const { data, error } = await supabase.functions.invoke("life-pii-bridge");
-      if (error) return null;
+      const { data, error } = await supabase.functions.invoke("life-pii-bridge", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        console.error("PII Bridge Error:", error);
+        return null;
+      }
+
       return {
         displayName: data.display_name ?? null,
         fullName: data.full_name ?? null,
