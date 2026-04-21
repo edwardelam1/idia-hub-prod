@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Activity, Cpu, Library, Database, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,29 +43,25 @@ const INDICATORS = [
 ];
 
 export const SystemHealthDashboard = () => {
-  // Key fix: Track every node state independently to prevent "succession" behavior
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
   const [activeLog, setActiveLog] = useState<string>("PIPELINE_STANDBY");
 
   useEffect(() => {
     const channel = supabase
       .channel("protocol-realtime-v5")
-      // STAGE 1: Real-time Ingestion
+      // STAGE 1: Ingestion Heartbeat
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_health_data" }, () => {
         pulseNode("apple-health-sync", "INGESTION_STAGED");
       })
-      // STAGE 2, 4, 5: Real-time Economic Ledger
+      // STAGE 2, 4, 5: The Economic Ledger (10/30/60 Law Enforcement)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
         const { entry_type, description } = payload.new;
-
-        // Mapped directly to the IDIA 10/30/60 Law ledger constraints
         if (entry_type === "USAGE") pulseNode("synapse-controller", "GAS_SETTLED");
         if (entry_type === "SETTLEMENT") pulseNode("process-data-sale", "SETTLEMENT_EXECUTED");
         if (entry_type === "ROYALTY") pulseNode("royalty-distribution", "ROYALTY_PAID");
-
         setActiveLog(description || `LEDGER UPDATE: ${entry_type}`);
       })
-      // STAGE 3: Real-time AI Egress
+      // STAGE 3: AI Egress Logs
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
         pulseNode("best-friend-ai", `EGRESS: ${payload.new.egress_type || "OMNI-FETCH"}`);
       })
@@ -79,7 +75,6 @@ export const SystemHealthDashboard = () => {
   const pulseNode = (nodeId: string, status: string) => {
     setActiveLog(status);
     setNodeStates((prev) => ({ ...prev, [nodeId]: true }));
-    // Pulsing duration is set to 3s to represent the active compute time
     setTimeout(() => setNodeStates((prev) => ({ ...prev, [nodeId]: false })), 3000);
   };
 
@@ -96,13 +91,10 @@ export const SystemHealthDashboard = () => {
       <Card className="border-none shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] rounded-[3rem] overflow-hidden bg-white">
         <CardContent className="p-20 md:p-32 relative">
           <div className="relative flex flex-col md:flex-row justify-between items-center min-h-[300px]">
-            {/* Connection Rail */}
             <div className="hidden md:block absolute top-[64px] left-[10%] right-[10%] h-2 bg-slate-50 rounded-full z-0" />
-
             {INDICATORS.map((indicator) => {
               const isPulse = !!nodeStates[indicator.id];
               const Icon = indicator.icon;
-
               return (
                 <div key={indicator.id} className="relative z-10 flex flex-col items-center w-full md:w-[18%] gap-6">
                   <div
