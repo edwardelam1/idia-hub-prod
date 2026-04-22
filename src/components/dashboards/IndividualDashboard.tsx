@@ -26,7 +26,7 @@ import {
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 
 const IndividualDashboard = () => {
-  const { user, piiData } = useAuth(); // Assuming 'user' provides the ID for database interrogation
+  const { user, piiData } = useAuth();
   const { balanceData } = useSynapseCredits();
   const { currentUsage, subscriptionPlan, subscription } = useBillingData();
   const navigate = useNavigate();
@@ -37,18 +37,18 @@ const IndividualDashboard = () => {
 
   // ─── DYNAMIC LEDGER INTERROGATION (NO HALLUCINATIONS) ─────────────────────
   const { data: stats } = useQuery({
-    queryKey: ["hub-personal-stats", user?.id],
+    queryKey: ["hub-personal-stats", user?.user_id], // Fixed: Accessing user_id per AuthContext
     queryFn: async () => {
-      if (!user?.id) return { activeSources: 0, auditLogs: 0, dataAssets: 0 };
+      if (!user?.user_id) return { activeSources: 0, auditLogs: 0, dataAssets: 0 }; // Fixed: Accessing user_id
 
       const [sourcesRes, auditsRes, assetsRes] = await Promise.all([
         supabase
           .from("data_connections")
           .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("is_active", true),
-        supabase.from("egress_logs").select("*", { count: "exact", head: true }).eq("user_id", user.id),
-        supabase.from("staged_health_data").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+          .eq("user_id", user.user_id)
+          .eq("is_active", true), // Fixed: Accessing user_id
+        supabase.from("egress_logs").select("*", { count: "exact", head: true }).eq("user_id", user.user_id), // Fixed: Accessing user_id
+        supabase.from("staged_health_data").select("*", { count: "exact", head: true }).eq("user_id", user.user_id), // Fixed: Accessing user_id
       ]);
 
       return {
@@ -57,7 +57,7 @@ const IndividualDashboard = () => {
         dataAssets: assetsRes.count || 0,
       };
     },
-    enabled: !!user?.id,
+    enabled: !!user?.user_id, // Fixed: Accessing user_id
   });
 
   const personalStats = stats || { activeSources: 0, auditLogs: 0, dataAssets: 0 };
@@ -88,7 +88,10 @@ const IndividualDashboard = () => {
           <h1 className="text-3xl font-bold text-foreground">
             {piiData?.displayName ? `${piiData.displayName}'s IDIA Hub` : "My IDIA Hub"}
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">Auditable personal data assets & Synapse provenance</p>
+          <p className="text-muted-foreground mt-1 text-sm font-mono flex items-center gap-2">
+            GUID:{" "}
+            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{user?.user_id?.substring(0, 8)}...</span>
+          </p>
         </div>
 
         <Card>
@@ -137,7 +140,6 @@ const IndividualDashboard = () => {
               </CardContent>
             </Card>
 
-            {/* DATA SOURCES: REAL-TIME COUNT */}
             <Card>
               <CardContent className="p-3 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between">
@@ -153,7 +155,6 @@ const IndividualDashboard = () => {
               </CardContent>
             </Card>
 
-            {/* AUDIT LOGS: FORMERLY SYNAPSE SCORE */}
             <Card className="border-primary/20 bg-primary/[0.01]">
               <CardContent className="p-3 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between">
