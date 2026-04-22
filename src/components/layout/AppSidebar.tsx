@@ -190,7 +190,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
             <img
               src="/images/hub-logo.png"
               alt="IDIA Hub"
-              className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0"
+              className="w-8 h-8 flex-shrink-0"
             />
             {!isCollapsed && (
               <div className="min-w-0">
