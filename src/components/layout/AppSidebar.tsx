@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Building2,
@@ -20,7 +20,7 @@ import {
   ScrollText,
   KeyRound,
   Landmark,
-  ChevronRight,
+  GripVertical,
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -34,11 +34,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 
 interface NavItem {
   title: string;
@@ -46,133 +41,145 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-interface NavSection {
-  label: string;
-  items: NavItem[];
-}
-
 interface AppSidebarProps {
   userRole: string;
 }
+
+// Dashboard is always pinned at the top and not reorderable.
+const PINNED_ITEM: NavItem = { title: 'Dashboard', url: '/dashboard', icon: BarChart3 };
+
+const getRoleItems = (userRole: string): NavItem[] => {
+  const base: NavItem[] = [
+    { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
+    { title: 'Data Marketplace', url: '/marketplace', icon: Database },
+    { title: 'My Reports', url: '/my-reports', icon: Package },
+    { title: 'Hub Enrollment', url: '/billing', icon: DollarSign },
+    { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
+    { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
+    { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
+    { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
+    { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+    { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
+  ];
+
+  switch (userRole) {
+    case 'super-admin':
+      base.push(
+        { title: 'System Health', url: '/system-health', icon: Activity },
+        { title: 'Client Organizations', url: '/organizations', icon: Building2 },
+        { title: 'AI Management', url: '/ai-management', icon: Zap },
+        { title: 'Security', url: '/security', icon: ShieldCheck },
+        { title: 'Audit Logs', url: '/audit-logs', icon: FileText },
+        { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
+      );
+      break;
+    case 'organization-admin':
+      base.push(
+        { title: 'Team Management', url: '/teams', icon: Users },
+        { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
+      );
+      break;
+    case 'team-lead':
+      base.push(
+        { title: 'My Team', url: '/my-team', icon: Users },
+        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
+        { title: 'Analytics', url: '/analytics', icon: TrendingUp },
+      );
+      break;
+    case 'team-member':
+      base.push(
+        { title: 'My Lists', url: '/my-lists', icon: FileText },
+        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
+      );
+      break;
+  }
+
+  base.push({ title: 'Settings', url: '/settings', icon: Settings });
+  return base;
+};
+
+const storageKey = (role: string) => `sidebar-order:${role}`;
+
+const loadSavedOrder = (role: string, items: NavItem[]): NavItem[] => {
+  try {
+    const raw = localStorage.getItem(storageKey(role));
+    if (!raw) return items;
+    const savedUrls: string[] = JSON.parse(raw);
+    const byUrl = new Map(items.map((i) => [i.url, i]));
+    const ordered: NavItem[] = [];
+    for (const url of savedUrls) {
+      const item = byUrl.get(url);
+      if (item) {
+        ordered.push(item);
+        byUrl.delete(url);
+      }
+    }
+    // Append any new items not present in saved order
+    for (const item of byUrl.values()) ordered.push(item);
+    return ordered;
+  } catch {
+    return items;
+  }
+};
 
 const AppSidebar = ({ userRole }: AppSidebarProps) => {
   const { state } = useSidebar();
   const location = useLocation();
   const isCollapsed = state === 'collapsed';
+  const isActive = (path: string) => location.pathname === path;
 
-  const getSections = (): NavSection[] => {
-    // -- Core (always visible) --
-    const core: NavSection = {
-      label: 'Core',
-      items: [
-        { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-        { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
-      ],
-    };
+  const roleItems = useMemo(() => getRoleItems(userRole), [userRole]);
+  const [items, setItems] = useState<NavItem[]>(() => loadSavedOrder(userRole, roleItems));
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
-    // -- Data & Discovery --
-    const data: NavSection = {
-      label: 'Data & Discovery',
-      items: [
-        { title: 'Data Marketplace', url: '/marketplace', icon: Database },
-        { title: 'My Reports', url: '/my-reports', icon: Package },
-      ],
-    };
+  // Re-reconcile when role changes
+  useEffect(() => {
+    setItems(loadSavedOrder(userRole, roleItems));
+  }, [userRole, roleItems]);
 
-    // -- Finance --
-    const finance: NavSection = {
-      label: 'Finance',
-      items: [
-        { title: 'Hub Enrollment', url: '/billing', icon: DollarSign },
-        { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
-        { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
-      ],
-    };
-
-    // -- Compliance & Provenance --
-    const compliance: NavSection = {
-      label: 'Compliance',
-      items: [
-        { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
-        { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
-      ],
-    };
-
-    // -- Trading & Liquidity (all roles) --
-    const trading: NavSection = {
-      label: 'Trading & Liquidity',
-      items: [
-        { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
-        { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
-      ],
-    };
-
-    // Settings always visible at end
-    const settingsSection: NavSection = {
-      label: 'Account',
-      items: [
-        { title: 'Settings', url: '/settings', icon: Settings },
-      ],
-    };
-
-    const sections: NavSection[] = [core, data, finance, compliance, trading];
-
-    switch (userRole) {
-      case 'super-admin': {
-        sections.push({
-          label: 'Platform Admin',
-          items: [
-            { title: 'System Health', url: '/system-health', icon: Activity },
-            { title: 'Client Organizations', url: '/organizations', icon: Building2 },
-            { title: 'AI Management', url: '/ai-management', icon: Zap },
-            { title: 'Security', url: '/security', icon: ShieldCheck },
-            { title: 'Audit Logs', url: '/audit-logs', icon: FileText },
-            { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
-          ],
-        });
-        break;
-      }
-      case 'organization-admin': {
-        sections.push({
-          label: 'Organization',
-          items: [
-            { title: 'Team Management', url: '/teams', icon: Users },
-            { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
-          ],
-        });
-        break;
-      }
-      case 'team-lead': {
-        sections.push({
-          label: 'Team',
-          items: [
-            { title: 'My Team', url: '/my-team', icon: Users },
-            { title: 'Saved Searches', url: '/saved-searches', icon: Search },
-            { title: 'Analytics', url: '/analytics', icon: TrendingUp },
-          ],
-        });
-        break;
-      }
-      case 'team-member': {
-        sections.push({
-          label: 'My Workspace',
-          items: [
-            { title: 'My Lists', url: '/my-lists', icon: FileText },
-            { title: 'Saved Searches', url: '/saved-searches', icon: Search },
-          ],
-        });
-        break;
-      }
+  const persistOrder = (next: NavItem[]) => {
+    try {
+      localStorage.setItem(storageKey(userRole), JSON.stringify(next.map((i) => i.url)));
+    } catch {
+      /* ignore */
     }
-
-    sections.push(settingsSection);
-    return sections;
   };
 
-  const sections = getSections();
-  const isActive = (path: string) => location.pathname === path;
-  const sectionHasActive = (section: NavSection) =>
-    section.items.some((item) => isActive(item.url));
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Required for Firefox to start the drag
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (dragIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (overIndex !== index) setOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setOverIndex(null);
+      return;
+    }
+    const next = [...items];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(index, 0, moved);
+    setItems(next);
+    persistOrder(next);
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setOverIndex(null);
+  };
 
   return (
     <Sidebar className="h-full flex-shrink-0" collapsible="icon">
@@ -198,110 +205,83 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
           </div>
         </div>
 
-        {/* Navigation Sections - Scrollable */}
+        {/* Flat, drag-reorderable navigation */}
         <div className="flex-1 overflow-y-auto">
-          {sections.map((section) => (
-            <CollapsibleNavGroup
-              key={section.label}
-              section={section}
-              isCollapsed={isCollapsed}
-              isActive={isActive}
-              defaultOpen={sectionHasActive(section) || section.label === 'Core'}
-            />
-          ))}
-        </div>
-      </SidebarContent>
-    </Sidebar>
-  );
-};
-
-/* ---- Collapsible Nav Group ---- */
-
-interface CollapsibleNavGroupProps {
-  section: NavSection;
-  isCollapsed: boolean;
-  isActive: (path: string) => boolean;
-  defaultOpen: boolean;
-}
-
-const CollapsibleNavGroup = ({
-  section,
-  isCollapsed,
-  isActive,
-  defaultOpen,
-}: CollapsibleNavGroupProps) => {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <Collapsible open={isCollapsed ? false : open} onOpenChange={setOpen}>
-      <SidebarGroup className="py-1">
-        {!isCollapsed && (
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground/70 transition-colors">
-            <span>{section.label}</span>
-            <ChevronRight
-              className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-            />
-          </CollapsibleTrigger>
-        )}
-        <CollapsibleContent>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5 mt-0.5">
-              {section.items.map((item) => (
-                <SidebarMenuItem key={item.title}>
+          <SidebarGroup className="py-2">
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">
+                {/* Pinned: Dashboard */}
+                <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    className={`
-                      mx-2 rounded-md transition-colors
-                      ${
-                        isActive(item.url)
-                          ? 'bg-primary/10 text-primary border-r-2 border-primary'
-                          : 'hover:bg-accent hover:text-accent-foreground'
-                      }
-                    `}
+                    className={`mx-2 rounded-md transition-colors ${
+                      isActive(PINNED_ITEM.url)
+                        ? 'bg-primary/10 text-primary border-r-2 border-primary'
+                        : 'hover:bg-accent hover:text-accent-foreground'
+                    }`}
                   >
-                    <NavLink to={item.url} className="flex items-center px-2 py-2">
-                      <item.icon className="h-4 w-4 flex-shrink-0" />
+                    <NavLink to={PINNED_ITEM.url} className="flex items-center px-2 py-2">
+                      <PINNED_ITEM.icon className="h-4 w-4 flex-shrink-0" />
                       {!isCollapsed && (
                         <span className="ml-3 text-sm font-medium truncate">
-                          {item.title}
+                          {PINNED_ITEM.title}
                         </span>
                       )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </CollapsibleContent>
 
-        {/* When collapsed, show icons without group labels */}
-        {isCollapsed && (
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {section.items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    className={`
-                      mx-2 rounded-md transition-colors
-                      ${
-                        isActive(item.url)
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-accent hover:text-accent-foreground'
-                      }
-                    `}
-                  >
-                    <NavLink to={item.url} className="flex items-center px-2 py-2">
-                      <item.icon className="h-4 w-4 flex-shrink-0" />
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        )}
-      </SidebarGroup>
-    </Collapsible>
+                {/* Reorderable items */}
+                {items.map((item, index) => {
+                  const isDragging = dragIndex === index;
+                  const isOver =
+                    overIndex === index && dragIndex !== null && dragIndex !== index;
+                  const indicatorAbove = isOver && (dragIndex as number) > index;
+                  const indicatorBelow = isOver && (dragIndex as number) < index;
+                  return (
+                    <SidebarMenuItem
+                      key={item.url}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`group/drag relative ${isDragging ? 'opacity-50' : ''} ${
+                        indicatorAbove ? 'border-t-2 border-primary' : ''
+                      } ${indicatorBelow ? 'border-b-2 border-primary' : ''}`}
+                    >
+                      <SidebarMenuButton
+                        asChild
+                        className={`mx-2 rounded-md transition-colors ${
+                          isActive(item.url)
+                            ? 'bg-primary/10 text-primary border-r-2 border-primary'
+                            : 'hover:bg-accent hover:text-accent-foreground'
+                        }`}
+                      >
+                        <NavLink to={item.url} className="flex items-center px-2 py-2">
+                          {!isCollapsed && (
+                            <GripVertical
+                              className="h-3.5 w-3.5 mr-1 text-muted-foreground/40 opacity-0 group-hover/drag:opacity-100 transition-opacity cursor-grab active:cursor-grabbing flex-shrink-0"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <item.icon className="h-4 w-4 flex-shrink-0" />
+                          {!isCollapsed && (
+                            <span className="ml-3 text-sm font-medium truncate">
+                              {item.title}
+                            </span>
+                          )}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </div>
+      </SidebarContent>
+    </Sidebar>
   );
 };
 
