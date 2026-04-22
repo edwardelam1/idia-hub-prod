@@ -166,7 +166,7 @@ const BestFriendPage = () => {
                         variant="outline"
                         className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
                       >
-                        <Shield size={10} className="mr-1" /> SHIELD_VERIFIED
+                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
                       </Badge>
                     </div>
                   )}
