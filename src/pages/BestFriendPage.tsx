@@ -78,7 +78,11 @@ const BestFriendPage = () => {
       // 4. SYNAPSE CASHIER — Fixed syntax and AWAIT logic
       let liabilityTokenHash: string | null = null;
       const cleanIdArray =
-        receipt.length > 0 ? receipt : marketplaceMode ? realPipelineData.map((r) => String(r.id)) : [];
+        receipt.length > 0
+          ? receipt.map((r: any) => String(r))
+          : realPipelineData.length > 0
+            ? realPipelineData.map((r: any) => String(r.aca_hash_key)).filter(Boolean) // <-- CHANGE TO aca_hash_key
+            : [];
 
       if (cleanIdArray.length > 0) {
         try {
