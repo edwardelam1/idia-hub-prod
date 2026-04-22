@@ -30,6 +30,9 @@ const BestFriendPage = () => {
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
 
+  // ATOMIC LOCK: Prevents multiple clicks while a query is in-flight
+  const isProcessing = useRef(false);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -37,11 +40,13 @@ const BestFriendPage = () => {
   }, [conversation, isLoading]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isLoading) return;
+    if (!currentMessage.trim() || isLoading || isProcessing.current) return;
+
+    isProcessing.current = true;
     setIsLoading(true);
 
     try {
-      // 1. IDENTITY
+      // 1. IDENTITY RESOLUTION
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -51,14 +56,14 @@ const BestFriendPage = () => {
       const activeGuid = profile?.platform_guid;
       if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
-      // 2. WAREHOUSE GRAB (only when in marketplace mode)
+      // 2. WAREHOUSE FETCH (Context for AI)
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         const { data: healthData } = await supabase.from("staged_health_data").select("*").eq("user_id", user.id);
         realPipelineData = healthData || [];
       }
 
-      // 3. AI CALL FIRST — get the answer + the consumption receipt
+      // 3. AI CALL (The Orchestrator now handles the Cashier internally)
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -73,37 +78,13 @@ const BestFriendPage = () => {
 
       if (aiError) throw aiError;
 
-      const receipt: string[] = chatResponse?.consumed_records || [];
+      // ========================================================================
+      // 4. RECEIPT CAPTURE (NO FRONTEND CALL TO SYNAPSE)
+      // We strictly use the token returned by the AI. NO ACA NO TOKEN.
+      // ========================================================================
+      const liabilityTokenHash = chatResponse?.liability_token || null;
 
-      // 4. SYNAPSE CASHIER — Fixed syntax and AWAIT logic
-      let liabilityTokenHash: string | null = null;
-      const cleanIdArray =
-        receipt.length > 0
-          ? receipt.map((r: any) => String(r))
-          : realPipelineData.length > 0
-            ? realPipelineData.map((r: any) => String(r.aca_hash_key)).filter(Boolean) // <-- CHANGE TO aca_hash_key
-            : [];
-
-      if (cleanIdArray.length > 0) {
-        try {
-          const { data: synapseData, error: synapseError } = await supabase.functions.invoke("synapse-controller", {
-            body: {
-              client_id: String(user.id),
-              aca_record_ids: cleanIdArray,
-              intent_type: chatResponse?.activeAgent || "RESEARCH",
-            },
-          });
-
-          if (!synapseError && synapseData?.success) {
-            liabilityTokenHash = synapseData.liability_token_hash;
-            await refreshBalance();
-          }
-        } catch (e) {
-          console.error("Synapse connection failed", e);
-        }
-      }
-
-      // 5. RENDER
+      // 5. RENDER TRUTH
       setConversation((prev) => [
         ...prev,
         { role: "user", content: currentMessage },
@@ -115,11 +96,18 @@ const BestFriendPage = () => {
         },
       ]);
 
+      // Refresh balance only if a purchase actually occurred
+      if (liabilityTokenHash) {
+        await refreshBalance();
+      }
+
       setCurrentMessage("");
     } catch (error: any) {
+      console.error("[BEST_FRIEND_UI_ERROR]:", error.message);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
+      isProcessing.current = false;
     }
   };
 
