@@ -13,8 +13,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { useBillingData } from '@/hooks/useBillingData';
 import { formatCredits } from '@/lib/utils';
+import AvailablePlansDialog from '@/components/billing/AvailablePlansDialog';
 
 const IndividualBilling = () => {
+  const [showPlans, setShowPlans] = useState(false);
   return (
     <div className="space-y-6 mt-4">
       <Card>
@@ -61,13 +63,14 @@ const IndividualBilling = () => {
                 Access Data Bundles, Synapse Credits, and Premier Filters.
               </p>
             </div>
-            <Button size="sm" className="gap-1.5" onClick={() => window.location.href = '/onboarding'}>
+            <Button size="sm" className="gap-1.5" onClick={() => setShowPlans(true)}>
               Upgrade
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </div>
         </CardContent>
       </Card>
+      <AvailablePlansDialog open={showPlans} onOpenChange={setShowPlans} currentTier="base" />
     </div>
   );
 };

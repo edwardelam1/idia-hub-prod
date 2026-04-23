@@ -4,61 +4,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CreditCard, Download, TrendingUp, AlertTriangle, FileText, Building, Wallet, Landmark, Plus, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { useBillingData, PLAN_PRICING } from '@/hooks/useBillingData';
+import { Download, TrendingUp, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
+import { useBillingData } from '@/hooks/useBillingData';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
-
-const PAYMENT_TYPES = [
-  { value: 'credit_card', label: 'Credit Card', icon: CreditCard },
-  { value: 'debit_card', label: 'Debit Card', icon: CreditCard },
-  { value: 'bank_ach', label: 'Bank (ACH)', icon: Landmark },
-  { value: 'bank_wire', label: 'Bank (Wire)', icon: Building },
-  { value: 'dex_wallet', label: 'DEX Wallet', icon: Wallet },
-  { value: 'idia_life_wallet', label: 'IDIA Life Wallet', icon: Wallet },
-];
-
-const PLAN_TIERS = ['analyst', 'professional', 'enterprise'] as const;
+import AvailablePlansDialog from './AvailablePlansDialog';
 
 const BillingCredits = () => {
-  const navigate = useNavigate();
   const {
-    currentUsage, subscriptionPlan, subscription, daysRemaining, paymentMethods, invoices,
-    isLoading, addPaymentMethod, removePaymentMethod, setDefaultPaymentMethod, downloadInvoice,
+    currentUsage, subscriptionPlan, subscription, daysRemaining, invoices,
+    isLoading, downloadInvoice,
   } = useBillingData();
   const { balanceData } = useSynapseCredits();
 
-  const [showAddPM, setShowAddPM] = useState(false);
-  const [pmType, setPmType] = useState('credit_card');
-  const [pmLabel, setPmLabel] = useState('');
-  const [pmIdentifier, setPmIdentifier] = useState('');
   const [showPlans, setShowPlans] = useState(false);
 
   const liveBalance = balanceData?.available_credits ?? 0;
   const usagePercentage = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
   const projectedUsage = new Date().getDate() > 0 ? Math.round(currentUsage.used * (30 / new Date().getDate())) : 0;
-
-  const handleAddPM = () => {
-    if (!pmLabel.trim() || !pmIdentifier.trim()) { toast.error('Fill in all fields'); return; }
-    addPaymentMethod.mutate({ paymentToken: pmIdentifier, display_label: pmLabel });
-    setPmLabel('');
-    setPmIdentifier('');
-    setShowAddPM(false);
-  };
-
-  const getMethodIcon = (type: string) => {
-    const found = PAYMENT_TYPES.find(p => p.value === type);
-    const Icon = found?.icon ?? CreditCard;
-    return <Icon className="h-5 w-5" />;
-  };
-
-  const getMethodLabel = (type: string) => PAYMENT_TYPES.find(p => p.value === type)?.label ?? type;
 
   const currentTier = subscription?.tier?.toLowerCase() ?? 'base';
 
