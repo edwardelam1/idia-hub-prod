@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,13 +14,9 @@ interface ConversationMessage {
   content: string;
   liabilityTokenHash?: string | null;
   creditDeducted?: boolean;
-  tokenSpend?: number;
 }
 
 const BestFriendPage = () => {
-  if (typeof window !== "undefined") {
-    (window as any).supabase = supabase;
-  }
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +25,6 @@ const BestFriendPage = () => {
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
 
-  // ATOMIC LOCK: Prevents multiple clicks while a query is in-flight
   const isProcessing = useRef(false);
 
   useEffect(() => {
@@ -56,35 +50,38 @@ const BestFriendPage = () => {
       const activeGuid = profile?.platform_guid;
       if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
 
-      // 2. WAREHOUSE FETCH (Context for AI)
+      // 2. WAREHOUSE FETCH (The Truth from DB)
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
-        const { data: healthData } = await supabase.from("staged_health_data").select("*").eq("user_id", user.id);
+        // Fetch fresh staged data to ensure the AI has the actual pipeline state
+        const { data: healthData } = await supabase
+          .from("staged_health_data")
+          .select("*")
+          .eq("user_id", user.id)
+          .limit(100);
         realPipelineData = healthData || [];
       }
 
-      // 3. AI CALL (The Orchestrator now handles the Cashier internally)
+      // 3. ORCHESTRATION INVOCATION
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
+            userId: user.id,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
-          history: conversation.map((m) => ({ role: m.role, content: m.content })),
+          history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
         },
       });
 
       if (aiError) throw aiError;
 
-      // ========================================================================
-      // 4. RECEIPT CAPTURE (NO FRONTEND CALL TO SYNAPSE)
-      // We strictly use the token returned by the AI. NO ACA NO TOKEN.
-      // ========================================================================
+      // 4. CASHIER RECEIPT CAPTURE
       const liabilityTokenHash = chatResponse?.liability_token || null;
 
-      // 5. RENDER TRUTH
+      // 5. UPDATE CONVERSATION
       setConversation((prev) => [
         ...prev,
         { role: "user", content: currentMessage },
@@ -96,7 +93,7 @@ const BestFriendPage = () => {
         },
       ]);
 
-      // Refresh balance only if a purchase actually occurred
+      // Refresh the "Synapse Gas" gauge if a credit was burned
       if (liabilityTokenHash) {
         await refreshBalance();
       }
@@ -121,7 +118,7 @@ const BestFriendPage = () => {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">Welcome to Best Friend AI</h1>
+            <h1 className="text-xl font-bold">Best Friend AI</h1>
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
               Agentic Orchestration Layer
             </p>
@@ -181,7 +178,7 @@ const BestFriendPage = () => {
                   <Bot size={16} />
                 </div>
                 <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
-                  Best Friend AI is auditing the pipeline...
+                  Best Friend AI is querying the data pipeline...
                 </div>
               </div>
             </div>
@@ -193,12 +190,12 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border max-w-3xl mx-auto w-full space-y-4">
         <div className="flex gap-2 relative">
           <Input
-            placeholder={marketplaceMode ? "Querying Pipeline via Person Anchor..." : "Message Synapse..."}
+            placeholder={marketplaceMode ? "Querying Pipeline via Person Anchor..." : "Message Best Friend..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
             disabled={isLoading}
-            className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border focus-visible:ring-primary"
+            className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border"
           />
           <Button
             onClick={handleSendMessage}
@@ -211,10 +208,13 @@ const BestFriendPage = () => {
         <div className="flex items-center justify-between px-1">
           <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
-            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
           >
             <Search size={14} /> Marketplace Mode (1 CR)
           </button>
+          <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50">
+            Synapse Controller v2.0 - Fixed Rate 0.75
+          </div>
         </div>
       </div>
     </div>
