@@ -108,7 +108,6 @@ const Index = () => {
         <Route path="/ai-management" element={<AIManagement />} />
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/best-friend" element={<BestFriendPage />} />
-        <Route path="/audit-logs" element={<div>Audit Logs (Coming Soon)</div>} />
         <Route path="/teams" element={<TeamManagement />} />
         <Route path="/billing" element={<BillingCredits />} />
         <Route path="/compliance" element={<ComplianceDashboard />} />

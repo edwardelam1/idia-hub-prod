@@ -69,7 +69,6 @@ const getRoleItems = (userRole: string): NavItem[] => {
         { title: 'Client Organizations', url: '/organizations', icon: Building2 },
         { title: 'AI Management', url: '/ai-management', icon: Zap },
         { title: 'Security', url: '/security', icon: ShieldCheck },
-        { title: 'Audit Logs', url: '/audit-logs', icon: FileText },
         { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
       );
       break;
