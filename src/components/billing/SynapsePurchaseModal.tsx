@@ -5,7 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, Lock } from 'lucide-react';
+import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, Lock, Copy, CircleDollarSign } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -35,6 +36,9 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [purchaseMode, setPurchaseMode] = useState<'tier' | 'alacarte'>('tier');
   const [alacarteAmount, setAlacarteAmount] = useState('');
+  const [paymentRail, setPaymentRail] = useState<'worldpay' | 'usdc'>('worldpay');
+  const [usdcNetwork, setUsdcNetwork] = useState<'base' | 'ethereum' | 'polygon'>('base');
+  const USDC_DEPOSIT_ADDRESS = '0xCirc1e0000000000000000000000000000IDIA00';
 
   const currentTier = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
 
@@ -55,6 +59,8 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
       setStep('select');
       setPurchaseMode('tier');
       setAlacarteAmount('');
+      setPaymentRail('worldpay');
+      setUsdcNetwork('base');
     }
   };
 
@@ -71,18 +77,18 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
   };
 
   const handlePurchase = async () => {
-    // Worldpay SDK handles tokenization — no local card validation needed
     setStep('processing');
 
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      const refPrefix = paymentRail === 'usdc' ? 'USDC' : 'WP';
       const { data, error } = await supabase.functions.invoke('top-up-credits', {
         body: {
           user_id: (await supabase.auth.getUser()).data.user?.id ?? 'mock-ent-9921',
           credit_amount: displayCredits,
           usd_amount: usdAmount,
-          payment_reference: `WP-${crypto.randomUUID().slice(0, 8)}`,
+          payment_reference: `${refPrefix}-${crypto.randomUUID().slice(0, 8)}`,
         },
       });
 
@@ -99,6 +105,11 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
       toast.error(err.message || 'Payment processing failed.');
       setStep('payment');
     }
+  };
+
+  const handleCopyAddress = () => {
+    navigator.clipboard.writeText(USDC_DEPOSIT_ADDRESS);
+    toast.success('Deposit address copied to clipboard');
   };
 
   return (
