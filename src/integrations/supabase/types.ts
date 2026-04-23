@@ -6754,6 +6754,7 @@ export type Database = {
         }
         Returns: string
       }
+      maintain_real_time_signals: { Args: never; Returns: undefined }
       process_idia_telemetry: {
         Args: {
           p_credit: number
