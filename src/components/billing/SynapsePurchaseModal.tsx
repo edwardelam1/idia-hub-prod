@@ -318,37 +318,109 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                   </div>
                 </div>
 
-                {/* Worldpay SDK Container */}
-                <div className="space-y-2">
-                  <h4 className="text-sm font-semibold text-foreground">Secure Payment Gateway</h4>
-                  <div
-                    id="worldpay-sdk-container"
-                    className="min-h-[160px] border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6"
+                {/* Payment Rail Selector */}
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    onClick={() => setPaymentRail('worldpay')}
+                    className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
+                      paymentRail === 'worldpay'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    }`}
                   >
-                    <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
-                      <p className="text-xs text-muted-foreground/70 mt-1">
-                        Card data is encrypted before reaching IDIA servers.
+                    <CreditCard className="h-4 w-4" /> Worldpay
+                  </button>
+                  <button
+                    onClick={() => setPaymentRail('usdc')}
+                    className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
+                      paymentRail === 'usdc'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <CircleDollarSign className="h-4 w-4" /> Stablecoin (USDC)
+                  </button>
+                </div>
+
+                {paymentRail === 'worldpay' ? (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-foreground">Secure Payment Gateway</h4>
+                    <div
+                      id="worldpay-sdk-container"
+                      className="min-h-[160px] border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6"
+                    >
+                      <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">
+                          Card data is encrypted before reaching IDIA servers.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-foreground">Send Circle USDC</h4>
+                    <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground uppercase tracking-wider">Amount Required</span>
+                        <span className="font-mono font-bold text-foreground">{usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Network</Label>
+                        <Select value={usdcNetwork} onValueChange={(v) => setUsdcNetwork(v as 'base' | 'ethereum' | 'polygon')}>
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="base">Base</SelectItem>
+                            <SelectItem value="ethereum">Ethereum</SelectItem>
+                            <SelectItem value="polygon">Polygon</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Deposit Address</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={USDC_DEPOSIT_ADDRESS}
+                            className="font-mono text-xs h-9 bg-background"
+                          />
+                          <Button variant="outline" size="sm" onClick={handleCopyAddress} className="h-9 px-3">
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Send the exact USDC amount to the address above on the {usdcNetwork.charAt(0).toUpperCase() + usdcNetwork.slice(1)} network. Confirm below once your transaction is broadcast.
                       </p>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="flex gap-3">
                 <Button variant="outline" className="gap-2" onClick={() => setStep('select')}>
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
-                <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
-                  <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </Button>
+                {paymentRail === 'worldpay' ? (
+                  <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
+                    <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </Button>
+                ) : (
+                  <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
+                    <CircleDollarSign className="w-4 h-4" /> I've Sent USDC — Confirm
+                  </Button>
+                )}
               </div>
 
               <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>PCI-DSS Level 1 · Encrypted & Secured by Worldpay</span>
+                  <span>
+                    {paymentRail === 'worldpay'
+                      ? 'PCI-DSS Level 1 · Encrypted & Secured by Worldpay'
+                      : 'On-chain settlement via Circle USDC · Manual confirmation'}
+                  </span>
                 </div>
               </div>
             </>
