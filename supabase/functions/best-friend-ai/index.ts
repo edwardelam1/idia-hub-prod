@@ -55,8 +55,16 @@ const corsHeaders = {
 
 // ─── BANNED LEXICON & LINGUISTIC GOVERNANCE ────────────────────────────────────
 const BANNED_WORDS = [
-  "unleash", "dive into", "game-changing", "revolutionary", "transformative",
-  "leverage", "unlock potential", "dive deeper", "delve", "synergy",
+  "unleash",
+  "dive into",
+  "game-changing",
+  "revolutionary",
+  "transformative",
+  "leverage",
+  "unlock potential",
+  "dive deeper",
+  "delve",
+  "synergy",
 ];
 
 type AgentType = "MEDICAL_AGENT" | "CONSTRUCTION_AGENT" | "FINANCE_AGENT" | "GENERAL_NAVIGATOR";
@@ -79,22 +87,33 @@ type VerificationResult = {
 
 const requestSchema = z.object({
   message: z.string().min(1),
-  history: z.array(z.object({
-    role: z.enum(["user", "assistant"]),
-    content: z.string().min(1),
-  })).optional().default([]),
-  context: z.object({
-    currentPage: z.string().optional(),
-    isMarketplaceMode: z.boolean().optional(),
-    platformGuid: z.string().optional(),
-    userId: z.string().optional(),
-    marketplace: z.object({
-      healthRecords: z.array(z.any()).optional().default([]),
-      lifestyleRecords: z.array(z.any()).optional().default([]),
-      lookupId: z.string().nullable().optional(),
-      liabilityTokenHash: z.string().nullable().optional(),
-    }).nullable().optional(),
-  }).optional().default({}),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1),
+      }),
+    )
+    .optional()
+    .default([]),
+  context: z
+    .object({
+      currentPage: z.string().optional(),
+      isMarketplaceMode: z.boolean().optional(),
+      platformGuid: z.string().optional(),
+      userId: z.string().optional(),
+      marketplace: z
+        .object({
+          healthRecords: z.array(z.any()).optional().default([]),
+          lifestyleRecords: z.array(z.any()).optional().default([]),
+          lookupId: z.string().nullable().optional(),
+          liabilityTokenHash: z.string().nullable().optional(),
+        })
+        .nullable()
+        .optional(),
+    })
+    .optional()
+    .default({}),
 });
 
 const AGENT_REGISTRY: Record<AgentType, { prompt: string; highStakes: boolean; verificationChecks: string[] }> = {
@@ -156,7 +175,8 @@ function applyLinguisticGovernance(text: string): string {
 }
 
 function routeIntent(message: string): AgentType {
-  if (/\b(heart|medical|health|clinical|diagnosis|symptom|treatment|patient|drug|pharma)\b/i.test(message)) return "MEDICAL_AGENT";
+  if (/\b(heart|medical|health|clinical|diagnosis|symptom|treatment|patient|drug|pharma)\b/i.test(message))
+    return "MEDICAL_AGENT";
   if (/\b(cost|permits?|construction|steel|concrete|labor|ENR|building)\b/i.test(message)) return "CONSTRUCTION_AGENT";
   if (/\b(market|sales|CLV|revenue|SEC|filing|stock|portfolio|RFM)\b/i.test(message)) return "FINANCE_AGENT";
   return "GENERAL_NAVIGATOR";
@@ -203,7 +223,10 @@ function shortenLongSentences(text: string): string {
 
       const chunks: string[] = [];
       for (let i = 0; i < words.length; i += 18) {
-        const chunk = words.slice(i, i + 18).join(" ").trim();
+        const chunk = words
+          .slice(i, i + 18)
+          .join(" ")
+          .trim();
         if (!chunk) continue;
         chunks.push(/[.!?]$/.test(chunk) ? chunk : `${chunk}.`);
       }
@@ -215,10 +238,18 @@ function shortenLongSentences(text: string): string {
 }
 
 function hasCitationMarker(sentence: string): boolean {
-  return /(source:|sources:|\[[^\]]+\]|\([^)]*(source|cdc|nih|sec|enr|census|trial|study|report)[^)]*\))/i.test(sentence);
+  return /(source:|sources:|\[[^\]]+\]|\([^)]*(source|cdc|nih|sec|enr|census|trial|study|report)[^)]*\))/i.test(
+    sentence,
+  );
 }
 
-function buildResearchPlan(message: string, agent: AgentType, isMarketplaceMode: boolean, _healthRecords: any[], _lifestyleRecords: any[]): ResearchPlan {
+function buildResearchPlan(
+  message: string,
+  agent: AgentType,
+  isMarketplaceMode: boolean,
+  _healthRecords: any[],
+  _lifestyleRecords: any[],
+): ResearchPlan {
   return {
     agent,
     outputMode: isMarketplaceMode ? "research" : "navigation",
@@ -239,14 +270,27 @@ function summarizeMarketplaceData(healthRecords: any[], lifestyleRecords: any[])
     total_samples: healthRecords.length + lifestyleRecords.length,
     step_volume: healthRecords.reduce((acc: number, row: any) => acc + Number(row.steps_count || 0), 0),
     average_quality: healthRecords.length
-      ? Number((healthRecords.reduce((acc: number, row: any) => acc + Number(row.data_quality_score || 0), 0) / healthRecords.length).toFixed(3))
+      ? Number(
+          (
+            healthRecords.reduce((acc: number, row: any) => acc + Number(row.data_quality_score || 0), 0) /
+            healthRecords.length
+          ).toFixed(3),
+        )
       : null,
-    baseline_hr: hrValues.length ? Math.round(hrValues.reduce((acc: number, value: number) => acc + value, 0) / hrValues.length) : null,
+    baseline_hr: hrValues.length
+      ? Math.round(hrValues.reduce((acc: number, value: number) => acc + value, 0) / hrValues.length)
+      : null,
     max_hr: hrValues.length ? Math.max(...hrValues) : null,
   };
 }
 
-function buildOrchestratorPrompt(plan: ResearchPlan, agentPrompt: string, marketplaceSummary: Record<string, unknown> | null, healthRecords: any[], lifestyleRecords: any[]) {
+function buildOrchestratorPrompt(
+  plan: ResearchPlan,
+  agentPrompt: string,
+  marketplaceSummary: Record<string, unknown> | null,
+  healthRecords: any[],
+  lifestyleRecords: any[],
+) {
   const compactData = marketplaceSummary
     ? `DATA SUMMARY:\n${JSON.stringify(marketplaceSummary)}\n\nHEALTH DATA (compact JSON):\n${JSON.stringify(healthRecords)}\n\nLIFESTYLE DATA (compact JSON):\n${JSON.stringify(lifestyleRecords)}`
     : "No marketplace dataset is attached to this request.";
@@ -268,11 +312,7 @@ EXECUTION RULES:
 ${compactData}`;
 }
 
-function runVerificationLoop(
-  draft: string,
-  healthRecords: any[],
-  lifestyleRecords: any[],
-): VerificationResult {
+function runVerificationLoop(draft: string, healthRecords: any[], lifestyleRecords: any[]): VerificationResult {
   const issues: string[] = [];
   const totalRows = healthRecords.length + lifestyleRecords.length;
 
@@ -288,7 +328,9 @@ function runVerificationLoop(
   if (countMatch) {
     const claimed = Number(countMatch[1]);
     if (claimed !== healthRecords.length && claimed !== lifestyleRecords.length && claimed !== totalRows) {
-      issues.push(`row_count_mismatch:claimed=${claimed},library_health=${healthRecords.length},library_lifestyle=${lifestyleRecords.length}`);
+      issues.push(
+        `row_count_mismatch:claimed=${claimed},library_health=${healthRecords.length},library_lifestyle=${lifestyleRecords.length}`,
+      );
     }
   }
 
@@ -306,9 +348,10 @@ function runVerificationLoop(
     }
   }
 
-  const footer = issues.length === 0
-    ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
-    : `\n\n_Library check flagged: ${issues.join("; ")}._`;
+  const footer =
+    issues.length === 0
+      ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
+      : `\n\n_Library check flagged: ${issues.join("; ")}._`;
 
   return { text: draft + footer, issues };
 }
@@ -373,9 +416,10 @@ serve(async (req) => {
     if (isDataScientistMode) {
       systemPrompt = buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents);
     } else {
-      const navSummary = (healthMetrics.length || lifestyleEvents.length)
-        ? `\n\nLIBRARY SNAPSHOT:\n${JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents))}`
-        : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
+      const navSummary =
+        healthMetrics.length || lifestyleEvents.length
+          ? `\n\nLIBRARY SNAPSHOT:\n${JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents))}`
+          : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
       systemPrompt = STORE_CLERK_PERSONA + navSummary;
     }
 
@@ -385,16 +429,19 @@ serve(async (req) => {
           .map((h: any) => ({ role: h.role, content: h.content }))
       : [];
 
-    const shouldAppendCurrentMessage = formattedHistory.length === 0 || formattedHistory[formattedHistory.length - 1]?.content !== message;
+    const shouldAppendCurrentMessage =
+      formattedHistory.length === 0 || formattedHistory[formattedHistory.length - 1]?.content !== message;
 
     const messages = [
       { role: "system", content: systemPrompt },
       ...formattedHistory,
       ...(shouldAppendCurrentMessage
-        ? [{
-            role: "user",
-            content: `Current Context: ${context ? JSON.stringify({ currentPage: context.currentPage, isMarketplaceMode: context.isMarketplaceMode, agent: detectedAgent, plan }) : "No additional context provided"}\n\nUser Request: "${message}"`,
-          }]
+        ? [
+            {
+              role: "user",
+              content: `Current Context: ${context ? JSON.stringify({ currentPage: context.currentPage, isMarketplaceMode: context.isMarketplaceMode, agent: detectedAgent, plan }) : "No additional context provided"}\n\nUser Request: "${message}"`,
+            },
+          ]
         : []),
     ];
 
@@ -423,11 +470,14 @@ serve(async (req) => {
       throw new Error(`OpenAI returned an empty response.`);
     }
 
-    const draftResponse = data.choices[0].message?.content || "I processed the request but could not format a text response.";
+    const draftResponse =
+      data.choices[0].message?.content || "I processed the request but could not format a text response.";
     const verification = runVerificationLoop(draftResponse, healthMetrics, lifestyleEvents);
     const aiResponse = normalizeOutput(verification.text, detectedAgent);
 
-    console.log(`Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`);
+    console.log(
+      `Chief Researcher [${detectedAgent}] [${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}] Response OK`,
+    );
 
     // RECEIPT: every record actually shown to the AI counts as consumed.
     // Agent-agnostic — fall back to row id when aca_hash_key is null so the
@@ -446,7 +496,12 @@ serve(async (req) => {
         agentStatus: "active",
         persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
         activeAgent: detectedAgent,
-        queryComplexity: detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT" ? 2.0 : detectedAgent === "CONSTRUCTION_AGENT" ? 1.5 : 1.0,
+        queryComplexity:
+          detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT"
+            ? 2.0
+            : detectedAgent === "CONSTRUCTION_AGENT"
+              ? 1.5
+              : 1.0,
         verificationIssues: verification.issues,
         orchestratorPlan: plan,
         consumed_records: consumedReceipt,
