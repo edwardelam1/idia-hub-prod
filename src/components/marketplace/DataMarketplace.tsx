@@ -1,23 +1,17 @@
-
-import { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useResponsive } from '@/hooks/useResponsive';
-import { useNavigate } from 'react-router-dom';
-import { usePurchaseHistory } from '@/contexts/PurchaseHistoryContext';
-import { useMarketplaceBundles } from '@/hooks/useMarketplaceBundles';
-import { Loader2 } from 'lucide-react';
-import MarketplaceHeader from './MarketplaceHeader';
-import MarketplaceFilters from './MarketplaceFilters';
-import ResultsHeader from './ResultsHeader';
-import BundleCard from './BundleCard';
-import ShoppingCartComponent from './ShoppingCart';
-import MarketplaceTerminal from './MarketplaceTerminal';
-import NoDataState from '@/components/health/NoDataState';
-import HealthDataInput from '@/components/health/HealthDataInput';
-import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CartItem } from '@/types/marketplace';
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useNavigate } from "react-router-dom";
+import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
+import { Loader2, Bot } from "lucide-react";
+import MarketplaceHeader from "./MarketplaceHeader";
+import MarketplaceFilters from "./MarketplaceFilters";
+import ResultsHeader from "./ResultsHeader";
+import BundleCard from "./BundleCard";
+import ShoppingCartComponent from "./ShoppingCart";
+import MarketplaceTerminal from "./MarketplaceTerminal";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { CartItem } from "@/types/marketplace";
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -25,33 +19,31 @@ interface DataMarketplaceProps {
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
-  const { isMobile, isTablet, isSmallTablet } = useResponsive();
-  const { addPurchase } = usePurchaseHistory();
+  const { isMobile, isTablet } = useResponsive();
   const { bundles, isLoading, error } = useMarketplaceBundles();
   const { balanceData } = useSynapseCredits();
-  
+
   const currentLedgerBalance = balanceData?.available_credits ?? 0;
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [showAddDataModal, setShowAddDataModal] = useState(false);
 
   // Responsive padding and sizing
-  const containerPadding = isMobile ? 'p-2' : isTablet ? 'p-4' : 'p-6';
-  const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-3' : 'p-4';
+  const containerPadding = isMobile ? "p-2" : isTablet ? "p-4" : "p-6";
+  const cardPadding = isMobile ? "p-3" : isTablet ? "p-3" : "p-4";
 
-  // Use real database bundles directly (no ID conversion needed)
-  const convertedBundles = bundles.map(bundle => ({
-    bundle_id: bundle.bundle_id, // Keep as UUID
-    id: bundle.bundle_id, // For compatibility with existing components
+  // Map bundles and ensure price reflects the fixed Synapse Credit unit
+  const convertedBundles = bundles.map((bundle) => ({
+    bundle_id: bundle.bundle_id,
+    id: bundle.bundle_id,
     name: bundle.title,
     description: bundle.description,
     tier: bundle.tier,
     contacts: bundle.contacts_count,
     features: bundle.features,
     category: bundle.category,
-    price: bundle.price,
+    price: bundle.price || 1, // Defaulting to 1 CR ($0.75)
     keyInsights: bundle.key_insights,
     dataPoints: bundle.data_points,
     suggestedFilters: bundle.suggested_filters,
@@ -59,29 +51,32 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     dataJson: bundle.data_json,
     createdAt: bundle.created_at,
     updatedAt: bundle.updated_at,
-    version: bundle.bundle_version
+    version: bundle.bundle_version,
   }));
 
-  const handleDownloadBundle = (bundle: any) => {
-    if (currentLedgerBalance >= bundle.price) {
-      addPurchase({
-        bundleId: bundle.bundle_id,
-        bundleName: bundle.name,
-        items: [],
-        totalCost: bundle.price,
-        purchaseType: 'bundle'
+  const handleAnalyzeWithAI = (bundle: any) => {
+    // Zero-leak check: Hard floor stop at 0
+    // Every AI interaction is fixed at 1 CR ($0.75)
+    if (currentLedgerBalance >= 1) {
+      navigate("/best-friend", {
+        state: {
+          marketplaceContext: {
+            bundleId: bundle.bundle_id,
+            bundleName: bundle.name,
+            initialPrompt: `I am accessing the ${bundle.name} bundle. Based on the available data curated by the AI, what are the primary insights?`,
+            isMarketplaceMode: true,
+          },
+        },
       });
-      
-      navigate(`/data-viewer/${bundle.bundle_id}`);
     }
   };
 
   const handleAddToCart = (items: any[]) => {
-    const newItems = items.map(item => ({
+    const newItems = items.map((item) => ({
       ...item,
-      quantity: 1
+      quantity: 1,
     }));
-    setCartItems(prev => [...prev, ...newItems]);
+    setCartItems((prev) => [...prev, ...newItems]);
   };
 
   const handleUpdateCart = (items: CartItem[]) => {
@@ -90,70 +85,22 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
   const handlePurchase = (totalCost: number) => {
     if (currentLedgerBalance >= totalCost) {
-      addPurchase({
-        items: cartItems,
-        totalCost,
-        purchaseType: 'ala-carte'
-      });
-      
       setCartItems([]);
-      navigate('/my-reports');
+      navigate("/my-reports");
     }
   };
 
-  // Filter bundles based on search and applied filters
-  const filteredBundles = convertedBundles.filter(bundle => {
-    const matchesSearch = !searchQuery || 
+  const filteredBundles = convertedBundles.filter((bundle) => {
+    const matchesSearch =
+      !searchQuery ||
       bundle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bundle.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bundle.keyInsights?.some(insight => insight.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+      bundle.description.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesCategory = !appliedFilters.category || bundle.category === appliedFilters.category;
-    const matchesTier = !appliedFilters.tier || bundle.tier === appliedFilters.tier;
-    
-    // Health metric filtering
-    const matchesHealthMetric = !appliedFilters.healthMetric || (() => {
-      const metric = appliedFilters.healthMetric.toLowerCase();
-      return bundle.name.toLowerCase().includes(metric) ||
-             bundle.description.toLowerCase().includes(metric) ||
-             bundle.keyInsights?.some(insight => insight.toLowerCase().includes(metric));
-    })();
-    
-    // Activity type filtering
-    const matchesActivityType = !appliedFilters.activityType || (() => {
-      const activityType = appliedFilters.activityType;
-      return bundle.dataJson?.activity_type_breakdown && 
-             Object.keys(bundle.dataJson.activity_type_breakdown).includes(activityType);
-    })();
-    
-    // Data type filtering
-    const matchesDataType = !appliedFilters.dataType || (() => {
-      const dataType = appliedFilters.dataType.toLowerCase();
-      if (dataType.includes('activity') && (bundle.dataJson?.total_activities || bundle.dataJson?.total_workouts)) return true;
-      if (dataType.includes('sleep') && bundle.dataJson?.total_sleep_records) return true;
-      if (dataType.includes('nutrition') && bundle.dataJson?.total_nutrition_records) return true;
-      if (dataType.includes('clinical') && bundle.dataJson?.total_clinical_records) return true;
-      if (dataType.includes('geographic') && bundle.dataJson?.regions_covered) return true;
-      return false;
-    })();
-    
-    // Price range filtering
-    const matchesPriceRange = !appliedFilters.priceRange || (() => {
-      const price = bundle.price || 0;
-      const range = appliedFilters.priceRange;
-      if (range === 'Under $500') return price < 500;
-      if (range === '$500 - $1,000') return price >= 500 && price < 1000;
-      if (range === '$1,000 - $2,500') return price >= 1000 && price < 2500;
-      if (range === '$2,500 - $5,000') return price >= 2500 && price < 5000;
-      if (range === '$5,000+') return price >= 5000;
-      return true;
-    })();
-    
-    return matchesSearch && matchesCategory && matchesTier && matchesHealthMetric && 
-           matchesActivityType && matchesDataType && matchesPriceRange;
+
+    return matchesSearch && matchesCategory;
   });
 
-  // Get the most common category for filter context
   const bundleCategory = filteredBundles.length > 0 ? filteredBundles[0].category : undefined;
 
   if (error) {
@@ -161,11 +108,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       <div className={`space-y-4 ${containerPadding} bg-gray-50 min-h-screen`}>
         <Card className="border-red-200 bg-red-50">
           <CardContent className={cardPadding}>
-            <p className="text-red-700 text-center">
-              Error loading marketplace data. Please try again later.
-            </p>
-            <p className="text-red-600 text-sm text-center mt-2">
-              {error.message}
+            <p className="text-red-700 text-center font-mono">
+              SYSTEM_ERROR: Failed to synchronize AI-curated bundles.
             </p>
           </CardContent>
         </Card>
@@ -196,74 +140,57 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         bundleCategory={bundleCategory}
       />
 
-      <MarketplaceTerminal
-        synapseBalance={balanceData?.available_credits ?? 0}
-        isBioKeyVerified={true}
-      />
+      {/* Central Cashier's Terminal */}
+      <MarketplaceTerminal synapseBalance={currentLedgerBalance} isBioKeyVerified={true} />
 
       <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className={`${isTablet ? 'h-6 w-6' : 'h-8 w-8'} animate-spin text-blue-600`} />
-          <span className={`ml-2 text-gray-600 ${isTablet ? 'text-sm' : ''}`}>Loading marketplace bundles...</span>
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+          <span className="text-gray-600 animate-pulse">Best Friend AI is curating data bundles...</span>
         </div>
       ) : (
-        <>
-          {/* Bundle Grid - Single column on tablet for less crowding */}
-          <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : isTablet ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-            {filteredBundles.map((bundle) => (
-              <BundleCard
-                key={bundle.id}
-                bundle={bundle}
-                isMobile={isMobile}
-                isTablet={isTablet}
-                userCredits={currentLedgerBalance}
-                onDownload={handleDownloadBundle}
-                onAddToCart={handleAddToCart}
-              />
-            ))}
-          </div>
+        <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
+          {filteredBundles.map((bundle) => (
+            <BundleCard
+              key={bundle.id}
+              bundle={bundle}
+              isMobile={isMobile}
+              isTablet={isTablet}
+              userCredits={currentLedgerBalance}
+              onDownload={handleAnalyzeWithAI} // Rerouted to AI Analysis
+              onAddToCart={handleAddToCart}
+            />
+          ))}
 
-          {filteredBundles.length === 0 && !isLoading && (
-            <NoDataState onAddData={() => setShowAddDataModal(true)} />
+          {filteredBundles.length === 0 && (
+            <div className="col-span-full py-16 text-center">
+              <Bot className="h-12 w-12 mx-auto mb-4 text-primary opacity-20" />
+              <p className="text-muted-foreground">The AI Curator is currently processing the data pipeline.</p>
+            </div>
           )}
-        </>
+        </div>
       )}
 
-      <Dialog open={showAddDataModal} onOpenChange={setShowAddDataModal}>
-        <DialogContent className={`${isTablet ? 'max-w-2xl' : 'max-w-4xl'} max-h-[90vh] overflow-y-auto`}>
-          <DialogHeader>
-            <DialogTitle>Add Health Data</DialogTitle>
-          </DialogHeader>
-          <HealthDataInput 
-            onDataSubmitted={() => {
-              setShowAddDataModal(false);
-              window.location.reload(); // Refresh to show new data
-            }} 
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Privacy Notice */}
-      <Card className="border-purple-200 bg-purple-50">
-        <CardContent className={cardPadding}>
-          <p className={`text-purple-700 ${isMobile || isTablet ? 'text-xs' : 'text-sm'} text-center`}>
-            🔒 All datasets are fully anonymized and aggregated to protect individual privacy.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Real-time Data Notice */}
-      {bundles.length > 0 && (
-        <Card className="border-green-200 bg-green-50">
+      {/* Sovereign Privacy & Pricing Notice */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+        <Card className="border-purple-200 bg-purple-50">
           <CardContent className={cardPadding}>
-            <p className={`text-green-700 ${isMobile || isTablet ? 'text-xs' : 'text-sm'} text-center`}>
-              📊 {bundles.length} health data bundles. Refreshes every 5 minutes.
+            <p className={`text-purple-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
+              🔒 Datasets are anonymized and curated solely by the IDIA AI Pipeline.
             </p>
           </CardContent>
         </Card>
-      )}
+
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className={cardPadding}>
+            <p className={`text-green-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
+              📊 Research interactions are fixed at 1 CR ($0.75) per session.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
