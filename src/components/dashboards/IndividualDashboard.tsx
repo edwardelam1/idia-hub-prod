@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
 import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
+import StablecoinPanel from "@/components/billing/StablecoinPanel";
 import {
   Activity,
   ShieldCheck,
@@ -141,6 +142,12 @@ const IndividualDashboard = () => {
             </Card>
 
             <Card>
+              <CardContent className="p-3">
+                <StablecoinPanel />
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardContent className="p-3 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
@@ -155,40 +162,27 @@ const IndividualDashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-primary/20 bg-primary/[0.01]">
-              <CardContent className="p-3 flex flex-col justify-between h-full">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-wide text-primary font-bold">Audit Logs</span>
-                  <FileKey className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <div className="space-y-2 mt-1">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-lg font-bold text-foreground">{personalStats.auditLogs}</span>
-                    <span className="text-[10px] text-muted-foreground uppercase">Receipts</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 w-full text-[9px] uppercase font-black tracking-tighter gap-1 border-primary/20 hover:bg-primary hover:text-white transition-all"
-                    onClick={() => navigate("/egress-logs")}
-                  >
-                    Review Audit Logs <ArrowUpRight className="h-2 w-2" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
             <Card>
               <CardContent className="p-3 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                    Data Assets
+                    Audit Logs
                   </span>
-                  <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                  <FileKey className="h-3.5 w-3.5 text-muted-foreground" />
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-1">
-                  <span className="text-lg font-bold">{personalStats.dataAssets.toLocaleString()}</span>
-                  <span className="text-[10px] text-muted-foreground">points</span>
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-bold">{personalStats.auditLogs}</span>
+                    <span className="text-[10px] text-muted-foreground">receipts</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 w-full text-[9px] uppercase tracking-wider gap-1"
+                    onClick={() => navigate("/egress-logs")}
+                  >
+                    Review Audit Logs <ArrowUpRight className="h-2 w-2" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>

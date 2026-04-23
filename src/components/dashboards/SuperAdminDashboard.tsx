@@ -8,7 +8,6 @@ import AIManagement from "@/components/ai/AIManagement";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 import HealthDataDashboard from "@/components/health/HealthDataDashboard";
 import { SystemHealthDashboard } from "@/components/system/SystemHealthDashboard";
-import AuditLogs from "@/components/audit/AuditLogs";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { toast } from "sonner";
 
@@ -76,13 +75,12 @@ const SuperAdminDashboard = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="health-data">Data</TabsTrigger>
           <TabsTrigger value="system-health">System Health</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>
           <TabsTrigger value="ai-management">AI Management</TabsTrigger>
-          <TabsTrigger value="audit-logs">Audit Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="health-data" className="space-y-6">
@@ -205,10 +203,6 @@ const SuperAdminDashboard = () => {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="audit-logs" className="space-y-6">
-          <AuditLogs />
         </TabsContent>
       </Tabs>
     </div>
