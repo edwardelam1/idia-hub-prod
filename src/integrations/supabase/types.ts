@@ -728,6 +728,7 @@ export type Database = {
           created_at: string | null
           data_coop_enabled: boolean | null
           email: string | null
+          entity_type: string | null
           franchise_parent_id: string | null
           id: string
           logo_url: string | null
@@ -744,6 +745,7 @@ export type Database = {
           created_at?: string | null
           data_coop_enabled?: boolean | null
           email?: string | null
+          entity_type?: string | null
           franchise_parent_id?: string | null
           id?: string
           logo_url?: string | null
@@ -760,6 +762,7 @@ export type Database = {
           created_at?: string | null
           data_coop_enabled?: boolean | null
           email?: string | null
+          entity_type?: string | null
           franchise_parent_id?: string | null
           id?: string
           logo_url?: string | null
