@@ -1,133 +1,67 @@
 
 
-## Plan: Make Best Friend AI cite the Library (honesty mode)
+## Plan: Apple logo + tighten Client Organizations + expand Manual Entry
 
-Modify `supabase/functions/best-friend-ai/index.ts` to remove the suppression layer and force citation of `aca_hash_key` / data categories from the staged tables.
+### 1. Real Apple logo on Login (`src/components/LoginScreen.tsx`)
+Replace the lucide `Apple` icon (cartoon apple) with the official Apple SVG logo glyph (the silhouette mark used by "Sign in with Apple"). Inline SVG with `fill="white"`, sized `h-4 w-4`, mirroring the `GoogleIcon` pattern already used in the file. Remove the `Apple` import from `lucide-react`.
 
-### Changes
+### 2. Tighten `OrganizationManagement.tsx` — professional density pass
+Global typographic and spacing reduction across the whole page. No layout/feature regressions.
 
-**1. Replace `ORCHESTRATOR_PROMPT` (lines ~109-117)**
+| Area | From | To |
+|------|------|----|
+| Page H1 | `text-4xl font-extrabold` | `text-xl font-semibold` |
+| Page subtitle | `text-lg` | `text-sm text-muted-foreground` |
+| Add Organization button | `size="lg"` + `text-xl py-6 px-8` | `size="sm"` (default look, `gap-1.5`) |
+| Pending verifications card title | `text-xl` icons `w-6` | `text-sm` icons `w-4` |
+| Pending row company name | `text-lg` | `text-sm font-medium` |
+| Pending "Process Application" button | `size="lg" text-base` | `size="sm"` |
+| Registry list header label | `text-2xl font-bold` | `text-sm font-semibold uppercase tracking-wider` |
+| Registry search input | `h-14 text-lg` | `h-9 text-sm` |
+| Registry row name | `text-xl font-bold` | `text-sm font-semibold` |
+| Registry row blueprint | `text-base` | `text-xs text-muted-foreground` |
+| Registry row capability icons | `w-6 h-6` | `w-3.5 h-3.5` |
+| Registry row padding | `p-6` | `p-3` |
+| Detail card header company name | `text-4xl font-extrabold` | `text-xl font-semibold` |
+| Detail card header icon tile | `p-5` w/ `h-12 w-12` icon | `p-2.5` w/ `h-5 w-5` icon |
+| Edit/Save/Cancel buttons | `size="lg" text-lg` | `size="sm"` |
+| Section headers | `text-lg` | `text-xs uppercase tracking-wider` |
+| Field labels | `text-sm font-bold uppercase` | `text-xs uppercase text-muted-foreground` |
+| Field values | `text-2xl` / `text-xl` | `text-sm` |
+| Edit-mode inputs | `h-14 text-xl` | `h-9 text-sm` |
+| Capability tiles | `p-6` `text-lg` icons `w-6` | `p-3` `text-sm` icons `w-4` |
+| Modal title | `text-2xl` padding `px-8 py-6` | `text-base` padding `px-5 py-4` |
+| Modal field labels | `text-lg font-bold` | `text-xs uppercase text-muted-foreground` |
+| Modal inputs/selects | `h-14 text-xl` | `h-9 text-sm` |
+| Modal footer buttons | `size="lg" text-xl py-6 px-8` | `size="sm"` |
+| Empty-state icon | `w-24 h-24` | `w-12 h-12` |
 
-```ts
-const ORCHESTRATOR_PROMPT = `You are the IDIA Hub Analyst speaking from the Library of Data.
+Reduce `gap-*` and `space-y-*` proportionally (e.g., `gap-6` → `gap-3`, `space-y-6` → `space-y-4`, `p-8` card body → `p-5`).
 
-CITATION RULES (MANDATORY):
-- Every quantitative claim must cite its source. Use the format [src: <table>:<aca_hash_key prefix 8 chars>] or [src: <table> n=<count>].
-- When summarizing aggregates, cite the row count and table, e.g. "average HR 72 bpm [src: staged_health_data n=277]".
-- If a metric is not present in the attached Library payload, say "not in Library" — do not infer.
-- Reference data_category and activity_type fields verbatim when relevant.
+### 3. Expand Manual Organization Entry form
+Form schema (`formData`) adds:
+- `addressLine1`, `addressLine2`, `city`, `state`, `zip` (replaces single `hqAddress`; kept compatible by concatenating into `address` on submit)
+- `ein` (replaces `taxId` label as "EIN" — XX-XXXXXXX format)
+- `entityType` enum: `C-Corp`, `S-Corp`, `LLC`, `LLP`, `Partnership`, `Sole Proprietorship`, `Non-Profit`, `B-Corp`, `Government`, `Other`
+- Keep existing `businessType` (Blueprint Category) — they're different concepts (legal entity vs operational blueprint)
 
-Language rules:
-- Plain vocabulary, no hype.
-- Brief, but never omit a citation to save space.
-- Numbers first, then the citation, then the trend.`;
-```
+**USPS verification (no label):** After user fills street/city/state/zip and blurs the zip field, call USPS Address Validation. Since this is client-side and USPS API requires server credentials, add a thin Supabase Edge Function `usps-verify-address` that proxies USPS Web Tools API. UI shows a small inline state next to the address group: spinner while verifying, green check when standardized, red dot if invalid — no text label per request. The standardized address replaces the user-entered address on success. Submit is blocked if verification fails (toast on attempt).
 
-**2. Replace `STORE_CLERK_PERSONA` (lines ~119-123)**
+EIN gets a regex mask (`\d{2}-\d{7}`) and inline format validation.
 
-```ts
-const STORE_CLERK_PERSONA = `You are Best Friend, the IDIA Hub guide with read access to the Library of Data summary.
+### 4. Delete Organization with confirmation
+Add a destructive button in the detail card header (next to Edit Profile), `size="sm" variant="destructive"`, label "Delete". Clicking opens an `AlertDialog` (shadcn) titled **"Delete this organization?"** with body listing what will be removed (business record, locations, status flags), and a required typed-confirmation input: user must type the exact organization name to enable the red "Delete Permanently" button. On confirm:
+1. `supabase.from('business_locations').delete().eq('business_id', id)`
+2. `supabase.from('businesses').delete().eq('id', id)`
+3. Clear `selectedBusiness`, refetch list, success toast.
 
-You may answer questions about what data exists in the user's Library (counts, categories, last sync) by citing the attached summary.
-For raw row inspection or research-grade analysis, recommend Marketplace Mode.
-When you cite a number, append [src: <table> n=<count>] so the user knows it came from the Library, not a guess.
-Keep it warm, plain, and brief — but always cite.`;
-```
+### Files touched
+- `src/components/LoginScreen.tsx` — Apple SVG swap
+- `src/components/management/OrganizationManagement.tsx` — density pass, expanded form, delete dialog
+- **New** `supabase/functions/usps-verify-address/index.ts` + `supabase/config.toml` entry — USPS proxy (uses `USPS_USER_ID` secret; will prompt to add it on first deploy)
 
-Then in the `serve` handler, when building the Store Clerk prompt, attach a lightweight Library summary so it has something to cite even outside Marketplace Mode. Update the `else` branch (around line 320):
-
-```ts
-} else {
-  // Even in navigation mode, give the clerk the Library summary so it can answer "what's in my data?" honestly.
-  const navSummary = (healthMetrics.length || lifestyleEvents.length)
-    ? `\n\nLIBRARY SNAPSHOT:\n${JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents))}`
-    : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
-  systemPrompt = STORE_CLERK_PERSONA + navSummary;
-}
-```
-
-And lift the omni-fetch gate so it also runs in navigation mode (change `if (isDataScientistMode && pseudoId ...)` to `if (pseudoId && ...)`).
-
-**3. Activate `runVerificationLoop` (lines ~257-259)**
-
-Replace the pass-through with a real cross-check against the Library payload:
-
-```ts
-function runVerificationLoop(
-  draft: string,
-  healthRecords: any[],
-  lifestyleRecords: any[],
-): VerificationResult {
-  const issues: string[] = [];
-  const totalRows = healthRecords.length + lifestyleRecords.length;
-
-  // Check 1: any number-bearing sentence must carry a [src: ...] citation
-  const numericSentences = splitIntoSentences(draft).filter((s) => /\d/.test(s));
-  const uncited = numericSentences.filter((s) => !/\[src:\s*[^\]]+\]/i.test(s));
-  if (uncited.length > 0) {
-    issues.push(`uncited_numeric_claims:${uncited.length}`);
-  }
-
-  // Check 2: if the draft cites a row count, it must match the Library
-  const countMatch = draft.match(/n=(\d+)/);
-  if (countMatch) {
-    const claimed = Number(countMatch[1]);
-    if (claimed !== healthRecords.length && claimed !== lifestyleRecords.length && claimed !== totalRows) {
-      issues.push(`row_count_mismatch:claimed=${claimed},library_health=${healthRecords.length},library_lifestyle=${lifestyleRecords.length}`);
-    }
-  }
-
-  // Check 3: forbid invented aca_hash_key prefixes
-  const hashRefs = [...draft.matchAll(/\[src:\s*\w+:([a-f0-9]{6,})\]/gi)].map((m) => m[1].toLowerCase());
-  if (hashRefs.length > 0) {
-    const validHashes = new Set(
-      [...healthRecords, ...lifestyleRecords]
-        .map((r: any) => String(r.aca_hash_key || "").toLowerCase())
-        .filter(Boolean),
-    );
-    const fabricated = hashRefs.filter((prefix) => ![...validHashes].some((h) => h.startsWith(prefix)));
-    if (fabricated.length > 0) {
-      issues.push(`fabricated_hashes:${fabricated.join(",")}`);
-    }
-  }
-
-  // Append a transparency footer so the user sees the verification result
-  const footer = issues.length === 0
-    ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
-    : `\n\n_Library check flagged: ${issues.join("; ")}._`;
-
-  return { text: draft + footer, issues };
-}
-```
-
-Update the call site (line ~376) to pass the records:
-```ts
-const verification = runVerificationLoop(draftResponse, healthMetrics, lifestyleEvents);
-```
-
-**4. Soften `applyLinguisticGovernance` (lines ~125-134)**
-
-Keep the banned-hype wordlist but stop flattening punctuation — semicolons and em-dashes carry list/citation structure:
-
-```ts
-function applyLinguisticGovernance(text: string): string {
-  let cleaned = text;
-  for (const phrase of BANNED_WORDS) {
-    const re = new RegExp(phrase, "gi");
-    cleaned = cleaned.replace(re, "");
-  }
-  // Preserve ; and — so cited lists and dashed clauses survive.
-  cleaned = cleaned.replace(/ {2,}/g, " ").trim();
-  return cleaned;
-}
-```
-
-### Files Modified
-- `supabase/functions/best-friend-ai/index.ts` — prompt blocks, verification loop, linguistic governance, Store Clerk Library injection, omni-fetch gate.
-
-### Outcome
-- AI must cite `[src: <table> n=<count>]` or `[src: <table>:<hash-prefix>]` on every numeric claim.
-- Drafts get audited against the actual Library payload; mismatches and fabricated hashes appear in `verificationIssues` and as a footer.
-- Store Clerk mode now sees a Library snapshot and can answer "what's in my data?" honestly instead of punting.
-- Punctuation no longer flattened, so cited lists render cleanly.
+### Notes
+- USPS Web Tools requires a free `USERID`. After approval, I'll request the `USPS_USER_ID` secret via the secrets prompt.
+- The `address` column in `businesses` stays a single string (concat of standardized parts) — no migration needed.
+- `entityType` and `ein` go into existing `tax_id` (for EIN) and `business_type` is reserved for blueprint; entity type will be stored in a new `entity_type` column. I'll add a small migration: `alter table businesses add column entity_type text;`.
 
