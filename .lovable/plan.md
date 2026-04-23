@@ -1,67 +1,74 @@
 
 
-## Plan: Apple logo + tighten Client Organizations + expand Manual Entry
+## Plan: Stablecoin panel, dual payment, Hub Enrollment cleanup, A La Carte upgrade flow
 
-### 1. Real Apple logo on Login (`src/components/LoginScreen.tsx`)
-Replace the lucide `Apple` icon (cartoon apple) with the official Apple SVG logo glyph (the silhouette mark used by "Sign in with Apple"). Inline SVG with `fill="white"`, sized `h-4 w-4`, mirroring the `GoogleIcon` pattern already used in the file. Remove the `Apple` import from `lucide-react`.
+### 1. IndividualDashboard panel grid (`src/components/dashboards/IndividualDashboard.tsx`)
+The 5-column grid currently is: Synapse Gauge · FBO Reservoir · Data Sources · Audit Logs · Data Assets.
 
-### 2. Tighten `OrganizationManagement.tsx` — professional density pass
-Global typographic and spacing reduction across the whole page. No layout/feature regressions.
+New 5-column grid:
+1. Synapse Gauge (unchanged)
+2. FBO Reservoir (unchanged)
+3. **Stablecoin (NEW)** — placeholder panel for Circle USDC balance. Shows USDC icon, balance `$0.0000 USDC`, "Circle Network" subtitle. Will wire to live data later.
+4. Data Sources (moved right one slot)
+5. Audit Logs (moved right one slot)
 
-| Area | From | To |
-|------|------|----|
-| Page H1 | `text-4xl font-extrabold` | `text-xl font-semibold` |
-| Page subtitle | `text-lg` | `text-sm text-muted-foreground` |
-| Add Organization button | `size="lg"` + `text-xl py-6 px-8` | `size="sm"` (default look, `gap-1.5`) |
-| Pending verifications card title | `text-xl` icons `w-6` | `text-sm` icons `w-4` |
-| Pending row company name | `text-lg` | `text-sm font-medium` |
-| Pending "Process Application" button | `size="lg" text-base` | `size="sm"` |
-| Registry list header label | `text-2xl font-bold` | `text-sm font-semibold uppercase tracking-wider` |
-| Registry search input | `h-14 text-lg` | `h-9 text-sm` |
-| Registry row name | `text-xl font-bold` | `text-sm font-semibold` |
-| Registry row blueprint | `text-base` | `text-xs text-muted-foreground` |
-| Registry row capability icons | `w-6 h-6` | `w-3.5 h-3.5` |
-| Registry row padding | `p-6` | `p-3` |
-| Detail card header company name | `text-4xl font-extrabold` | `text-xl font-semibold` |
-| Detail card header icon tile | `p-5` w/ `h-12 w-12` icon | `p-2.5` w/ `h-5 w-5` icon |
-| Edit/Save/Cancel buttons | `size="lg" text-lg` | `size="sm"` |
-| Section headers | `text-lg` | `text-xs uppercase tracking-wider` |
-| Field labels | `text-sm font-bold uppercase` | `text-xs uppercase text-muted-foreground` |
-| Field values | `text-2xl` / `text-xl` | `text-sm` |
-| Edit-mode inputs | `h-14 text-xl` | `h-9 text-sm` |
-| Capability tiles | `p-6` `text-lg` icons `w-6` | `p-3` `text-sm` icons `w-4` |
-| Modal title | `text-2xl` padding `px-8 py-6` | `text-base` padding `px-5 py-4` |
-| Modal field labels | `text-lg font-bold` | `text-xs uppercase text-muted-foreground` |
-| Modal inputs/selects | `h-14 text-xl` | `h-9 text-sm` |
-| Modal footer buttons | `size="lg" text-xl py-6 px-8` | `size="sm"` |
-| Empty-state icon | `w-24 h-24` | `w-12 h-12` |
+Remove the **Data Assets** card entirely.
 
-Reduce `gap-*` and `space-y-*` proportionally (e.g., `gap-6` → `gap-3`, `space-y-6` → `space-y-4`, `p-8` card body → `p-5`).
+Standardize all 5 panels to identical typography:
+- Label: `text-[11px] uppercase tracking-wide text-muted-foreground font-medium` (matching the existing Data Sources / Data Assets style — currently the Audit Logs card overrides with bold primary, which we'll normalize)
+- Icon: `h-3.5 w-3.5 text-muted-foreground`
+- Value: `text-lg font-bold`
+- Sub-text: `text-[10px] text-muted-foreground`
+- Card padding: `p-3`, `flex flex-col justify-between h-full`
+- Remove the colored border/background on Audit Logs (`border-primary/20 bg-primary/[0.01]`) so all 5 cards look uniform.
 
-### 3. Expand Manual Organization Entry form
-Form schema (`formData`) adds:
-- `addressLine1`, `addressLine2`, `city`, `state`, `zip` (replaces single `hqAddress`; kept compatible by concatenating into `address` on submit)
-- `ein` (replaces `taxId` label as "EIN" — XX-XXXXXXX format)
-- `entityType` enum: `C-Corp`, `S-Corp`, `LLC`, `LLP`, `Partnership`, `Sole Proprietorship`, `Non-Profit`, `B-Corp`, `Government`, `Other`
-- Keep existing `businessType` (Blueprint Category) — they're different concepts (legal entity vs operational blueprint)
+The "Review Audit Logs" button stays inside the Audit Logs card but with neutral (non-primary) styling.
 
-**USPS verification (no label):** After user fills street/city/state/zip and blurs the zip field, call USPS Address Validation. Since this is client-side and USPS API requires server credentials, add a thin Supabase Edge Function `usps-verify-address` that proxies USPS Web Tools API. UI shows a small inline state next to the address group: spinner while verifying, green check when standardized, red dot if invalid — no text label per request. The standardized address replaces the user-entered address on success. Submit is blocked if verification fails (toast on attempt).
+**New file**: `src/components/billing/StablecoinPanel.tsx` — small presentational component matching `FBOReservoirGauge` shape so the dashboard import stays clean.
 
-EIN gets a regex mask (`\d{2}-\d{7}`) and inline format validation.
+### 2. Authorize Payment — split into USDC vs Worldpay (`src/components/billing/SynapsePurchaseModal.tsx`)
+On the `step === 'payment'` view, add a 2-tab segmented control above the payment gateway area:
+- **Worldpay** (default) — existing Worldpay SDK container + "Authorize via Worldpay — $X" button (unchanged behavior)
+- **Stablecoin (Circle USDC)** — shows: USDC amount required (1:1 with USD), destination Circle deposit address (placeholder `0xCirc...IDIA`), copy-to-clipboard button, network selector (Ethereum / Polygon / Base — defaults Base), and an "I've Sent USDC — Confirm" button that runs the same `top-up-credits` invocation with `payment_reference: USDC-${uuid}`.
 
-### 4. Delete Organization with confirmation
-Add a destructive button in the detail card header (next to Edit Profile), `size="sm" variant="destructive"`, label "Delete". Clicking opens an `AlertDialog` (shadcn) titled **"Delete this organization?"** with body listing what will be removed (business record, locations, status flags), and a required typed-confirmation input: user must type the exact organization name to enable the red "Delete Permanently" button. On confirm:
-1. `supabase.from('business_locations').delete().eq('business_id', id)`
-2. `supabase.from('businesses').delete().eq('id', id)`
-3. Clear `selectedBusiness`, refetch list, success toast.
+State: add `paymentRail: 'worldpay' | 'usdc'` local to the modal. Reset on close.
+
+### 3. Hub Enrollment cleanup (`src/components/billing/BillingCredits.tsx`)
+- Remove the **"Add Payment Method"** button + its Dialog from the sticky header (lines 89–148).
+- Remove the **"Credits Remaining" badge** from the sticky header (lines 86–88).
+- Remove the **Payment Methods** `<TabsTrigger>` (line 156) and the entire `<TabsContent value="payment">` block (lines 378–420).
+- Drop now-unused imports/state: `showAddPM`, `pmType`, `pmLabel`, `pmIdentifier`, `addPaymentMethod`, `removePaymentMethod`, `setDefaultPaymentMethod`, `paymentMethods`, `PAYMENT_TYPES`, `Plus`, `Wallet`, `Landmark`, `Building`, `Select*`, etc.
+- Header right-side becomes empty (or we leave the header div clean with just title/subtitle).
+
+### 4. Remove Audit Logs page entirely
+- Remove `<Route path="/audit-logs" ... />` from `src/pages/Index.tsx` (line 111).
+- Remove `{ title: 'Audit Logs', url: '/audit-logs', icon: FileText }` from the super-admin block in `src/components/layout/AppSidebar.tsx` (line 72).
+- Delete the file `src/components/audit/AuditLogs.tsx`.
+- Remove the `<TabsTrigger value="audit-logs">` from `src/components/dashboards/SuperAdminDashboard.tsx` (line 85) and its corresponding `<TabsContent>` if present.
+- Note: this is the **/audit-logs** page only. The **Egress Logs** / Provenance Audit Log page (`/egress-logs`) and the dashboard's "Audit Logs" stat card (which links to `/egress-logs`) both stay.
+
+### 5. A La Carte → Available Plans (`src/components/settings/SettingsBilling.tsx`)
+The Individual `IndividualBilling` component has an "Upgrade" button that does `window.location.href = '/onboarding'`. Change it to open the Available Plans dialog.
+
+Approach: lift the existing `Available Plans` dialog (from `BillingCredits.tsx` lines 293–375) into a shared component **`src/components/billing/AvailablePlansDialog.tsx`** that accepts `open` / `onOpenChange` / `currentTier` props. Then:
+- `BillingCredits.tsx` renders `<AvailablePlansDialog>` controlled by its existing `showPlans` state (no UX change there).
+- `IndividualBilling` adds local `showPlans` state; the "Upgrade" button sets it to `true` and renders `<AvailablePlansDialog>`.
+
+Button label stays "Upgrade", icon stays `ArrowRight`.
 
 ### Files touched
-- `src/components/LoginScreen.tsx` — Apple SVG swap
-- `src/components/management/OrganizationManagement.tsx` — density pass, expanded form, delete dialog
-- **New** `supabase/functions/usps-verify-address/index.ts` + `supabase/config.toml` entry — USPS proxy (uses `USPS_USER_ID` secret; will prompt to add it on first deploy)
+- `src/components/dashboards/IndividualDashboard.tsx` — panel reshuffle, font standardization, remove Data Assets
+- **New** `src/components/billing/StablecoinPanel.tsx`
+- `src/components/billing/SynapsePurchaseModal.tsx` — dual payment rail tabs
+- `src/components/billing/BillingCredits.tsx` — remove header button/badge, remove Payment tab, use shared plans dialog
+- **New** `src/components/billing/AvailablePlansDialog.tsx` — extracted shared dialog
+- `src/components/settings/SettingsBilling.tsx` — upgrade opens plans dialog
+- `src/pages/Index.tsx` — remove `/audit-logs` route
+- `src/components/layout/AppSidebar.tsx` — remove Audit Logs nav item
+- `src/components/dashboards/SuperAdminDashboard.tsx` — remove Audit Logs tab
+- **Delete** `src/components/audit/AuditLogs.tsx`
 
 ### Notes
-- USPS Web Tools requires a free `USERID`. After approval, I'll request the `USPS_USER_ID` secret via the secrets prompt.
-- The `address` column in `businesses` stays a single string (concat of standardized parts) — no migration needed.
-- `entityType` and `ein` go into existing `tax_id` (for EIN) and `business_type` is reserved for blueprint; entity type will be stored in a new `entity_type` column. I'll add a small migration: `alter table businesses add column entity_type text;`.
+- Stablecoin panel is presentational only for now — no Circle API integration yet. When ready, we can wire it to a `useStablecoinBalance` hook + Circle SDC. Say the word if you want me to scaffold the live integration in the same pass.
+- USDC tab in Authorize Payment is a manual-confirm flow (deposit-then-confirm). For automated detection we'd need a Circle webhook + watcher Edge Function — happy to add as a follow-up.
 
