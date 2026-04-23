@@ -130,240 +130,6 @@ export type Database = {
           },
         ]
       }
-      ar_campaign_performance: {
-        Row: {
-          business_id: string
-          campaign_id: string
-          conversion_count: number | null
-          created_at: string | null
-          date: string
-          engagement_duration_avg: number | null
-          id: string
-          revenue_generated: number | null
-          total_interactions: number | null
-          unique_users: number | null
-        }
-        Insert: {
-          business_id: string
-          campaign_id: string
-          conversion_count?: number | null
-          created_at?: string | null
-          date?: string
-          engagement_duration_avg?: number | null
-          id?: string
-          revenue_generated?: number | null
-          total_interactions?: number | null
-          unique_users?: number | null
-        }
-        Update: {
-          business_id?: string
-          campaign_id?: string
-          conversion_count?: number | null
-          created_at?: string | null
-          date?: string
-          engagement_duration_avg?: number | null
-          id?: string
-          revenue_generated?: number | null
-          total_interactions?: number | null
-          unique_users?: number | null
-        }
-        Relationships: []
-      }
-      ar_content_assets: {
-        Row: {
-          ar_experience_id: string | null
-          asset_metadata: Json | null
-          asset_type: string
-          asset_url: string
-          created_at: string | null
-          file_size_bytes: number | null
-          id: string
-          is_active: boolean | null
-        }
-        Insert: {
-          ar_experience_id?: string | null
-          asset_metadata?: Json | null
-          asset_type: string
-          asset_url: string
-          created_at?: string | null
-          file_size_bytes?: number | null
-          id?: string
-          is_active?: boolean | null
-        }
-        Update: {
-          ar_experience_id?: string | null
-          asset_metadata?: Json | null
-          asset_type?: string
-          asset_url?: string
-          created_at?: string | null
-          file_size_bytes?: number | null
-          id?: string
-          is_active?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ar_content_assets_ar_experience_id_fkey"
-            columns: ["ar_experience_id"]
-            isOneToOne: false
-            referencedRelation: "ar_experiences"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ar_experiences: {
-        Row: {
-          business_id: string
-          campaign_id: string | null
-          content_version: number
-          conversion_rate: number | null
-          created_at: string | null
-          creator_id: string | null
-          description: string | null
-          experience_type: string
-          id: string
-          interaction_triggers: Json | null
-          is_active: boolean | null
-          performance_metrics: Json | null
-          revenue_attributed: number | null
-          spatial_anchor_data: Json | null
-          title: string
-          updated_at: string | null
-        }
-        Insert: {
-          business_id: string
-          campaign_id?: string | null
-          content_version?: number
-          conversion_rate?: number | null
-          created_at?: string | null
-          creator_id?: string | null
-          description?: string | null
-          experience_type?: string
-          id?: string
-          interaction_triggers?: Json | null
-          is_active?: boolean | null
-          performance_metrics?: Json | null
-          revenue_attributed?: number | null
-          spatial_anchor_data?: Json | null
-          title: string
-          updated_at?: string | null
-        }
-        Update: {
-          business_id?: string
-          campaign_id?: string | null
-          content_version?: number
-          conversion_rate?: number | null
-          created_at?: string | null
-          creator_id?: string | null
-          description?: string | null
-          experience_type?: string
-          id?: string
-          interaction_triggers?: Json | null
-          is_active?: boolean | null
-          performance_metrics?: Json | null
-          revenue_attributed?: number | null
-          spatial_anchor_data?: Json | null
-          title?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ar_experiences_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ar_interactions: {
-        Row: {
-          ar_experience_id: string
-          created_at: string | null
-          customer_session_id: string | null
-          duration_seconds: number | null
-          id: string
-          interaction_type: string
-          location_id: string | null
-          resulted_in_purchase: boolean | null
-        }
-        Insert: {
-          ar_experience_id: string
-          created_at?: string | null
-          customer_session_id?: string | null
-          duration_seconds?: number | null
-          id?: string
-          interaction_type: string
-          location_id?: string | null
-          resulted_in_purchase?: boolean | null
-        }
-        Update: {
-          ar_experience_id?: string
-          created_at?: string | null
-          customer_session_id?: string | null
-          duration_seconds?: number | null
-          id?: string
-          interaction_type?: string
-          location_id?: string | null
-          resulted_in_purchase?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ar_interactions_ar_experience_id_fkey"
-            columns: ["ar_experience_id"]
-            isOneToOne: false
-            referencedRelation: "ar_menu_experiences"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ar_interactions_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "business_locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ar_menu_experiences: {
-        Row: {
-          ar_model_url: string | null
-          conversion_rate: number | null
-          created_at: string | null
-          experience_type: string | null
-          id: string
-          interaction_count: number | null
-          is_active: boolean | null
-          menu_item_id: string
-        }
-        Insert: {
-          ar_model_url?: string | null
-          conversion_rate?: number | null
-          created_at?: string | null
-          experience_type?: string | null
-          id?: string
-          interaction_count?: number | null
-          is_active?: boolean | null
-          menu_item_id: string
-        }
-        Update: {
-          ar_model_url?: string | null
-          conversion_rate?: number | null
-          created_at?: string | null
-          experience_type?: string | null
-          id?: string
-          interaction_count?: number | null
-          is_active?: boolean | null
-          menu_item_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ar_menu_experiences_menu_item_id_fkey"
-            columns: ["menu_item_id"]
-            isOneToOne: false
-            referencedRelation: "menu_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       ar_menu_interactions: {
         Row: {
           ar_menu_item_id: string
@@ -500,13 +266,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "ar_placement_zones_ar_experience_id_fkey"
-            columns: ["ar_experience_id"]
-            isOneToOne: false
-            referencedRelation: "ar_experiences"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "ar_placement_zones_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
@@ -559,15 +318,7 @@ export type Database = {
           session_id?: string | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "ar_user_interactions_ar_experience_id_fkey"
-            columns: ["ar_experience_id"]
-            isOneToOne: false
-            referencedRelation: "ar_experiences"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       auditable_consent_artifacts: {
         Row: {
@@ -1487,6 +1238,7 @@ export type Database = {
           is_active: boolean | null
           last_successful_sync: string | null
           last_sync_at: string | null
+          metadata: Json | null
           refresh_token: string | null
           sync_failure_count: number | null
           sync_status: string | null
@@ -1503,6 +1255,7 @@ export type Database = {
           is_active?: boolean | null
           last_successful_sync?: string | null
           last_sync_at?: string | null
+          metadata?: Json | null
           refresh_token?: string | null
           sync_failure_count?: number | null
           sync_status?: string | null
@@ -1519,6 +1272,7 @@ export type Database = {
           is_active?: boolean | null
           last_successful_sync?: string | null
           last_sync_at?: string | null
+          metadata?: Json | null
           refresh_token?: string | null
           sync_failure_count?: number | null
           sync_status?: string | null
@@ -1876,6 +1630,39 @@ export type Database = {
             referencedColumns: ["platform_guid"]
           },
         ]
+      }
+      digiramp_testnet_migration: {
+        Row: {
+          digiramp_id: string
+          id: string
+          last_sync_at: string | null
+          mint_tx_hash: string | null
+          platform_guid: string | null
+          status: string | null
+          testnet_address: string
+          token_balance_minted: number | null
+        }
+        Insert: {
+          digiramp_id: string
+          id?: string
+          last_sync_at?: string | null
+          mint_tx_hash?: string | null
+          platform_guid?: string | null
+          status?: string | null
+          testnet_address: string
+          token_balance_minted?: number | null
+        }
+        Update: {
+          digiramp_id?: string
+          id?: string
+          last_sync_at?: string | null
+          mint_tx_hash?: string | null
+          platform_guid?: string | null
+          status?: string | null
+          testnet_address?: string
+          token_balance_minted?: number | null
+        }
+        Relationships: []
       }
       economic_impact_metrics: {
         Row: {
@@ -4286,13 +4073,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "pos_transactions_ar_experience_id_fkey"
-            columns: ["ar_experience_id"]
-            isOneToOne: false
-            referencedRelation: "ar_experiences"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "pos_transactions_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
@@ -5875,6 +5655,33 @@ export type Database = {
           sync_results?: Json | null
           sync_type?: string
           total_connections?: number
+        }
+        Relationships: []
+      }
+      system_health: {
+        Row: {
+          component: string
+          created_at: string | null
+          id: string
+          last_heartbeat: string | null
+          metadata: Json | null
+          status: string
+        }
+        Insert: {
+          component: string
+          created_at?: string | null
+          id?: string
+          last_heartbeat?: string | null
+          metadata?: Json | null
+          status?: string
+        }
+        Update: {
+          component?: string
+          created_at?: string | null
+          id?: string
+          last_heartbeat?: string | null
+          metadata?: Json | null
+          status?: string
         }
         Relationships: []
       }
