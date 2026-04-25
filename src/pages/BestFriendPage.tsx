@@ -16,6 +16,18 @@ interface ConversationMessage {
   creditDeducted?: boolean;
 }
 
+// NATIVE CRYPTO GENERATOR FOR THE DIGIRAMP ANCHOR
+async function generateDigiRampAnchor(liabilityTokenHash: string) {
+  if (!liabilityTokenHash) return null;
+  const timestamp = new Date().toISOString();
+  const payload = new TextEncoder().encode(`${liabilityTokenHash}|${timestamp}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", payload);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return "0x" + hashHex;
+}
+
 const BestFriendPage = () => {
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
@@ -38,14 +50,10 @@ const BestFriendPage = () => {
 
     isProcessing.current = true;
     setIsLoading(true);
-    setMessages((prev) => [
-  ...prev,
-  {
-    role: "assistant",
-    content: aiPayload.response,           // The sanitized text
-    liabilityTokenHash: digiRampAnchorId,  // <--- UNBLOCKED HERE
-    creditDeducted: true                   // <--- UNBLOCKED HERE
-  },
+
+    // Optimistically push the user's message
+    setConversation((prev) => [...prev, { role: "user", content: currentMessage }]);
+
     try {
       // 1. IDENTITY RESOLUTION
       const {
@@ -85,23 +93,27 @@ const BestFriendPage = () => {
 
       if (aiError) throw aiError;
 
-      // 4. CASHIER RECEIPT CAPTURE
-      const liabilityTokenHash = chatResponse?.liability_token || null;
+      // 4. DIGIRAMP ANCHOR GENERATION
+      const rawTokenHash = chatResponse?.liability_token || null;
+      let digiRampAnchorId = null;
 
-      // 5. UPDATE CONVERSATION
+      if (rawTokenHash) {
+        digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
+      }
+
+      // 5. UPDATE CONVERSATION WITH THE AI RESPONSE AND ANCHOR
       setConversation((prev) => [
         ...prev,
-        { role: "user", content: currentMessage },
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis complete.",
-          liabilityTokenHash,
-          creditDeducted: !!liabilityTokenHash,
+          liabilityTokenHash: digiRampAnchorId, // The 0x Address
+          creditDeducted: !!digiRampAnchorId,
         },
       ]);
 
       // Refresh the "Synapse Gas" gauge if a credit was burned
-      if (liabilityTokenHash) {
+      if (digiRampAnchorId) {
         await refreshBalance();
       }
 
@@ -160,10 +172,10 @@ const BestFriendPage = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 text-[10px] gap-1.5 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 font-mono border border-purple-100 bg-purple-50/30 rounded-full"
+                        className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
                         onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
                       >
-                        <FileKey size={12} className="text-purple-500" />
+                        <FileKey size={12} className="text-amber-500" />
                         {truncateHash(msg.liabilityTokenHash)}
                       </Button>
                       <Badge
