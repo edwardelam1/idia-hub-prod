@@ -12,7 +12,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
 import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
-import StablecoinPanel from "@/components/billing/StablecoinPanel";
 import {
   Activity,
   ShieldCheck,
@@ -20,7 +19,6 @@ import {
   BrainCircuit,
   Eye,
   Sparkles,
-  BarChart3,
   BookOpen,
   FileKey,
   ArrowUpRight,
@@ -109,14 +107,14 @@ const IndividualDashboard = () => {
         </div>
       </div>
 
-      {/* CONSTRAINED NEURAL VISUALIZER */}
-      <Card className="border-primary/10 bg-black/20 backdrop-blur-sm min-h-[140px] max-h-[160px] overflow-hidden relative">
+      {/* NEURAL VISUALIZER: NO HEIGHT RESTRICTION */}
+      <Card className="border-primary/10 bg-black/20 backdrop-blur-sm relative">
         <div className="absolute top-2 left-3 z-10">
           <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
             Neural Interaction Matrix
           </span>
         </div>
-        <CardContent className="p-0 h-full">
+        <CardContent className="p-0">
           <SynapseVisualizer />
         </CardContent>
       </Card>
@@ -191,7 +189,7 @@ const IndividualDashboard = () => {
         </TabsList>
 
         <TabsContent value="overview" className="flex-1 mt-2 space-y-2 overflow-y-auto pr-1">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Card className="border-foreground/5 bg-muted/5 p-2 flex flex-col justify-between h-[60px]">
               <div className="flex justify-between items-center">
                 <span className="text-[8px] font-bold text-muted-foreground uppercase">Data Sources</span>
@@ -206,16 +204,7 @@ const IndividualDashboard = () => {
               </div>
               <span className="text-lg font-mono font-bold">{personalStats.auditLogs}</span>
             </Card>
-            <div className="col-span-2">
-              <StablecoinPanel />
-            </div>
           </div>
-          <Card className="bg-black/20 p-3 border-dashed border-white/5 flex items-center justify-center h-[50px]">
-            <BarChart3 className="h-4 w-4 text-muted-foreground/10 mr-2" />
-            <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-[0.2em]">
-              Yield Distribution Analysis Pending
-            </span>
-          </Card>
         </TabsContent>
 
         <TabsContent value="ledger" className="flex-1 mt-2">
