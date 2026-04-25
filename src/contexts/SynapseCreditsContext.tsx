@@ -5,122 +5,72 @@ import { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 // ========================================================================
-// IDIA PROTOCOL: TRIPLE-SILO INTERFACE
+// IDIA PROTOCOL: DUAL-RAIL SOVEREIGN STATE
 // ========================================================================
-interface WalletSchema {
-  hub_cash_balance: number;
-  cash_balance: number;
-  idia_beta_balance: number;
+interface ProtocolState {
+  hub_operating_cash: number; // Rail 1: USD Liquidity ($10,000.00)
+  synapse_gas_credits: number; // Rail 2: Computational Fuel (25,000)
+  fbo_royalty_balance: number; // Rail 3: Life Yield Floor ($0.00)
   wallet_address: string;
-}
-
-interface BalanceData {
-  // Triple-Silo Architecture
-  hub_operating_cash: number; // Physical Operating Capital ($10,000.00)
-  synapse_gas_credits: number; // AI Computational Fuel (25,000)
-  fbo_balance: number; // Life Royalty Floor ($0.00)
-
-  // Legacy Aliases for Component Compatibility
-  available_credits: number;
-  stablecoin_balance: number;
-  wallet_address: string;
-  currency: string;
-  stablecoin_currency: string;
   last_updated: string;
 }
 
-interface BurnRateData {
-  daily_average: number;
-  thirty_day_total: number;
-  burn_status: "healthy" | "warning" | "critical";
-}
-
 interface SynapseCreditsContextType {
-  balanceData: BalanceData | null;
-  burnRate: BurnRateData | null; // RESTORED: Fixes TS2339 in Settings & Trading
+  protocolState: ProtocolState | null;
   isLoading: boolean;
-  error: string | null;
-  refreshBalance: () => Promise<void>;
+  refreshState: () => Promise<void>;
 }
 
 const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefined>(undefined);
 
 export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
-  const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
-  const [burnRate, setBurnRate] = useState<BurnRateData | null>(null);
+  const [protocolState, setProtocolState] = useState<ProtocolState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchSovereignState = useCallback(async () => {
+    // Identity Reconciliation: Bridging AuthContext user_id to Supabase id
     const authUser = user as unknown as SupabaseUser;
-    if (!authUser?.id) {
+    const activeId = authUser?.id || (user as any)?.user_id;
+
+    if (!activeId) {
+      console.warn("[STATUS: Synapse.Engine] No Active GUID. Standby.");
       setIsLoading(false);
       return;
     }
 
-    console.info(`[BEGIN: Synapse.Sync] Resolving Vault Finality for UID: ${authUser.id}`);
+    console.info(`[BEGIN: Synapse.Engine] Syncing Dual-Rail State for: ${activeId}`);
     setIsLoading(true);
 
     try {
-      // 1. VAULT DISCOVERY (Hub & Life Silos)
-      const { data: walletData, error: walletError } = await (supabase
+      // 1. VAULT DISCOVERY (The USD & Yield Silos)
+      const { data: vault, error: vaultError } = await (supabase
         .from("wallets")
-        .select("hub_cash_balance, cash_balance, idia_beta_balance, wallet_address")
-        .eq("user_id", authUser.id)
+        .select("hub_cash_balance, cash_balance, wallet_address")
+        .eq("user_id", activeId)
         .maybeSingle() as any);
 
-      if (walletError) throw walletError;
+      if (vaultError) throw vaultError;
 
-      // REVELATION LOG: If this is null in your Mac console, RLS is blocking you.
-      console.log("[TRACE: Synapse.Sync] Raw Vault Payload:", walletData);
+      // CRITICAL LOG: If this is NULL, RLS is active and blocking your Mac browser.
+      console.log("[TRACE: Synapse.Engine] Physical Vault Payload:", vault);
 
-      // 2. GAS DISCOVERY (Computational Silo)
-      const { data: gasBalance, error: gasError } = await supabase.rpc("get_synapse_balance", { uid: authUser.id });
-      if (gasError) console.warn(`[WARNING: Synapse.Gas] RPC Stall: ${gasError.message}`);
+      // 2. GAS DISCOVERY (The Credit Silo via hardened RPC)
+      const { data: gasBalance, error: gasError } = await supabase.rpc("get_synapse_balance", { uid: activeId });
+      if (gasError) console.warn(`[WARNING: Synapse.Engine] Gas RPC Stall: ${gasError.message}`);
 
-      // 3. BURN RATE CALCULATION (Required for Billing/Trading Modules)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: usageEntries } = await supabase
-        .from("synapse_credit_ledger")
-        .select("amount")
-        .eq("user_id", authUser.id)
-        .in("entry_type", ["deduction", "USAGE"])
-        .neq("status", "FAILED")
-        .gte("created_at", thirtyDaysAgo);
-
-      const totalDeductions = (usageEntries || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
-      const dailyAvg = totalDeductions / 30;
-
-      // 4. PROTOCOL RECONCILIATION
-      const wallet = walletData as WalletSchema;
-      const hubCash = Number(wallet?.hub_cash_balance ?? 0);
-      const gasCredits = Number(gasBalance ?? 0);
-
-      setBurnRate({
-        daily_average: dailyAvg,
-        thirty_day_total: totalDeductions,
-        burn_status: dailyAvg > 0 && gasCredits < dailyAvg * 2 ? "critical" : "healthy",
-      });
-
-      setBalanceData({
-        hub_operating_cash: hubCash,
-        synapse_gas_credits: gasCredits,
-        fbo_balance: Number(wallet?.cash_balance ?? 0),
-        // Legacy Aliases: Point available_credits to the gas tank
-        available_credits: gasCredits,
-        stablecoin_balance: (wallet?.idia_beta_balance || 0) / 10 ** 18,
-        wallet_address: wallet?.wallet_address || "",
-        currency: "USD",
-        stablecoin_currency: "IDIA-BETA",
+      // 3. UNIFICATION
+      setProtocolState({
+        hub_operating_cash: Number(vault?.hub_cash_balance ?? 0),
+        synapse_gas_credits: Number(gasBalance ?? 0),
+        fbo_royalty_balance: Number(vault?.cash_balance ?? 0),
+        wallet_address: vault?.wallet_address || "0x-PENDING",
         last_updated: new Date().toISOString(),
       });
 
-      console.info(`[END: Synapse.Sync] State Hydrated. Hub: $${hubCash} | Gas: ${gasCredits}`);
+      console.info(`[END: Synapse.Engine] Solvency Resolved. USD: $${vault?.hub_cash_balance} | Gas: ${gasBalance}`);
     } catch (err: any) {
-      console.error(`[FATAL: Synapse.Sync] State Resolution Failure: ${err.message}`);
-      setError(err.message);
-      toast.error("Sovereign Sync Failed");
+      console.error(`[FATAL: Synapse.Engine] Pipeline Stall: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -131,9 +81,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
   }, [fetchSovereignState]);
 
   return (
-    <SynapseCreditsContext.Provider
-      value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchSovereignState }}
-    >
+    <SynapseCreditsContext.Provider value={{ protocolState, isLoading, refreshState: fetchSovereignState }}>
       {children}
     </SynapseCreditsContext.Provider>
   );
