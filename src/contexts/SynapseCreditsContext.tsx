@@ -5,19 +5,29 @@ import { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 // ========================================================================
-// IDIA PROTOCOL: DUAL-RAIL SOVEREIGN INTERFACES
+// IDIA PROTOCOL: TRIPLE-RAIL SOVEREIGN INTERFACES
 // ========================================================================
 interface ProtocolState {
-  hub_operating_cash: number; // Silo 1: USD Liquidity ($10,000.00)
-  synapse_gas_credits: number; // Silo 2: Computational Fuel (25,000)
-  fbo_royalty_balance: number; // Silo 3: Life Yield Floor ($0.00)
+  // RAIL 1: FIAT OPERATING CAPITAL (USD)
+  hub_operating_cash: number;
+
+  // RAIL 2: COMPUTATIONAL GAS (CREDITS)
+  synapse_gas_credits: number;
+
+  // RAIL 3: STABLECOIN LIQUIDITY (USDC / IDIA-BETA)
+  stablecoin_balance: number;
+
+  // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
+  fbo_royalty_balance: number;
+
   wallet_address: string;
 }
 
 interface BalanceData {
-  available_credits: number; // Legacy mapping to Gas Credits
-  hub_operating_cash: number; // Mapping to Operating USD
-  fbo_balance: number; // Legacy mapping to Royalty Floor
+  // Legacy mappings for backward compatibility
+  available_credits: number;
+  hub_operating_cash: number;
+  fbo_balance: number;
   stablecoin_balance: number;
   wallet_address: string;
   currency: string;
@@ -32,16 +42,11 @@ interface BurnRateData {
 }
 
 interface SynapseCreditsContextType {
-  // LEGACY CONTRACTS (Required to fix TS2339)
   balanceData: BalanceData | null;
   burnRate: BurnRateData | null;
   refreshBalance: () => Promise<void>;
-
-  // NEW FLUID CONTRACTS
   protocolState: ProtocolState | null;
   refreshState: () => Promise<void>;
-
-  // CORE STATE
   isLoading: boolean;
   error: string | null;
 }
@@ -57,33 +62,40 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
   const [error, setError] = useState<string | null>(null);
 
   const fetchSovereignState = useCallback(async () => {
-    // Identity Bridge
+    // Identity Reconciliation
     const authUser = user as unknown as SupabaseUser;
     const activeId = authUser?.id || (user as any)?.user_id;
 
     if (!activeId) {
+      console.warn("[STATUS: Synapse.Engine] Identity Resolution Pending.");
       setIsLoading(false);
       return;
     }
 
-    console.info(`[BEGIN: Synapse.Engine] Syncing Sovereign State for GUID: ${activeId}`);
+    console.info(`[BEGIN: Synapse.Engine] Initializing State Resolution for: ${activeId}`);
     setIsLoading(true);
 
     try {
-      // 1. VAULT DISCOVERY
+      // 1. VAULT DISCOVERY: Accessing physical silos
       const { data: vault, error: vaultError } = await (supabase
         .from("wallets")
         .select("hub_cash_balance, cash_balance, idia_beta_balance, wallet_address")
         .eq("user_id", activeId)
         .maybeSingle() as any);
 
-      if (vaultError) throw vaultError;
-      console.log("[TRACE: Synapse.Engine] Physical Vault Payload:", vault);
+      if (vaultError) {
+        console.error(`[ERROR: Synapse.Engine] Vault Discovery Failed: ${vaultError.message}`);
+        throw vaultError;
+      }
 
-      // 2. GAS DISCOVERY (RPC)
-      const { data: gasBalance } = await supabase.rpc("get_synapse_balance", { uid: activeId });
+      console.info("[STATUS: Synapse.Engine] Physical Vault Hydrated.");
+      console.log("[TRACE: Synapse.Engine] Raw Payload:", vault);
 
-      // 3. USAGE AUDIT (For Burn Rate)
+      // 2. GAS DISCOVERY: Interrogating Computational Silo (RPC)
+      const { data: gasBalance, error: gasError } = await supabase.rpc("get_synapse_balance", { uid: activeId });
+      if (gasError) console.warn(`[WARNING: Synapse.Engine] Gas RPC Stall: ${gasError.message}`);
+
+      // 3. USAGE AUDIT: Calculating Consumption Burn
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: usageEntries } = await supabase
         .from("synapse_credit_ledger")
@@ -96,41 +108,46 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const totalDeductions = (usageEntries || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
       const dailyAvg = totalDeductions / 30;
 
-      // 4. PROTOCOL RECONCILIATION (One Fluid Concept)
-      const hubCash = Number(vault?.hub_cash_balance ?? 0);
-      const royaltyYield = Number(vault?.cash_balance ?? 0);
-      const gasCredits = Number(gasBalance ?? 0);
+      // 4. PROTOCOL RECONCILIATION: Straight-Through Rail Mapping
+      const fiatOperating = Number(vault?.hub_cash_balance ?? 0);
+      const fiatRoyalty = Number(vault?.cash_balance ?? 0);
+      const computationalGas = Number(gasBalance ?? 0);
+      const stablecoinLiquidity = Number(vault?.idia_beta_balance ?? 0); // No commingling
 
-      const newProtocolState: ProtocolState = {
-        hub_operating_cash: hubCash,
-        synapse_gas_credits: gasCredits,
-        fbo_royalty_balance: royaltyYield,
+      const newState: ProtocolState = {
+        hub_operating_cash: fiatOperating,
+        synapse_gas_credits: computationalGas,
+        stablecoin_balance: stablecoinLiquidity,
+        fbo_royalty_balance: fiatRoyalty,
         wallet_address: vault?.wallet_address || "",
       };
 
-      const newBalanceData: BalanceData = {
-        available_credits: gasCredits, // Legacy components see the gas tank
-        hub_operating_cash: hubCash,
-        fbo_balance: royaltyYield,
-        stablecoin_balance: (vault?.idia_beta_balance || 0) / 10 ** 18,
+      const newLegacyData: BalanceData = {
+        available_credits: computationalGas,
+        hub_operating_cash: fiatOperating,
+        fbo_balance: fiatRoyalty,
+        stablecoin_balance: stablecoinLiquidity,
         wallet_address: vault?.wallet_address || "",
         currency: "USD",
         stablecoin_currency: "IDIA-BETA",
         last_updated: new Date().toISOString(),
       };
 
-      setProtocolState(newProtocolState);
-      setBalanceData(newBalanceData);
+      setProtocolState(newState);
+      setBalanceData(newLegacyData);
       setBurnRate({
         daily_average: dailyAvg,
         thirty_day_total: totalDeductions,
-        burn_status: dailyAvg > 0 && gasCredits < dailyAvg * 2 ? "critical" : "healthy",
+        burn_status: dailyAvg > 0 && computationalGas < dailyAvg * 2 ? "critical" : "healthy",
       });
 
-      console.info(`[END: Synapse.Engine] Finality Resolved. Cash: $${hubCash} | Gas: ${gasCredits}`);
+      console.info(
+        `[END: Synapse.Engine] Finality Resolved. Rails: Cash[$${fiatOperating}] | Gas[${computationalGas}] | Beta[${stablecoinLiquidity}]`,
+      );
     } catch (err: any) {
-      console.error(`[FATAL: Synapse.Engine] Pipeline Stall: ${err.message}`);
+      console.error(`[FATAL: Synapse.Engine] State Stall: ${err.message}`);
       setError(err.message);
+      toast.error("Sovereign State Synchronization Failure");
     } finally {
       setIsLoading(false);
     }
