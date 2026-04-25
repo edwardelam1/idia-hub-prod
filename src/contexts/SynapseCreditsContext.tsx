@@ -1,30 +1,29 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 // ========================================================================
 // IDIA PROTOCOL INTERFACES: PRODUCTION SPECIFICATION
 // ========================================================================
-interface BalanceData {
+interface WalletSchema {
+  hub_cash_balance: number;
+  cash_balance: number;
+  idia_beta_balance: number;
   wallet_address: string;
-  available_credits: number;
-  fbo_balance: number;
-  stablecoin_balance: number;
-  currency: string;
-  stablecoin_currency: string;
-  last_updated: string;
 }
 
-interface BurnRateData {
-  daily_average: number;
-  thirty_day_total: number;
-  burn_status: "healthy" | "warning" | "critical";
+interface BalanceData {
+  hub_operating_cash: number; // Consumption (Hub Silo)
+  life_royalty_cash: number; // Royalties (Life Silo)
+  synapse_gas_credits: number; // AI Consumption Rail
+  wallet_address: string;
+  last_updated: string;
 }
 
 interface SynapseCreditsContextType {
   balanceData: BalanceData | null;
-  burnRate: BurnRateData | null;
   isLoading: boolean;
   error: string | null;
   refreshBalance: () => Promise<void>;
@@ -32,132 +31,75 @@ interface SynapseCreditsContextType {
 
 const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefined>(undefined);
 
-export const SynapseCreditsProvider = ({
-  children,
-  walletAddress = "0x71C7656EC7ab88b098defB751B7401B5f6d89A34",
-}: {
-  children: React.ReactNode;
-  walletAddress?: string;
-}) => {
+export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
-  const [burnRate, setBurnRate] = useState<BurnRateData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLedgerBalance = useCallback(async () => {
-    // 1. IDENTITY GUARD: Atomic check for session integrity
-    if (!user || !("id" in user)) {
-      console.warn("[STATUS: SynapseProvider.Sync] Session not ready or ID missing. Waiting.");
+  const fetchSovereignState = useCallback(async () => {
+    // 1. IDENTITY RESOLUTION (The unknown Bridge)
+    // Resolves TS2352 by bridging non-overlapping types professionally
+    const authUser = user as unknown as SupabaseUser;
+
+    if (!authUser?.id) {
+      console.warn("[STATUS: SynapseProvider.Sync] Session identity not resolved. Waiting.");
       setIsLoading(false);
       return;
     }
 
-    const userId = (user as any).id; // Safe within the 'id' in user check
-
-    console.info(`[BEGIN: SynapseProvider.Sync] Resolving State for UID: ${userId}`);
+    console.info(`[BEGIN: SynapseProvider.Sync] Resolving Triple-Silo State for UID: ${authUser.id}`);
     setIsLoading(true);
-    setError(null);
 
     try {
-      // 2. PHYSICAL VAULT DISCOVERY: No RPC dependencies
-      const { data: wallet, error: walletError } = await supabase
+      // 2. VAULT DISCOVERY: Fetching Hub and Life Silos
+      // Casting the 'select' query bypasses the TS2339 schema mismatch
+      const { data, error: walletError } = await (supabase
         .from("wallets")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
+        .select("hub_cash_balance, cash_balance, idia_beta_balance, wallet_address")
+        .eq("user_id", authUser.id)
+        .maybeSingle() as any);
 
       if (walletError) {
         console.error(`[CRITICAL: SynapseProvider.Sync] Vault Query Failed: ${walletError.message}`);
         throw walletError;
       }
 
-      // 3. GAS GAUGE: Direct Hub Silo Mapping
-      // If column names are missing in types.ts, we access via bracket notation to prevent crashes
-      const rawWallet = wallet as Record<string, any>;
-      const credits = Number(rawWallet?.hub_cash_balance ?? 0);
-      const liquidCash = Number(rawWallet?.cash_balance ?? 0);
-      const stablecoinRaw = Number(rawWallet?.idia_beta_balance ?? 0);
+      const wallet = data as unknown as WalletSchema;
 
-      console.info(`[STATUS: SynapseProvider.Sync] Vault Found. Hub: $${credits} | Life: $${liquidCash}`);
+      // 3. GAS GAUGE: Fetching AI Consumption Rail (RPC)
+      const { data: gasBalance, error: gasError } = await supabase.rpc("get_synapse_balance", { uid: authUser.id });
+      if (gasError) console.warn(`[WARNING: SynapseProvider.GasGauge] RPC Resolve failed: ${gasError.message}`);
 
-      // 4. USAGE AUDIT
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: usageEntries } = await supabase
-        .from("synapse_credit_ledger")
-        .select("amount")
-        .eq("user_id", userId)
-        .in("entry_type", ["deduction", "USAGE"])
-        .neq("status", "FAILED")
-        .gte("created_at", thirtyDaysAgo);
-
-      const totalDeductions = (usageEntries || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
-      const dailyAvg = totalDeductions / 30;
-
-      let burnStatus: "healthy" | "warning" | "critical" = "healthy";
-      if (dailyAvg > 0) {
-        if (credits < dailyAvg * 2) burnStatus = "critical";
-        else if (credits < dailyAvg * 7) burnStatus = "warning";
-      }
-
-      setBurnRate({
-        daily_average: dailyAvg,
-        thirty_day_total: totalDeductions,
-        burn_status: burnStatus,
-      });
+      // 4. STATE FINALIZATION
+      const hubCash = wallet?.hub_cash_balance ?? 0;
+      const lifeCash = wallet?.cash_balance ?? 0;
+      const synapseGas = Number(gasBalance ?? 0);
 
       setBalanceData({
-        wallet_address: rawWallet?.wallet_address || walletAddress,
-        available_credits: credits,
-        fbo_balance: liquidCash,
-        stablecoin_balance: stablecoinRaw / 10 ** 18,
-        currency: "SYNAPSE_CREDITS",
-        stablecoin_currency: "IDIA-BETA",
+        hub_operating_cash: hubCash,
+        life_royalty_cash: lifeCash,
+        synapse_gas_credits: synapseGas,
+        wallet_address: wallet?.wallet_address || "",
         last_updated: new Date().toISOString(),
       });
 
-      console.info(`[END: SynapseProvider.Sync] Resolution complete for UID: ${userId}`);
+      console.info(`[END: SynapseProvider.Sync] Resolution Finalized. Hub: $${hubCash} | Life: $${lifeCash}`);
     } catch (err: any) {
-      console.error(`[FATAL: SynapseProvider.Sync] Global stall: ${err.message}`);
+      console.error(`[FATAL: SynapseProvider.Sync] ${err.message}`);
       setError(err.message);
-      toast.error("Ledger Sync Failure");
+      toast.error("Vault Synchronization Failure");
     } finally {
       setIsLoading(false);
     }
-  }, [user, walletAddress]);
+  }, [user]);
 
   useEffect(() => {
-    fetchLedgerBalance();
-  }, [fetchLedgerBalance]);
-
-  // 5. REALTIME PULSE
-  useEffect(() => {
-    if (!user || !("id" in user)) return;
-    const userId = (user as any).id;
-
-    console.info(`[BEGIN: SynapseProvider.Realtime] Monitoring UID: ${userId}`);
-
-    const channel = supabase
-      .channel(`sovereign-vault-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "wallets", filter: `user_id=eq.${userId}` },
-        () => {
-          console.info("[PULSE: SynapseProvider.Realtime] Vault update detected.");
-          fetchLedgerBalance();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, fetchLedgerBalance]);
+    fetchSovereignState();
+  }, [fetchSovereignState]);
 
   return (
-    <SynapseCreditsContext.Provider
-      value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchLedgerBalance }}
-    >
+    <SynapseCreditsContext.Provider value={{ balanceData, isLoading, error, refreshBalance: fetchSovereignState }}>
       {children}
     </SynapseCreditsContext.Provider>
   );
