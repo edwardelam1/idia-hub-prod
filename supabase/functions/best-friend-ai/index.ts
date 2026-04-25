@@ -348,14 +348,6 @@ function runVerificationLoop(draft: string, healthRecords: any[], lifestyleRecor
     }
   }
 
-  const footer =
-    issues.length === 0
-      ? `\n\n_Library check: passed (${totalRows} rows referenced)._`
-      : `\n\n_Library check flagged: ${issues.join("; ")}._`;
-
-  return { text: draft + footer, issues };
-}
-
 function normalizeOutput(text: string, _agent: AgentType): string {
   let cleaned = applyLinguisticGovernance(text);
   cleaned = shortenLongSentences(cleaned);
