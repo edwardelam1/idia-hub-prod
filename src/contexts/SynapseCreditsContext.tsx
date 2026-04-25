@@ -5,7 +5,7 @@ import { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 // ========================================================================
-// IDIA PROTOCOL INTERFACES: PRODUCTION SPECIFICATION
+// IDIA PROTOCOL INTERFACES: PRODUCTION CONTRACT ALIGNMENT
 // ========================================================================
 interface WalletSchema {
   hub_cash_balance: number;
@@ -15,15 +15,24 @@ interface WalletSchema {
 }
 
 interface BalanceData {
-  hub_operating_cash: number; // Consumption (Hub Silo)
-  life_royalty_cash: number; // Royalties (Life Silo)
-  synapse_gas_credits: number; // AI Consumption Rail
+  available_credits: number; // Mapped to Hub Silo ($5,000.00)
+  fbo_balance: number; // Mapped to Life Silo ($0.00)
+  stablecoin_balance: number; // IDIA-BETA Rail
   wallet_address: string;
+  currency: string;
+  stablecoin_currency: string;
   last_updated: string;
+}
+
+interface BurnRateData {
+  daily_average: number;
+  thirty_day_total: number;
+  burn_status: "healthy" | "warning" | "critical";
 }
 
 interface SynapseCreditsContextType {
   balanceData: BalanceData | null;
+  burnRate: BurnRateData | null; // Restored for Settings/Trading components
   isLoading: boolean;
   error: string | null;
   refreshBalance: () => Promise<void>;
@@ -34,57 +43,71 @@ const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefine
 export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
+  const [burnRate, setBurnRate] = useState<BurnRateData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSovereignState = useCallback(async () => {
-    // 1. IDENTITY RESOLUTION (The unknown Bridge)
-    // Resolves TS2352 by bridging non-overlapping types professionally
+    // 1. IDENTITY RESOLUTION: The unknown bridge resolves TS2352
     const authUser = user as unknown as SupabaseUser;
 
     if (!authUser?.id) {
-      console.warn("[STATUS: SynapseProvider.Sync] Session identity not resolved. Waiting.");
+      console.warn("[STATUS: SynapseProvider.Sync] Session identity not resolved.");
       setIsLoading(false);
       return;
     }
 
-    console.info(`[BEGIN: SynapseProvider.Sync] Resolving Triple-Silo State for UID: ${authUser.id}`);
+    console.info(`[BEGIN: SynapseProvider.Sync] Resolving Vault for UID: ${authUser.id}`);
     setIsLoading(true);
 
     try {
-      // 2. VAULT DISCOVERY: Fetching Hub and Life Silos
-      // Casting the 'select' query bypasses the TS2339 schema mismatch
+      // 2. VAULT DISCOVERY: Forced cast bypasses TS2339 schema mismatch
       const { data, error: walletError } = await (supabase
         .from("wallets")
         .select("hub_cash_balance, cash_balance, idia_beta_balance, wallet_address")
         .eq("user_id", authUser.id)
         .maybeSingle() as any);
 
-      if (walletError) {
-        console.error(`[CRITICAL: SynapseProvider.Sync] Vault Query Failed: ${walletError.message}`);
-        throw walletError;
-      }
-
+      if (walletError) throw walletError;
       const wallet = data as unknown as WalletSchema;
 
-      // 3. GAS GAUGE: Fetching AI Consumption Rail (RPC)
-      const { data: gasBalance, error: gasError } = await supabase.rpc("get_synapse_balance", { uid: authUser.id });
-      if (gasError) console.warn(`[WARNING: SynapseProvider.GasGauge] RPC Resolve failed: ${gasError.message}`);
+      // 3. GAS GAUGE: Consumption credits (RPC)
+      const { data: gasBalance } = await supabase.rpc("get_synapse_balance", { uid: authUser.id });
 
-      // 4. STATE FINALIZATION
-      const hubCash = wallet?.hub_cash_balance ?? 0;
-      const lifeCash = wallet?.cash_balance ?? 0;
-      const synapseGas = Number(gasBalance ?? 0);
+      // 4. BURN RATE CALCULATION: Required for Settings/Trading components
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: usageEntries } = await supabase
+        .from("synapse_credit_ledger")
+        .select("amount")
+        .eq("user_id", authUser.id)
+        .in("entry_type", ["deduction", "USAGE"])
+        .neq("status", "FAILED")
+        .gte("created_at", thirtyDaysAgo);
+
+      const totalDeductions = (usageEntries || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);
+      const dailyAvg = totalDeductions / 30;
+
+      // 5. STATE FINALIZATION: Mapping Silos to Legacy Contract Names
+      const hubFuel = wallet?.hub_cash_balance ?? 0;
+      const royaltyYield = wallet?.cash_balance ?? 0;
+
+      setBurnRate({
+        daily_average: dailyAvg,
+        thirty_day_total: totalDeductions,
+        burn_status: dailyAvg > 0 && hubFuel < dailyAvg * 2 ? "critical" : "healthy",
+      });
 
       setBalanceData({
-        hub_operating_cash: hubCash,
-        life_royalty_cash: lifeCash,
-        synapse_gas_credits: synapseGas,
+        available_credits: hubFuel, // Anchored to $5,000.00
+        fbo_balance: royaltyYield, // Anchored to $0.00
+        stablecoin_balance: (wallet?.idia_beta_balance || 0) / 10 ** 18,
         wallet_address: wallet?.wallet_address || "",
+        currency: "SYNAPSE_CREDITS",
+        stablecoin_currency: "IDIA-BETA",
         last_updated: new Date().toISOString(),
       });
 
-      console.info(`[END: SynapseProvider.Sync] Resolution Finalized. Hub: $${hubCash} | Life: $${lifeCash}`);
+      console.info(`[END: SynapseProvider.Sync] Resolution Finalized. Hub Operating: $${hubFuel}`);
     } catch (err: any) {
       console.error(`[FATAL: SynapseProvider.Sync] ${err.message}`);
       setError(err.message);
@@ -99,7 +122,9 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
   }, [fetchSovereignState]);
 
   return (
-    <SynapseCreditsContext.Provider value={{ balanceData, isLoading, error, refreshBalance: fetchSovereignState }}>
+    <SynapseCreditsContext.Provider
+      value={{ balanceData, burnRate, isLoading, error, refreshBalance: fetchSovereignState }}
+    >
       {children}
     </SynapseCreditsContext.Provider>
   );
