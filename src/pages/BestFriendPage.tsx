@@ -38,7 +38,14 @@ const BestFriendPage = () => {
 
     isProcessing.current = true;
     setIsLoading(true);
-
+    setMessages((prev) => [
+  ...prev,
+  {
+    role: "assistant",
+    content: aiPayload.response,           // The sanitized text
+    liabilityTokenHash: digiRampAnchorId,  // <--- UNBLOCKED HERE
+    creditDeducted: true                   // <--- UNBLOCKED HERE
+  }
     try {
       // 1. IDENTITY RESOLUTION
       const {
