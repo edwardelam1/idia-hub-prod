@@ -8,8 +8,8 @@ import { toast } from "sonner";
 // ========================================================================
 interface BalanceData {
   wallet_address: string;
-  available_credits: number; // Consumption Utility
-  fbo_balance: number; // Liquid USD Reservoir
+  available_credits: number; // Consumption Utility (Hub Silo)
+  fbo_balance: number; // Liquid USD Reservoir (Life Silo Bridge)
   stablecoin_balance: number; // Crypto Rail (IDIA-BETA)
   currency: string;
   stablecoin_currency: string;
@@ -45,13 +45,17 @@ export const SynapseCreditsProvider = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Type-Force: Create a local reference that TypeScript won't choke on
+  const authUser = user as any;
+
   const fetchLedgerBalance = useCallback(async () => {
     console.info("[BEGIN: SynapseProvider.Sync] Starting Sovereign State Resolution.");
     setIsLoading(true);
     setError(null);
 
     try {
-      const userId = user?.id; // Standardizing on .id for Supabase auth alignment
+      // Use the forced reference to access .id without TS errors
+      const userId = authUser?.id;
       if (!userId) {
         console.warn("[STATUS: SynapseProvider.Sync] No authenticated user detected. Aborting.");
         setIsLoading(false);
@@ -64,7 +68,7 @@ export const SynapseCreditsProvider = ({
       console.info("[STATUS: SynapseProvider.LKSDiscovery] Querying wallets vault.");
       const { data: wallet, error: walletError } = await supabase
         .from("wallets")
-        .select("cash_balance, idia_beta_balance")
+        .select("hub_cash_balance, cash_balance, idia_beta_balance")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -74,12 +78,12 @@ export const SynapseCreditsProvider = ({
       }
 
       // ----------------------------------------------------------------------
-      // 2. GAS GAUGE: Consumption credits from the stored RPC
+      // 2. GAS GAUGE: Consumption credits (Mapped to Hub Silo)
       // ----------------------------------------------------------------------
       const { data: balance, error: ledgerError } = await supabase.rpc("get_synapse_balance", { uid: userId });
       if (ledgerError) console.warn("[WARNING: SynapseProvider.GasGauge] RPC Fetch failed.", ledgerError);
 
-      const credits = Number(balance ?? wallet?.cash_balance ?? 0);
+      const credits = Number(balance ?? wallet?.hub_cash_balance ?? 0);
 
       // ----------------------------------------------------------------------
       // 3. BURN RATE: Logic for 'deduction' and 'USAGE'
@@ -106,7 +110,7 @@ export const SynapseCreditsProvider = ({
         .eq("user_id", userId)
         .neq("status", "FAILED");
 
-      // The FBO Reservoir should match the physical cash_balance we found in Stage 1
+      // The FBO Reservoir (Life Silo)
       const auditedFboBalance = (fboEntries || []).reduce((sum, e) => sum + Number(e.amount_usd ?? 0), 0);
       const liquidCashSilo = Number(wallet?.cash_balance ?? auditedFboBalance);
 
@@ -136,7 +140,7 @@ export const SynapseCreditsProvider = ({
       });
 
       console.info(
-        `[END: SynapseProvider.Sync] State Finalized. Liquid: $${liquidCashSilo.toFixed(2)} | Stable: ${stablecoinSilo.toFixed(4)}`,
+        `[END: SynapseProvider.Sync] State Finalized. Hub: $${credits.toFixed(2)} | Life: $${liquidCashSilo.toFixed(2)}`,
       );
     } catch (err: any) {
       console.error("[FATAL: SynapseProvider.GlobalStall]", err.message);
@@ -145,7 +149,7 @@ export const SynapseCreditsProvider = ({
     } finally {
       setIsLoading(false);
     }
-  }, [walletAddress, user?.id]);
+  }, [walletAddress, authUser?.id]); // Use authUser here
 
   useEffect(() => {
     fetchLedgerBalance();
@@ -155,12 +159,13 @@ export const SynapseCreditsProvider = ({
   // REALTIME SUBSCRIPTION: VAULT WATCHER
   // ========================================================================
   useEffect(() => {
-    if (!user?.id) return;
+    const userId = authUser?.id;
+    if (!userId) return;
 
     console.info("[STATUS: SynapseProvider.Realtime] Monitoring Wallet & Ledger for State Changes.");
 
     const channel = supabase
-      .channel(`sovereign-vault-${user.id}`)
+      .channel(`sovereign-vault-${userId}`)
       // Watch for new ledger entries (History)
       .on(
         "postgres_changes",
@@ -168,7 +173,7 @@ export const SynapseCreditsProvider = ({
           event: "INSERT",
           schema: "public",
           table: "synapse_credit_ledger",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
           console.info("[EVENT: Realtime] Credit Ledger Update Detected.");
@@ -182,7 +187,7 @@ export const SynapseCreditsProvider = ({
           event: "UPDATE",
           schema: "public",
           table: "wallets",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
           console.info("[EVENT: Realtime] Wallet Vault Transition Detected.");
@@ -195,7 +200,7 @@ export const SynapseCreditsProvider = ({
       console.info("[STATUS: SynapseProvider.Realtime] Cleaning up sovereign listeners.");
       supabase.removeChannel(channel);
     };
-  }, [user?.id, fetchLedgerBalance]);
+  }, [authUser?.id, fetchLedgerBalance]); // Use authUser here
 
   return (
     <SynapseCreditsContext.Provider
