@@ -45,7 +45,7 @@ const BestFriendPage = () => {
     content: aiPayload.response,           // The sanitized text
     liabilityTokenHash: digiRampAnchorId,  // <--- UNBLOCKED HERE
     creditDeducted: true                   // <--- UNBLOCKED HERE
-  }
+  },
     try {
       // 1. IDENTITY RESOLUTION
       const {
