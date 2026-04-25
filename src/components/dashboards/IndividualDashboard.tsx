@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,49 +24,74 @@ import {
   BookOpen,
   FileKey,
   ArrowUpRight,
+  Wallet,
 } from "lucide-react";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
-  const { balanceData } = useSynapseCredits();
-  const { currentUsage, subscriptionPlan, subscription } = useBillingData();
+  const { balanceData, isLoading: creditsLoading } = useSynapseCredits();
+  const { currentUsage, subscription } = useBillingData();
   const navigate = useNavigate();
 
-  const liveBalance = balanceData?.available_credits ?? 0;
-  const tier = subscription?.tier?.toLowerCase() ?? "base";
-  const planInfo = PLAN_PRICING[tier] ?? PLAN_PRICING.base;
+  // ========================================================================
+  // IDENTITY RECONCILIATION: Bridging user_id vs id
+  // ========================================================================
+  const activeUserId = user?.user_id || (user as any)?.id;
+
+  useEffect(() => {
+    console.info(`[BEGIN: Dashboard.Hydration] Verifying Identity for GUID: ${activeUserId}`);
+    if (!activeUserId) {
+      console.warn("[STATUS: Dashboard.Hydration] Identity Missing. UI Stalling.");
+    }
+  }, [activeUserId]);
+
+  // ========================================================================
+  // DUAL-SILO MAPPING: Liquidity vs. Computational Gas
+  // ========================================================================
+  const operatingCash = balanceData?.hub_operating_cash ?? 0;
+  const gasCredits = balanceData?.synapse_gas_credits ?? 0;
+
+  useEffect(() => {
+    if (balanceData) {
+      console.info(`[STATUS: Dashboard.DataSync] Silos Resolved - Cash: $${operatingCash} | Gas: ${gasCredits}`);
+    }
+  }, [balanceData, operatingCash, gasCredits]);
 
   // ─── DYNAMIC LEDGER INTERROGATION (NO HALLUCINATIONS) ─────────────────────
-  const { data: stats } = useQuery({
-    queryKey: ["hub-personal-stats", user?.user_id], // Fixed: Accessing user_id per AuthContext
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["hub-personal-stats", activeUserId],
     queryFn: async () => {
-      if (!user?.user_id) return { activeSources: 0, auditLogs: 0, dataAssets: 0 }; // Fixed: Accessing user_id
+      console.info("[BEGIN: Dashboard.StatsQuery] Interrogating Ledger Tables.");
+      if (!activeUserId) return { activeSources: 0, auditLogs: 0, dataAssets: 0 };
 
-      const [sourcesRes, auditsRes, assetsRes] = await Promise.all([
-        supabase
-          .from("data_connections")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.user_id)
-          .eq("is_active", true), // Fixed: Accessing user_id
-        supabase.from("egress_logs").select("*", { count: "exact", head: true }).eq("user_id", user.user_id), // Fixed: Accessing user_id
-        supabase.from("staged_health_data").select("*", { count: "exact", head: true }).eq("user_id", user.user_id), // Fixed: Accessing user_id
-      ]);
+      try {
+        const [sourcesRes, auditsRes, assetsRes] = await Promise.all([
+          supabase
+            .from("data_connections")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", activeUserId)
+            .eq("is_active", true),
+          supabase.from("egress_logs").select("*", { count: "exact", head: true }).eq("user_id", activeUserId),
+          supabase.from("staged_health_data").select("*", { count: "exact", head: true }).eq("user_id", activeUserId),
+        ]);
 
-      return {
-        activeSources: sourcesRes.count || 0,
-        auditLogs: auditsRes.count || 0,
-        dataAssets: assetsRes.count || 0,
-      };
+        console.info("[END: Dashboard.StatsQuery] Ledger Response Received.");
+        return {
+          activeSources: sourcesRes.count || 0,
+          auditLogs: auditsRes.count || 0,
+          dataAssets: assetsRes.count || 0,
+        };
+      } catch (err) {
+        console.error("[FATAL: Dashboard.StatsQuery] Query Execution Failed", err);
+        throw err;
+      }
     },
-    enabled: !!user?.user_id, // Fixed: Accessing user_id
+    enabled: !!activeUserId,
   });
 
   const personalStats = stats || { activeSources: 0, auditLogs: 0, dataAssets: 0 };
-
-  const recentContributions = [
-    { id: 1, action: "Health data synced from Apple Health", timestamp: "Recent", type: "health" },
-  ];
+  const usagePercent = currentUsage.limit > 0 ? Math.min((currentUsage.used / currentUsage.limit) * 100, 100) : 0;
 
   const getContributionIcon = (type: string) => {
     switch (type) {
@@ -80,24 +106,29 @@ const IndividualDashboard = () => {
     }
   };
 
-  const usagePercent = currentUsage.limit > 0 ? Math.min((currentUsage.used / currentUsage.limit) * 100, 100) : 0;
-
   return (
     <div className="flex flex-col h-full font-sans">
       <div className="flex-shrink-0 space-y-4 pb-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">
-            {piiData?.displayName ? `${piiData.displayName}'s IDIA Hub` : "My IDIA Hub"}
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm font-mono flex items-center gap-2">
-            GUID:{" "}
-            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{user?.user_id?.substring(0, 8)}...</span>
-          </p>
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">
+              {piiData?.displayName ? `${piiData.displayName}'s IDIA Hub` : "My IDIA Hub"}
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm font-mono flex items-center gap-2">
+              GUID:{" "}
+              <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{activeUserId?.substring(0, 8)}...</span>
+            </p>
+          </div>
+          <Badge variant="outline" className="mb-1 font-mono text-[10px] tracking-tighter">
+            {creditsLoading ? "SYNCING_PROTOCOL..." : "STATE: SETTLED"}
+          </Badge>
         </div>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Personal Synapse Impact</CardTitle>
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground/70">
+              Synapse Neural Visualizer
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <SynapseVisualizer />
@@ -107,35 +138,27 @@ const IndividualDashboard = () => {
 
       <Tabs defaultValue="overview" className="flex flex-col flex-1 min-h-0">
         <TabsList className="flex-shrink-0 w-full justify-start bg-transparent border-b rounded-none h-auto p-0">
-          <TabsTrigger
-            value="overview"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 px-4"
-          >
+          <TabsTrigger value="overview" className="tab-trigger-idia">
             Overview
           </TabsTrigger>
-          <TabsTrigger
-            value="usage"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 px-4"
-          >
+          <TabsTrigger value="usage" className="tab-trigger-idia">
             Usage Stats
           </TabsTrigger>
-          <TabsTrigger
-            value="ledger"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent pb-2 px-4"
-          >
+          <TabsTrigger value="ledger" className="tab-trigger-idia">
             Ledger Audit
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="flex-1 mt-3 space-y-3 overflow-hidden">
+          {/* SILO GRID: THE SOURCE OF TRUTH */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <Card>
+            <Card className="border-primary/20 bg-primary/5">
               <CardContent className="p-3">
                 <SynapseGasGauge />
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-foreground/10">
               <CardContent className="p-3">
                 <FBOReservoirGauge />
               </CardContent>
@@ -157,7 +180,7 @@ const IndividualDashboard = () => {
                 </div>
                 <div className="flex items-baseline gap-1.5 mt-1">
                   <span className="text-lg font-bold">{personalStats.activeSources}</span>
-                  <span className="text-[10px] text-muted-foreground">connected</span>
+                  <span className="text-[10px] text-muted-foreground">active</span>
                 </div>
               </CardContent>
             </Card>
@@ -181,112 +204,114 @@ const IndividualDashboard = () => {
                     className="h-6 w-full text-[9px] uppercase tracking-wider gap-1"
                     onClick={() => navigate("/egress-logs")}
                   >
-                    Review Audit Logs <ArrowUpRight className="h-2 w-2" />
+                    Review Audit <ArrowUpRight className="h-2 w-2" />
                   </Button>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
-            <CardContent className="p-3">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-semibold mb-2">Asset Performance</p>
-                  <div className="space-y-1.5">
-                    <div>
-                      <div className="flex justify-between mb-0.5">
-                        <span className="text-[11px]">Provenance Integrity</span>
-                        <span className="text-[11px] font-medium">100%</span>
-                      </div>
-                      <Progress value={100} className="h-1" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-0.5">
-                        <span className="text-[11px]">Source Connectivity</span>
-                        <span className="text-[11px] font-medium">
-                          {personalStats.activeSources > 0 ? "100%" : "0%"}
-                        </span>
-                      </div>
-                      <Progress value={personalStats.activeSources > 0 ? 100 : 0} className="h-1" />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold mb-2">Recent Contributions</p>
-                  <div className="space-y-1.5">
-                    {recentContributions.map((item) => (
-                      <div key={item.id} className="flex items-start space-x-2">
-                        {getContributionIcon(item.type)}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-medium leading-tight">{item.action}</p>
-                          <p className="text-[10px] text-muted-foreground">{item.timestamp}</p>
-                        </div>
-                        <Badge variant="secondary" className="text-[9px] capitalize px-1.5 py-0">
-                          {item.type}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="usage" className="flex-1 mt-3 space-y-3 overflow-hidden">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-                <CardTitle className="text-xs font-medium">Credits Used</CardTitle>
-                <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="p-3 pt-0">
-                <div className="text-xl font-bold font-mono">
-                  {currentUsage.used.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              <CardContent className="p-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <Wallet className="h-3.5 w-3.5" /> IDIA Hub Operating Liquidity
+                </h3>
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-3xl font-mono font-bold tracking-tighter">
+                    ${operatingCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-sm font-bold text-muted-foreground">USD</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  of {currentUsage.limit > 0 ? currentUsage.limit.toLocaleString() : "∞"} CR
-                </p>
-                {currentUsage.limit > 0 && <Progress value={usagePercent} className="mt-1.5 h-1.5" />}
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground">Vault Integrity</span>
+                      <span className="text-[10px] font-mono">100%</span>
+                    </div>
+                    <Progress value={100} className="h-1" />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-                <CardTitle className="text-xs font-medium">Live Balance</CardTitle>
-                <Database className="h-3.5 w-3.5 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="p-3 pt-0">
-                <div className="text-xl font-bold font-mono text-primary">
-                  {liveBalance.toLocaleString(undefined, { minimumFractionDigits: 4 })}
+              <CardContent className="p-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+                  <BrainCircuit className="h-3.5 w-3.5" /> Computational Gas
+                </h3>
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-3xl font-mono font-bold tracking-tighter text-primary">
+                    {gasCredits.toLocaleString()}
+                  </span>
+                  <span className="text-sm font-bold text-primary/70 uppercase">Credits</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground">CR · Real-time</p>
+                <Button
+                  variant="link"
+                  className="p-0 h-auto text-[10px] uppercase font-bold tracking-tight"
+                  onClick={() => navigate("/billing")}
+                >
+                  Top Up Gas Reserves →
+                </Button>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="ledger" className="flex-1 mt-3 overflow-hidden">
+        <TabsContent value="usage" className="flex-1 mt-3 space-y-3">
           <Card>
-            <CardHeader className="p-3 pb-1">
-              <CardTitle className="text-xs">Ledger Transaction Log</CardTitle>
-              <CardDescription className="text-[11px]">
-                Immutable record of all Synapse Credit movements
-              </CardDescription>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm">Historical Data Yield</CardTitle>
             </CardHeader>
-            <CardContent className="p-3">
-              <div className="flex flex-col items-center justify-center py-6 text-center space-y-2">
-                <BookOpen className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-xs text-muted-foreground">View full provenance history in Ledger Audit.</p>
-                <Button variant="outline" size="sm" onClick={() => navigate("/egress-logs")}>
-                  Open Ledger Audit
-                </Button>
+            <CardContent className="p-4 pt-0">
+              <div className="h-40 w-full bg-muted/20 rounded flex items-center justify-center border-dashed border-2">
+                <BarChart3 className="h-8 w-8 text-muted-foreground/30" />
+                <span className="text-xs font-mono text-muted-foreground ml-2">DATA_YIELD_VIZ_PENDING</span>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="ledger" className="flex-1 mt-3 overflow-hidden">
+          <Card className="h-full">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm">Provenance Registry</CardTitle>
+              <CardDescription className="text-xs">
+                Immutable audit trail of all Synapse State transitions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 flex flex-col items-center justify-center h-64">
+              <BookOpen className="h-10 w-10 text-muted-foreground/20 mb-4" />
+              <Button variant="outline" onClick={() => navigate("/egress-logs")}>
+                Access Full Ledger
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .tab-trigger-idia {
+          border-radius: 0;
+          border-bottom: 2px solid transparent;
+          background: transparent !important;
+          padding-bottom: 0.5rem;
+          padding-left: 1rem;
+          padding-right: 1rem;
+          text-transform: uppercase;
+          font-size: 10px;
+          letter-spacing: 0.05em;
+          font-weight: 700;
+        }
+        .tab-trigger-idia[data-state="active"] {
+          border-bottom-color: hsl(var(--primary));
+          color: hsl(var(--primary));
+        }
+      `,
+        }}
+      />
     </div>
   );
 };
