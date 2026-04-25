@@ -1,19 +1,19 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { 
-  ShieldCheck, 
-  FileSignature, 
-  Lock, 
-  AlertTriangle, 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  ShieldCheck,
+  FileSignature,
+  Lock,
+  AlertTriangle,
   Server,
   Building2,
   Users,
   Download,
-  Activity
-} from 'lucide-react';
+  Activity,
+} from "lucide-react";
 
 export default function ComplianceDashboard() {
   return (
@@ -119,7 +119,9 @@ export default function ComplianceDashboard() {
                   <span className="text-green-600 font-bold">Compliant</span>
                 </div>
                 <Progress value={100} className="h-2 bg-muted [&>div]:bg-green-500" />
-                <p className="text-xs text-muted-foreground">The enterprise record is securely anchored to an IDIA Life verified owner.</p>
+                <p className="text-xs text-muted-foreground">
+                  The enterprise record is securely anchored to an IDIA Life verified owner.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -128,7 +130,9 @@ export default function ComplianceDashboard() {
                   <span className="text-blue-600 font-bold">95%</span>
                 </div>
                 <Progress value={95} className="h-2 bg-muted [&>div]:bg-blue-500" />
-                <p className="text-xs text-muted-foreground">95% of invited enterprise users have completed sovereign onboarding. 5% pending.</p>
+                <p className="text-xs text-muted-foreground">
+                  95% of invited enterprise users have completed sovereign onboarding. 5% pending.
+                </p>
               </div>
 
               <div className="p-4 bg-muted/50 rounded-lg border flex items-start gap-4">
@@ -136,7 +140,9 @@ export default function ComplianceDashboard() {
                 <div>
                   <h4 className="text-sm font-semibold">Zero-PII Access Enforced</h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    The IDIA Hub is operating with zero-PII persistence. All personal data associated with enterprise users remains encrypted in their respective mobile Secure Enclaves. Session data is bridged temporarily via Edge Functions.
+                    The IDIA Hub is operating with zero-PII persistence. All personal data associated with enterprise
+                    users remains encrypted in their respective mobile Secure Enclaves. Session data is bridged
+                    temporarily via Edge Functions.
                   </p>
                 </div>
               </div>
@@ -147,15 +153,17 @@ export default function ComplianceDashboard() {
         <TabsContent value="delt">
           <Card>
             <CardHeader>
-              <CardTitle>Data Escrow Liability Transfer (DELT)</CardTitle>
-              <CardDescription>Monitor the status of your cryptographic liability shields.</CardDescription>
+              <CardTitle>Liability Shield</CardTitle>
+              <CardDescription>Monitor the status of your immutable indemnity.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 <div className="text-center">
                   <FileSignature className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                  <p>All active data endpoints are currently protected by DELT.</p>
-                  <Button variant="link" className="mt-2 text-primary">View Escrow Ledgers</Button>
+                  <p>All active data endpoints are currently protected by the Liability Shield.</p>
+                  <Button variant="link" className="mt-2 text-primary">
+                    View Escrow Ledgers
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -177,7 +185,9 @@ export default function ComplianceDashboard() {
                     <p className="text-xs text-muted-foreground">US-East-1 (N. Virginia)</p>
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-green-50 text-green-700">SOC2 Compliant</Badge>
+                <Badge variant="outline" className="bg-green-50 text-green-700">
+                  SOC2 Compliant
+                </Badge>
               </div>
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
@@ -187,7 +197,9 @@ export default function ComplianceDashboard() {
                     <p className="text-xs text-muted-foreground">Distributed Edge</p>
                   </div>
                 </div>
-                <Badge variant="outline" className="bg-green-50 text-green-700">Immutable</Badge>
+                <Badge variant="outline" className="bg-green-50 text-green-700">
+                  Immutable
+                </Badge>
               </div>
             </CardContent>
           </Card>
