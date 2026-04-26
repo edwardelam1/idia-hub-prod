@@ -1,25 +1,25 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { 
-  Shield, 
-  FileCheck, 
-  Hash, 
-  Clock, 
-  Database, 
-  CheckCircle2, 
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Shield,
+  FileCheck,
+  Hash,
+  Clock,
+  Database,
+  CheckCircle2,
   Loader2,
   Link,
   Globe,
   Lock,
   AlertTriangle,
-  Zap
-} from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+  Zap,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface DELTSimulationModalProps {
   open: boolean;
@@ -32,7 +32,7 @@ interface SimulationStep {
   id: string;
   name: string;
   description: string;
-  status: 'pending' | 'processing' | 'complete' | 'error';
+  status: "pending" | "processing" | "complete" | "error";
   artifact?: string;
 }
 
@@ -49,58 +49,58 @@ interface LiabilityToken {
 
 const STEPS_TEMPLATE: SimulationStep[] = [
   {
-    id: 'vetting',
-    name: 'Data Vetting',
-    description: 'Gathering Feature Feed data with ACA_RECORD_ID hash tags',
-    status: 'pending',
-    artifact: 'Justified Data Payload'
+    id: "vetting",
+    name: "Data Vetting",
+    description: "Gathering Feature Feed data with ACA_RECORD_ID hash tags",
+    status: "pending",
+    artifact: "Justified Data Payload",
   },
   {
-    id: 'token-creation',
-    name: 'Token Creation',
-    description: 'Generating unique Liability Token via {Client_ID + Timestamp + Batch_Checksum}',
-    status: 'pending',
-    artifact: 'Unique Liability_Token'
+    id: "token-creation",
+    name: "Token Creation",
+    description: "Generating unique Liability Token via {Client_ID + Timestamp + Batch_Checksum}",
+    status: "pending",
+    artifact: "Unique Liability_Token",
   },
   {
-    id: 'header-injection',
-    name: 'Header Injection',
-    description: 'Injecting token into API response header as X-IDIA-LIABILITY-TOKEN',
-    status: 'pending',
-    artifact: 'API Header'
+    id: "header-injection",
+    name: "Header Injection",
+    description: "Injecting token into API response header as X-IDIA-LIABILITY-TOKEN",
+    status: "pending",
+    artifact: "API Header",
   },
   {
-    id: 'metadata-injection',
-    name: 'Metadata Injection',
-    description: 'Placing ACA_RECORD_ID hash and COO tag into JSON payload',
-    status: 'pending',
-    artifact: 'Data Payload'
+    id: "metadata-injection",
+    name: "Metadata Injection",
+    description: "Placing ACA_RECORD_ID hash and COO tag into JSON payload",
+    status: "pending",
+    artifact: "Data Payload",
   },
   {
-    id: 'parallel-write',
-    name: 'Parallel Write',
-    description: 'Atomic parallel write upon successful query execution',
-    status: 'pending',
-    artifact: 'Transaction Receipt'
+    id: "parallel-write",
+    name: "Parallel Write",
+    description: "Atomic parallel write upon successful query execution",
+    status: "pending",
+    artifact: "Transaction Receipt",
   },
   {
-    id: 'ledger-record',
-    name: 'DigiRAMP Ledger Record',
-    description: 'Recording to DigiRAMP ledger with Liability_Token, Client_ID, and ACA_Anchor_Reference',
-    status: 'pending',
-    artifact: 'Egress Log Entry'
-  }
+    id: "ledger-record",
+    name: "DigiRAMP Ledger Record",
+    description: "Recording to DigiRAMP ledger with Liability_Token, Client_ID, and ACA_Anchor_Reference",
+    status: "pending",
+    artifact: "Egress Log Entry",
+  },
 ];
 
 const generateHash = (length: number = 64) => {
-  const chars = '0123456789abcdef';
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const chars = "0123456789abcdef";
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 };
 
 const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 };
@@ -111,18 +111,18 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
   const [progress, setProgress] = useState(0);
   const [liabilityToken, setLiabilityToken] = useState<LiabilityToken | null>(null);
   const [isLive, setIsLive] = useState(false);
-  const [steps, setSteps] = useState<SimulationStep[]>(STEPS_TEMPLATE.map(s => ({ ...s })));
+  const [steps, setSteps] = useState<SimulationStep[]>(STEPS_TEMPLATE.map((s) => ({ ...s })));
 
   const animateSteps = async () => {
     const newSteps = [...steps];
     const stepDelay = 800;
 
     for (let i = 0; i < newSteps.length; i++) {
-      newSteps[i].status = 'processing';
+      newSteps[i].status = "processing";
       setSteps([...newSteps]);
-      setProgress(((i) / newSteps.length) * 100);
-      await new Promise(resolve => setTimeout(resolve, stepDelay));
-      newSteps[i].status = 'complete';
+      setProgress((i / newSteps.length) * 100);
+      await new Promise((resolve) => setTimeout(resolve, stepDelay));
+      newSteps[i].status = "complete";
       setSteps([...newSteps]);
       setProgress(((i + 1) / newSteps.length) * 100);
     }
@@ -134,7 +134,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
     setIsLive(false);
     setProgress(0);
     setLiabilityToken(null);
-    setSteps(STEPS_TEMPLATE.map(s => ({ ...s })));
+    setSteps(STEPS_TEMPLATE.map((s) => ({ ...s })));
 
     await animateSteps();
 
@@ -149,9 +149,9 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
       timestamp,
       batchChecksum,
       acaRecordIds: Array.from({ length: 5 }, () => `ACA-${generateHash(16)}`),
-      countryOfOrigin: 'US',
+      countryOfOrigin: "US",
       egressLogId: generateUUID(),
-      digiRampAnchor: `DRA-${generateHash(24)}`
+      digiRampAnchor: `0x${generateHash(24)}`,
     });
 
     setIsSimulating(false);
@@ -164,7 +164,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
     setIsLive(true);
     setProgress(0);
     setLiabilityToken(null);
-    setSteps(STEPS_TEMPLATE.map(s => ({ ...s })));
+    setSteps(STEPS_TEMPLATE.map((s) => ({ ...s })));
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -209,7 +209,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
       setSimulationComplete(true);
     } catch (err: any) {
       toast.error(`Liability Shield Error: ${err.message}`);
-      setSteps(prev => prev.map(s => s.status === 'processing' ? { ...s, status: 'error' } : s));
+      setSteps((prev) => prev.map((s) => (s.status === "processing" ? { ...s, status: "error" } : s)));
     } finally {
       setIsSimulating(false);
     }
@@ -220,7 +220,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
     setProgress(0);
     setLiabilityToken(null);
     setIsLive(false);
-    setSteps(STEPS_TEMPLATE.map(s => ({ ...s })));
+    setSteps(STEPS_TEMPLATE.map((s) => ({ ...s })));
   };
 
   return (
@@ -229,11 +229,9 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            Liability Shield Protocol {isLive && simulationComplete ? '' : 'Simulation'}
+            Liability Shield Protocol {isLive && simulationComplete ? "" : "Simulation"}
           </DialogTitle>
-          <DialogDescription>
-            Liability Shield &amp; Data Egress Transfer Protocol for {feedName}
-          </DialogDescription>
+          <DialogDescription>Liability Shield &amp; Data Egress Transfer Protocol for {feedName}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -245,8 +243,8 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-foreground">Liability Shield Protocol Purpose</p>
                   <p className="text-xs text-muted-foreground">
-                    Creates and logs a unique Liability Token for every API query, ensuring the client's 
-                    Indemnification Moat is conditional upon preserving the data's lineage.
+                    Creates and logs a unique Liability Token for every API query, ensuring the client's Indemnification
+                    Moat is conditional upon preserving the data's lineage.
                   </p>
                 </div>
               </div>
@@ -257,15 +255,15 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
           {(isSimulating || simulationComplete) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {isLive ? 'Live Transfer' : 'Simulation'} Progress
-                </span>
+                <span className="text-muted-foreground">{isLive ? "Live Transfer" : "Simulation"} Progress</span>
                 <div className="flex items-center gap-2">
                   {isLive && simulationComplete && (
                     <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">LIVE</Badge>
                   )}
                   {!isLive && simulationComplete && (
-                    <Badge variant="outline" className="text-muted-foreground">SIMULATED</Badge>
+                    <Badge variant="outline" className="text-muted-foreground">
+                      SIMULATED
+                    </Badge>
                   )}
                   <span className="font-medium">{Math.round(progress)}%</span>
                 </div>
@@ -284,43 +282,41 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
             </CardHeader>
             <CardContent className="space-y-3">
               {steps.map((step, index) => (
-                <div 
-                  key={step.id} 
+                <div
+                  key={step.id}
                   className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
-                    step.status === 'processing' ? 'border-primary bg-primary/5' :
-                    step.status === 'complete' ? 'border-emerald-500/30 bg-emerald-500/5' :
-                    step.status === 'error' ? 'border-destructive/30 bg-destructive/5' :
-                    'border-border'
+                    step.status === "processing"
+                      ? "border-primary bg-primary/5"
+                      : step.status === "complete"
+                        ? "border-emerald-500/30 bg-emerald-500/5"
+                        : step.status === "error"
+                          ? "border-destructive/30 bg-destructive/5"
+                          : "border-border"
                   }`}
                 >
                   <div className="mt-0.5">
-                    {step.status === 'pending' && (
+                    {step.status === "pending" && (
                       <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
                     )}
-                    {step.status === 'processing' && (
-                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
-                    )}
-                    {step.status === 'complete' && (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                    )}
-                    {step.status === 'error' && (
-                      <AlertTriangle className="h-5 w-5 text-destructive" />
-                    )}
+                    {step.status === "processing" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+                    {step.status === "complete" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                    {step.status === "error" && <AlertTriangle className="h-5 w-5 text-destructive" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-foreground">
                         {index + 1}. {step.name}
                       </p>
-                      {step.artifact && step.status === 'complete' && (
-                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                      {step.artifact && step.status === "complete" && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                        >
                           {step.artifact}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {step.description}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
                   </div>
                 </div>
               ))}
@@ -333,7 +329,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
               <CardHeader className="py-3">
                 <CardTitle className="text-sm flex items-center gap-2 text-emerald-700">
                   <Hash className="h-4 w-4" />
-                  {isLive ? 'Live' : 'Simulated'} Liability Token
+                  {isLive ? "Live" : "Simulated"} Liability Token
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -414,8 +410,8 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
                 <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                   <p className="text-xs text-purple-700 font-medium">⚖️ Indemnification Clause</p>
                   <p className="text-xs text-purple-600 mt-1">
-                    Client must preserve ACA_RECORD_ID metadata. IDIA's indemnification is void if client 
-                    cannot produce the Liability_Token upon regulatory request.
+                    Client must preserve ACA_RECORD_ID metadata. IDIA's indemnification is void if client cannot produce
+                    the Liability_Token upon regulatory request.
                   </p>
                 </div>
               </CardContent>
@@ -426,12 +422,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
           <div className="flex gap-3">
             {!simulationComplete ? (
               <div className="flex gap-3 w-full">
-                <Button 
-                  onClick={runSimulation} 
-                  disabled={isSimulating}
-                  variant="outline"
-                  className="flex-1"
-                >
+                <Button onClick={runSimulation} disabled={isSimulating} variant="outline" className="flex-1">
                   {isSimulating && !isLive ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -444,11 +435,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
                     </>
                   )}
                 </Button>
-                <Button 
-                  onClick={runLiveTransfer} 
-                  disabled={isSimulating}
-                  className="flex-1"
-                >
+                <Button onClick={runLiveTransfer} disabled={isSimulating} className="flex-1">
                   {isSimulating && isLive ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -464,17 +451,10 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
               </div>
             ) : (
               <>
-                <Button 
-                  variant="outline" 
-                  onClick={resetSimulation}
-                  className="flex-1"
-                >
+                <Button variant="outline" onClick={resetSimulation} className="flex-1">
                   Reset
                 </Button>
-                <Button 
-                  onClick={() => onOpenChange(false)}
-                  className="flex-1"
-                >
+                <Button onClick={() => onOpenChange(false)} className="flex-1">
                   Close
                 </Button>
               </>

@@ -61,7 +61,7 @@ serve(async (req) => {
     const sortedIds = [...aca_record_ids].sort();
     const batchChecksum = await sha256(sortedIds.join("|"));
     const liabilityTokenHash = await sha256(`${client_id}|${timestamp}|${batchChecksum}`);
-    const digiRampAnchorId = "DRA-" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
+    const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
 
     // 3. ATOMIC LEDGER AND EGRESS WRITE
     const adminClient = createClient(supabaseUrl, serviceRoleKey);

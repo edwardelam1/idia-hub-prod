@@ -9,7 +9,9 @@ const corsHeaders = {
 async function sha256(input: string): Promise<string> {
   const encoded = new TextEncoder().encode(input);
   const hash = await crypto.subtle.digest("SHA-256", encoded);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 serve(async (req) => {
@@ -76,7 +78,7 @@ serve(async (req) => {
     const liabilityTokenHash = await sha256(`${normalizedClientId}|${timestamp}|${batchChecksum}`);
 
     // 5. Generate DigiRAMP anchor (internal cryptographic anchor)
-    const digiRampAnchorId = "DRA-" + await sha256(`${liabilityTokenHash}|${timestamp}`);
+    const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
 
     // 6. Parallel write using service role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -87,26 +89,34 @@ serve(async (req) => {
 
     // Write ledger entry + egress log in parallel
     const [ledgerResult, egressResult] = await Promise.all([
-      adminClient.from("synapse_credit_ledger").insert({
-        user_id: userId,
-        amount: egressFee,
-        entry_type: "usage",
-        status: "SETTLED",
-        description: "Liability Shield Payload Egress Fee",
-        reference_id: referenceId,
-      }).select("id").single(),
+      adminClient
+        .from("synapse_credit_ledger")
+        .insert({
+          user_id: userId,
+          amount: egressFee,
+          entry_type: "usage",
+          status: "SETTLED",
+          description: "Liability Shield Payload Egress Fee",
+          reference_id: referenceId,
+        })
+        .select("id")
+        .single(),
 
-      adminClient.from("egress_logs").insert({
-        user_id: userId,
-        client_id: normalizedClientId,
-        liability_token_hash: liabilityTokenHash,
-        batch_checksum: batchChecksum,
-        aca_record_references: normalizedAcaRecordIds,
-        country_of_origin,
-        digiramp_anchor_id: digiRampAnchorId,
-        egress_type,
-        data_payload_summary: data_summary,
-      }).select("id").single(),
+      adminClient
+        .from("egress_logs")
+        .insert({
+          user_id: userId,
+          client_id: normalizedClientId,
+          liability_token_hash: liabilityTokenHash,
+          batch_checksum: batchChecksum,
+          aca_record_references: normalizedAcaRecordIds,
+          country_of_origin,
+          digiramp_anchor_id: digiRampAnchorId,
+          egress_type,
+          data_payload_summary: data_summary,
+        })
+        .select("id")
+        .single(),
     ]);
 
     if (ledgerResult.error) {
@@ -120,28 +130,31 @@ serve(async (req) => {
     }
 
     // Update egress log with ledger reference
-    await adminClient.from("egress_logs")
+    await adminClient
+      .from("egress_logs")
       .update({ synapse_ledger_entry_id: ledgerResult.data.id })
       .eq("id", egressResult.data.id);
 
     console.log(`DELT Transfer: Success — egress_log ${egressResult.data.id}, user ${userId.slice(0, 8)}...`);
 
     // 7. Return full liability token object
-    return new Response(JSON.stringify({
-      success: true,
-      liability_token_hash: liabilityTokenHash,
-      batch_checksum: batchChecksum,
-      digiramp_anchor_id: digiRampAnchorId,
-      egress_log_id: egressResult.data.id,
-      aca_record_references: normalizedAcaRecordIds,
-      country_of_origin,
-      timestamp,
-      egress_fee_charged: Math.abs(egressFee),
-      api_header: `X-IDIA-LIABILITY-TOKEN: LT-${liabilityTokenHash}`,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        liability_token_hash: liabilityTokenHash,
+        batch_checksum: batchChecksum,
+        digiramp_anchor_id: digiRampAnchorId,
+        egress_log_id: egressResult.data.id,
+        aca_record_references: normalizedAcaRecordIds,
+        country_of_origin,
+        timestamp,
+        egress_fee_charged: Math.abs(egressFee),
+        api_header: `X-IDIA-LIABILITY-TOKEN: LT-${liabilityTokenHash}`,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     console.error("Liability Shield Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
