@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
 import {
   Dialog,
   DialogContent,
@@ -34,17 +35,7 @@ import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
 
-// Fix for TS2339: Property 'ethereum' does not exist on type 'Window'
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
-const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-
-// Ensure this aligns with your global TRUTH
 const BASE_RATE = 0.75;
 
 const creditTiers = [
@@ -78,6 +69,10 @@ const SynapsePurchaseModal = ({
   const { balanceData, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
 
+  // Bring in the internal IDIA Life wallet balances (CUSTODIAL TRUTH)
+  const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
+  const availableInternalUSDC = walletBalance?.idia_beta_balance ?? 0;
+
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
   const [open, setOpen] = useState(defaultOpen ?? false);
@@ -86,207 +81,129 @@ const SynapsePurchaseModal = ({
   const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
   const [usdcNetwork, setUsdcNetwork] = useState<"base" | "ethereum" | "polygon">("base");
 
-  try {
-    console.log("[SynapsePurchaseModal][State Derivation] INFO: Calculating current variables based on state.");
-    const currentTierCheck = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
-    const alacarteUsdCheck = parseInt(alacarteAmount) || 0;
-    const alacarteValidCheck = alacarteUsdCheck >= 2 && alacarteUsdCheck <= 1000;
-    console.log(
-      `[SynapsePurchaseModal][State Derivation] INFO: selectedTier=${selectedTier}, alacarteUsd=${alacarteUsdCheck}, alacarteValid=${alacarteValidCheck}`,
-    );
-  } catch (derivationError) {
-    console.error(
-      "[SynapsePurchaseModal][State Derivation] ERROR: Failed to calculate component state variables.",
-      derivationError,
-    );
-  }
-
-  // Recalculating outside try-catch to ensure variables are available to the scope
+  // State Derivation Logic
   const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
-  const alacarteCredits = alacarteUsd / BASE_RATE; // Math.floor removed to preserve exact yield
+  const alacarteCredits = alacarteUsd / BASE_RATE;
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
+
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentTier.credits;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * currentTier.rate;
-  const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * BASE_RATE;
+  const baseRateCost = displayCredits * BASE_RATE;
   const savings = purchaseMode === "alacarte" ? 0 : baseRateCost - usdAmount;
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleOpenChange = (isOpen: boolean) => {
-    console.log(`[SynapsePurchaseModal][handleOpenChange] START: Modal open state changing to: ${isOpen}`);
-    try {
-      setOpen(isOpen);
-      onOpenChange?.(isOpen);
-      if (!isOpen) {
-        console.log("[SynapsePurchaseModal][handleOpenChange] INFO: Modal closing. Resetting internal state.");
-        setStep("select");
-        setPurchaseMode("tier");
-        setAlacarteAmount("");
-        setPaymentRail("usdc");
-        setUsdcNetwork("base");
-      }
-    } catch (err) {
-      console.error("[SynapsePurchaseModal][handleOpenChange] ERROR: Exception caught during open state change.", err);
-    } finally {
-      console.log("[SynapsePurchaseModal][handleOpenChange] END: Open state change complete.");
+    console.log(`[SynapsePurchaseModal][handleOpenChange] START: Modal open state: ${isOpen}`);
+    setOpen(isOpen);
+    onOpenChange?.(isOpen);
+    if (!isOpen) {
+      setStep("select");
+      setPurchaseMode("tier");
+      setAlacarteAmount("");
+      setPaymentRail("usdc");
     }
   };
 
   const handleProceedToPayment = () => {
-    console.log("[SynapsePurchaseModal][handleProceedToPayment] START: Verifying proceed condition.");
-    if (!canProceed) {
-      console.warn("[SynapsePurchaseModal][handleProceedToPayment] WARN: Execution halted. canProceed is false.");
-      return;
-    }
-    console.log("[SynapsePurchaseModal][handleProceedToPayment] INFO: Advancing to payment step.");
+    console.log("[SynapsePurchaseModal][handleProceedToPayment] START: Advancing to settlement step.");
+    if (!canProceed) return;
     setStep("payment");
-    console.log("[SynapsePurchaseModal][handleProceedToPayment] END: Proceed condition met.");
   };
 
   const handleAlacarteInput = (val: string) => {
-    console.log(`[SynapsePurchaseModal][handleAlacarteInput] START: Processing input value: ${val}`);
-    try {
-      const digits = val.replace(/\D/g, "");
-      if (digits.length <= 4) {
-        setAlacarteAmount(digits);
-        console.log(`[SynapsePurchaseModal][handleAlacarteInput] INFO: Valid length, state updated to: ${digits}`);
-      } else {
-        console.log(`[SynapsePurchaseModal][handleAlacarteInput] INFO: Input exceeds 4 digits, rejected.`);
-      }
-    } catch (err) {
-      console.error("[SynapsePurchaseModal][handleAlacarteInput] ERROR: Exception caught processing input.", err);
-    } finally {
-      console.log("[SynapsePurchaseModal][handleAlacarteInput] END: Finished processing input.");
+    const digits = val.replace(/\D/g, "");
+    if (digits.length <= 4) {
+      setAlacarteAmount(digits);
     }
   };
 
   const handlePurchase = async () => {
-    console.log("[SynapsePurchaseModal][handlePurchase] START: Initiating purchase sequence.");
+    console.log("[SynapsePurchaseModal][handlePurchase] START: Initiating custodial settlement.");
     if (!canProceed) return;
-
-    console.log(
-      "[SynapsePurchaseModal][handlePurchase][SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...",
-    );
-    console.log(
-      `[SynapsePurchaseModal][handlePurchase][DEBUG] Target Wallet: ${IDIA_SYNAPSE_WALLET} | Amount: ${usdAmount} | Rail: ${paymentRail.toUpperCase()}`,
-    );
 
     setStep("processing");
 
     try {
-      let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
+      // 1. LIQUIDITY VERIFICATION
+      console.log(
+        `[SynapsePurchaseModal] INFO: Checking internal vault liquidity. Required: $${usdAmount}, Available: $${availableInternalUSDC}`,
+      );
+      if (availableInternalUSDC < usdAmount) {
+        console.error("[SynapsePurchaseModal] ERROR: Insufficient custodial funds.");
+        throw new Error(
+          `Insufficient Internal USDC balance ($${availableInternalUSDC.toFixed(2)}). Please fund your IDIA Life wallet.`,
+        );
+      }
+
+      // 2. GENERATE SETTLEMENT REFERENCE
+      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
 
       if (paymentRail === "usdc") {
-        console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast via Web3 Provider...");
-
-        if (!window.ethereum) {
-          const web3Error = new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
-          console.error("[ONCHAIN_TX_ERROR] Web3 provider missing.", web3Error);
-          throw web3Error;
-        }
-
-        console.log("[ONCHAIN_TX] INFO: Requesting ethereum accounts...");
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-        const sender = accounts[0];
-        console.log(`[ONCHAIN_TX] INFO: Active account retrieved: ${sender}`);
-
-        const amountInUnits = BigInt(usdAmount * 1_000_000); // 6 Decimals for USDC
-
-        const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
-
-        console.log("[WALLET_SIGN_AWAIT] Waiting for user signature on blockchain...");
-        txReference = await window.ethereum.request({
-          method: "eth_sendTransaction",
-          params: [
-            {
-              from: sender,
-              to: USDC_BASE_CONTRACT,
-              data: encodedData,
-            },
-          ],
-        });
-
-        console.log(`[ONCHAIN_TX_SUCCESS] Transaction Broadcasted! Hash: ${txReference}`);
+        console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
+        await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate ledger lock UX
       } else {
-        console.log(
-          "[SynapsePurchaseModal][handlePurchase][FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...",
-        );
+        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("[SynapsePurchaseModal][handlePurchase][FIAT_WP_END] Fiat authorization secured.");
+        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
       }
 
-      console.log(`[LEDGER_HYDRATION_START] Calling top-up-credits with reference: ${txReference}`);
+      // 3. AUTHENTICATION & DISPATCH
+      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const userReq = await supabase.auth.getUser();
-      const sessionReq = await supabase.auth.getSession();
-      const accessToken = sessionReq.data.session?.access_token;
-
-      if (userReq.error || !userReq.data.user || !accessToken) {
-        console.error("[LEDGER_HYDRATION_ERROR] Failed to fetch secure user session.");
-        throw new Error("Authentication failed before ledger hydration.");
+      if (!session) {
+        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Auth session missing.");
+        throw new Error("Authentication failed. Please re-login.");
       }
-      console.log(`[SynapsePurchaseModal][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user.id}`);
 
-      const { error } = await supabase.functions.invoke("top-up-credits", {
+      // DISPATCHING as "internal_usdc" to move funds from IDIA Life to IDIA Data Treasury
+      const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: {
-          user_id: userReq.data.user.id,
+          user_id: session.user.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: txReference,
-          payment_method: paymentRail === "usdc" ? "crypto_usdc" : "worldpay",
+          payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
+          target_synapse_wallet: IDIA_SYNAPSE_WALLET,
         },
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
 
-      if (error) {
-        console.error(
-          "[SynapsePurchaseModal][handlePurchase][LEDGER_HYDRATION_ERROR] Error from top-up edge function:",
-          error,
-        );
-        throw error;
+      if (topUpError) {
+        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Function rejected request.", topUpError);
+        throw topUpError;
       }
 
-      console.log(
-        "[SynapsePurchaseModal][handlePurchase][LEDGER_HYDRATION_END] Settlement successfully verified and propagated to ledger.",
-      );
+      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] END: Settlement successful.");
 
+      // 4. SUCCESS HYDRATION
       setStep("success");
-      toast.success("Synapse Credits added successfully!", {
-        description: `${formatCredits(displayCredits)} added to your account.`,
+      toast.success("Synapse Hydrated!", {
+        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
       });
 
-      console.log("[SynapsePurchaseModal][handlePurchase] INFO: Refreshing local balance context...");
-      await refreshSynapseBalance();
+      console.log("[SynapsePurchaseModal][CONTEXT_REFRESH] START: Refreshing balance stores.");
+      await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+      console.log("[SynapsePurchaseModal][CONTEXT_REFRESH] END: UI Contexts updated.");
 
-      setTimeout(() => {
-        console.log("[SynapsePurchaseModal][handlePurchase] INFO: Executing soft close timeout.");
-        handleOpenChange(false);
-      }, 3500);
+      setTimeout(() => handleOpenChange(false), 3500);
     } catch (err: any) {
-      console.error(
-        "[SynapsePurchaseModal][handlePurchase][SETTLEMENT_CRITICAL_FAILURE] Error during purchase:",
-        err.message,
-      );
-      toast.error(err.message || "Payment processing failed.");
+      console.error("[SynapsePurchaseModal][handlePurchase] FATAL ERROR:", err.message);
+      toast.error(err.message || "Settlement failed.");
       setStep("payment");
     } finally {
-      console.log("[SynapsePurchaseModal][handlePurchase] END: Purchase sequence exited.");
+      console.log("[SynapsePurchaseModal][handlePurchase] END: Execution function exited.");
     }
   };
 
   const handleCopyAddress = () => {
-    console.log(`[SynapsePurchaseModal][handleCopyAddress] START: Copying text to clipboard: ${IDIA_SYNAPSE_WALLET}`);
-    try {
-      navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
-      toast.success("Synapse Treasury Address copied");
-      console.log("[SynapsePurchaseModal][handleCopyAddress] SUCCESS: Text copied successfully.");
-    } catch (err) {
-      console.error("[SynapsePurchaseModal][handleCopyAddress] ERROR: Failed to copy text to clipboard.", err);
-    } finally {
-      console.log("[SynapsePurchaseModal][handleCopyAddress] END: Exiting function.");
-    }
+    navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
+    toast.success("Synapse Treasury Address copied");
   };
 
   console.log("[SynapsePurchaseModal][Component] END: Render phase complete.");
@@ -306,16 +223,16 @@ const SynapsePurchaseModal = ({
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
             {step === "payment"
-              ? "Authorize Payment"
+              ? "Authorize Internal Transfer"
               : step === "processing"
-                ? "Processing..."
+                ? "Settling..."
                 : step === "success"
-                  ? "Purchase Complete"
+                  ? "Complete"
                   : "Purchase Synapse Credits"}
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Complete your purchase via the secure ${paymentRail.toUpperCase()} gateway`
+              ? `Review transfer from IDIA Life to Synapse Treasury`
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -334,163 +251,98 @@ const SynapsePurchaseModal = ({
                 <SynapseGasGauge />
               </div>
 
-              {/* Mode Toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
                 <button
-                  onClick={() => {
-                    console.log("[SynapsePurchaseModal] INFO: Purchase mode set to 'tier'");
-                    setPurchaseMode("tier");
-                  }}
-                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
-                    purchaseMode === "tier"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={() => setPurchaseMode("tier")}
+                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${purchaseMode === "tier" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground"}`}
                 >
                   Volume Tranches
                 </button>
                 <button
-                  onClick={() => {
-                    console.log("[SynapsePurchaseModal] INFO: Purchase mode set to 'alacarte'");
-                    setPurchaseMode("alacarte");
-                  }}
-                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
-                    purchaseMode === "alacarte"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={() => setPurchaseMode("alacarte")}
+                  className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${purchaseMode === "alacarte" ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground"}`}
                 >
                   A La Carte
                 </button>
               </div>
 
               {purchaseMode === "tier" ? (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Select Volume Tranche
-                  </h4>
-                  <div className="grid grid-cols-1 gap-3">
-                    {creditTiers.map((tier) => {
-                      const isSelected = selectedTier === tier.id;
-                      const usdCost = tier.credits * tier.rate;
-                      return (
-                        <Card
-                          key={tier.id}
-                          className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
-                            isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "hover:border-primary/50"
-                          }`}
-                          onClick={() => {
-                            console.log(
-                              `[SynapsePurchaseModal] INFO: Tier selected: ${tier.name} (${tier.credits} CRD)`,
-                            );
-                            setSelectedTier(tier.id);
-                          }}
-                        >
-                          {tier.popular && <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>}
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-muted-foreground/50"}`}
-                              >
-                                {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-sm text-foreground">{tier.name}</span>
-                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
-                                    ${tier.rate.toFixed(2)} / CR
-                                  </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
-                              </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {creditTiers.map((tier) => {
+                    const isSelected = selectedTier === tier.id;
+                    const usdCost = tier.credits * tier.rate;
+                    return (
+                      <Card
+                        key={tier.id}
+                        className={`relative p-4 cursor-pointer transition-all ${isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : ""}`}
+                        onClick={() => setSelectedTier(tier.id)}
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-muted-foreground/50"}`}
+                            >
+                              {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
                             </div>
-                            <div className="text-right">
-                              <div className="text-lg font-bold text-foreground font-mono">
-                                {formatCredits(tier.credits)}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm">{tier.name}</span>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  ${tier.rate}/CR
+                                </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
-                              </p>
+                              <p className="text-xs text-muted-foreground">{tier.description}</p>
                             </div>
                           </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold font-mono">{formatCredits(tier.credits)}</div>
+                            <p className="text-xs text-muted-foreground">${usdCost.toFixed(2)} USD</p>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Custom Amount
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Enter a whole dollar amount between $2 and $1,000. Credits are calculated at the base rate of $
-                    {BASE_RATE.toFixed(2)}/CR.
-                  </p>
-                  <div className="space-y-2">
-                    <Label>Purchase Amount</Label>
-                    <div className="flex items-center gap-0">
-                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-r-0 border-input rounded-l-md text-sm font-medium text-muted-foreground">
-                        $
-                      </span>
-                      <Input
-                        className="rounded-none border-r-0 font-mono text-lg"
-                        placeholder="100"
-                        value={alacarteAmount}
-                        onChange={(e) => handleAlacarteInput(e.target.value)}
-                        inputMode="numeric"
-                      />
-                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-l-0 border-input rounded-r-md text-sm font-medium text-muted-foreground">
-                        .00
-                      </span>
-                    </div>
-                    {alacarteAmount && !alacarteValid && (
-                      <p className="text-xs text-destructive">
-                        {alacarteUsd < 2 ? "Minimum purchase is $2.00" : "Maximum purchase is $1,000.00"}
-                      </p>
-                    )}
-                    {alacarteValid && (
-                      <p className="text-xs text-emerald-500">
-                        You will receive <span className="font-mono font-bold">{formatCredits(alacarteCredits)}</span>
-                      </p>
-                    )}
+                  <Label>Purchase Amount (USD)</Label>
+                  <div className="flex items-center">
+                    <span className="px-3 py-2 bg-muted border border-r-0 rounded-l-md font-mono text-sm">$</span>
+                    <Input
+                      className="rounded-none border-r-0 font-mono"
+                      placeholder="100"
+                      value={alacarteAmount}
+                      onChange={(e) => handleAlacarteInput(e.target.value)}
+                    />
+                    <span className="px-3 py-2 bg-muted border border-l-0 rounded-r-md font-mono text-sm">.00</span>
                   </div>
+                  {alacarteValid && (
+                    <p className="text-xs text-emerald-500">
+                      Yield: <span className="font-mono font-bold">{formatCredits(alacarteCredits)}</span>
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Transaction Summary */}
               <div className="bg-muted/50 border border-border rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Transaction Summary
-                </h4>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Current Balance</span>
-                  <span className="text-foreground font-mono">{formatCredits(currentBalance)}</span>
+                  <span className="text-muted-foreground">IDIA Life Balance</span>
+                  <span className="text-primary font-bold">${availableInternalUSDC.toFixed(2)} USDC</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credits to Add</span>
                   <span className="text-emerald-500 font-mono">+{formatCredits(displayCredits)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Rate</span>
-                  <span className="text-foreground font-mono">
-                    ${purchaseMode === "alacarte" ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / CR
-                  </span>
-                </div>
                 {savings > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
-                    <Tag className="w-4 h-4" />
-                    Volume discount applied. You save ${savings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    .
+                  <div className="flex items-center gap-2 text-xs text-emerald-500 bg-emerald-500/10 p-2 rounded-lg">
+                    <Tag className="w-4 h-4" /> Volume discount applied.
                   </div>
                 )}
-                <div className="pt-3 border-t border-border flex justify-between items-end">
-                  <span className="text-foreground font-medium">Total Due</span>
+                <div className="pt-3 border-t flex justify-between items-end">
+                  <span className="font-medium">Total Due</span>
                   <div className="text-right">
-                    <div className="text-xl font-bold text-foreground font-mono">
-                      ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-muted-foreground uppercase">USD</div>
+                    <div className="text-xl font-bold font-mono">${usdAmount.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground uppercase">USDC</div>
                   </div>
                 </div>
               </div>
@@ -498,197 +350,82 @@ const SynapsePurchaseModal = ({
               <Button className="w-full gap-2" size="lg" onClick={handleProceedToPayment} disabled={!canProceed}>
                 Continue to Payment <ArrowRight className="w-4 h-4" />
               </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                Funds held in secure FBO account at Unit Banking
-              </p>
             </>
           )}
 
           {step === "payment" && (
-            <>
-              <div className="space-y-4">
-                {/* Institutional Custody Bridge */}
-                <div className="bg-muted/50 border border-border rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                        <Coins className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-foreground font-mono">
-                          {currentBalance.toLocaleString(undefined, { minimumFractionDigits: 4 })} CR
-                        </p>
-                        <p className="text-xs text-muted-foreground">Held in FBO custody at Unit Banking</p>
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="text-xs gap-1">
-                      <ShieldCheck className="h-3 w-3" /> Verified Port
-                    </Badge>
-                  </div>
+            <div className="space-y-4">
+              <div className="bg-muted/50 border border-border rounded-xl p-4 flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
+                  <p className="font-bold text-foreground flex items-center gap-2">
+                    <CircleDollarSign className="h-4 w-4 text-primary" /> Internal IDIA Life Transfer
+                  </p>
                 </div>
-
-                {/* Purchase summary */}
-                <div className="bg-muted/50 border border-border rounded-xl p-4 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Purchasing</p>
-                    <p className="font-bold text-foreground">{formatCredits(displayCredits)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="font-bold text-foreground font-mono">
-                      ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Payment Rail Selector */}
-                <div className="flex rounded-lg border border-border overflow-hidden">
-                  <button
-                    onClick={() => {
-                      console.log("[SynapsePurchaseModal] INFO: Payment rail set to 'worldpay'");
-                      setPaymentRail("worldpay");
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
-                      paymentRail === "worldpay"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <CreditCard className="h-4 w-4" /> Worldpay
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log("[SynapsePurchaseModal] INFO: Payment rail set to 'usdc'");
-                      setPaymentRail("usdc");
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
-                      paymentRail === "usdc"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <CircleDollarSign className="h-4 w-4" /> Base USDC
-                  </button>
-                </div>
-
-                {paymentRail === "worldpay" ? (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-foreground">Secure Payment Gateway</h4>
-                    <div
-                      id="worldpay-sdk-container"
-                      className="min-h-[160px] border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6"
-                    >
-                      <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
-                        <p className="text-xs text-muted-foreground/70 mt-1">
-                          Card data is encrypted before reaching IDIA servers.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-foreground">Send Circle USDC</h4>
-                    <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground uppercase tracking-wider">Amount Required</span>
-                        <span className="font-mono font-bold text-foreground">
-                          {usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Network</Label>
-                        <Select
-                          value={usdcNetwork}
-                          onValueChange={(v) => {
-                            console.log(`[SynapsePurchaseModal] INFO: USDC Network set to '${v}'`);
-                            setUsdcNetwork(v as "base" | "ethereum" | "polygon");
-                          }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="base">Base</SelectItem>
-                            <SelectItem value="ethereum">Ethereum</SelectItem>
-                            <SelectItem value="polygon">Polygon</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                          Deposit Address
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input readOnly value={IDIA_SYNAPSE_WALLET} className="font-mono text-xs h-9 bg-background" />
-                          <Button variant="outline" size="sm" onClick={handleCopyAddress} className="h-9 px-3">
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Settlement will be executed natively on-chain. Approving the transaction will transfer USDC
-                        directly via your Web3 Provider.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <Badge variant="outline" className="gap-1">
+                  <ShieldCheck className="h-3 w-3" /> Verified Vault
+                </Badge>
               </div>
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => {
-                    console.log("[SynapsePurchaseModal] INFO: Returning to 'select' step.");
-                    setStep("select");
-                  }}
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  onClick={() => setPaymentRail("usdc")}
+                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "usdc" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
                 >
+                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
+                </button>
+                <button
+                  onClick={() => setPaymentRail("worldpay")}
+                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "worldpay" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
+                >
+                  <CreditCard className="h-4 w-4" /> Fiat Port
+                </button>
+              </div>
+
+              {paymentRail === "usdc" ? (
+                <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    By clicking confirm, you authorize the transfer of <strong>${usdAmount.toFixed(2)} USDC</strong>{" "}
+                    from your IDIA Life wallet to IDIA Data Inc. Credits will be available instantly.
+                  </p>
+                </div>
+              ) : (
+                <div className="min-h-[160px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6">
+                  <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
+                  <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
                 <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
                   {paymentRail === "usdc" ? (
                     <>
-                      <CircleDollarSign className="w-4 h-4" /> Confirm & Send USDC
+                      <CircleDollarSign className="w-4 h-4" /> Confirm & Spend USDC
                     </>
                   ) : (
-                    <>
-                      <CreditCard className="w-4 h-4" /> Authorize via Worldpay — $
-                      {usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </>
+                    <>Authorize via Worldpay</>
                   )}
                 </Button>
               </div>
-
-              <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>
-                    {paymentRail === "worldpay"
-                      ? "PCI-DSS Level 1 · Encrypted & Secured by Worldpay"
-                      : "On-chain settlement via Base Network"}
-                  </span>
-                </div>
-              </div>
-            </>
+            </div>
           )}
 
           {step === "processing" && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="text-foreground font-semibold">Broadcasting to Ledger...</p>
-              <p className="text-muted-foreground text-sm">Please do not close this window</p>
+              <p className="font-semibold text-center uppercase tracking-widest text-xs">Executing Internal Swap...</p>
             </div>
           )}
 
           {step === "success" && (
-            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="text-foreground font-bold text-lg">Synapse Hydrated!</p>
               <p className="text-muted-foreground text-sm">
-                {formatCredits(displayCredits)} have been added to your ledger.
+                {formatCredits(displayCredits)} added to your operational ledger.
               </p>
             </div>
           )}
