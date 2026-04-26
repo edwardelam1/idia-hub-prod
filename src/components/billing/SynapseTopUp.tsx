@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button"; // Added Button import
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { toast } from "@/hooks/use-toast";
 import { formatCredits } from "@/lib/utils";
@@ -42,7 +43,12 @@ const pricingTiers: PricingTier[] = [
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
+// Added BASE_RATE. Ensure this aligns with your global TRUTH, or replace with an import.
+const BASE_RATE = 1.0;
+
 const SynapseTopUp = () => {
+  console.log("[SynapseTopUp][Component] START: Rendering component.");
+
   const { balanceData, refreshBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
 
@@ -53,14 +59,37 @@ const SynapseTopUp = () => {
   const [alacarteAmount, setAlacarteAmount] = useState("");
   const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
 
-  const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
+  try {
+    console.log("[SynapseTopUp][State Derivation] INFO: Calculating current variables based on state.");
+    const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
 
+    const alacarteUsd = parseInt(alacarteAmount) || 0;
+    const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
+
+    // LOWERED THE BAR: Testing threshold set to $2.00
+    const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
+
+    const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
+    const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
+    const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * BASE_RATE;
+    const savings = purchaseMode === "alacarte" ? 0 : baseRateCost - usdAmount;
+    const effectiveRate = purchaseMode === "alacarte" ? BASE_RATE : currentSelection.rate;
+    const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
+    console.log(
+      `[SynapseTopUp][State Derivation] INFO: canProceed=${canProceed}, displayCredits=${displayCredits}, usdAmount=${usdAmount}`,
+    );
+  } catch (derivationError) {
+    console.error(
+      "[SynapseTopUp][State Derivation] ERROR: Failed to calculate component state variables.",
+      derivationError,
+    );
+  }
+
+  // Recalculating outside try-catch to ensure variables are available to the scope
+  const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
-
-  // LOWERED THE BAR: Testing threshold set to $2.00
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
-
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
   const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * BASE_RATE;
@@ -69,18 +98,34 @@ const SynapseTopUp = () => {
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleAlacarteInput = (val: string) => {
-    const digits = val.replace(/\D/g, "");
-    if (digits.length <= 4) {
-      setAlacarteAmount(digits);
+    console.log(`[SynapseTopUp][handleAlacarteInput] START: Processing input value: ${val}`);
+    try {
+      const digits = val.replace(/\D/g, "");
+      if (digits.length <= 4) {
+        setAlacarteAmount(digits);
+        console.log(`[SynapseTopUp][handleAlacarteInput] INFO: Valid length, state updated to: ${digits}`);
+      } else {
+        console.log(`[SynapseTopUp][handleAlacarteInput] INFO: Input exceeds 4 digits, rejected.`);
+      }
+    } catch (err) {
+      console.error("[SynapseTopUp][handleAlacarteInput] ERROR: Exception caught processing input.", err);
+    } finally {
+      console.log("[SynapseTopUp][handleAlacarteInput] END: Finished processing input.");
     }
   };
 
   const handlePurchase = async () => {
-    if (!canProceed) return;
+    console.log("[SynapseTopUp][handlePurchase] START: Initiating purchase sequence.");
+    if (!canProceed) {
+      console.warn("[SynapseTopUp][handlePurchase] WARN: Execution halted. canProceed is false.");
+      return;
+    }
 
-    console.log("[SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...");
     console.log(
-      `[DEBUG] Target Wallet: ${IDIA_SYNAPSE_WALLET} | Amount: $${usdAmount} | Rail: ${paymentRail.toUpperCase()}`,
+      "[SynapseTopUp][handlePurchase][SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...",
+    );
+    console.log(
+      `[SynapseTopUp][handlePurchase][DEBUG] Target Wallet: ${IDIA_SYNAPSE_WALLET} | Amount: $${usdAmount} | Rail: ${paymentRail.toUpperCase()}`,
     );
 
     setStep("processing");
@@ -88,21 +133,29 @@ const SynapseTopUp = () => {
 
     try {
       let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
+      console.log(`[SynapseTopUp][handlePurchase] INFO: Generated initial txReference: ${txReference}`);
 
       if (paymentRail === "usdc") {
-        console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
+        console.log("[SynapseTopUp][handlePurchase][ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
 
         if (!window.ethereum) {
-          throw new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+          const web3Error = new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+          console.error("[SynapseTopUp][handlePurchase][ONCHAIN_TX_ERROR] Web3 provider missing.", web3Error);
+          throw web3Error;
         }
 
+        console.log("[SynapseTopUp][handlePurchase] INFO: Requesting ethereum accounts...");
         const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        console.log(`[SynapseTopUp][handlePurchase] INFO: Accounts retrieved. Active account: ${accounts[0]}`);
+
         const amountInUnits = BigInt(usdAmount * 1_000_000); // USDC 6 Decimals
+        console.log(`[SynapseTopUp][handlePurchase] INFO: Calculated amountInUnits: ${amountInUnits.toString()}`);
 
         // ERC20 transfer(address,uint256) data
         const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
+        console.log(`[SynapseTopUp][handlePurchase] INFO: Encoded transaction data generated.`);
 
-        console.log("[WALLET_SIGN_AWAIT] Waiting for user signature...");
+        console.log("[SynapseTopUp][handlePurchase][WALLET_SIGN_AWAIT] Waiting for user signature...");
         txReference = await window.ethereum.request({
           method: "eth_sendTransaction",
           params: [
@@ -113,17 +166,25 @@ const SynapseTopUp = () => {
             },
           ],
         });
-        console.log("[ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
+        console.log("[SynapseTopUp][handlePurchase][ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
       } else {
-        console.log("[FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("[FIAT_WP_END] Fiat authorization secured.");
+        console.log("[SynapseTopUp][handlePurchase][FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulated delay for fiat auth
+        console.log("[SynapseTopUp][handlePurchase][FIAT_WP_END] Fiat authorization secured.");
       }
 
-      console.log("[LEDGER_HYDRATION_START] Calling top-up-credits edge function...");
+      console.log("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_START] Calling top-up-credits edge function...");
+
+      const userReq = await supabase.auth.getUser();
+      if (userReq.error) {
+        console.error("[SynapseTopUp][handlePurchase] ERROR: Failed to fetch user from Supabase auth.", userReq.error);
+        throw new Error("Authentication failed before ledger hydration.");
+      }
+      console.log(`[SynapseTopUp][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user?.id}`);
+
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: userReq.data.user?.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: txReference,
@@ -133,27 +194,31 @@ const SynapseTopUp = () => {
       });
 
       if (topUpError) {
-        console.error("[LEDGER_HYDRATION_ERROR] Edge function rejection:", topUpError);
+        console.error("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_ERROR] Edge function rejection:", topUpError);
         throw topUpError;
       }
 
-      console.log("[LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.");
+      console.log("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.");
 
       setStep("success");
       toast({
         title: "Synapse Hydrated!",
         description: `${formatCredits(displayCredits)} added to your operational ledger.`,
       });
+
+      console.log("[SynapseTopUp][handlePurchase] INFO: Refreshing local balance context...");
       await refreshBalance();
+      console.log("[SynapseTopUp][handlePurchase] INFO: Balance context refreshed.");
 
       // Soft reset back to active screen after success viewing
       setTimeout(() => {
+        console.log("[SynapseTopUp][handlePurchase] INFO: Executing soft reset timeout.");
         setStep("select");
         setPurchaseMode("tier");
         setAlacarteAmount("");
       }, 3500);
     } catch (err: any) {
-      console.error("[SETTLEMENT_CRITICAL_FAILURE] Error during purchase:", err.message);
+      console.error("[SynapseTopUp][handlePurchase][SETTLEMENT_CRITICAL_FAILURE] Error during purchase:", err.message);
       setError(err.message || "Payment processing failed.");
       toast({
         title: "Settlement Failed",
@@ -161,13 +226,25 @@ const SynapseTopUp = () => {
         variant: "destructive",
       });
       setStep("select");
+    } finally {
+      console.log("[SynapseTopUp][handlePurchase] END: Purchase sequence exited.");
     }
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Address copied to clipboard" });
+    console.log(`[SynapseTopUp][copyToClipboard] START: Copying text to clipboard: ${text}`);
+    try {
+      navigator.clipboard.writeText(text);
+      toast({ title: "Address copied to clipboard" });
+      console.log("[SynapseTopUp][copyToClipboard] SUCCESS: Text copied successfully.");
+    } catch (err) {
+      console.error("[SynapseTopUp][copyToClipboard] ERROR: Failed to copy text to clipboard.", err);
+    } finally {
+      console.log("[SynapseTopUp][copyToClipboard] END: Exiting function.");
+    }
   };
+
+  console.log("[SynapseTopUp][Component] END: Render phase complete.");
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -188,7 +265,10 @@ const SynapseTopUp = () => {
           {/* Mode Toggle */}
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
-              onClick={() => setPurchaseMode("tier")}
+              onClick={() => {
+                console.log("[SynapseTopUp] INFO: Purchase mode set to 'tier'");
+                setPurchaseMode("tier");
+              }}
               className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
                 purchaseMode === "tier"
                   ? "bg-primary text-primary-foreground"
@@ -198,7 +278,10 @@ const SynapseTopUp = () => {
               Volume Tranches
             </button>
             <button
-              onClick={() => setPurchaseMode("alacarte")}
+              onClick={() => {
+                console.log("[SynapseTopUp] INFO: Purchase mode set to 'alacarte'");
+                setPurchaseMode("alacarte");
+              }}
               className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
                 purchaseMode === "alacarte"
                   ? "bg-primary text-primary-foreground"
@@ -221,7 +304,10 @@ const SynapseTopUp = () => {
                   return (
                     <div
                       key={tier.crd}
-                      onClick={() => setSelectedTier(tier.crd)}
+                      onClick={() => {
+                        console.log(`[SynapseTopUp] INFO: Tier selected: ${tier.label} (${tier.crd} CRD)`);
+                        setSelectedTier(tier.crd);
+                      }}
                       className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                         isSelected
                           ? "border-primary bg-primary/10"
@@ -364,7 +450,10 @@ const SynapseTopUp = () => {
               {/* Payment Rail Selector */}
               <div className="flex rounded-lg border border-border overflow-hidden mb-6">
                 <button
-                  onClick={() => setPaymentRail("worldpay")}
+                  onClick={() => {
+                    console.log("[SynapseTopUp] INFO: Payment rail set to 'worldpay'");
+                    setPaymentRail("worldpay");
+                  }}
                   className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-3 px-2 transition-colors ${
                     paymentRail === "worldpay"
                       ? "bg-primary text-primary-foreground"
@@ -374,7 +463,10 @@ const SynapseTopUp = () => {
                   <CreditCard className="h-4 w-4" /> Fiat
                 </button>
                 <button
-                  onClick={() => setPaymentRail("usdc")}
+                  onClick={() => {
+                    console.log("[SynapseTopUp] INFO: Payment rail set to 'usdc'");
+                    setPaymentRail("usdc");
+                  }}
                   className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-3 px-2 transition-colors ${
                     paymentRail === "usdc"
                       ? "bg-primary text-primary-foreground"
@@ -416,10 +508,10 @@ const SynapseTopUp = () => {
                 </div>
               )}
 
-              <button
+              <Button
                 onClick={handlePurchase}
                 disabled={!canProceed}
-                className="w-full flex justify-center items-center px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex justify-center items-center px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed h-auto"
               >
                 {paymentRail === "usdc" ? (
                   <>
@@ -430,7 +522,7 @@ const SynapseTopUp = () => {
                     <CreditCard className="w-4 h-4 mr-2" /> Authorize via Worldpay
                   </>
                 )}
-              </button>
+              </Button>
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
                 <ShieldCheck className="w-3 h-3" />
