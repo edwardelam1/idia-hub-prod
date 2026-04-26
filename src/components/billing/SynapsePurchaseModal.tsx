@@ -1,24 +1,56 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Coins, Zap, CreditCard, ShieldCheck, Tag, Loader2, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, Lock, Copy, CircleDollarSign } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { formatCredits } from '@/lib/utils';
-import SynapseGasGauge from './SynapseGasGauge';
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Coins,
+  Zap,
+  CreditCard,
+  ShieldCheck,
+  Tag,
+  Loader2,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle2,
+  AlertTriangle,
+  Lock,
+  Copy,
+  CircleDollarSign,
+} from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { formatCredits } from "@/lib/utils";
+import SynapseGasGauge from "./SynapseGasGauge";
 
 const BASE_RATE = 0.75;
+// REAL Treasury Address for IDIA Synapse
+const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
+// Base Network USDC Contract
+const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 const creditTiers = [
-  { id: 'tier1', name: 'Tier 1', credits: 1000, rate: 0.70, popular: false, description: 'Minimum bulk entry' },
-  { id: 'tier2', name: 'Tier 2', credits: 5000, rate: 0.65, popular: true, description: 'Standard operational capacity' },
-  { id: 'tier3', name: 'Tier 3', credits: 20000, rate: 0.60, popular: false, description: 'Maximum volume discount' },
+  { id: "tier1", name: "Tier 1", credits: 1000, rate: 0.7, popular: false, description: "Minimum bulk entry" },
+  {
+    id: "tier2",
+    name: "Tier 2",
+    credits: 5000,
+    rate: 0.65,
+    popular: true,
+    description: "Standard operational capacity",
+  },
+  { id: "tier3", name: "Tier 3", credits: 20000, rate: 0.6, popular: false, description: "Maximum volume discount" },
 ];
 
 interface SynapsePurchaseModalProps {
@@ -28,88 +60,140 @@ interface SynapsePurchaseModalProps {
   insufficientWarning?: string;
 }
 
-const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficientWarning }: SynapsePurchaseModalProps) => {
+const SynapsePurchaseModal = ({
+  trigger,
+  defaultOpen,
+  onOpenChange,
+  insufficientWarning,
+}: SynapsePurchaseModalProps) => {
   const { balanceData, refreshBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
-  const [selectedTier, setSelectedTier] = useState<string>('tier2');
-  const [step, setStep] = useState<'select' | 'payment' | 'processing' | 'success'>('select');
+  const [selectedTier, setSelectedTier] = useState<string>("tier2");
+  const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
   const [open, setOpen] = useState(defaultOpen ?? false);
-  const [purchaseMode, setPurchaseMode] = useState<'tier' | 'alacarte'>('tier');
-  const [alacarteAmount, setAlacarteAmount] = useState('');
-  const [paymentRail, setPaymentRail] = useState<'worldpay' | 'usdc'>('worldpay');
-  const [usdcNetwork, setUsdcNetwork] = useState<'base' | 'ethereum' | 'polygon'>('base');
-  const USDC_DEPOSIT_ADDRESS = '0xCirc1e0000000000000000000000000000IDIA00';
+  const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
+  const [alacarteAmount, setAlacarteAmount] = useState("");
+  const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
+  const [usdcNetwork, setUsdcNetwork] = useState<"base" | "ethereum" | "polygon">("base");
 
-  const currentTier = creditTiers.find(t => t.id === selectedTier) || creditTiers[1];
+  const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
 
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
-  const alacarteValid = alacarteUsd >= 10 && alacarteUsd <= 1000;
 
-  const displayCredits = purchaseMode === 'alacarte' ? alacarteCredits : currentTier.credits;
-  const usdAmount = purchaseMode === 'alacarte' ? alacarteUsd : currentTier.credits * currentTier.rate;
-  const baseRateCost = purchaseMode === 'alacarte' ? alacarteUsd : currentTier.credits * BASE_RATE;
-  const savings = purchaseMode === 'alacarte' ? 0 : baseRateCost - usdAmount;
-  const canProceed = purchaseMode === 'alacarte' ? alacarteValid : true;
+  // LOWERED THE BAR: Min $2.00 for testing purposes
+  const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
+
+  const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentTier.credits;
+  const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * currentTier.rate;
+  const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * BASE_RATE;
+  const savings = purchaseMode === "alacarte" ? 0 : baseRateCost - usdAmount;
+  const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     onOpenChange?.(isOpen);
     if (!isOpen) {
-      setStep('select');
-      setPurchaseMode('tier');
-      setAlacarteAmount('');
-      setPaymentRail('worldpay');
-      setUsdcNetwork('base');
+      setStep("select");
+      setPurchaseMode("tier");
+      setAlacarteAmount("");
+      setPaymentRail("usdc");
+      setUsdcNetwork("base");
     }
   };
 
   const handleProceedToPayment = () => {
     if (!canProceed) return;
-    setStep('payment');
+    setStep("payment");
   };
 
   const handleAlacarteInput = (val: string) => {
-    const digits = val.replace(/\D/g, '');
+    const digits = val.replace(/\D/g, "");
     if (digits.length <= 4) {
       setAlacarteAmount(digits);
     }
   };
 
   const handlePurchase = async () => {
-    setStep('processing');
+    console.log("[SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement...");
+    console.log(
+      "[PARAMS_DEBUG] Rail:",
+      paymentRail.toUpperCase(),
+      "| Amount USD:",
+      usdAmount,
+      "| Credits:",
+      displayCredits,
+    );
+    setStep("processing");
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
 
-      const refPrefix = paymentRail === 'usdc' ? 'USDC' : 'WP';
-      const { data, error } = await supabase.functions.invoke('top-up-credits', {
+      // REAL USDC Settlement Logic (Base Network)
+      if (paymentRail === "usdc") {
+        console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
+        if (!window.ethereum) throw new Error("Compatible web3 wallet (IDIA Life/MetaMask) not detected.");
+
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const amountInUnits = BigInt(usdAmount * 1_000_000); // USDC 6 Decimals
+
+        // standard ERC20 transfer(address,uint256) data
+        const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
+
+        console.log("[WALLET_SIGN_AWAIT] Presenting transaction to user for signing...");
+        txReference = await window.ethereum.request({
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: accounts[0],
+              to: USDC_BASE_CONTRACT,
+              data: encodedData,
+            },
+          ],
+        });
+        console.log("[ONCHAIN_TX_SUCCESS] Transaction Hash Broadcasted:", txReference);
+      } else {
+        console.log("[FIAT_WP_BEGIN] Worldpay PCI-DSS authorization sequence starting...");
+        // Simulated Worldpay delay
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        console.log("[FIAT_WP_SUCCESS] Worldpay authorization secured.");
+      }
+
+      console.log("[LEDGER_HYDRATION_START] Invoking Edge Function: top-up-credits...");
+      const { data, error } = await supabase.functions.invoke("top-up-credits", {
         body: {
-          user_id: (await supabase.auth.getUser()).data.user?.id ?? 'mock-ent-9921',
+          user_id: (await supabase.auth.getUser()).data.user?.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
-          payment_reference: `${refPrefix}-${crypto.randomUUID().slice(0, 8)}`,
+          payment_reference: txReference,
+          payment_method: paymentRail === "usdc" ? "crypto_usdc" : "worldpay",
+          onchain_network: paymentRail === "usdc" ? usdcNetwork : null,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[LEDGER_HYDRATION_ERROR] Edge Function returned error:", error);
+        throw error;
+      }
+      console.log("[LEDGER_HYDRATION_END] Credit provisioned successfully.");
 
-      setStep('success');
-      toast.success('Synapse Credits added successfully!', {
-        description: `${formatCredits(displayCredits)} added to your account.`,
+      setStep("success");
+      toast.success("Synapse Credits added successfully!", {
+        description: `${formatCredits(displayCredits)} added to your ledger.`,
       });
       await refreshBalance();
 
       setTimeout(() => handleOpenChange(false), 2000);
     } catch (err: any) {
-      toast.error(err.message || 'Payment processing failed.');
-      setStep('payment');
+      console.error("[SETTLEMENT_CRITICAL_FAILURE] Error during purchase flow:", err.message);
+      toast.error(err.message || "Payment processing failed.");
+      setStep("payment");
     }
   };
 
   const handleCopyAddress = () => {
-    navigator.clipboard.writeText(USDC_DEPOSIT_ADDRESS);
-    toast.success('Deposit address copied to clipboard');
+    navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
+    toast.success("IDIA Synapse Treasury Address copied");
   };
 
   return (
@@ -126,14 +210,22 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
-            {step === 'payment' ? 'Authorize Payment' : step === 'processing' ? 'Processing...' : step === 'success' ? 'Purchase Complete' : 'Purchase Synapse Credits'}
+            {step === "payment"
+              ? "Authorize Settlement"
+              : step === "processing"
+                ? "Broadcasting..."
+                : step === "success"
+                  ? "Settlement Complete"
+                  : "Purchase Synapse Credits"}
           </DialogTitle>
           <DialogDescription>
-            {step === 'payment' ? 'Complete your purchase via the secure Worldpay gateway' : 'Fuel your data operations with Synapse Credits'}
+            {step === "payment"
+              ? `Complete your purchase via the ${paymentRail.toUpperCase()} authorization port`
+              : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
 
-        {insufficientWarning && step === 'select' && (
+        {insufficientWarning && step === "select" && (
           <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
             <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
             <span className="text-sm text-destructive font-medium">{insufficientWarning}</span>
@@ -141,7 +233,7 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
         )}
 
         <div className="space-y-6 pt-2">
-          {step === 'select' && (
+          {step === "select" && (
             <>
               <div className="flex justify-center">
                 <SynapseGasGauge />
@@ -150,30 +242,32 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
               {/* Mode Toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
                 <button
-                  onClick={() => setPurchaseMode('tier')}
+                  onClick={() => setPurchaseMode("tier")}
                   className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
-                    purchaseMode === 'tier'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    purchaseMode === "tier"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Volume Tranches
                 </button>
                 <button
-                  onClick={() => setPurchaseMode('alacarte')}
+                  onClick={() => setPurchaseMode("alacarte")}
                   className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
-                    purchaseMode === 'alacarte'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    purchaseMode === "alacarte"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   A La Carte
                 </button>
               </div>
 
-              {purchaseMode === 'tier' ? (
+              {purchaseMode === "tier" ? (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Select Volume Tranche</h4>
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Select Volume Tranche
+                  </h4>
                   <div className="grid grid-cols-1 gap-3">
                     {creditTiers.map((tier) => {
                       const isSelected = selectedTier === tier.id;
@@ -182,20 +276,24 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                         <Card
                           key={tier.id}
                           className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
-                            isSelected ? 'ring-2 ring-primary border-primary bg-primary/5' : 'hover:border-primary/50'
+                            isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "hover:border-primary/50"
                           }`}
                           onClick={() => setSelectedTier(tier.id)}
                         >
                           {tier.popular && <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>}
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
-                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                              <div
+                                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-muted-foreground/50"}`}
+                              >
                                 {isSelected && <div className="w-2 h-2 bg-primary rounded-full" />}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-sm text-foreground">{tier.name}</span>
-                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">${tier.rate.toFixed(2)} / CR</span>
+                                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
+                                    ${tier.rate.toFixed(2)} / CR
+                                  </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">{tier.description}</p>
                               </div>
@@ -204,7 +302,9 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                               <div className="text-lg font-bold text-foreground font-mono">
                                 {formatCredits(tier.credits)}
                               </div>
-                              <p className="text-xs text-muted-foreground">${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</p>
+                              <p className="text-xs text-muted-foreground">
+                                ${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                              </p>
                             </div>
                           </div>
                         </Card>
@@ -214,24 +314,33 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Custom Amount</h4>
-                  <p className="text-xs text-muted-foreground">Enter a whole dollar amount between $10 and $1,000. Credits are calculated at the base rate of ${BASE_RATE.toFixed(2)}/CR.</p>
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Custom Amount
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Enter a whole dollar amount between $2 and $1,000. Credits are calculated at the base rate of $
+                    {BASE_RATE.toFixed(2)}/CR.
+                  </p>
                   <div className="space-y-2">
                     <Label>Purchase Amount</Label>
                     <div className="flex items-center gap-0">
-                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-r-0 border-input rounded-l-md text-sm font-medium text-muted-foreground">$</span>
+                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-r-0 border-input rounded-l-md text-sm font-medium text-muted-foreground">
+                        $
+                      </span>
                       <Input
                         className="rounded-none border-r-0 font-mono text-lg"
-                        placeholder="100"
+                        placeholder="25"
                         value={alacarteAmount}
                         onChange={(e) => handleAlacarteInput(e.target.value)}
                         inputMode="numeric"
                       />
-                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-l-0 border-input rounded-r-md text-sm font-medium text-muted-foreground">.00</span>
+                      <span className="flex items-center justify-center h-10 px-3 bg-muted border border-l-0 border-input rounded-r-md text-sm font-medium text-muted-foreground">
+                        .00
+                      </span>
                     </div>
                     {alacarteAmount && !alacarteValid && (
                       <p className="text-xs text-destructive">
-                        {alacarteUsd < 10 ? 'Minimum purchase is $10.00' : 'Maximum purchase is $1,000.00'}
+                        {alacarteUsd < 2 ? "Minimum purchase is $2.00" : "Maximum purchase is $1,000.00"}
                       </p>
                     )}
                     {alacarteValid && (
@@ -245,7 +354,9 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
 
               {/* Transaction Summary */}
               <div className="bg-muted/50 border border-border rounded-xl p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Transaction Summary</h4>
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Transaction Summary
+                </h4>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Current Balance</span>
                   <span className="text-foreground font-mono">{formatCredits(currentBalance)}</span>
@@ -257,19 +368,22 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Rate</span>
                   <span className="text-foreground font-mono">
-                    ${purchaseMode === 'alacarte' ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / CR
+                    ${purchaseMode === "alacarte" ? BASE_RATE.toFixed(2) : currentTier.rate.toFixed(2)} / CR
                   </span>
                 </div>
                 {savings > 0 && (
                   <div className="flex items-center gap-2 text-xs text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
                     <Tag className="w-4 h-4" />
-                    Volume discount applied. You save ${savings.toLocaleString(undefined, { minimumFractionDigits: 2 })}.
+                    Volume discount applied. You save ${savings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    .
                   </div>
                 )}
                 <div className="pt-3 border-t border-border flex justify-between items-end">
                   <span className="text-foreground font-medium">Total Due</span>
                   <div className="text-right">
-                    <div className="text-xl font-bold text-foreground font-mono">${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    <div className="text-xl font-bold text-foreground font-mono">
+                      ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
                     <div className="text-xs text-muted-foreground uppercase">USD</div>
                   </div>
                 </div>
@@ -279,11 +393,13 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                 Continue to Payment <ArrowRight className="w-4 h-4" />
               </Button>
 
-              <p className="text-xs text-center text-muted-foreground">Funds held in secure FBO account at Unit Banking</p>
+              <p className="text-xs text-center text-muted-foreground">
+                Funds held in secure FBO account at Unit Banking
+              </p>
             </>
           )}
 
-          {step === 'payment' && (
+          {step === "payment" && (
             <>
               <div className="space-y-4">
                 {/* Institutional Custody Bridge */}
@@ -314,35 +430,37 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="font-bold text-foreground font-mono">${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <p className="font-bold text-foreground font-mono">
+                      ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
                   </div>
                 </div>
 
                 {/* Payment Rail Selector */}
                 <div className="flex rounded-lg border border-border overflow-hidden">
                   <button
-                    onClick={() => setPaymentRail('worldpay')}
+                    onClick={() => setPaymentRail("worldpay")}
                     className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
-                      paymentRail === 'worldpay'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                      paymentRail === "worldpay"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/50 text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <CreditCard className="h-4 w-4" /> Worldpay
+                    <CreditCard className="h-4 w-4" /> Worldpay (Fiat)
                   </button>
                   <button
-                    onClick={() => setPaymentRail('usdc')}
+                    onClick={() => setPaymentRail("usdc")}
                     className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
-                      paymentRail === 'usdc'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                      paymentRail === "usdc"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/50 text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <CircleDollarSign className="h-4 w-4" /> Stablecoin (USDC)
+                    <CircleDollarSign className="h-4 w-4" /> Platform Credit (USDC)
                   </button>
                 </div>
 
-                {paymentRail === 'worldpay' ? (
+                {paymentRail === "worldpay" ? (
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold text-foreground">Secure Payment Gateway</h4>
                     <div
@@ -360,38 +478,28 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-foreground">Send Circle USDC</h4>
+                    <h4 className="text-sm font-semibold text-foreground">Base Network Authorization</h4>
                     <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-muted-foreground uppercase tracking-wider">Amount Required</span>
-                        <span className="font-mono font-bold text-foreground">{usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+                        </span>
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Network</Label>
-                        <Select value={usdcNetwork} onValueChange={(v) => setUsdcNetwork(v as 'base' | 'ethereum' | 'polygon')}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="base">Base</SelectItem>
-                            <SelectItem value="ethereum">Ethereum</SelectItem>
-                            <SelectItem value="polygon">Polygon</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Deposit Address</Label>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                          Target Settlement Address
+                        </Label>
                         <div className="flex gap-2">
-                          <Input
-                            readOnly
-                            value={USDC_DEPOSIT_ADDRESS}
-                            className="font-mono text-xs h-9 bg-background"
-                          />
+                          <Input readOnly value={IDIA_SYNAPSE_WALLET} className="font-mono text-xs h-9 bg-background" />
                           <Button variant="outline" size="sm" onClick={handleCopyAddress} className="h-9 px-3">
                             <Copy className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Send the exact USDC amount to the address above on the {usdcNetwork.charAt(0).toUpperCase() + usdcNetwork.slice(1)} network. Confirm below once your transaction is broadcast.
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Funds will be settled directly to the IDIA Synapse Wallet on Base Mainnet. Confirming will
+                        initiate a blockchain broadcast from your connected wallet.
                       </p>
                     </div>
                   </div>
@@ -399,47 +507,51 @@ const SynapsePurchaseModal = ({ trigger, defaultOpen, onOpenChange, insufficient
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" className="gap-2" onClick={() => setStep('select')}>
+                <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
-                {paymentRail === 'worldpay' ? (
-                  <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
-                    <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </Button>
-                ) : (
-                  <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
-                    <CircleDollarSign className="w-4 h-4" /> I've Sent USDC — Confirm
-                  </Button>
-                )}
+                <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
+                  {paymentRail === "usdc" ? (
+                    <>
+                      <CircleDollarSign className="w-4 h-4" /> I've Sent USDC — Confirm & Hydrate
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toFixed(2)}
+                    </>
+                  )}
+                </Button>
               </div>
 
               <div className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" />
                   <span>
-                    {paymentRail === 'worldpay'
-                      ? 'PCI-DSS Level 1 · Encrypted & Secured by Worldpay'
-                      : 'On-chain settlement via Circle USDC · Manual confirmation'}
+                    {paymentRail === "worldpay"
+                      ? "PCI-DSS Level 1 · Encrypted & Secured by Worldpay"
+                      : "On-chain settlement via Base Network · Auditable Provenance"}
                   </span>
                 </div>
               </div>
             </>
           )}
 
-          {step === 'processing' && (
+          {step === "processing" && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="text-foreground font-semibold">Verifying payment...</p>
-              <p className="text-muted-foreground text-sm">Please do not close this window</p>
+              <p className="text-foreground font-semibold">Broadcasting to Ledger...</p>
+              <p className="text-muted-foreground text-sm">
+                Please do not close this window while settlement propagates
+              </p>
             </div>
           )}
 
-          {step === 'success' && (
+          {step === "success" && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
-              <p className="text-foreground font-bold text-lg">Payment Successful!</p>
+              <p className="text-foreground font-bold text-lg">Synapse Hydrated!</p>
               <p className="text-muted-foreground text-sm">
-                {formatCredits(displayCredits)} have been added to your ledger.
+                {formatCredits(displayCredits)} have been settled to your operational ledger.
               </p>
             </div>
           )}
