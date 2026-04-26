@@ -1,3 +1,4 @@
+import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { useState } from "react";
 import {
   CreditCard,
