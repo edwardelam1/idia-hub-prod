@@ -39,7 +39,6 @@ const pricingTiers: PricingTier[] = [
   { crd: 20000, label: "Tier 3", rate: 0.6, description: "Maximum volume discount" },
 ];
 
-const BASE_RATE = 0.75;
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 

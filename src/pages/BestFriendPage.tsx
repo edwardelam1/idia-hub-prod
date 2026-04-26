@@ -232,7 +232,7 @@ const BestFriendPage = () => {
             <Search size={14} /> Marketplace Mode (1 CR)
           </button>
           <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50">
-            Synapse Controller v2.0 - Fixed Rate 0.75
+            Tell Your Best Friend Everything...
           </div>
         </div>
       </div>
