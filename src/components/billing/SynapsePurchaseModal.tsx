@@ -44,6 +44,9 @@ declare global {
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
+// Added BASE_RATE. Ensure this aligns with your global TRUTH, or replace with an import.
+const BASE_RATE = 1.0;
+
 const creditTiers = [
   { id: "tier1", name: "Tier 1", credits: 1000, rate: 0.7, popular: false, description: "Minimum bulk entry" },
   {
@@ -70,8 +73,11 @@ const SynapsePurchaseModal = ({
   onOpenChange,
   insufficientWarning,
 }: SynapsePurchaseModalProps) => {
+  console.log("[SynapsePurchaseModal][Component] START: Rendering component.");
+
   const { balanceData, refreshBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
+
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
   const [open, setOpen] = useState(defaultOpen ?? false);
@@ -80,14 +86,26 @@ const SynapsePurchaseModal = ({
   const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
   const [usdcNetwork, setUsdcNetwork] = useState<"base" | "ethereum" | "polygon">("base");
 
-  const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
+  try {
+    console.log("[SynapsePurchaseModal][State Derivation] INFO: Calculating current variables based on state.");
+    const currentTierCheck = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
+    const alacarteUsdCheck = parseInt(alacarteAmount) || 0;
+    const alacarteValidCheck = alacarteUsdCheck >= 2 && alacarteUsdCheck <= 1000;
+    console.log(
+      `[SynapsePurchaseModal][State Derivation] INFO: selectedTier=${selectedTier}, alacarteUsd=${alacarteUsdCheck}, alacarteValid=${alacarteValidCheck}`,
+    );
+  } catch (derivationError) {
+    console.error(
+      "[SynapsePurchaseModal][State Derivation] ERROR: Failed to calculate component state variables.",
+      derivationError,
+    );
+  }
 
+  // Recalculating outside try-catch to ensure variables are available to the scope
+  const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
-
-  // LOWERED THE BAR: Testing threshold set to $2.00
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
-
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentTier.credits;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * currentTier.rate;
   const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * BASE_RATE;
@@ -95,51 +113,91 @@ const SynapsePurchaseModal = ({
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleOpenChange = (isOpen: boolean) => {
-    setOpen(isOpen);
-    onOpenChange?.(isOpen);
-    if (!isOpen) {
-      setStep("select");
-      setPurchaseMode("tier");
-      setAlacarteAmount("");
-      setPaymentRail("usdc");
-      setUsdcNetwork("base");
+    console.log(`[SynapsePurchaseModal][handleOpenChange] START: Modal open state changing to: ${isOpen}`);
+    try {
+      setOpen(isOpen);
+      onOpenChange?.(isOpen);
+      if (!isOpen) {
+        console.log("[SynapsePurchaseModal][handleOpenChange] INFO: Modal closing. Resetting internal state.");
+        setStep("select");
+        setPurchaseMode("tier");
+        setAlacarteAmount("");
+        setPaymentRail("usdc");
+        setUsdcNetwork("base");
+      }
+    } catch (err) {
+      console.error("[SynapsePurchaseModal][handleOpenChange] ERROR: Exception caught during open state change.", err);
+    } finally {
+      console.log("[SynapsePurchaseModal][handleOpenChange] END: Open state change complete.");
     }
   };
 
   const handleProceedToPayment = () => {
-    if (!canProceed) return;
+    console.log("[SynapsePurchaseModal][handleProceedToPayment] START: Verifying proceed condition.");
+    if (!canProceed) {
+      console.warn("[SynapsePurchaseModal][handleProceedToPayment] WARN: Execution halted. canProceed is false.");
+      return;
+    }
+    console.log("[SynapsePurchaseModal][handleProceedToPayment] INFO: Advancing to payment step.");
     setStep("payment");
+    console.log("[SynapsePurchaseModal][handleProceedToPayment] END: Proceed condition met.");
   };
 
   const handleAlacarteInput = (val: string) => {
-    const digits = val.replace(/\D/g, "");
-    if (digits.length <= 4) {
-      setAlacarteAmount(digits);
+    console.log(`[SynapsePurchaseModal][handleAlacarteInput] START: Processing input value: ${val}`);
+    try {
+      const digits = val.replace(/\D/g, "");
+      if (digits.length <= 4) {
+        setAlacarteAmount(digits);
+        console.log(`[SynapsePurchaseModal][handleAlacarteInput] INFO: Valid length, state updated to: ${digits}`);
+      } else {
+        console.log(`[SynapsePurchaseModal][handleAlacarteInput] INFO: Input exceeds 4 digits, rejected.`);
+      }
+    } catch (err) {
+      console.error("[SynapsePurchaseModal][handleAlacarteInput] ERROR: Exception caught processing input.", err);
+    } finally {
+      console.log("[SynapsePurchaseModal][handleAlacarteInput] END: Finished processing input.");
     }
   };
 
   const handlePurchase = async () => {
-    console.log("[SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...");
-    console.log("[DEBUG] Target Wallet:", IDIA_SYNAPSE_WALLET, "| Amount:", usdAmount);
+    console.log("[SynapsePurchaseModal][handlePurchase] START: Initiating purchase sequence.");
+    console.log(
+      "[SynapsePurchaseModal][handlePurchase][SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...",
+    );
+    console.log(
+      `[SynapsePurchaseModal][handlePurchase][DEBUG] Target Wallet: ${IDIA_SYNAPSE_WALLET} | Amount: ${usdAmount} | Rail: ${paymentRail.toUpperCase()}`,
+    );
+
     setStep("processing");
 
     try {
       let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
+      console.log(`[SynapsePurchaseModal][handlePurchase] INFO: Generated initial txReference: ${txReference}`);
 
       if (paymentRail === "usdc") {
-        console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
+        console.log("[SynapsePurchaseModal][handlePurchase][ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
 
         if (!window.ethereum) {
-          throw new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+          const web3Error = new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+          console.error("[SynapsePurchaseModal][handlePurchase][ONCHAIN_TX_ERROR] Web3 provider missing.", web3Error);
+          throw web3Error;
         }
 
+        console.log("[SynapsePurchaseModal][handlePurchase] INFO: Requesting ethereum accounts...");
         const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        console.log(`[SynapsePurchaseModal][handlePurchase] INFO: Accounts retrieved. Active account: ${accounts[0]}`);
+
         const amountInUnits = BigInt(usdAmount * 1_000_000); // USDC 6 Decimals
+        console.log(
+          `[SynapsePurchaseModal][handlePurchase] INFO: Calculated amountInUnits: ${amountInUnits.toString()}`,
+        );
 
         // ERC20 transfer(address,uint256) data
         const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
+        console.log(`[SynapsePurchaseModal][handlePurchase] INFO: Encoded transaction data generated.`);
 
-        console.log("[WALLET_SIGN_AWAIT] Waiting for user signature...");
+        console.log("[SynapsePurchaseModal][handlePurchase][WALLET_SIGN_AWAIT] Waiting for user signature...");
         txReference = await window.ethereum.request({
           method: "eth_sendTransaction",
           params: [
@@ -150,17 +208,32 @@ const SynapsePurchaseModal = ({
             },
           ],
         });
-        console.log("[ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
+        console.log("[SynapsePurchaseModal][handlePurchase][ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
       } else {
-        console.log("[FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
+        console.log(
+          "[SynapsePurchaseModal][handlePurchase][FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...",
+        );
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("[FIAT_WP_END] Fiat authorization secured.");
+        console.log("[SynapsePurchaseModal][handlePurchase][FIAT_WP_END] Fiat authorization secured.");
       }
 
-      console.log("[LEDGER_HYDRATION_START] Calling top-up-credits with reference:", txReference);
+      console.log(
+        `[SynapsePurchaseModal][handlePurchase][LEDGER_HYDRATION_START] Calling top-up-credits with reference: ${txReference}`,
+      );
+
+      const userReq = await supabase.auth.getUser();
+      if (userReq.error) {
+        console.error(
+          "[SynapsePurchaseModal][handlePurchase] ERROR: Failed to fetch user from Supabase auth.",
+          userReq.error,
+        );
+        throw new Error("Authentication failed before ledger hydration.");
+      }
+      console.log(`[SynapsePurchaseModal][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user?.id}`);
+
       const { data, error } = await supabase.functions.invoke("top-up-credits", {
         body: {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: userReq.data.user?.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: txReference,
@@ -170,30 +243,56 @@ const SynapsePurchaseModal = ({
       });
 
       if (error) {
-        console.error("[LEDGER_HYDRATION_ERROR] Error from top-up function:", error);
+        console.error(
+          "[SynapsePurchaseModal][handlePurchase][LEDGER_HYDRATION_ERROR] Error from top-up edge function:",
+          error,
+        );
         throw error;
       }
 
-      console.log("[LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.");
+      console.log(
+        "[SynapsePurchaseModal][handlePurchase][LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.",
+      );
 
       setStep("success");
       toast.success("Synapse Credits added successfully!", {
         description: `${formatCredits(displayCredits)} added to your account.`,
       });
-      await refreshBalance();
 
-      setTimeout(() => handleOpenChange(false), 2000);
+      console.log("[SynapsePurchaseModal][handlePurchase] INFO: Refreshing local balance context...");
+      await refreshBalance();
+      console.log("[SynapsePurchaseModal][handlePurchase] INFO: Balance context refreshed.");
+
+      setTimeout(() => {
+        console.log("[SynapsePurchaseModal][handlePurchase] INFO: Executing soft close timeout.");
+        handleOpenChange(false);
+      }, 2000);
     } catch (err: any) {
-      console.error("[SETTLEMENT_CRITICAL_FAILURE] Error during purchase:", err.message);
+      console.error(
+        "[SynapsePurchaseModal][handlePurchase][SETTLEMENT_CRITICAL_FAILURE] Error during purchase:",
+        err.message,
+      );
       toast.error(err.message || "Payment processing failed.");
       setStep("payment");
+    } finally {
+      console.log("[SynapsePurchaseModal][handlePurchase] END: Purchase sequence exited.");
     }
   };
 
   const handleCopyAddress = () => {
-    navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
-    toast.success("Synapse Treasury Address copied");
+    console.log(`[SynapsePurchaseModal][handleCopyAddress] START: Copying text to clipboard: ${IDIA_SYNAPSE_WALLET}`);
+    try {
+      navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
+      toast.success("Synapse Treasury Address copied");
+      console.log("[SynapsePurchaseModal][handleCopyAddress] SUCCESS: Text copied successfully.");
+    } catch (err) {
+      console.error("[SynapsePurchaseModal][handleCopyAddress] ERROR: Failed to copy text to clipboard.", err);
+    } finally {
+      console.log("[SynapsePurchaseModal][handleCopyAddress] END: Exiting function.");
+    }
   };
+
+  console.log("[SynapsePurchaseModal][Component] END: Render phase complete.");
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -241,7 +340,10 @@ const SynapsePurchaseModal = ({
               {/* Mode Toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
                 <button
-                  onClick={() => setPurchaseMode("tier")}
+                  onClick={() => {
+                    console.log("[SynapsePurchaseModal] INFO: Purchase mode set to 'tier'");
+                    setPurchaseMode("tier");
+                  }}
                   className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
                     purchaseMode === "tier"
                       ? "bg-primary text-primary-foreground"
@@ -251,7 +353,10 @@ const SynapsePurchaseModal = ({
                   Volume Tranches
                 </button>
                 <button
-                  onClick={() => setPurchaseMode("alacarte")}
+                  onClick={() => {
+                    console.log("[SynapsePurchaseModal] INFO: Purchase mode set to 'alacarte'");
+                    setPurchaseMode("alacarte");
+                  }}
                   className={`flex-1 text-sm font-medium py-2.5 px-4 transition-colors ${
                     purchaseMode === "alacarte"
                       ? "bg-primary text-primary-foreground"
@@ -277,7 +382,12 @@ const SynapsePurchaseModal = ({
                           className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
                             isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "hover:border-primary/50"
                           }`}
-                          onClick={() => setSelectedTier(tier.id)}
+                          onClick={() => {
+                            console.log(
+                              `[SynapsePurchaseModal] INFO: Tier selected: ${tier.name} (${tier.credits} CRD)`,
+                            );
+                            setSelectedTier(tier.id);
+                          }}
                         >
                           {tier.popular && <Badge className="absolute -top-2 right-3 text-xs">Most Popular</Badge>}
                           <div className="flex items-center justify-between gap-4">
@@ -438,7 +548,10 @@ const SynapsePurchaseModal = ({
                 {/* Payment Rail Selector */}
                 <div className="flex rounded-lg border border-border overflow-hidden">
                   <button
-                    onClick={() => setPaymentRail("worldpay")}
+                    onClick={() => {
+                      console.log("[SynapsePurchaseModal] INFO: Payment rail set to 'worldpay'");
+                      setPaymentRail("worldpay");
+                    }}
                     className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
                       paymentRail === "worldpay"
                         ? "bg-primary text-primary-foreground"
@@ -448,7 +561,10 @@ const SynapsePurchaseModal = ({
                     <CreditCard className="h-4 w-4" /> Worldpay
                   </button>
                   <button
-                    onClick={() => setPaymentRail("usdc")}
+                    onClick={() => {
+                      console.log("[SynapsePurchaseModal] INFO: Payment rail set to 'usdc'");
+                      setPaymentRail("usdc");
+                    }}
                     className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2.5 px-4 transition-colors ${
                       paymentRail === "usdc"
                         ? "bg-primary text-primary-foreground"
@@ -489,7 +605,10 @@ const SynapsePurchaseModal = ({
                         <Label className="text-xs text-muted-foreground uppercase tracking-wider">Network</Label>
                         <Select
                           value={usdcNetwork}
-                          onValueChange={(v) => setUsdcNetwork(v as "base" | "ethereum" | "polygon")}
+                          onValueChange={(v) => {
+                            console.log(`[SynapsePurchaseModal] INFO: USDC Network set to '${v}'`);
+                            setUsdcNetwork(v as "base" | "ethereum" | "polygon");
+                          }}
                         >
                           <SelectTrigger className="h-9">
                             <SelectValue />
@@ -523,7 +642,14 @@ const SynapsePurchaseModal = ({
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    console.log("[SynapsePurchaseModal] INFO: Returning to 'select' step.");
+                    setStep("select");
+                  }}
+                >
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
                 <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
