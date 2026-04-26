@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Search, Database, ShieldAlert, Play, Loader2, Info, Terminal, ChevronDown } from 'lucide-react';
-import { fetchApi } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { useState } from "react";
+import { Search, Database, ShieldAlert, Play, Loader2, Info, Terminal, ChevronDown } from "lucide-react";
+import { fetchApi } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
 interface MarketplaceTerminalProps {
   synapseBalance?: number;
@@ -11,7 +11,7 @@ interface MarketplaceTerminalProps {
 }
 
 const MarketplaceTerminal = ({ synapseBalance: propBalance, isBioKeyVerified = false }: MarketplaceTerminalProps) => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -25,17 +25,17 @@ const MarketplaceTerminal = ({ synapseBalance: propBalance, isBioKeyVerified = f
     if (displayCredits < QUERY_COST_CRD) return;
     setIsExecuting(true);
     try {
-      const response = await fetchApi<{ data: any }>('/api/v1/synapse/query', {
-        method: 'POST',
+      const response = await fetchApi<{ data: any }>("/api/v1/synapse/query", {
+        method: "POST",
         body: JSON.stringify({
           query_string: query,
           cost_credits: QUERY_COST_CRD,
-          auth_type: 'BIO_SOVEREIGN',
+          auth_type: "BIO_SOVEREIGN",
         }),
       });
       setResults(response.data);
     } catch (err) {
-      console.error('Query failed', err);
+      console.error("Query failed", err);
     } finally {
       setIsExecuting(false);
     }
@@ -59,9 +59,13 @@ const MarketplaceTerminal = ({ synapseBalance: propBalance, isBioKeyVerified = f
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-muted-foreground">
                 <Database className="w-3 h-3" />
-                <span className="text-[11px] font-mono font-medium">{displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })} CRD</span>
+                <span className="text-[11px] font-mono font-medium">
+                  {displayCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })} CRD
+                </span>
               </div>
-              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown
+                className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              />
             </div>
           </button>
         </CollapsibleTrigger>
@@ -140,9 +144,7 @@ const MarketplaceTerminal = ({ synapseBalance: propBalance, isBioKeyVerified = f
             {!results && !isExecuting && (
               <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/20">
                 <Search className="w-4 h-4 text-muted-foreground/50" />
-                <p className="text-[11px] text-muted-foreground">
-                  Execute a query to view Iceberg Lakehouse metadata.
-                </p>
+                <p className="text-[11px] text-muted-foreground">Execute a query to view Iceberg Lakehouse metadata.</p>
               </div>
             )}
           </div>
