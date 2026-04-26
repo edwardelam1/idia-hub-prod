@@ -34,10 +34,15 @@ import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
 
+// Fix for TS2339: Property 'ethereum' does not exist on type 'Window'
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 const BASE_RATE = 0.75;
-// REAL Treasury Address for IDIA Synapse
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
-// Base Network USDC Contract
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 const creditTiers = [
@@ -81,7 +86,7 @@ const SynapsePurchaseModal = ({
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
 
-  // LOWERED THE BAR: Min $2.00 for testing purposes
+  // LOWERED THE BAR: Testing threshold set to $2.00
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
 
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentTier.credits;
@@ -115,32 +120,27 @@ const SynapsePurchaseModal = ({
   };
 
   const handlePurchase = async () => {
-    console.log("[SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement...");
-    console.log(
-      "[PARAMS_DEBUG] Rail:",
-      paymentRail.toUpperCase(),
-      "| Amount USD:",
-      usdAmount,
-      "| Credits:",
-      displayCredits,
-    );
+    console.log("[SETTLEMENT_CORE_START] Initializing Parallel Rail Settlement sequence...");
+    console.log("[DEBUG] Target Wallet:", IDIA_SYNAPSE_WALLET, "| Amount:", usdAmount);
     setStep("processing");
 
     try {
       let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
 
-      // REAL USDC Settlement Logic (Base Network)
       if (paymentRail === "usdc") {
         console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
-        if (!window.ethereum) throw new Error("Compatible web3 wallet (IDIA Life/MetaMask) not detected.");
+
+        if (!window.ethereum) {
+          throw new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+        }
 
         const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
         const amountInUnits = BigInt(usdAmount * 1_000_000); // USDC 6 Decimals
 
-        // standard ERC20 transfer(address,uint256) data
+        // ERC20 transfer(address,uint256) data
         const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
 
-        console.log("[WALLET_SIGN_AWAIT] Presenting transaction to user for signing...");
+        console.log("[WALLET_SIGN_AWAIT] Waiting for user signature...");
         txReference = await window.ethereum.request({
           method: "eth_sendTransaction",
           params: [
@@ -151,15 +151,14 @@ const SynapsePurchaseModal = ({
             },
           ],
         });
-        console.log("[ONCHAIN_TX_SUCCESS] Transaction Hash Broadcasted:", txReference);
+        console.log("[ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
       } else {
-        console.log("[FIAT_WP_BEGIN] Worldpay PCI-DSS authorization sequence starting...");
-        // Simulated Worldpay delay
+        console.log("[FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("[FIAT_WP_SUCCESS] Worldpay authorization secured.");
+        console.log("[FIAT_WP_END] Fiat authorization secured.");
       }
 
-      console.log("[LEDGER_HYDRATION_START] Invoking Edge Function: top-up-credits...");
+      console.log("[LEDGER_HYDRATION_START] Calling top-up-credits with reference:", txReference);
       const { data, error } = await supabase.functions.invoke("top-up-credits", {
         body: {
           user_id: (await supabase.auth.getUser()).data.user?.id,
@@ -172,20 +171,21 @@ const SynapsePurchaseModal = ({
       });
 
       if (error) {
-        console.error("[LEDGER_HYDRATION_ERROR] Edge Function returned error:", error);
+        console.error("[LEDGER_HYDRATION_ERROR] Error from top-up function:", error);
         throw error;
       }
-      console.log("[LEDGER_HYDRATION_END] Credit provisioned successfully.");
+
+      console.log("[LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.");
 
       setStep("success");
       toast.success("Synapse Credits added successfully!", {
-        description: `${formatCredits(displayCredits)} added to your ledger.`,
+        description: `${formatCredits(displayCredits)} added to your account.`,
       });
       await refreshBalance();
 
       setTimeout(() => handleOpenChange(false), 2000);
     } catch (err: any) {
-      console.error("[SETTLEMENT_CRITICAL_FAILURE] Error during purchase flow:", err.message);
+      console.error("[SETTLEMENT_CRITICAL_FAILURE] Error during purchase:", err.message);
       toast.error(err.message || "Payment processing failed.");
       setStep("payment");
     }
@@ -193,7 +193,7 @@ const SynapsePurchaseModal = ({
 
   const handleCopyAddress = () => {
     navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
-    toast.success("IDIA Synapse Treasury Address copied");
+    toast.success("Synapse Treasury Address copied");
   };
 
   return (
@@ -211,16 +211,16 @@ const SynapsePurchaseModal = ({
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
             {step === "payment"
-              ? "Authorize Settlement"
+              ? "Authorize Payment"
               : step === "processing"
-                ? "Broadcasting..."
+                ? "Processing..."
                 : step === "success"
-                  ? "Settlement Complete"
+                  ? "Purchase Complete"
                   : "Purchase Synapse Credits"}
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Complete your purchase via the ${paymentRail.toUpperCase()} authorization port`
+              ? `Complete your purchase via the secure ${paymentRail.toUpperCase()} gateway`
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -329,7 +329,7 @@ const SynapsePurchaseModal = ({
                       </span>
                       <Input
                         className="rounded-none border-r-0 font-mono text-lg"
-                        placeholder="25"
+                        placeholder="100"
                         value={alacarteAmount}
                         onChange={(e) => handleAlacarteInput(e.target.value)}
                         inputMode="numeric"
@@ -446,7 +446,7 @@ const SynapsePurchaseModal = ({
                         : "bg-muted/50 text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <CreditCard className="h-4 w-4" /> Worldpay (Fiat)
+                    <CreditCard className="h-4 w-4" /> Worldpay
                   </button>
                   <button
                     onClick={() => setPaymentRail("usdc")}
@@ -456,7 +456,7 @@ const SynapsePurchaseModal = ({
                         : "bg-muted/50 text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <CircleDollarSign className="h-4 w-4" /> Platform Credit (USDC)
+                    <CircleDollarSign className="h-4 w-4" /> Stablecoin (USDC)
                   </button>
                 </div>
 
@@ -478,7 +478,7 @@ const SynapsePurchaseModal = ({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-foreground">Base Network Authorization</h4>
+                    <h4 className="text-sm font-semibold text-foreground">Send Circle USDC</h4>
                     <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-muted-foreground uppercase tracking-wider">Amount Required</span>
@@ -487,8 +487,24 @@ const SynapsePurchaseModal = ({
                         </span>
                       </div>
                       <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Network</Label>
+                        <Select
+                          value={usdcNetwork}
+                          onValueChange={(v) => setUsdcNetwork(v as "base" | "ethereum" | "polygon")}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="base">Base</SelectItem>
+                            <SelectItem value="ethereum">Ethereum</SelectItem>
+                            <SelectItem value="polygon">Polygon</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-                          Target Settlement Address
+                          Deposit Address
                         </Label>
                         <div className="flex gap-2">
                           <Input readOnly value={IDIA_SYNAPSE_WALLET} className="font-mono text-xs h-9 bg-background" />
@@ -498,8 +514,9 @@ const SynapsePurchaseModal = ({
                         </div>
                       </div>
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Funds will be settled directly to the IDIA Synapse Wallet on Base Mainnet. Confirming will
-                        initiate a blockchain broadcast from your connected wallet.
+                        Send USDC to the address above on the{" "}
+                        {usdcNetwork.charAt(0).toUpperCase() + usdcNetwork.slice(1)} network. Confirm below to initiate
+                        the blockchain settlement.
                       </p>
                     </div>
                   </div>
@@ -513,11 +530,12 @@ const SynapsePurchaseModal = ({
                 <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
                   {paymentRail === "usdc" ? (
                     <>
-                      <CircleDollarSign className="w-4 h-4" /> I've Sent USDC — Confirm & Hydrate
+                      <CircleDollarSign className="w-4 h-4" /> I've Sent USDC — Confirm
                     </>
                   ) : (
                     <>
-                      <CreditCard className="w-4 h-4" /> Authorize via Worldpay — ${usdAmount.toFixed(2)}
+                      <CreditCard className="w-4 h-4" /> Authorize via Worldpay — $
+                      {usdAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </>
                   )}
                 </Button>
@@ -529,7 +547,7 @@ const SynapsePurchaseModal = ({
                   <span>
                     {paymentRail === "worldpay"
                       ? "PCI-DSS Level 1 · Encrypted & Secured by Worldpay"
-                      : "On-chain settlement via Base Network · Auditable Provenance"}
+                      : "On-chain settlement via Circle USDC · Manual confirmation"}
                   </span>
                 </div>
               </div>
@@ -540,9 +558,7 @@ const SynapsePurchaseModal = ({
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="text-foreground font-semibold">Broadcasting to Ledger...</p>
-              <p className="text-muted-foreground text-sm">
-                Please do not close this window while settlement propagates
-              </p>
+              <p className="text-muted-foreground text-sm">Please do not close this window</p>
             </div>
           )}
 
@@ -551,7 +567,7 @@ const SynapsePurchaseModal = ({
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="text-foreground font-bold text-lg">Synapse Hydrated!</p>
               <p className="text-muted-foreground text-sm">
-                {formatCredits(displayCredits)} have been settled to your operational ledger.
+                {formatCredits(displayCredits)} have been added to your ledger.
               </p>
             </div>
           )}
