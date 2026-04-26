@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useWalletBalance } from "@/hooks/useWalletBalance";
 import {
   CreditCard,
   Zap,
@@ -52,10 +51,6 @@ const SynapseTopUp = () => {
 
   const { balanceData, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
-
-  // Bring in the internal IDIA Life wallet balances
-  const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
-  const availableUSDC = walletBalance?.idia_beta_balance ?? 0;
 
   const [selectedTier, setSelectedTier] = useState(5000);
   const [step, setStep] = useState<"select" | "processing" | "success">("select");
@@ -126,62 +121,83 @@ const SynapseTopUp = () => {
     setError(null);
 
     try {
-      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
-      console.log(`[SynapseTopUp][handlePurchase] INFO: Generated internal txReference: ${txReference}`);
+      let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
 
       if (paymentRail === "usdc") {
-        console.log("[SynapseTopUp][handlePurchase][INTERNAL_TX_BEGIN] Initiating internal IDIA Life USDC transfer...");
+        console.log("[ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast via Web3 Provider...");
 
-        // 1. Verify Internal Funds
-        console.log(
-          `[SynapseTopUp][handlePurchase] INFO: Verifying funds. Required: $${usdAmount}, Available: $${availableUSDC}`,
-        );
-        if (availableUSDC < usdAmount) {
-          const fundError = new Error(
-            `Insufficient internal USDC balance. You have $${availableUSDC.toFixed(2)} available.`,
-          );
-          console.error("[SynapseTopUp][handlePurchase][INTERNAL_TX_ERROR] Fund verification failed.", fundError);
-          throw fundError;
+        if (!window.ethereum) {
+          const web3Error = new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
+          console.error("[ONCHAIN_TX_ERROR] Web3 provider missing.", web3Error);
+          throw web3Error;
         }
 
-        // 2. Simulate Internal Custodial Lock
-        console.log("[SynapseTopUp][handlePurchase] INFO: Securing internal custodial funds...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log("[SynapseTopUp][handlePurchase][INTERNAL_TX_SUCCESS] Funds secured for internal transfer.");
+        // 1. Request Wallet Access
+        console.log("[ONCHAIN_TX] INFO: Requesting ethereum accounts...");
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const sender = accounts[0];
+        console.log(`[ONCHAIN_TX] INFO: Active account retrieved: ${sender}`);
+
+        // 2. Format Amount to USDC 6 Decimals
+        const amountInUnits = BigInt(usdAmount * 1_000_000);
+
+        // 3. Generate ERC20 Transfer Bytecode
+        const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
+
+        console.log("[WALLET_SIGN_AWAIT] Waiting for user signature on blockchain...");
+
+        // 4. Send Transaction
+        txReference = await window.ethereum.request({
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: sender,
+              to: USDC_BASE_CONTRACT,
+              data: encodedData,
+            },
+          ],
+        });
+
+        console.log(`[ONCHAIN_TX_SUCCESS] Transaction Broadcasted! Hash: ${txReference}`);
       } else {
-        console.log("[SynapseTopUp][handlePurchase][FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
+        console.log("[FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("[SynapseTopUp][handlePurchase][FIAT_WP_END] Fiat authorization secured.");
-        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
+        console.log("[FIAT_WP_END] Fiat authorization secured.");
       }
 
-      console.log(`[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_START] Calling top-up-credits edge function...`);
+      console.log(`[LEDGER_HYDRATION_START] Calling top-up-credits edge function with reference: ${txReference}`);
 
+      // 5. Authenticate Request
       const userReq = await supabase.auth.getUser();
-      if (userReq.error || !userReq.data.user) {
-        console.error("[SynapseTopUp][handlePurchase] ERROR: Failed to fetch user from Supabase auth.");
+      const sessionReq = await supabase.auth.getSession();
+      const accessToken = sessionReq.data.session?.access_token;
+
+      if (userReq.error || !userReq.data.user || !accessToken) {
+        console.error("[LEDGER_HYDRATION_ERROR] Failed to fetch secure user session.");
         throw new Error("Authentication failed before ledger hydration.");
       }
-      console.log(`[SynapseTopUp][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user.id}`);
+      console.log(`[LEDGER_HYDRATION] INFO: Authenticated user ID: ${userReq.data.user.id}`);
 
-      // 3. Dispatch to Edge Function
+      // 6. Dispatch TX Hash to Backend for On-Chain Verification
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: {
           user_id: userReq.data.user.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: txReference,
-          payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
-          target_synapse_wallet: IDIA_SYNAPSE_WALLET,
+          payment_method: paymentRail === "usdc" ? "crypto_usdc" : "worldpay",
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
       if (topUpError) {
-        console.error("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_ERROR] Edge function rejection:", topUpError);
+        console.error("[LEDGER_HYDRATION_ERROR] Edge function rejection:", topUpError);
         throw topUpError;
       }
 
-      console.log("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_END] Settlement successfully propagated to ledger.");
+      console.log("[LEDGER_HYDRATION_END] Settlement verified and successfully propagated to ledger.");
 
       setStep("success");
       toast({
@@ -191,7 +207,6 @@ const SynapseTopUp = () => {
 
       console.log("[SynapseTopUp][handlePurchase] INFO: Refreshing local balance contexts...");
       await refreshSynapseBalance();
-      await refreshWalletBalance();
       console.log("[SynapseTopUp][handlePurchase] INFO: Balance contexts refreshed.");
 
       setTimeout(() => {
@@ -456,7 +471,7 @@ const SynapseTopUp = () => {
                       : "bg-muted/50 text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
+                  <CircleDollarSign className="h-4 w-4" /> Base USDC
                 </button>
               </div>
 
@@ -478,7 +493,8 @@ const SynapseTopUp = () => {
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Settlement will be executed instantly via your IDIA Life internal custodial balance.
+                    Settlement will be executed natively on-chain. Approving the transaction will transfer USDC directly
+                    via your Web3 Provider.
                   </p>
                 </div>
               ) : (
@@ -498,7 +514,7 @@ const SynapseTopUp = () => {
               >
                 {paymentRail === "usdc" ? (
                   <>
-                    <CircleDollarSign className="w-4 h-4 mr-2" /> Confirm Custodial Transfer
+                    <CircleDollarSign className="w-4 h-4 mr-2" /> Confirm & Send USDC
                   </>
                 ) : (
                   <>
@@ -512,7 +528,7 @@ const SynapseTopUp = () => {
                 <span>
                   {paymentRail === "worldpay"
                     ? "PCI-DSS Level 1 Secured • FBO at Airwallex"
-                    : "Zero-latency internal settlement"}
+                    : "On-chain settlement via Base Network"}
                 </span>
               </div>
             </>
