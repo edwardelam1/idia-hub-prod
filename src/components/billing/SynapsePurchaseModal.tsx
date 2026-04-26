@@ -45,7 +45,7 @@ const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 // Added BASE_RATE. Ensure this aligns with your global TRUTH, or replace with an import.
-const BASE_RATE = 1.0;
+const BASE_RATE = 0.75;
 
 const creditTiers = [
   { id: "tier1", name: "Tier 1", credits: 1000, rate: 0.7, popular: false, description: "Minimum bulk entry" },
