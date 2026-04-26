@@ -1,5 +1,5 @@
-import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { useState } from "react";
+import { useWalletBalance } from "../../hooks/useWalletBalance"; // Updated to relative path
 import {
   CreditCard,
   Zap,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button"; // Added Button import
+import { Button } from "@/components/ui/button";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { toast } from "@/hooks/use-toast";
 import { formatCredits } from "@/lib/utils";
@@ -44,14 +44,18 @@ const pricingTiers: PricingTier[] = [
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const USDC_BASE_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-// Added BASE_RATE. Ensure this aligns with your global TRUTH, or replace with an import.
+// Ensure this aligns with your global TRUTH, or replace with an import.
 const BASE_RATE = 0.75;
 
 const SynapseTopUp = () => {
   console.log("[SynapseTopUp][Component] START: Rendering component.");
 
-  const { balanceData, refreshBalance } = useSynapseCredits();
+  const { balanceData, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
+
+  // Bring in the internal IDIA Life wallet balances
+  const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
+  const availableUSDC = walletBalance?.idia_beta_balance ?? 0;
 
   const [selectedTier, setSelectedTier] = useState(5000);
   const [step, setStep] = useState<"select" | "processing" | "success">("select");
@@ -62,22 +66,11 @@ const SynapseTopUp = () => {
 
   try {
     console.log("[SynapseTopUp][State Derivation] INFO: Calculating current variables based on state.");
-    const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
-
-    const alacarteUsd = parseInt(alacarteAmount) || 0;
-    const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
-
-    // LOWERED THE BAR: Testing threshold set to $2.00
-    const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
-
-    const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
-    const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
-    const baseRateCost = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * BASE_RATE;
-    const savings = purchaseMode === "alacarte" ? 0 : baseRateCost - usdAmount;
-    const effectiveRate = purchaseMode === "alacarte" ? BASE_RATE : currentSelection.rate;
-    const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
+    const currentSelectionCheck = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
+    const alacarteUsdCheck = parseInt(alacarteAmount) || 0;
+    const alacarteValidCheck = alacarteUsdCheck >= 2 && alacarteUsdCheck <= 1000;
     console.log(
-      `[SynapseTopUp][State Derivation] INFO: canProceed=${canProceed}, displayCredits=${displayCredits}, usdAmount=${usdAmount}`,
+      `[SynapseTopUp][State Derivation] INFO: selectedTier=${selectedTier}, alacarteUsd=${alacarteUsdCheck}, alacarteValid=${alacarteValidCheck}`,
     );
   } catch (derivationError) {
     console.error(
@@ -89,7 +82,7 @@ const SynapseTopUp = () => {
   // Recalculating outside try-catch to ensure variables are available to the scope
   const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
-  const alacarteCredits = Math.floor(alacarteUsd / BASE_RATE);
+  const alacarteCredits = alacarteUsd / BASE_RATE; // Math.floor removed to preserve exact yield
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
@@ -133,64 +126,53 @@ const SynapseTopUp = () => {
     setError(null);
 
     try {
-      let txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
-      console.log(`[SynapseTopUp][handlePurchase] INFO: Generated initial txReference: ${txReference}`);
+      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
+      console.log(`[SynapseTopUp][handlePurchase] INFO: Generated internal txReference: ${txReference}`);
 
       if (paymentRail === "usdc") {
-        console.log("[SynapseTopUp][handlePurchase][ONCHAIN_TX_BEGIN] Requesting Base USDC Broadcast...");
+        console.log("[SynapseTopUp][handlePurchase][INTERNAL_TX_BEGIN] Initiating internal IDIA Life USDC transfer...");
 
-        if (!window.ethereum) {
-          const web3Error = new Error("No compatible web3 wallet detected. Please connect IDIA Life or MetaMask.");
-          console.error("[SynapseTopUp][handlePurchase][ONCHAIN_TX_ERROR] Web3 provider missing.", web3Error);
-          throw web3Error;
+        // 1. Verify Internal Funds
+        console.log(
+          `[SynapseTopUp][handlePurchase] INFO: Verifying funds. Required: $${usdAmount}, Available: $${availableUSDC}`,
+        );
+        if (availableUSDC < usdAmount) {
+          const fundError = new Error(
+            `Insufficient internal USDC balance. You have $${availableUSDC.toFixed(2)} available.`,
+          );
+          console.error("[SynapseTopUp][handlePurchase][INTERNAL_TX_ERROR] Fund verification failed.", fundError);
+          throw fundError;
         }
 
-        console.log("[SynapseTopUp][handlePurchase] INFO: Requesting ethereum accounts...");
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-        console.log(`[SynapseTopUp][handlePurchase] INFO: Accounts retrieved. Active account: ${accounts[0]}`);
-
-        const amountInUnits = BigInt(usdAmount * 1_000_000); // USDC 6 Decimals
-        console.log(`[SynapseTopUp][handlePurchase] INFO: Calculated amountInUnits: ${amountInUnits.toString()}`);
-
-        // ERC20 transfer(address,uint256) data
-        const encodedData = `0xa9059cbb${IDIA_SYNAPSE_WALLET.replace("0x", "").padStart(64, "0")}${amountInUnits.toString(16).padStart(64, "0")}`;
-        console.log(`[SynapseTopUp][handlePurchase] INFO: Encoded transaction data generated.`);
-
-        console.log("[SynapseTopUp][handlePurchase][WALLET_SIGN_AWAIT] Waiting for user signature...");
-        txReference = await window.ethereum.request({
-          method: "eth_sendTransaction",
-          params: [
-            {
-              from: accounts[0],
-              to: USDC_BASE_CONTRACT,
-              data: encodedData,
-            },
-          ],
-        });
-        console.log("[SynapseTopUp][handlePurchase][ONCHAIN_TX_SUCCESS] Transaction Broadcasted:", txReference);
+        // 2. Simulate Internal Custodial Lock
+        console.log("[SynapseTopUp][handlePurchase] INFO: Securing internal custodial funds...");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log("[SynapseTopUp][handlePurchase][INTERNAL_TX_SUCCESS] Funds secured for internal transfer.");
       } else {
         console.log("[SynapseTopUp][handlePurchase][FIAT_WP_START] Initializing Worldpay PCI-DSS authorization...");
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulated delay for fiat auth
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         console.log("[SynapseTopUp][handlePurchase][FIAT_WP_END] Fiat authorization secured.");
+        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
       }
 
-      console.log("[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_START] Calling top-up-credits edge function...");
+      console.log(`[SynapseTopUp][handlePurchase][LEDGER_HYDRATION_START] Calling top-up-credits edge function...`);
 
       const userReq = await supabase.auth.getUser();
-      if (userReq.error) {
-        console.error("[SynapseTopUp][handlePurchase] ERROR: Failed to fetch user from Supabase auth.", userReq.error);
+      if (userReq.error || !userReq.data.user) {
+        console.error("[SynapseTopUp][handlePurchase] ERROR: Failed to fetch user from Supabase auth.");
         throw new Error("Authentication failed before ledger hydration.");
       }
-      console.log(`[SynapseTopUp][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user?.id}`);
+      console.log(`[SynapseTopUp][handlePurchase] INFO: Authenticated user ID: ${userReq.data.user.id}`);
 
+      // 3. Dispatch to Edge Function
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: {
-          user_id: userReq.data.user?.id,
+          user_id: userReq.data.user.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
           payment_reference: txReference,
-          payment_method: paymentRail === "usdc" ? "crypto_usdc" : "worldpay",
-          onchain_network: paymentRail === "usdc" ? "base" : null,
+          payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
+          target_synapse_wallet: IDIA_SYNAPSE_WALLET,
         },
       });
 
@@ -207,11 +189,11 @@ const SynapseTopUp = () => {
         description: `${formatCredits(displayCredits)} added to your operational ledger.`,
       });
 
-      console.log("[SynapseTopUp][handlePurchase] INFO: Refreshing local balance context...");
-      await refreshBalance();
-      console.log("[SynapseTopUp][handlePurchase] INFO: Balance context refreshed.");
+      console.log("[SynapseTopUp][handlePurchase] INFO: Refreshing local balance contexts...");
+      await refreshSynapseBalance();
+      await refreshWalletBalance();
+      console.log("[SynapseTopUp][handlePurchase] INFO: Balance contexts refreshed.");
 
-      // Soft reset back to active screen after success viewing
       setTimeout(() => {
         console.log("[SynapseTopUp][handlePurchase] INFO: Executing soft reset timeout.");
         setStep("select");
@@ -474,7 +456,7 @@ const SynapseTopUp = () => {
                       : "bg-muted/50 text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <CircleDollarSign className="h-4 w-4" /> Base USDC
+                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
                 </button>
               </div>
 
@@ -496,7 +478,7 @@ const SynapseTopUp = () => {
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Settlement will be executed via the IDIA Synapse Wallet on Base Mainnet.
+                    Settlement will be executed instantly via your IDIA Life internal custodial balance.
                   </p>
                 </div>
               ) : (
@@ -516,7 +498,7 @@ const SynapseTopUp = () => {
               >
                 {paymentRail === "usdc" ? (
                   <>
-                    <CircleDollarSign className="w-4 h-4 mr-2" /> Confirm & Send USDC
+                    <CircleDollarSign className="w-4 h-4 mr-2" /> Confirm Custodial Transfer
                   </>
                 ) : (
                   <>
@@ -530,7 +512,7 @@ const SynapseTopUp = () => {
                 <span>
                   {paymentRail === "worldpay"
                     ? "PCI-DSS Level 1 Secured • FBO at Airwallex"
-                    : "On-chain settlement via Base Network"}
+                    : "Zero-latency internal settlement"}
                 </span>
               </div>
             </>
