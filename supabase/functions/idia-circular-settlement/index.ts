@@ -74,11 +74,11 @@ serve(async (req) => {
       
       const { data: profile } = await supabase
         .from('profiles')
-        .select('circle_wallet_address')
+        .select('wallet_address')
         .eq('id', contributor.user_id)
         .single();
         
-      const lifeWallet = profile?.circle_wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+      const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
 
       const yieldHash = await client.writeContract({
         address: USDC_ADDRESS,

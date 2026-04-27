@@ -43,7 +43,7 @@ serve(async (req) => {
     
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
-      .select('circle_wallet_address')
+      .select('wallet_address')
       .eq('id', userId)
       .single();
 
@@ -53,7 +53,7 @@ serve(async (req) => {
     }
 
     const SYSTEM_FALLBACK_WALLET = "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
-    const activeWallet = profile?.circle_wallet_address || SYSTEM_FALLBACK_WALLET;
+    const activeWallet = profile?.wallet_address || SYSTEM_FALLBACK_WALLET;
 
     if (activeWallet === SYSTEM_FALLBACK_WALLET) {
       console.warn(`⚠️ [WARNING: VALIDATING_INPUTS] User ${userId} lacks a registered wallet. Rerouting to System Fallback.`);
