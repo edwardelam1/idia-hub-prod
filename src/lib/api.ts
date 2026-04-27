@@ -99,7 +99,25 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     const { data, error } = await supabase.functions.invoke("best-friend-ai", {
       body: bodyParsed,
     });
+    // Add these routes to your fetchApi function to plug the leak:
 
+if (endpoint.startsWith("/api/v1/settlement/circular")) {
+  const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
+  const { data, error } = await supabase.functions.invoke("idia-circular-settlement", {
+    body: bodyParsed,
+  });
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
+  const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
+  const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", {
+    body: bodyParsed,
+  });
+  if (error) throw new Error(error.message);
+  return data as T;
+}
     if (error) {
       console.error("Supabase Edge Function Error:", error);
       throw new Error(error.message || "Failed to connect to Best Friend AI Edge Function");
