@@ -100,8 +100,7 @@ const SynapseTopUp = () => {
 
   // 2. SETTLEMENT
   const handlePurchase = async () => {
-    console.log("🚀 [SynapseTopUp] START: Initiating settlement.");
-    if (!canProceed) return;
+    console.log("🚀 [SynapseTopUp][handlePurchase] START: Initiating settlement sequence.");
     setStep("processing");
     setError(null);
 
@@ -109,54 +108,54 @@ const SynapseTopUp = () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (!session) throw new Error("Auth session missing.");
+      if (!session) throw new Error("Auth session missing. Please log in again.");
 
-      let userWallet = "";
-      if (paymentRail === "usdc") {
-        if (!window.ethereum) throw new Error("MetaMask not found.");
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send("eth_requestAccounts", []);
-        userWallet = accounts[0];
-      }
+      // FETCH FRESH ADDRESS: Don't rely on state, get it from the provider directly
+      if (!window.ethereum) throw new Error("MetaMask is required for on-chain settlement.");
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      const activeAddress = accounts[0];
+      if (!activeAddress) throw new Error("No active wallet address detected.");
+      console.log(`[SynapseTopUp][handlePurchase] INFO: Using wallet ${activeAddress}`);
 
+      // DISPATCH: Explicitly passing 'user_wallet'
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] START: Calling Edge Function.");
       const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", {
         body: {
           user_id: session.user.id,
           credit_amount: displayCredits,
           usd_amount: usdAmount,
-          user_wallet: userWallet,
-          payment_method: paymentRail === "usdc" ? "usdc" : "worldpay",
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          user_wallet: activeAddress, // THE TRUTH: Verified address string
+          payment_method: paymentRail,
         },
       });
 
-      if (functionError) throw functionError;
-
-      if (data?.error?.includes?.("ALLOWANCE")) {
-        console.warn("[SynapseTopUp] Handshake required: Allowance missing.");
-        setStep("need_allowance");
-        return;
+      if (functionError) {
+        console.error("[SynapseTopUp][handlePurchase][API_INVOKE] ERROR:", functionError);
+        throw functionError;
       }
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: API call complete.", data);
 
+      // SUCCESS HANDLING
       setStep("success");
-      toast({
-        title: "Hydration Successful",
-        description: `${formatCredits(displayCredits)} added.`,
-      });
+      toast({ title: "Hydration Successful", description: `${formatCredits(displayCredits)} added.` });
 
+      console.log("[SynapseTopUp][handlePurchase][REFRESH] START: Updating balances.");
       await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+      console.log("[SynapseTopUp][handlePurchase][REFRESH] END: Balances updated.");
+
       setTimeout(() => setStep("select"), 4000);
     } catch (err: any) {
-      console.error("🚨 [SynapseTopUp] FATAL:", err?.message);
-      const msg = err?.message || "Settlement failed.";
-      if (msg.includes("ALLOWANCE")) {
+      console.error("🚨 [SynapseTopUp][handlePurchase] FATAL:", err.message);
+
+      if (err.message?.includes("ALLOWANCE")) {
         setStep("need_allowance");
       } else {
-        setError(msg);
+        setError(err.message || "Settlement failed.");
         setStep("select");
       }
+    } finally {
+      console.log("[SynapseTopUp][handlePurchase] END: Logic execution complete.");
     }
   };
 
