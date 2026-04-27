@@ -363,7 +363,7 @@ const SynapseTopUp = () => {
               </div>
 
               <Button onClick={handlePurchase} disabled={!canProceed} className="w-full py-6 font-bold">
-                Confirm Settlement
+                FORCE SETTLEMENT V2
               </Button>
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
