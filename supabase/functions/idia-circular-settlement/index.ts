@@ -1,4 +1,3 @@
-// supabase/functions/process-data-sale/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
@@ -25,16 +24,14 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    console.info(`[BEGIN: process-data-sale] Pulse detected.`);
+    console.info(`[BEGIN: circular-settlement] Pulse detected.`);
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     
-    // --- 1. PAYLOAD PARSING (Renamed to prevent collisions) ---
     currentStep = "PARSING_PAYLOAD";
     const payoutData = await req.json(); 
     const { total_fiat_amount, buyer_id, contributing_users, payment_reference } = payoutData;
-    console.info(`[STATUS] Processing Ref: ${payment_reference}`);
+    console.info(`[STATUS] Processing Ref: ${payment_reference} for Amount: $${total_fiat_amount}`);
 
-    // --- 2. INFRASTRUCTURE SETUP ---
     currentStep = "CONFIGURING_BLOCKCHAIN";
     const account = privateKeyToAccount(Deno.env.get("PRIVATE_KEY") as `0x${string}`);
     const client = createWalletClient({ 
@@ -43,30 +40,44 @@ serve(async (req) => {
       transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org") 
     }).extend(publicActions);
 
-    // --- 3. STEP 4: UNBUFFERED PULL (Ingestion) ---
+    currentStep = "FETCHING_MASTER_NONCE";
+    let masterNonce = await client.getTransactionCount({ 
+      address: account.address, 
+      blockTag: 'pending' 
+    });
+    console.info(`[STATUS] Master Nonce secured at: ${masterNonce}`);
+
     currentStep = "BROADCASTING_INGESTION";
     console.info(`[BEGIN: Step 4] Ingestion: Treasury -> Register ($${total_fiat_amount})`);
+    
     const ingestionHash = await client.writeContract({
       address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: "transfer",
       args: [SYSTEM_CASH_REGISTER, parseUnits(total_fiat_amount.toString(), 6)],
       account,
+      nonce: masterNonce
     });
     
+    masterNonce++; // Local increment to stay ahead of RPC lag
+
     const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
     if (ingestionReceipt.status !== 'success') throw new Error(`Ingestion Reverted.`);
-    console.info(`[END: Step 4] Ingestion Confirmed.`);
+    console.info(`[END: Step 4] Ingestion Confirmed. Hash: ${ingestionHash}`);
 
-    // --- 4. STEP 6: DATA YIELD EGRESS (Payout) ---
     currentStep = "DISSEMINATING_YIELD";
     const royaltyPool = total_fiat_amount * REVENUE_SPLIT.DATA_YIELD;
     const contributorPayouts = [];
 
     for (const contributor of contributing_users) {
-      console.info(`[BEGIN: Step 6] Payout for: ${contributor.user_id}`);
+      console.info(`[BEGIN: Step 6] Payout for: ${contributor.user_id} using Nonce: ${masterNonce}`);
       
-      const { data: profile } = await supabase.from('profiles').select('circle_wallet_address').eq('id', contributor.user_id).single();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('circle_wallet_address')
+        .eq('id', contributor.user_id)
+        .single();
+        
       const lifeWallet = profile?.circle_wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
 
       const yieldHash = await client.writeContract({
@@ -75,11 +86,13 @@ serve(async (req) => {
         functionName: "transfer",
         args: [lifeWallet as `0x${string}`, parseUnits(royaltyPool.toFixed(6), 6)],
         account,
+        nonce: masterNonce
       });
+
+      masterNonce++; // Maintain strict local sequence
 
       const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash });
 
-      // Audit Log
       await supabase.from('synapse_credit_ledger').insert({
         user_id: contributor.user_id,
         amount: royaltyPool,
@@ -93,12 +106,11 @@ serve(async (req) => {
       });
 
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });
-      console.info(`[END: Step 6] Payout complete for ${contributor.user_id}`);
+      console.info(`[END: Step 6] Payout complete for ${contributor.user_id}. Hash: ${yieldHash}`);
     }
 
-    // --- 5. STEP 7: SILO HYDRATION (Revenue Split) ---
     currentStep = "HYDRATING_PROTOCOL_REVENUE";
-    console.info(`[BEGIN: Step 7] 60/10 Split.`);
+    console.info(`[BEGIN: Step 7] 60/10 Split Hydration.`);
 
     const corporateRevenue = total_fiat_amount * 0.60;
     const escrowWarChest = total_fiat_amount * 0.10;
@@ -129,15 +141,22 @@ serve(async (req) => {
     ]);
 
     console.info(`[END: Step 7] Silos Hydrated.`);
-    return new Response(JSON.stringify({ success: true, ingestionHash, payouts: contributorPayouts }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      ingestionHash, 
+      payouts: contributorPayou\ts 
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200
     });
 
   } catch (error: any) {
     console.error(`🚨 [FATAL STALL: ${currentStep}]: ${error.message}`);
-    return new Response(JSON.stringify({ error: error.message, failed_at: currentStep }), { 
-      status: 500, 
+    return new Response(JSON.stringify({ 
+      error: error.message, 
+      failed_at: currentStep 
+    }), { 
+      status: 400, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }

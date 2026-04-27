@@ -38,7 +38,29 @@ serve(async (req) => {
     if (userId === "00000000-0000-0000-0000-000000000000") {
       throw new Error("Rejected: anonymous identity is not permitted");
     }
+    console.info(`[BEGIN: VALIDATING_INPUTS] Interrogating profile for User ID: ${userId}`);
+    const adminClient = createClient(supabaseUrl, serviceRoleKey); // Lifted up for profile query
+    
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('circle_wallet_address')
+      .eq('id', userId)
+      .single();
 
+    if (profileError && profileError.code !== 'PGRST116') { 
+      console.error(`🚨 [FATAL STALL: VALIDATING_INPUTS] Database query failed: ${profileError.message}`);
+      throw new Error(`Profile interrogation failed: ${profileError.message}`);
+    }
+
+    const SYSTEM_FALLBACK_WALLET = "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+    const activeWallet = profile?.circle_wallet_address || SYSTEM_FALLBACK_WALLET;
+
+    if (activeWallet === SYSTEM_FALLBACK_WALLET) {
+      console.warn(`⚠️ [WARNING: VALIDATING_INPUTS] User ${userId} lacks a registered wallet. Rerouting to System Fallback.`);
+    } else {
+      console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
+    }
+    console.info(`[END: VALIDATING_INPUTS] Active wallet secured.`);
     const body = await req.json();
     const {
       client_id,
@@ -64,7 +86,6 @@ serve(async (req) => {
     const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
 
     // 3. ATOMIC LEDGER AND EGRESS WRITE
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const referenceId = `SYN-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     const [ledgerResult, egressResult] = await Promise.all([
@@ -97,7 +118,26 @@ serve(async (req) => {
         .select("id")
         .single(),
     ]);
+    console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline...`);
+    const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
+    
+    const cashierResponse = await fetch(cashierUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        total_fiat_amount: 0.75, // The exact fiat equivalent for the 1 CR deduction
+        buyer_id: userId,
+        payment_reference: referenceId,
+        contributing_users: [{ user_id: userId }] 
+      })
+    });
 
+    if (!cashierResponse.ok) {
+        const errText = await cashierResponse.text();
+        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${errText}`);
+        throw new Error(`Circular Settlement Failed: ${errText}`);
+    }
+    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed to Base.`);
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
