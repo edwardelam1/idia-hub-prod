@@ -6547,6 +6547,7 @@ export type Database = {
         | "settlement"
         | "fbo_dissemination"
         | "FREE_COMPUTE"
+        | "INTERNAL_DEPOSIT"
       sync_status: "pending" | "processing" | "completed" | "failed"
       user_role: "owner" | "manager" | "employee" | "warehouse_associate"
     }
@@ -6689,6 +6690,7 @@ export const Constants = {
         "settlement",
         "fbo_dissemination",
         "FREE_COMPUTE",
+        "INTERNAL_DEPOSIT",
       ],
       sync_status: ["pending", "processing", "completed", "failed"],
       user_role: ["owner", "manager", "employee", "warehouse_associate"],
