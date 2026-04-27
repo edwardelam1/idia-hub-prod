@@ -57,14 +57,12 @@ const SynapseTopUp = () => {
   const [alacarteAmount, setAlacarteAmount] = useState("");
   const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
 
-  // State derivation
   const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = alacarteUsd / BASE_RATE;
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
-  const usdAmount =
-    purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
+  const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleAlacarteInput = (val: string) => {
@@ -74,79 +72,123 @@ const SynapseTopUp = () => {
 
   // 1. HANDSHAKE: Enable USDC Allowance
   const handleEnableUSDC = async () => {
-    console.log("[SynapseTopUp] START: Requesting USDC Allowance...");
+    console.log("[SynapseTopUp][handleEnableUSDC] START: Requesting USDC Allowance execution.");
     setStep("processing");
     setError(null);
     try {
-      if (!window.ethereum) throw new Error("MetaMask not found.");
+      console.log("[SynapseTopUp][handleEnableUSDC][PROVIDER] START: Checking window.ethereum instance.");
+      if (!window.ethereum) {
+        console.error("[SynapseTopUp][handleEnableUSDC][PROVIDER] FATAL: window.ethereum is undefined.");
+        throw new Error("MetaMask not found.");
+      }
+      console.log("[SynapseTopUp][handleEnableUSDC][PROVIDER] END: Ethereum instance located.");
+
+      console.log("[SynapseTopUp][handleEnableUSDC][SIGNER] START: Initializing provider and signer.");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      console.log("[SynapseTopUp][handleEnableUSDC][SIGNER] END: Signer initialized.");
+
+      console.log("[SynapseTopUp][handleEnableUSDC][CONTRACT] START: Connecting to USDC contract and broadcasting tx.");
       const contract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
-
       const tx = await contract.approve(TREASURY_ADDRESS, ethers.MaxUint256);
+      
       toast({ title: "Broadcasting Approval...", description: "Please wait for Base confirmation." });
+      
+      console.log(`[SynapseTopUp][handleEnableUSDC][CONTRACT] PENDING: Waiting for tx confirmation ${tx.hash}...`);
       await tx.wait();
+      console.log("[SynapseTopUp][handleEnableUSDC][CONTRACT] END: Transaction confirmed on-chain.");
 
-      console.log("[SynapseTopUp] SUCCESS: Allowance granted.");
+      console.log("[SynapseTopUp][handleEnableUSDC] SUCCESS: Complete allowance granted.");
       toast({ title: "USDC Enabled", description: "You can now settle on-chain." });
       setStep("select");
       handlePurchase();
     } catch (err: any) {
-      console.error("[SynapseTopUp] Allowance Failed:", err.message);
+      console.error("[SynapseTopUp][handleEnableUSDC] FATAL: Allowance Failed. Details:", err.message);
       setError("Approval failed. Permission is required to move USDC.");
       setStep("need_allowance");
+    } finally {
+      console.log("[SynapseTopUp][handleEnableUSDC] END: USDC Allowance execution finished.");
     }
   };
 
-  // 2. SETTLEMENT
+  // 2. SETTLEMENT (HYDRATED & HARDENED)
   const handlePurchase = async () => {
-    console.log("🚀 [SynapseTopUp][handlePurchase] START: Initiating settlement sequence.");
+    console.log("🚀 [SynapseTopUp][handlePurchase] START: Initiating verified settlement sequence.");
     setStep("processing");
     setError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error("Auth session missing. Please log in again.");
+      // FIX: Hardened Auth Destructuring
+      console.log("[SynapseTopUp][handlePurchase][AUTH] START: Fetching Supabase session.");
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Supabase returned an auth error.", sessionError.message);
+        throw new Error(`Authentication error: ${sessionError.message}`);
+      }
+      if (!sessionData || !sessionData.session) {
+        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Session data is null or completely missing.");
+        throw new Error("Auth session missing. Please log in again.");
+      }
+      
+      const session = sessionData.session;
+      console.log(`[SynapseTopUp][handlePurchase][AUTH] END: Auth verified for user ${session.user.id}.`);
 
-      // FETCH FRESH ADDRESS: Don't rely on state, get it from the provider directly
-      if (!window.ethereum) throw new Error("MetaMask is required for on-chain settlement.");
+      console.log("[SynapseTopUp][handlePurchase][PROVIDER] START: Requesting active Ethereum accounts.");
+      if (!window.ethereum) {
+        console.error("[SynapseTopUp][handlePurchase][PROVIDER] FATAL: MetaMask is missing from window.");
+        throw new Error("MetaMask is required for on-chain settlement.");
+      }
+      
       const provider = new ethers.BrowserProvider(window.ethereum);
       const accounts = await provider.send("eth_requestAccounts", []);
       const activeAddress = accounts[0];
-      if (!activeAddress) throw new Error("No active wallet address detected.");
-      console.log(`[SynapseTopUp][handlePurchase] INFO: Using wallet ${activeAddress}`);
+      console.log(`[SynapseTopUp][handlePurchase][PROVIDER] END: Accounts retrieved.`);
 
-      // DISPATCH: Explicitly passing 'user_wallet'
-      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] START: Calling Edge Function.");
+      console.log("[SynapseTopUp][handlePurchase][VALIDATION] START: Checking address sovereignty.");
+      if (!activeAddress || typeof activeAddress !== 'string' || !activeAddress.startsWith('0x')) {
+        console.error(`[SynapseTopUp][handlePurchase][VALIDATION] FATAL: Invalid wallet address detected: ${activeAddress}`);
+        throw new Error("WALLET_ERROR: Please unlock MetaMask and ensure you are on the Base network.");
+      }
+      console.log(`[SynapseTopUp][handlePurchase][VALIDATION] END: Using verified wallet ${activeAddress}`);
+
+      const payload = {
+        user_id: session.user.id,
+        credit_amount: displayCredits,
+        usd_amount: usdAmount,
+        user_wallet: activeAddress, 
+        payment_method: paymentRail,
+      };
+
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] START: Dispatching settlement payload to Edge Function.", JSON.stringify(payload));
       const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", {
-        body: {
-          user_id: session.user.id,
-          credit_amount: displayCredits,
-          usd_amount: usdAmount,
-          user_wallet: activeAddress, // THE TRUTH: Verified address string
-          payment_method: paymentRail,
-        },
+        body: payload,
       });
 
       if (functionError) {
-        console.error("[SynapseTopUp][handlePurchase][API_INVOKE] ERROR:", functionError);
+        console.error("[SynapseTopUp][handlePurchase][API_INVOKE] FATAL: Edge function rejected request.", functionError);
         throw functionError;
       }
-      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: API call complete.", data);
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: Edge Function returned successful response.", data);
+      
+      if (data?.error?.includes("ALLOWANCE")) {
+        console.warn("[SynapseTopUp][handlePurchase] HANDSHAKE REQUIRED: Allowance missing on-chain. Routing to approval flow.");
+        setStep("need_allowance");
+        return;
+      }
 
-      // SUCCESS HANDLING
+      console.log("[SynapseTopUp][handlePurchase] SUCCESS: Settlement confirmed.");
+
       setStep("success");
       toast({ title: "Hydration Successful", description: `${formatCredits(displayCredits)} added.` });
 
-      console.log("[SynapseTopUp][handlePurchase][REFRESH] START: Updating balances.");
+      console.log("[SynapseTopUp][handlePurchase][REFRESH] START: Syncing UI state across contexts.");
       await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
-      console.log("[SynapseTopUp][handlePurchase][REFRESH] END: Balances updated.");
+      console.log("[SynapseTopUp][handlePurchase][REFRESH] END: UI Contexts fully updated.");
 
       setTimeout(() => setStep("select"), 4000);
     } catch (err: any) {
-      console.error("🚨 [SynapseTopUp][handlePurchase] FATAL:", err.message);
+      console.error("🚨 [SynapseTopUp][handlePurchase] FATAL EXCEPTION CAUGHT:", err.message);
 
       if (err.message?.includes("ALLOWANCE")) {
         setStep("need_allowance");
@@ -155,7 +197,7 @@ const SynapseTopUp = () => {
         setStep("select");
       }
     } finally {
-      console.log("[SynapseTopUp][handlePurchase] END: Logic execution complete.");
+      console.log("[SynapseTopUp][handlePurchase] END: Logic execution fully complete.");
     }
   };
 
@@ -167,8 +209,7 @@ const SynapseTopUp = () => {
           Fund Synapse Credits
         </h1>
         <p className="text-muted-foreground mt-2">
-          Purchase Synapse Credits using your internal IDIA Life balance. Move custodial USDC to Synapse instantly to
-          fuel AI data operations.
+          Real-time settlement on <strong>Base Mainnet</strong>. Move custodial USDC to Synapse instantly to fuel AI data operations.
         </p>
       </div>
 
