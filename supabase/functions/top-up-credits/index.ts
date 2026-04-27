@@ -1,67 +1,152 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// supabase/functions/top-up-credits/index.ts
+
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
+// Hardcoded ABI saves us from importing Viem's massive constants library
+const ERC20_ABI = [{ 
+  name: "transfer", type: "function", stateMutability: "nonpayable", 
+  inputs: [{ name: "to", type: "address" }, { name: "value", type: "uint256" }],
+  outputs: [{ name: "", type: "bool" }] 
+}];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+console.log("⚡ [Pre-Flight]: Unified Full Hydration Engine Booting...");
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  console.log("🚨 [START]: Invocation received. Initializing core parameters...");
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // 1. DYNAMIC IMPORTS (Prevents Deno Edge memory timeout)
+    console.log("🚨 [EXECUTION]: Loading Supabase Client...");
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.42.7");
 
-    const { user_id, credit_amount, usd_amount, payment_reference } = await req.json();
+    // 2. PARSING & NORMALIZING PAYLOAD
+    const body = await req.json();
+    
+    // Supports both the old Worldpay payload and the new On-Chain payload
+    const user_id = body.user_id;
+    const amount = Number(body.amount || body.credit_amount || 0);
+    const routing = body.routing || "fiat"; 
+    const recipient_address = body.recipient_address;
+    const usd_amount = body.usd_amount || amount;
+    const payment_reference = body.payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
 
-    if (!user_id || !credit_amount || credit_amount <= 0) {
-      return new Response(JSON.stringify({ error: "Invalid parameters" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    console.log(`🚨 [EXECUTION]: Payload parsed. User: ${user_id} | Amount: ${amount} | Routing: ${routing}`);
+
+    if (!user_id || amount <= 0) {
+      throw new Error("Invalid parameters: missing valid user_id or amount.");
     }
 
-    const txId = payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    let txHash = payment_reference;
 
-    // Write to synapse_credit_ledger (append-only, SUM-based balance)
-    const { data: entry, error } = await supabase
-      .from("synapse_credit_ledger")
-      .insert({
-        user_id,
-        amount: Number(credit_amount),
-        entry_type: "deposit",
-        status: "SETTLED",
-        metadata: {
-          usd_amount,
-          payment_method: "worldpay",
-          payment_reference: txId,
-        },
-      })
-      .select()
+    // --- ROUTE A: ON-CHAIN USDC SETTLEMENT ---
+    if (routing === "on-chain") {
+      console.log("🚨 [EXECUTION]: On-Chain routing detected. Dynamically loading Viem...");
+      const { createWalletClient, http, parseUnits, isAddress, getAddress } = await import("https://esm.sh/viem@2.9.20");
+      const { privateKeyToAccount } = await import("https://esm.sh/viem@2.9.20/accounts");
+      const { base } = await import("https://esm.sh/viem@2.9.20/chains");
+
+      if (!recipient_address || !isAddress(recipient_address)) {
+        throw new Error(`Invalid recipient address format: ${recipient_address}`);
+      }
+      
+      const safeAddress = getAddress(recipient_address);
+      let rawPk = Deno.env.get("PRIVATE_KEY") || "";
+      if (!rawPk.startsWith("0x")) rawPk = "0x" + rawPk;
+      
+      const account = privateKeyToAccount(rawPk as `0x${string}`);
+      const client = createWalletClient({
+        account,
+        chain: base,
+        transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org")
+      });
+
+      console.log(`🚨 [EXECUTION]: Broadcasting ${amount} USDC to Base Mainnet...`);
+      const parsedAmount = parseUnits(amount.toString(), 6);
+      
+      txHash = await client.writeContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [safeAddress, parsedAmount],
+        chain: base,
+        account,
+      });
+      console.log(`🚨 [EXECUTION]: On-Chain Transfer Success! Hash: ${txHash}`);
+    }
+
+    // --- ROUTE B/COMMON: LEDGER & HYDRATION ---
+    console.log("🚨 [EXECUTION]: Securing Synapse Credit Ledger Audit Trail...");
+    
+    const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
+      user_id, 
+      amount: -amount, // Matches your verified DEBIT enum structure
+      transaction_type: "INTERNAL_DEPOSIT", 
+      entry_type: "DEBIT", 
+      status: "completed", 
+      tx_hash: txHash,
+      metadata: { 
+        class: "Synapse_Purchase", 
+        fund: "CORPORATE_REVENUE",
+        usd_amount: usd_amount,
+        payment_reference: payment_reference,
+        routing: routing
+      }
+    });
+    
+    if (ledgerError) {
+      console.error(`🚨 [LEDGER STALL]: ${ledgerError.message}`);
+      throw new Error(`Ledger Error: ${ledgerError.message}`);
+    }
+
+    console.log("🚨 [EXECUTION]: Ledger secured. Hydrating CORPORATE_REVENUE column...");
+    
+    const { data: wallet, error: fetchError } = await supabase
+      .from('wallets')
+      .select('corporate_revenue')
+      .eq('user_id', user_id)
       .single();
 
-    if (error) throw error;
+    if (fetchError) {
+      console.error(`🚨 [FETCH STALL]: ${fetchError.message}`);
+      throw new Error(`Wallet Fetch Error: ${fetchError.message}`);
+    }
 
-    // Get new balance via SUM-based RPC
-    const { data: newBalance } = await supabase.rpc("get_synapse_balance", { uid: user_id });
+    const newRev = (Number(wallet?.corporate_revenue) || 0) + amount;
+    
+    const { error: updateError } = await supabase.from('wallets').update({ 
+      corporate_revenue: newRev, 
+      updated_at: new Date().toISOString()
+    }).eq('user_id', user_id);
+    
+    if (updateError) {
+      console.error(`🚨 [UPDATE STALL]: ${updateError.message}`);
+      throw new Error(`Wallet Update Error: ${updateError.message}`);
+    }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        new_balance: Number(newBalance ?? 0),
-        entry_id: entry.id,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+    console.log(`🚨 [END]: Full Hydration Settlement Complete. Corporate Revenue: ${newRev}`);
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      hash: txHash, 
+      revenue_total: newRev 
+    }), { 
       headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200
+    });
+
+  } catch (error: any) {
+    console.error(`🚨 [FATAL EXCEPTION]: ${error.message}`);
+    return new Response(JSON.stringify({ error: error.message }), { 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }, 
+      status: 400 
     });
   }
 });
