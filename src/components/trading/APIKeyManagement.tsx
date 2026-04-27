@@ -12,12 +12,25 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Copy, Eye, EyeOff, Key, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Copy, Eye, EyeOff, Key, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+
+// 1. STRICT TYPING: Aligned with exact Supabase schema (user_id instead of created_by)
+interface APIKeyRecord {
+  id: string;
+  user_id: string; // FIXED SCHEMA MAPPING
+  name: string;
+  key_prefix: string;
+  key_hash: string;
+  environment: string;
+  status: "active" | "revoked";
+  created_at: string;
+  last_used_at: string | null;
+}
 
 function generateApiKey(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -39,33 +52,52 @@ export const APIKeyManagement = () => {
   const { user } = useAuth();
   const userId = user?.user_id;
   const queryClient = useQueryClient();
+  
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [newKeyName, setNewKeyName] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null);
 
-  const { data: apiKeys = [], isLoading } = useQuery({
+  // 2. HYDRATED STATE: Typed Query Fetching
+  const { data: apiKeys = [], isLoading } = useQuery<APIKeyRecord[]>({
     queryKey: ["api-keys", userId],
     queryFn: async () => {
-      if (!userId) return [];
-      const { data, error } = await supabase.from("api_keys").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      console.log("[APIKeyManagement][FetchQuery] START: Retrieving ledger keys for user.");
+      if (!userId) {
+        console.warn("[APIKeyManagement][FetchQuery] WARN: Execution halted. User ID missing.");
+        return [];
+      }
+      const { data, error } = await supabase
+        .from("api_keys")
+        .select("*")
+        .order("created_at", { ascending: false });
+        
+      if (error) {
+        console.error("[APIKeyManagement][FetchQuery] FATAL:", error.message);
+        throw error;
+      }
+      
+      console.log(`[APIKeyManagement][FetchQuery] END: Successfully retrieved ${data?.length || 0} keys.`);
+      return data as APIKeyRecord[];
     },
     enabled: !!userId,
   });
 
+  // 3. SECURE MUTATION: Generation & Hashing
   const createKey = useMutation({
     mutationFn: async (keyName: string) => {
+      console.log("🚀 [APIKeyManagement][createKey] START: Generating new cryptographic key.");
       if (!userId) throw new Error("Not authenticated");
+      
       const fullKey = generateApiKey();
       const keyHash = await hashKey(fullKey);
       const keyPrefix = fullKey.slice(0, 13);
 
-      // Using the new 'api_keys' table schema
+      console.log(`[APIKeyManagement][createKey] INFO: Hashing complete. Injecting prefix ${keyPrefix} into ledger.`);
+
       const { error } = await supabase.from("api_keys").insert([
         {
-          created_by: userId,
+          user_id: userId, // FIXED SCHEMA MAPPING
           name: keyName,
           key_prefix: keyPrefix,
           key_hash: keyHash,
@@ -73,7 +105,12 @@ export const APIKeyManagement = () => {
         },
       ]);
 
-      if (error) throw error;
+      if (error) {
+        console.error("[APIKeyManagement][createKey] FATAL: Ledger insertion rejected.", error.message);
+        throw error;
+      }
+      
+      console.log("[APIKeyManagement][createKey] END: Key officially registered.");
       return fullKey;
     },
     onSuccess: (fullKey) => {
@@ -81,13 +118,21 @@ export const APIKeyManagement = () => {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       toast.success("API key generated — copy it now, it won't be shown again");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
   });
 
+  // 4. REVOCATION PROTOCOL
   const revokeKey = useMutation({
     mutationFn: async (keyId: string) => {
+      console.log(`🚀 [APIKeyManagement][revokeKey] START: Commencing revocation for key ${keyId}.`);
       const { error } = await supabase.from("api_keys").update({ status: "revoked" }).eq("id", keyId);
-      if (error) throw error;
+      if (error) {
+         console.error("[APIKeyManagement][revokeKey] FATAL: Status update failed.", error.message);
+         throw error;
+      }
+      console.log(`[APIKeyManagement][revokeKey] END: Key ${keyId} successfully revoked.`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
@@ -185,7 +230,7 @@ export const APIKeyManagement = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {apiKeys.map((keyData: any) => {
+              {apiKeys.map((keyData: APIKeyRecord) => {
                 const isVisible = visibleKeys[keyData.id] ?? false;
                 return (
                   <div key={keyData.id} className="border rounded-lg p-4 space-y-3">
