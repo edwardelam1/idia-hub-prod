@@ -38,8 +38,6 @@ const mockHandlers: Record<string, (body?: any) => any> = {
     ],
     total_count: 2,
   }),
-  // DELT transfer now handled via live edge function below
-  // REMOVED the mock handler for /api/v1/best-friend/chat so it no longer traps the request
   "/api/v1/billing/worldpay/initiate": (body?: any) => ({
     session_id: `WP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     payment_url: "#worldpay-mock",
@@ -65,22 +63,6 @@ const mockHandlers: Record<string, (body?: any) => any> = {
         anonymization_level: "k-anon-10",
         last_updated: "2026-02-27T07:45:00Z",
       },
-      {
-        region: "GB-LND",
-        device_os: "iOS 18.2",
-        hri_score: 78.9,
-        record_count: 672,
-        anonymization_level: "k-anon-5",
-        last_updated: "2026-02-26T22:30:00Z",
-      },
-      {
-        region: "DE-BY",
-        device_os: "Android 15",
-        hri_score: 93.1,
-        record_count: 418,
-        anonymization_level: "k-anon-8",
-        last_updated: "2026-02-27T06:15:00Z",
-      },
     ],
   }),
 };
@@ -92,63 +74,46 @@ function getMockResponse(endpoint: string, body?: any): any | null {
 }
 
 export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  // ROUTE AI TRAFFIC DIRECTLY TO SUPABASE EDGE FUNCTION
-  if (endpoint.startsWith("/api/v1/best-friend/chat")) {
-    const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
+  const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
 
+  // 1. ROUTE CIRCULAR SETTLEMENT TO LIVE EDGE FUNCTION (Fixes Auth Leak)
+  if (endpoint.startsWith("/api/v1/settlement/circular")) {
+    const { data, error } = await supabase.functions.invoke("idia-circular-settlement", {
+      body: bodyParsed,
+    });
+    if (error) throw new Error(error.message || "Failed to execute Settlement Protocol");
+    return data as T;
+  }
+
+  // 2. ROUTE CRYPTO WITHDRAWALS TO LIVE EDGE FUNCTION (Fixes Auth Leak)
+  if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
+    const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", {
+      body: bodyParsed,
+    });
+    if (error) throw new Error(error.message || "Failed to execute Withdrawal Protocol");
+    return data as T;
+  }
+
+  // 3. ROUTE DELT TRANSFER TO LIVE EDGE FUNCTION
+  if (endpoint.startsWith("/api/v1/delt/transfer")) {
+    const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
+      body: bodyParsed,
+    });
+    if (error) throw new Error(error.message || "Failed to execute Liability Shield protocol");
+    return data as T;
+  }
+
+  // 4. ROUTE AI TRAFFIC DIRECTLY TO SUPABASE EDGE FUNCTION
+  if (endpoint.startsWith("/api/v1/best-friend/chat")) {
     const { data, error } = await supabase.functions.invoke("best-friend-ai", {
       body: bodyParsed,
     });
-    // Add these routes to your fetchApi function to plug the leak:
-
-if (endpoint.startsWith("/api/v1/settlement/circular")) {
-  const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
-  const { data, error } = await supabase.functions.invoke("idia-circular-settlement", {
-    body: bodyParsed,
-  });
-  if (error) throw new Error(error.message);
-  return data as T;
-}
-
-if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
-  const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
-  const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", {
-    body: bodyParsed,
-  });
-  if (error) throw new Error(error.message);
-  return data as T;
-}
-    if (error) {
-      console.error("Supabase Edge Function Error:", error);
-      throw new Error(error.message || "Failed to connect to Best Friend AI Edge Function");
-    }
-
+    if (error) throw new Error(error.message || "Failed to connect to Best Friend AI");
     return data as T;
   }
 
-  // ROUTE DELT TRANSFER TO LIVE EDGE FUNCTION
-  if (endpoint.startsWith("/api/v1/delt/transfer")) {
-    const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
-
-    const { data: session } = await supabase.auth.getSession();
-    const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
-      body: bodyParsed,
-      headers: session?.session?.access_token
-        ? { Authorization: `Bearer ${session.session.access_token}` }
-        : {},
-    });
-
-    if (error) {
-      console.error("Liability Shield Edge Function Error:", error);
-      throw new Error(error.message || "Failed to execute Liability Shield protocol");
-    }
-
-    return data as T;
-  }
-
-  // FALLBACK MOCK LOGIC FOR OTHER UNFINISHED ENDPOINTS
+  // 5. FALLBACK MOCK LOGIC FOR UNFINISHED ENDPOINTS
   if (!API_BASE_URL) {
-    const bodyParsed = options.body ? JSON.parse(options.body as string) : undefined;
     const mock = getMockResponse(endpoint, bodyParsed);
     if (mock) {
       await new Promise((resolve) => setTimeout(resolve, 800));
@@ -157,9 +122,8 @@ if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
     throw new Error(`No mock handler for endpoint: ${endpoint}`);
   }
 
-  // STANDARD FETCH LOGIC
+  // 6. STANDARD FETCH LOGIC (Fallback for external APIs)
   const token = localStorage.getItem("idia_auth_token");
-
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
