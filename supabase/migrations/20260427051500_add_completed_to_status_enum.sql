@@ -1,0 +1,1 @@
+ALTER TYPE public.idia_transaction_status ADD VALUE IF NOT EXISTS 'completed';
