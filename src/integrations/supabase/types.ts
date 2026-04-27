@@ -1551,6 +1551,7 @@ export type Database = {
           batch_checksum: string | null
           bundle_id: string | null
           buyer_intent: string | null
+          circle_idempotency_key: string | null
           client_id: string | null
           consumption_weight: number | null
           country_of_origin: string
@@ -1564,9 +1565,12 @@ export type Database = {
           intent_type: string | null
           liability_token_hash: string | null
           manifest_hashes: string[] | null
+          on_chain_status: string | null
+          on_chain_tx_hash: string | null
           pseudo_user_id: string | null
           purchaser_id: string | null
           query_complexity: number | null
+          settled_at: string | null
           settlement_status: string | null
           staged_data_ids: string[] | null
           status: string | null
@@ -1580,6 +1584,7 @@ export type Database = {
           batch_checksum?: string | null
           bundle_id?: string | null
           buyer_intent?: string | null
+          circle_idempotency_key?: string | null
           client_id?: string | null
           consumption_weight?: number | null
           country_of_origin?: string
@@ -1593,9 +1598,12 @@ export type Database = {
           intent_type?: string | null
           liability_token_hash?: string | null
           manifest_hashes?: string[] | null
+          on_chain_status?: string | null
+          on_chain_tx_hash?: string | null
           pseudo_user_id?: string | null
           purchaser_id?: string | null
           query_complexity?: number | null
+          settled_at?: string | null
           settlement_status?: string | null
           staged_data_ids?: string[] | null
           status?: string | null
@@ -1609,6 +1617,7 @@ export type Database = {
           batch_checksum?: string | null
           bundle_id?: string | null
           buyer_intent?: string | null
+          circle_idempotency_key?: string | null
           client_id?: string | null
           consumption_weight?: number | null
           country_of_origin?: string
@@ -1622,9 +1631,12 @@ export type Database = {
           intent_type?: string | null
           liability_token_hash?: string | null
           manifest_hashes?: string[] | null
+          on_chain_status?: string | null
+          on_chain_tx_hash?: string | null
           pseudo_user_id?: string | null
           purchaser_id?: string | null
           query_complexity?: number | null
+          settled_at?: string | null
           settlement_status?: string | null
           staged_data_ids?: string[] | null
           status?: string | null
@@ -3973,6 +3985,7 @@ export type Database = {
           created_at: string | null
           document_type: string | null
           ein: string | null
+          fbo_account_id: string | null
           gender: string | null
           health_goals: string[] | null
           id: string
@@ -3996,6 +4009,7 @@ export type Database = {
           trust_score: number | null
           updated_at: string | null
           user_id: string
+          wallet_address: string | null
         }
         Insert: {
           account_type?: string | null
@@ -4008,6 +4022,7 @@ export type Database = {
           created_at?: string | null
           document_type?: string | null
           ein?: string | null
+          fbo_account_id?: string | null
           gender?: string | null
           health_goals?: string[] | null
           id?: string
@@ -4031,6 +4046,7 @@ export type Database = {
           trust_score?: number | null
           updated_at?: string | null
           user_id: string
+          wallet_address?: string | null
         }
         Update: {
           account_type?: string | null
@@ -4043,6 +4059,7 @@ export type Database = {
           created_at?: string | null
           document_type?: string | null
           ein?: string | null
+          fbo_account_id?: string | null
           gender?: string | null
           health_goals?: string[] | null
           id?: string
@@ -4066,6 +4083,7 @@ export type Database = {
           trust_score?: number | null
           updated_at?: string | null
           user_id?: string
+          wallet_address?: string | null
         }
         Relationships: []
       }
@@ -5227,6 +5245,8 @@ export type Database = {
           balance_idia_beta: number | null
           balance_previous: number | null
           balance_usdc_stable: number | null
+          blockchain_tx_hash: string | null
+          circle_idempotency_key: string | null
           circle_transfer_id: string | null
           created_at: string | null
           description: string | null
@@ -5257,6 +5277,8 @@ export type Database = {
           balance_idia_beta?: number | null
           balance_previous?: number | null
           balance_usdc_stable?: number | null
+          blockchain_tx_hash?: string | null
+          circle_idempotency_key?: string | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -5287,6 +5309,8 @@ export type Database = {
           balance_idia_beta?: number | null
           balance_previous?: number | null
           balance_usdc_stable?: number | null
+          blockchain_tx_hash?: string | null
+          circle_idempotency_key?: string | null
           circle_transfer_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -6017,52 +6041,19 @@ export type Database = {
         }
         Relationships: []
       }
-      user_wallets: {
-        Row: {
-          cash_balance: number
-          created_at: string
-          governance_tokens: number | null
-          id: string
-          idia_beta_balance: number | null
-          platform_guid: string | null
-          total_earned: number | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          cash_balance?: number
-          created_at?: string
-          governance_tokens?: number | null
-          id?: string
-          idia_beta_balance?: number | null
-          platform_guid?: string | null
-          total_earned?: number | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          cash_balance?: number
-          created_at?: string
-          governance_tokens?: number | null
-          id?: string
-          idia_beta_balance?: number | null
-          platform_guid?: string | null
-          total_earned?: number | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       wallets: {
         Row: {
           cash_balance: number | null
           created_at: string | null
+          governance_tokens: number | null
           hub_cash_balance: number | null
           id: string
           idia_beta_balance: number | null
           idia_token_balance: number | null
           idia_usd_balance: number | null
           life_cash_balance: number | null
+          platform_guid: string | null
+          total_earned: number | null
           updated_at: string | null
           user_id: string
           wallet_address: string
@@ -6070,12 +6061,15 @@ export type Database = {
         Insert: {
           cash_balance?: number | null
           created_at?: string | null
+          governance_tokens?: number | null
           hub_cash_balance?: number | null
           id?: string
           idia_beta_balance?: number | null
           idia_token_balance?: number | null
           idia_usd_balance?: number | null
           life_cash_balance?: number | null
+          platform_guid?: string | null
+          total_earned?: number | null
           updated_at?: string | null
           user_id: string
           wallet_address: string
@@ -6083,12 +6077,15 @@ export type Database = {
         Update: {
           cash_balance?: number | null
           created_at?: string | null
+          governance_tokens?: number | null
           hub_cash_balance?: number | null
           id?: string
           idia_beta_balance?: number | null
           idia_token_balance?: number | null
           idia_usd_balance?: number | null
           life_cash_balance?: number | null
+          platform_guid?: string | null
+          total_earned?: number | null
           updated_at?: string | null
           user_id?: string
           wallet_address?: string
@@ -6321,6 +6318,10 @@ export type Database = {
         Args: { p_recorded_at: string; p_step_count: number; p_user_id: string }
         Returns: boolean
       }
+      commit_sovereign_handshake: {
+        Args: { p_user_id: string; p_wallet_address: string }
+        Returns: boolean
+      }
       community_pool_ledger: {
         Args: { p_fiat_amount: number; p_pseudo_id: string }
         Returns: undefined
@@ -6397,6 +6398,10 @@ export type Database = {
       }
       increment_fiat_balance: {
         Args: { amount_to_add: number; target_user_id: string }
+        Returns: undefined
+      }
+      increment_idia_beta_balance: {
+        Args: { increment_amount: number; x_user_id: string }
         Returns: undefined
       }
       increment_idia_life_balance: {
