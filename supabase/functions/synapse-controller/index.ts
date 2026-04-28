@@ -17,11 +17,10 @@ async function sha256(input: string) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
+  
   try {
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = req.headers.get("Authorization")!;
     if (!authHeader) throw new Error("Missing Authorization header");
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -29,6 +28,10 @@ serve(async (req) => {
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
+    const { data, error } = await supabase.functions.invoke
+    body: { ... },
+  headers: { Authorization: authHeader } // MUST PASS THE JWT
+});
 
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData?.user?.id) throw new Error("Invalid user session");
