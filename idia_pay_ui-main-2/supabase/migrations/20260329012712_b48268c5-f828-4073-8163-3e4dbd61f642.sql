@@ -1,0 +1,6 @@
+ALTER TABLE business_locations
+  ADD COLUMN street TEXT DEFAULT '',
+  ADD COLUMN street2 TEXT DEFAULT '',
+  ADD COLUMN city TEXT DEFAULT '',
+  ADD COLUMN state TEXT DEFAULT '',
+  ADD COLUMN zip TEXT DEFAULT '';
