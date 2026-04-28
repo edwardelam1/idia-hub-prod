@@ -111,26 +111,23 @@ serve(async (req) => {
         .single(),
     ]);
     console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline...`);
-    const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
     
-    const cashierResponse = await fetch(cashierUrl, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceRoleKey}` 
-      },
-      body: JSON.stringify({
-        total_fiat_amount: 0.75, // The exact fiat equivalent for the 1 CR deduction
-        buyer_id: userId,
-        payment_reference: referenceId,
-        contributing_users: [{ user_id: userId }] 
-      })
-    });
+    // Leverage the adminClient SDK to auto-generate perfect Gateway headers
+    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke(
+      "idia-circular-settlement",
+      {
+        body: {
+          total_fiat_amount: 0.75,
+          buyer_id: userId,
+          payment_reference: referenceId,
+          contributing_users: [{ user_id: userId }]
+        }
+      }
+    );
 
-    if (!cashierResponse.ok) {
-        const errText = await cashierResponse.text();
-        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${errText}`);
-        throw new Error(`Circular Settlement Failed: ${errText}`);
+    if (cashierError) {
+        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
+        throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
     }
     console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed to Base.`);
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
