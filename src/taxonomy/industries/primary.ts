@@ -1,0 +1,46 @@
+import type { IndustryNode } from '../types';
+
+export const PRIMARY_INDUSTRIES: IndustryNode[] = [
+  {
+    id: 'primary.extractive',
+    parentId: 'primary',
+    sector: 'primary',
+    label: 'Extractive (Mining, Oil & Gas)',
+    naics: '21',
+    gics: '10',
+    tags: ['extraction', 'non_renewable', 'asset_heavy'],
+    defaultProductionMethod: 'continuous_flow',
+    defaultArchetype: 'mass_market',
+  },
+  {
+    id: 'primary.agricultural',
+    parentId: 'primary',
+    sector: 'primary',
+    label: 'Agricultural',
+    naics: '111',
+    gics: '302020',
+    tags: ['cultivation', 'seasonal'],
+    defaultProductionMethod: 'batch',
+    defaultArchetype: 'mid_market',
+  },
+  {
+    id: 'primary.genetic',
+    parentId: 'primary',
+    sector: 'primary',
+    label: 'Genetic (Hatchery, Nursery)',
+    naics: '1125',
+    tags: ['breeding', 'biological'],
+    defaultProductionMethod: 'batch',
+    defaultArchetype: 'boutique',
+  },
+  {
+    id: 'primary.harvesting',
+    parentId: 'primary',
+    sector: 'primary',
+    label: 'Harvesting (Forestry, Fishing)',
+    naics: '113',
+    tags: ['renewable', 'seasonal'],
+    defaultProductionMethod: 'batch',
+    defaultArchetype: 'mid_market',
+  },
+];
