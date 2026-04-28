@@ -1,1 +1,0 @@
-ALTER TABLE public.inventory_items ADD COLUMN IF NOT EXISTS current_stock numeric NOT NULL DEFAULT 0;
