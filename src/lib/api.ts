@@ -48,42 +48,31 @@ function getMockResponse(endpoint: string, body?: any): any | null {
 export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
 
-  // 1. ROUTE CIRCULAR SETTLEMENT (Fixes Auth Leak)
-  if (endpoint.startsWith("/api/v1/settlement/circular")) {
-    const { data, error } = await supabase.functions.invoke("idia-circular-settlement", { body: bodyParsed });
-    if (error) throw new Error(error.message || "Failed to execute Settlement Protocol");
+  // 1. GET ACTIVE SESSION (The only source of truth for the JWT)
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  // 2. ROUTE TO EDGE FUNCTIONS (Using SDK for auto-auth)
+  const edgeFunctionMap: Record<string, string> = {
+    "/api/v1/settlement/circular": "idia-circular-settlement",
+    "/api/v1/billing/withdraw/crypto": "withdraw-to-crypto",
+    "/api/v1/delt/transfer": "process-delt-transfer",
+    "/api/v1/best-friend/chat": "best-friend-ai",
+    "/api/v1/synapse/controller": "synapse-controller" // HYDRATED
+  };
+
+  const matchedRoute = Object.keys(edgeFunctionMap).find(route => endpoint.startsWith(route));
+  
+  if (matchedRoute) {
+    const { data, error } = await supabase.functions.invoke(edgeFunctionMap[matchedRoute], {
+      body: bodyParsed,
+    });
+    if (error) throw new Error(error.message || `Protocol Error: ${edgeFunctionMap[matchedRoute]}`);
     return data as T;
   }
 
-  // 2. ROUTE CRYPTO WITHDRAWALS (Fixes Auth Leak)
-  if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
-    const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", { body: bodyParsed });
-    if (error) throw new Error(error.message || "Failed to execute Withdrawal Protocol");
-    return data as T;
-  }
-
-  // 3. ROUTE DELT TRANSFER
-  if (endpoint.startsWith("/api/v1/delt/transfer")) {
-    const { data, error } = await supabase.functions.invoke("process-delt-transfer", { body: bodyParsed });
-    if (error) throw new Error(error.message || "Failed to execute Liability Shield protocol");
-    return data as T;
-  }
-
-  // 4. ROUTE AI TRAFFIC
-  if (endpoint.startsWith("/api/v1/best-friend/chat")) {
-    const { data, error } = await supabase.functions.invoke("best-friend-ai", { body: bodyParsed });
-    if (error) throw new Error(error.message || "Failed to connect to Best Friend AI");
-    return data as T;
-  }
-
-  // 5. HYDRATED: ROUTE SYNAPSE CONTROLLER (Eliminates 401 Rejections)
-  if (endpoint.startsWith("/api/v1/synapse/controller")) {
-    const { data, error } = await supabase.functions.invoke("synapse-controller", { body: bodyParsed });
-    if (error) throw new Error(error.message || "Synapse Protocol initialization failed");
-    return data as T;
-  }
-
-  // 6. FALLBACK MOCK LOGIC FOR UNFINISHED ENDPOINTS
+  // 3. FALLBACK MOCK LOGIC
   if (!API_BASE_URL) {
     const mock = getMockResponse(endpoint, bodyParsed);
     if (mock) {
@@ -93,18 +82,15 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     throw new Error(`No mock handler for endpoint: ${endpoint}`);
   }
 
-  // 7. STANDARD FETCH LOGIC (External APIs & Gateway Clearance)
-  const token = localStorage.getItem("idia_auth_token");
+  // 4. STANDARD FETCH (External APIs & Gateway Clearance)
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    // Added apikey to satisfy Supabase Gateway security perimeter
-    "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY, 
+    "apikey": anonKey, 
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...((options.headers as Record<string, string>) || {}),
   };
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `API Error: ${response.status}`);
