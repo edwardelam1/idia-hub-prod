@@ -19,22 +19,8 @@ const mockHandlers: Record<string, (body?: any) => any> = {
   }),
   "/api/v1/security/events": () => ({
     events: [
-      {
-        id: "sec-001",
-        agent_name: "crazy_sentinel",
-        action_type: "scan",
-        severity: "low",
-        timestamp: new Date().toISOString(),
-        resolved: true,
-      },
-      {
-        id: "sec-002",
-        agent_name: "crazy_oracle",
-        action_type: "anomaly_detection",
-        severity: "medium",
-        timestamp: new Date().toISOString(),
-        resolved: false,
-      },
+      { id: "sec-001", agent_name: "crazy_sentinel", action_type: "scan", severity: "low", timestamp: new Date().toISOString(), resolved: true },
+      { id: "sec-002", agent_name: "crazy_oracle", action_type: "anomaly_detection", severity: "medium", timestamp: new Date().toISOString(), resolved: false },
     ],
     total_count: 2,
   }),
@@ -47,22 +33,8 @@ const mockHandlers: Record<string, (body?: any) => any> = {
   }),
   "/api/v1/synapse/query": () => ({
     data: [
-      {
-        region: "US-KY",
-        device_os: "iOS 18.2",
-        hri_score: 91.4,
-        record_count: 1243,
-        anonymization_level: "k-anon-5",
-        last_updated: "2026-02-27T08:00:00Z",
-      },
-      {
-        region: "US-CA",
-        device_os: "Android 16",
-        hri_score: 87.2,
-        record_count: 3891,
-        anonymization_level: "k-anon-10",
-        last_updated: "2026-02-27T07:45:00Z",
-      },
+      { region: "US-KY", device_os: "iOS 18.2", hri_score: 91.4, record_count: 1243, anonymization_level: "k-anon-5", last_updated: "2026-02-27T08:00:00Z" },
+      { region: "US-CA", device_os: "Android 16", hri_score: 87.2, record_count: 3891, anonymization_level: "k-anon-10", last_updated: "2026-02-27T07:45:00Z" },
     ],
   }),
 };
@@ -76,43 +48,42 @@ function getMockResponse(endpoint: string, body?: any): any | null {
 export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const bodyParsed = options.body ? JSON.parse(options.body as string) : {};
 
-  // 1. ROUTE CIRCULAR SETTLEMENT TO LIVE EDGE FUNCTION (Fixes Auth Leak)
+  // 1. ROUTE CIRCULAR SETTLEMENT (Fixes Auth Leak)
   if (endpoint.startsWith("/api/v1/settlement/circular")) {
-    const { data, error } = await supabase.functions.invoke("idia-circular-settlement", {
-      body: bodyParsed,
-    });
+    const { data, error } = await supabase.functions.invoke("idia-circular-settlement", { body: bodyParsed });
     if (error) throw new Error(error.message || "Failed to execute Settlement Protocol");
     return data as T;
   }
 
-  // 2. ROUTE CRYPTO WITHDRAWALS TO LIVE EDGE FUNCTION (Fixes Auth Leak)
+  // 2. ROUTE CRYPTO WITHDRAWALS (Fixes Auth Leak)
   if (endpoint.startsWith("/api/v1/billing/withdraw/crypto")) {
-    const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", {
-      body: bodyParsed,
-    });
+    const { data, error } = await supabase.functions.invoke("withdraw-to-crypto", { body: bodyParsed });
     if (error) throw new Error(error.message || "Failed to execute Withdrawal Protocol");
     return data as T;
   }
 
-  // 3. ROUTE DELT TRANSFER TO LIVE EDGE FUNCTION
+  // 3. ROUTE DELT TRANSFER
   if (endpoint.startsWith("/api/v1/delt/transfer")) {
-    const { data, error } = await supabase.functions.invoke("process-delt-transfer", {
-      body: bodyParsed,
-    });
+    const { data, error } = await supabase.functions.invoke("process-delt-transfer", { body: bodyParsed });
     if (error) throw new Error(error.message || "Failed to execute Liability Shield protocol");
     return data as T;
   }
 
-  // 4. ROUTE AI TRAFFIC DIRECTLY TO SUPABASE EDGE FUNCTION
+  // 4. ROUTE AI TRAFFIC
   if (endpoint.startsWith("/api/v1/best-friend/chat")) {
-    const { data, error } = await supabase.functions.invoke("best-friend-ai", {
-      body: bodyParsed,
-    });
+    const { data, error } = await supabase.functions.invoke("best-friend-ai", { body: bodyParsed });
     if (error) throw new Error(error.message || "Failed to connect to Best Friend AI");
     return data as T;
   }
 
-  // 5. FALLBACK MOCK LOGIC FOR UNFINISHED ENDPOINTS
+  // 5. HYDRATED: ROUTE SYNAPSE CONTROLLER (Eliminates 401 Rejections)
+  if (endpoint.startsWith("/api/v1/synapse/controller")) {
+    const { data, error } = await supabase.functions.invoke("synapse-controller", { body: bodyParsed });
+    if (error) throw new Error(error.message || "Synapse Protocol initialization failed");
+    return data as T;
+  }
+
+  // 6. FALLBACK MOCK LOGIC FOR UNFINISHED ENDPOINTS
   if (!API_BASE_URL) {
     const mock = getMockResponse(endpoint, bodyParsed);
     if (mock) {
@@ -122,18 +93,17 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     throw new Error(`No mock handler for endpoint: ${endpoint}`);
   }
 
-  // 6. STANDARD FETCH LOGIC (Fallback for external APIs)
+  // 7. STANDARD FETCH LOGIC (External APIs & Gateway Clearance)
   const token = localStorage.getItem("idia_auth_token");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    // Added apikey to satisfy Supabase Gateway security perimeter
+    "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY, 
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
