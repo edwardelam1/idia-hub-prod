@@ -1,74 +1,175 @@
+# Business Taxonomy Engine — App Builder Only
 
+The taxonomy module will be built as a self-contained data layer, but **the only consumer in v1 is `PayAppBlueprint.tsx`**. No other Hub module (Settings, Onboarding, Marketplace, Best Friend, MyReports, Compliance) will be touched.
 
-## Plan: Stablecoin panel, dual payment, Hub Enrollment cleanup, A La Carte upgrade flow
+---
 
-### 1. IndividualDashboard panel grid (`src/components/dashboards/IndividualDashboard.tsx`)
-The 5-column grid currently is: Synapse Gauge · FBO Reservoir · Data Sources · Audit Logs · Data Assets.
+## 1. New module: `src/taxonomy/`
 
-New 5-column grid:
-1. Synapse Gauge (unchanged)
-2. FBO Reservoir (unchanged)
-3. **Stablecoin (NEW)** — placeholder panel for Circle USDC balance. Shows USDC icon, balance `$0.0000 USDC`, "Circle Network" subtitle. Will wire to live data later.
-4. Data Sources (moved right one slot)
-5. Audit Logs (moved right one slot)
+Pure data + types + selectors. No UI, no Supabase, no side effects.
 
-Remove the **Data Assets** card entirely.
+```text
+src/taxonomy/
+├── types.ts           Sector, Industry, Archetype, NanoBite, ValueChainStage,
+│                       RevenueModel, ProductionMethod, TaxonomyNode, Classification
+├── sectors.ts         Primary, Secondary, Tertiary, Quaternary, Quinary
+├── industries/
+│   ├── primary.ts     Extractive, Agricultural, Genetic, Harvesting
+│   ├── secondary.ts   Manufacturing (Industrial + Consumer), Processing, Construction
+│   ├── tertiary.ts    Retail (Boutique + Mass), Hospitality, QSR, Banking, Transport
+│   ├── quaternary.ts  SaaS, Consulting, R&D, Creator (6 sub-models)
+│   └── quinary.ts     Executive / Policy
+├── archetypes.ts      8 HBS models + Pipe vs Platform flag
+├── positioning.ts     Boutique ↔ Mass spectrum (variety, volume, lead time, pricing)
+├── production.ts      JobShop | Batch | AssemblyLine | ContinuousFlow + breakEven()
+├── valueChain.ts      Porter primary + support activities
+├── nanoBites/         Task atoms keyed by (industryId, valueChainStage)
+│   ├── retail.ts
+│   ├── saas.ts
+│   ├── consulting.ts
+│   ├── creator.ts
+│   ├── manufacturing.ts
+│   └── ... one per seeded industry
+├── codes/
+│   ├── naics.ts       Curated ~200 codes covering seeded industries
+│   └── gics.ts        Curated subset
+├── selectors.ts       getNanoBitesFor(...), recommendArchetype(...), breakEven(...)
+└── index.ts           Public surface
+```
 
-Standardize all 5 panels to identical typography:
-- Label: `text-[11px] uppercase tracking-wide text-muted-foreground font-medium` (matching the existing Data Sources / Data Assets style — currently the Audit Logs card overrides with bold primary, which we'll normalize)
-- Icon: `h-3.5 w-3.5 text-muted-foreground`
-- Value: `text-lg font-bold`
-- Sub-text: `text-[10px] text-muted-foreground`
-- Card padding: `p-3`, `flex flex-col justify-between h-full`
-- Remove the colored border/background on Audit Logs (`border-primary/20 bg-primary/[0.01]`) so all 5 cards look uniform.
+Isotropic shape — every node and bite shares one record type so any component
+consuming `TaxonomyNode[]` or `NanoBite[]` works across every vertical.
 
-The "Review Audit Logs" button stays inside the Audit Logs card but with neutral (non-primary) styling.
+```ts
+interface NanoBite {
+  id: string;
+  industryId: string;
+  valueChainStage: ValueChainStage;
+  microElement: string;     // "Stock Control"
+  task: string;             // "SKU labeling"
+  cadence: 'daily' | 'weekly' | 'monthly' | 'event';
+  automatable: boolean;
+}
+```
 
-**New file**: `src/components/billing/StablecoinPanel.tsx` — small presentational component matching `FBOReservoirGauge` shape so the dashboard import stays clean.
+Break-even helper lives here:
+```text
+QBE = FC / (P − VC)
+```
 
-### 2. Authorize Payment — split into USDC vs Worldpay (`src/components/billing/SynapsePurchaseModal.tsx`)
-On the `step === 'payment'` view, add a 2-tab segmented control above the payment gateway area:
-- **Worldpay** (default) — existing Worldpay SDK container + "Authorize via Worldpay — $X" button (unchanged behavior)
-- **Stablecoin (Circle USDC)** — shows: USDC amount required (1:1 with USD), destination Circle deposit address (placeholder `0xCirc...IDIA`), copy-to-clipboard button, network selector (Ethereum / Polygon / Base — defaults Base), and an "I've Sent USDC — Confirm" button that runs the same `top-up-credits` invocation with `payment_reference: USDC-${uuid}`.
+---
 
-State: add `paymentRail: 'worldpay' | 'usdc'` local to the modal. Reset on close.
+## 2. Hook: `src/hooks/useBusinessTaxonomy.ts`
 
-### 3. Hub Enrollment cleanup (`src/components/billing/BillingCredits.tsx`)
-- Remove the **"Add Payment Method"** button + its Dialog from the sticky header (lines 89–148).
-- Remove the **"Credits Remaining" badge** from the sticky header (lines 86–88).
-- Remove the **Payment Methods** `<TabsTrigger>` (line 156) and the entire `<TabsContent value="payment">` block (lines 378–420).
-- Drop now-unused imports/state: `showAddPM`, `pmType`, `pmLabel`, `pmIdentifier`, `addPaymentMethod`, `removePaymentMethod`, `setDefaultPaymentMethod`, `paymentMethods`, `PAYMENT_TYPES`, `Plus`, `Wallet`, `Landmark`, `Building`, `Select*`, etc.
-- Header right-side becomes empty (or we leave the header div clean with just title/subtitle).
+Single seam used **only** by the App Builder. Includes the granular logging
+pattern requested.
 
-### 4. Remove Audit Logs page entirely
-- Remove `<Route path="/audit-logs" ... />` from `src/pages/Index.tsx` (line 111).
-- Remove `{ title: 'Audit Logs', url: '/audit-logs', icon: FileText }` from the super-admin block in `src/components/layout/AppSidebar.tsx` (line 72).
-- Delete the file `src/components/audit/AuditLogs.tsx`.
-- Remove the `<TabsTrigger value="audit-logs">` from `src/components/dashboards/SuperAdminDashboard.tsx` (line 85) and its corresponding `<TabsContent>` if present.
-- Note: this is the **/audit-logs** page only. The **Egress Logs** / Provenance Audit Log page (`/egress-logs`) and the dashboard's "Audit Logs" stat card (which links to `/egress-logs`) both stay.
+```ts
+useBusinessTaxonomy(businessId: string) → {
+  classification,                  // current selections (in-memory for v1)
+  setClassification,
+  hydrateNanoBites(stage),         // logs START / SUCCESS / FATAL / END
+  recommendedArchetype(),
+  breakEvenFor({ fc, vc, price })
+}
+```
 
-### 5. A La Carte → Available Plans (`src/components/settings/SettingsBilling.tsx`)
-The Individual `IndividualBilling` component has an "Upgrade" button that does `window.location.href = '/onboarding'`. Change it to open the Available Plans dialog.
+No Supabase persistence in v1 — classification is held in App Builder local
+state and serialized into the generated `merchant_blueprint.json`. Persistence
+to a `business_classification` column is explicitly deferred.
 
-Approach: lift the existing `Available Plans` dialog (from `BillingCredits.tsx` lines 293–375) into a shared component **`src/components/billing/AvailablePlansDialog.tsx`** that accepts `open` / `onOpenChange` / `currentTier` props. Then:
-- `BillingCredits.tsx` renders `<AvailablePlansDialog>` controlled by its existing `showPlans` state (no UX change there).
-- `IndividualBilling` adds local `showPlans` state; the "Upgrade" button sets it to `true` and renders `<AvailablePlansDialog>`.
+---
 
-Button label stays "Upgrade", icon stays `ArrowRight`.
+## 3. Reusable components (App Builder only)
 
-### Files touched
-- `src/components/dashboards/IndividualDashboard.tsx` — panel reshuffle, font standardization, remove Data Assets
-- **New** `src/components/billing/StablecoinPanel.tsx`
-- `src/components/billing/SynapsePurchaseModal.tsx` — dual payment rail tabs
-- `src/components/billing/BillingCredits.tsx` — remove header button/badge, remove Payment tab, use shared plans dialog
-- **New** `src/components/billing/AvailablePlansDialog.tsx` — extracted shared dialog
-- `src/components/settings/SettingsBilling.tsx` — upgrade opens plans dialog
-- `src/pages/Index.tsx` — remove `/audit-logs` route
-- `src/components/layout/AppSidebar.tsx` — remove Audit Logs nav item
-- `src/components/dashboards/SuperAdminDashboard.tsx` — remove Audit Logs tab
-- **Delete** `src/components/audit/AuditLogs.tsx`
+Dropped into `src/components/trading/blueprint/`:
 
-### Notes
-- Stablecoin panel is presentational only for now — no Circle API integration yet. When ready, we can wire it to a `useStablecoinBalance` hook + Circle SDC. Say the word if you want me to scaffold the live integration in the same pass.
-- USDC tab in Authorize Payment is a manual-confirm flow (deposit-then-confirm). For automated detection we'd need a Circle webhook + watcher Edge Function — happy to add as a follow-up.
+- `<TaxonomyPicker depth="industry" />` — cascading Sector → Industry → Sub
+- `<ArchetypeSlider />` — Boutique ↔ Mass slider; recomputes recommended
+  production method + break-even live
+- `<ValueChainStrip />` — horizontal Porter-chain selector
+- `<NanoBitePanel stage cadence />` — renders filtered bites for a stage
 
+All four are generic over `TaxonomyNode[]` / `NanoBite[]`.
+
+---
+
+## 4. Integration into `PayAppBlueprint.tsx` (the only touchpoint)
+
+Add a new "Business Classification" step at the top of the blueprint flow,
+before vertical/sub-module selection:
+
+1. **Classification step** — `TaxonomyPicker` + `ArchetypeSlider` produce a
+   `Classification { sector, industry, archetype, productionMethod }`.
+2. **Value-chain step** — `ValueChainStrip` lets the merchant pick which
+   stages their app covers (Inbound Logistics, Operations, Outbound, etc.).
+3. **Nano-bite injection** — for each selected stage, `NanoBitePanel`
+   surfaces industry-specific tasks. Selected bites become the app's
+   data-capture / payment-trigger rails:
+   - Boutique / Job Shop → milestone-based IDIA Pay triggers
+     ("Consultation Complete", "Material Sourced")
+   - Mass Market / Continuous Flow → high-velocity micro-transactions tied
+     to sensor data or SKU scans
+4. **Break-even widget** — inline `QBE = FC / (P − VC)` calculator showing
+   real-time "Survival Velocity" once the merchant enters FC, VC, P.
+5. **Blueprint output** — the existing `merchant_blueprint.json` gains a
+   `taxonomy` block:
+   ```json
+   {
+     "taxonomy": {
+       "sector": "tertiary",
+       "industry": "retail.boutique",
+       "archetype": "job_shop",
+       "productionMethod": "make_to_order",
+       "valueChainStages": ["operations", "service"],
+       "nanoBites": ["retail.ops.sku_labeling", "retail.svc.return_handling"],
+       "breakEven": { "fc": 12000, "vc": 8, "price": 45, "qbe": 324 }
+     }
+   }
+   ```
+
+The existing vertical/sub-module UI in `PayAppBlueprint` stays — the new
+classification flow runs **before** it and pre-filters the vertical list to
+match the chosen sector/industry.
+
+---
+
+## 5. Coverage shipped in v1
+
+- **Sectors:** all 5
+- **Industries seeded with full nano-bite sets:** Extractive, Agricultural,
+  Genetic, Harvesting, Manufacturing (Industrial + Consumer), Processing,
+  Construction, Retail (Boutique + Mass), Hospitality, QSR, Banking,
+  Transport, SaaS (Growth/Mid/Enterprise), Consulting, R&D, Creator
+  (6 sub-models), Executive/Policy
+- **Archetypes:** all 8 HBS models + Pipe/Platform flag
+- **Production methods:** Job Shop, Batch, Assembly Line, Continuous Flow
+  + break-even helper
+- **Codes:** ~200 curated NAICS + GICS, structured to load full tables later
+
+---
+
+## 6. Explicitly out of scope (kept inside App Builder boundary)
+
+- Settings → Business Profile classification card — **not touched**
+- Ecosystem Onboarding vertical step — **not touched**
+- Marketplace filters / bundle metadata — **not touched**
+- Best Friend Store Clerk Mode — **not touched**
+- MyReports / Compliance Dashboard — **not touched**
+- Supabase `business_classification` column — **not added**
+- Edge function bundle metadata changes — **not made**
+- Per-bite SOP authoring UI
+
+These remain available as future follow-ups but are not built now.
+
+---
+
+## Deliverables
+
+1. `src/taxonomy/` module — types, seeded data, selectors, pure helpers
+2. `useBusinessTaxonomy` hook with the granular `[IDIA_CORE_OP]` logging
+3. Four reusable components under `src/components/trading/blueprint/`:
+   `TaxonomyPicker`, `ArchetypeSlider`, `ValueChainStrip`, `NanoBitePanel`
+4. `PayAppBlueprint.tsx` updated to host the classification step, value-chain
+   step, nano-bite injection, break-even widget, and extended JSON output
+5. No changes to any other Hub module, no DB migration, no edge function edits

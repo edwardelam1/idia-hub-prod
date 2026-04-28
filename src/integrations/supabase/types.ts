@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       account_conversion_requests: {
@@ -6069,6 +6044,7 @@ export type Database = {
       wallets: {
         Row: {
           cash_balance: number | null
+          corporate_revenue: number | null
           created_at: string | null
           governance_tokens: number | null
           hub_cash_balance: number | null
@@ -6085,6 +6061,7 @@ export type Database = {
         }
         Insert: {
           cash_balance?: number | null
+          corporate_revenue?: number | null
           created_at?: string | null
           governance_tokens?: number | null
           hub_cash_balance?: number | null
@@ -6101,6 +6078,7 @@ export type Database = {
         }
         Update: {
           cash_balance?: number | null
+          corporate_revenue?: number | null
           created_at?: string | null
           governance_tokens?: number | null
           hub_cash_balance?: number | null
@@ -6437,6 +6415,10 @@ export type Database = {
         Args: { amount_to_add: number; target_user_id: string }
         Returns: undefined
       }
+      increment_wallet_balance: {
+        Args: { increment_amount: number; target_user_id: string }
+        Returns: undefined
+      }
       increment_wallet_cash: {
         Args: { p_amount: number; p_user_id: string }
         Returns: undefined
@@ -6537,7 +6519,7 @@ export type Database = {
       }
     }
     Enums: {
-      idia_transaction_status: "PENDING" | "SETTLED" | "FAILED"
+      idia_transaction_status: "PENDING" | "SETTLED" | "FAILED" | "completed"
       idia_transaction_type:
         | "DATA_SALE"
         | "DEPOSIT"
@@ -6675,12 +6657,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
-      idia_transaction_status: ["PENDING", "SETTLED", "FAILED"],
+      idia_transaction_status: ["PENDING", "SETTLED", "FAILED", "completed"],
       idia_transaction_type: [
         "DATA_SALE",
         "DEPOSIT",
