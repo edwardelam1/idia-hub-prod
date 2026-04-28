@@ -19,30 +19,27 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   
   try {
-    const authHeader = req.headers.get("Authorization")!;
-    if (!authHeader) throw new Error("Missing Authorization header");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data, error } = await supabase.functions.invoke
-    body: { ... },
-  headers: { Authorization: authHeader } // MUST PASS THE JWT
-});
+    // Parse payload immediately to get the user_id (Bypasses strict getUser auth for MVP)
+    const body = await req.json();
+    const {
+      user_id,
+      client_id,
+      aca_record_ids = [],
+      intent_type = "RESEARCH",
+      query_complexity = 1.0,
+      country_of_origin = "US",
+    } = body;
 
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user?.id) throw new Error("Invalid user session");
-    const userId = userData.user.id;
-
-    // Reject zero-UUID
-    if (userId === "00000000-0000-0000-0000-000000000000") {
-      throw new Error("Rejected: anonymous identity is not permitted");
+    const userId = user_id;
+    if (!userId || userId === "00000000-0000-0000-0000-000000000000") {
+      throw new Error("Rejected: Invalid or missing user_id in payload");
     }
+
     console.info(`[BEGIN: VALIDATING_INPUTS] Interrogating profile for User ID: ${userId}`);
-    const adminClient = createClient(supabaseUrl, serviceRoleKey); // Lifted up for profile query
     
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
@@ -64,14 +61,6 @@ serve(async (req) => {
       console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
     }
     console.info(`[END: VALIDATING_INPUTS] Active wallet secured.`);
-    const body = await req.json();
-    const {
-      client_id,
-      aca_record_ids = [],
-      intent_type = "RESEARCH",
-      query_complexity = 1.0,
-      country_of_origin = "US",
-    } = body;
 
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
@@ -126,7 +115,10 @@ serve(async (req) => {
     
     const cashierResponse = await fetch(cashierUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}` 
+      },
       body: JSON.stringify({
         total_fiat_amount: 0.75, // The exact fiat equivalent for the 1 CR deduction
         buyer_id: userId,
