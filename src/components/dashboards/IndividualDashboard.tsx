@@ -31,7 +31,6 @@ import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
   const { protocolState, isLoading: creditsLoading, refreshState } = useSynapseCredits();
-  const { balance: walletBalance, loading: walletLoading } = useWalletBalance(); // 🚨 INJECT HOOK
   const { currentUsage, subscription } = useBillingData();
   const navigate = useNavigate();
 
@@ -52,9 +51,7 @@ const IndividualDashboard = () => {
   // ========================================================================
   const rail1_Operating = protocolState?.hub_operating_cash ?? 0;
   const rail2_Gas = protocolState?.synapse_gas_credits ?? 0;
-
-  // 🚨 REROUTE RAIL 3 TO THE LIVE ON-CHAIN TRUTH
-  const rail3_Stablecoin = walletBalance?.idia_beta_balance ?? 0;
+  const rail3_Stablecoin = protocolState?.stablecoin_balance ?? 0;
   const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? 0;
 
   useEffect(() => {
