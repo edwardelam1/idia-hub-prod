@@ -101,25 +101,22 @@ const requestSchema = z.object({
     )
     .optional()
     .default([]),
-  context: z
-    .object({
-      currentPage: z.string().optional(),
-      isMarketplaceMode: z.boolean().optional(),
-      platformGuid: z.string().optional(),
-      userId: z.string().optional(),
-      routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Strict enum passthrough
-      marketplace: z
-        .object({
-          healthRecords: z.array(z.any()).optional().default([]),
-          lifestyleRecords: z.array(z.any()).optional().default([]),
-          lookupId: z.string().nullable().optional(),
-          liabilityTokenHash: z.string().nullable().optional(),
-        })
-        .nullable()
-        .optional(),
-    })
-    .optional()
-    .default({}),
+  context: z.object({
+    currentPage: z.string().optional(),
+    isMarketplaceMode: z.boolean().optional(),
+    platformGuid: z.string().optional(),
+    userId: z.string().optional(),
+    routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Strict enum
+    marketplace: z
+      .object({
+        healthRecords: z.array(z.any()).optional().default([]),
+        lifestyleRecords: z.array(z.any()).optional().default([]),
+        lookupId: z.string().nullable().optional(),
+        liabilityTokenHash: z.string().nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+  }),
 });
 
 const AGENT_REGISTRY: Record<AgentType, { prompt: string; highStakes: boolean; verificationChecks: string[] }> = {
