@@ -1,58 +1,67 @@
+## Scope
 
-## Goal
-Populate the IDIA Data Marketplace "Available Datasets" grid with the bundles that already exist in the backend layer. Today the UI shows nothing because:
+App Builder ONLY (`src/components/trading/PayAppBlueprint.tsx` + `src/taxonomy/*` + `src/hooks/useBusinessTaxonomy.ts`). No marketplace, no ledger, no edge functions touched.
 
-1. `marketplace_bundles` table has **0 rows** (verified).
-2. `useMarketplaceBundles` hook returns `[]` without ever querying Supabase.
-3. The hook also reads `bundle.contacts_count`, but the table column is actually `participant_count` — so even if rows existed they would mis-map.
-4. `ai-data-curator` edge function generates bundle metadata via Gemini, but never persists it. `create-health-data-bundle` is an empty file.
+## Current State (audited)
 
-Per the Golden Rule (no synthetic/simulated data in production tables), we will not hand-fabricate datasets. Instead we will (a) wire the UI to the real table, and (b) wire the existing AI-curator edge function so it actually writes its output into `marketplace_bundles`, then trigger one curation run so the catalog is populated from the live data the curator has access to.
+The taxonomy engine already exists and largely matches your spec, but with naming differences that we will preserve to avoid breaking existing consumers:
 
-## Plan
+| Your spec | Existing in repo | Action |
+|---|---|---|
+| `'Job Shop' \| 'Batch' \| ...` | `'job_shop' \| 'batch' \| ...` (snake_case) | Keep snake_case (already wired into `production.ts`, `selectors.ts`) |
+| `'Boutique' \| 'Mass Market' \| 'Platform'` | `'boutique' \| 'mid_market' \| 'mass_market'` | Keep existing — `Platform` is already covered by `NetworkModel='platform'` |
+| `'hr' \| 'tech_dev'` | `'human_resources' \| 'technology'` | Keep existing |
+| `quaternary.saas` (single node) | Already split into `saas.growth`, `saas.midmarket`, `saas.enterprise` | Keep — richer than spec |
+| `hospitality` industry | `tertiary.hospitality` exists | Enrich with spatial telemetry meta + nano-bites |
+| Telemetry constants | Not present | NEW |
+| Spatial validator | Not present | NEW |
+| App Builder consuming taxonomy | `PayAppBlueprint.tsx` uses its own hardcoded `verticalCategories` array | NEW: bridge to taxonomy engine |
 
-### 1. Fix the read path (UI ↔ DB)
-File: `src/hooks/useMarketplaceBundles.tsx`
-- Replace the stub `return []` with a real query:
-  ```ts
-  supabase
-    .from('marketplace_bundles')
-    .select('*')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-  ```
-- Map DB column `participant_count` → interface field `contacts_count` so existing UI (`DataMarketplace.tsx`, `BundleCard`) keeps working without UI changes.
-- Keep the 30s `refetchInterval` so newly curated bundles surface live.
+The "meat" gap is mostly: (1) hospitality spatial telemetry, (2) the App Builder isn't yet reading from `src/taxonomy/`.
 
-### 2. Make the curator persist its output
-File: `supabase/functions/ai-data-curator/index.ts`
-- Add a new action `publish_bundle` that takes the curated metadata (title, description, key_insights, features, suggested_filters, tier, recommended_price, category, data_json, participant_count, match_percentage, bundle_category, data_fusion_level) and inserts a row into `marketplace_bundles` with `is_active=true`, `bundle_version=1`.
-- Add a convenience action `curate_and_publish` that runs `analyze_data` → `curate_bundle` → `recommend_pricing` → insert in one call, so a single invocation produces a publishable bundle.
-- Use the existing service-role client already created in the function. CORS unchanged.
+## Changes
 
-### 3. One-time catalog backfill (no fabricated data)
-File: new `supabase/functions/seed-marketplace-catalog/index.ts` (admin-only, `verify_jwt = true`)
-- Pulls live, anonymized aggregates from existing pipeline tables (`universal_data_bundles`, staged lifestyle data already produced by `process-lifestyle-data`). No invented records.
-- For each distinct `bundle_category` present in `universal_data_bundles`, calls `ai-data-curator` action `curate_and_publish` to produce one Analyst, one Professional, and one Enterprise tier entry, sized & priced from the real underlying aggregates per the Marketplace bundle pricing tiers memory (Analyst 300–500 CR, Professional 500–2000 CR, Enterprise 2000–5000 CR).
-- If `universal_data_bundles` is empty, the function returns `{ seeded: 0, reason: "no source aggregates yet" }` rather than fabricating rows. (Honors the Golden Rule.)
+### 1. Enrich Hospitality vertical — `src/taxonomy/industries/tertiary.ts`
+Extend the existing `tertiary.hospitality` node's `meta` with the benchmarks, tech stack, and telemetry focus from your spec. Non-breaking (additive `meta` fields).
 
-### 4. Column-name alignment
-Don't migrate the table — we only need the UI hook to translate `participant_count` ↔ `contacts_count`. No schema change.
+### 2. Add spatial nano-bites — `src/taxonomy/nanoBites/hospitality.ts`
+Append 4 new bites to the existing array (keep the 2 already there):
+- `hosp.ops.guest_flow_tracking` — AMCL guest-floor traversal (enterprise tier)
+- `hosp.service.proximity_greeting` — UWB tag greeting trigger
+- `hosp.ops.kitchen_telemetry` — Speed-of-Service via Elo Android
+- `hosp.infra.spatial_audit` — LiDAR PMS update
 
-### 5. Trigger initial population
-After deploy, invoke `seed-marketplace-catalog` once from the admin client. Whatever real aggregates exist will produce real bundles. The Marketplace grid will then render them via the now-live hook.
+Adds an optional `requiresTier?: 'basic' | 'pro' | 'enterprise'` field to `NanoBite` in `types.ts` (additive, non-breaking).
+
+### 3. New telemetry module — `src/taxonomy/telemetry.ts` (NEW)
+Holds `TELEMETRY_CONSTANTS` (LIGHT_SPEED, UWB_FREQUENCY_RANGE, IMU_SAMPLING_RATE_MIN) and `validateSpatialEvent()` with `[IDIA_PAY_VALIDATOR]` granular logs (STARTING/ENDING per your trace requirement). Exported from `src/taxonomy/index.ts`. Not placed in `production.ts` because that file already handles fixed/variable cost economics — keeping concerns separate.
+
+### 4. Master assembly trace — `src/taxonomy/index.ts`
+Add `initializeTaxonomy()` that logs `[IDIA_TAXONOMY_CORE]: STARTING / SUCCESS` and returns a hydrated registry `{ sectors, industries, nanoBites, archetypes }` — useful for App Builder bootstrap and debug panels.
+
+### 5. Wire taxonomy into App Builder — `src/components/trading/PayAppBlueprint.tsx`
+The App Builder currently has a 1186-line file with hardcoded `verticalCategories`. We will NOT delete that (it carries icons/colors used in the UI). Instead:
+- Import `getIndustriesBySector`, `getNanoBitesFor`, `initializeTaxonomy` from `@/taxonomy`.
+- When the user selects a vertical (e.g. `hospitality`), look up the matching `IndustryNode` by tag/id, then call `getNanoBitesFor({ industryId })` to render a new "Nano-Bite Tasks" panel below the sub-modules.
+- For `hospitality`, surface a "Spatial Telemetry" badge populated from `industry.meta.telemetry_focus`.
+- Each bite shows: `microElement`, `task`, `cadence`, `automatable` indicator, optional tier badge.
+
+### 6. App Builder hook usage — `src/hooks/useBusinessTaxonomy.ts`
+Already exists and does the right thing. Add one method: `getSpatialMetaFor(industryId)` returning `meta.telemetry_focus / benchmarks / tech_stack` for the hospitality panel. Keep its existing `[IDIA_CORE_OP]` logging style.
+
+## Technical notes
+
+- All log statements use the `[IDIA_TAXONOMY_CORE]` / `[IDIA_PAY_VALIDATOR]` / `[IDIA_CORE_OP]` STARTING-SUCCESS-ENDING pattern already established in `useBusinessTaxonomy.ts`.
+- Type changes are strictly additive (new optional fields, new exports). No existing import will break.
+- Snake_case enums (`job_shop`, `mid_market`, `human_resources`, `technology`) are retained — they're already used by `selectors.ts`, `positioning.ts`, `production.ts`, and the `merchant_blueprint.json` serializer. Switching to your PascalCase spec would break the serializer used by IDIA Pay.
+- No DB migrations, no edge function changes, no marketplace changes.
 
 ## Files touched
-- `src/hooks/useMarketplaceBundles.tsx` — real query + column rename
-- `supabase/functions/ai-data-curator/index.ts` — add `publish_bundle` + `curate_and_publish` actions
-- `supabase/functions/seed-marketplace-catalog/index.ts` — new admin function
-- `supabase/config.toml` — register new function
 
-## What this does NOT do
-- Does not insert hand-written/mock bundles. If `universal_data_bundles` has no aggregates yet, the marketplace stays empty until the upstream pipeline produces them — which is the correct behavior under the Golden Rule.
-- Does not change `BundleCard`, `MarketplaceFilters`, or any UI component. The shape consumed by `DataMarketplace.tsx` is preserved by the hook's mapping layer.
-
-## Verification after build
-1. `select count(*) from marketplace_bundles where is_active` > 0 once seeded.
-2. `/marketplace` route shows BundleCards with real titles/tiers/prices.
-3. Hook returns `contacts_count` populated from `participant_count`.
+- `src/taxonomy/types.ts` — add optional `requiresTier` to `NanoBite`
+- `src/taxonomy/industries/tertiary.ts` — enrich hospitality `meta`
+- `src/taxonomy/nanoBites/hospitality.ts` — add 4 spatial bites
+- `src/taxonomy/telemetry.ts` — NEW
+- `src/taxonomy/index.ts` — export telemetry + add `initializeTaxonomy`
+- `src/hooks/useBusinessTaxonomy.ts` — add `getSpatialMetaFor`
+- `src/components/trading/PayAppBlueprint.tsx` — render Nano-Bite + Spatial Telemetry panels for selected vertical
