@@ -96,7 +96,8 @@ export const useWalletBalance = () => {
       console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Raw BigInt retrieved: ${rawBalance.toString()}`);
 
       // 4. FORMATTING & STATE INJECTION
-      const hydratedBalance = Number(formatUnits(rawBalance, 6));
+      // 🚨 CAST TO BIGINT: Tell TS that the contract return value is definitely a BigInt
+      const hydratedBalance = Number(formatUnits(rawBalance as bigint, 6));
       console.log(
         `[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified on-chain truth is $${hydratedBalance} USDC.`,
       );
