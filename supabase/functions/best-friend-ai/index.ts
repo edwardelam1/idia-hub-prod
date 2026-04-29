@@ -110,7 +110,7 @@ const requestSchema = z.object({
       routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Strict enum passthrough
       marketplace: z
         .object({
-          healthRecords: z.axrray(z.any()).optional().default([]),
+          healthRecords: z.array(z.any()).optional().default([]),
           lifestyleRecords: z.array(z.any()).optional().default([]),
           lookupId: z.string().nullable().optional(),
           liabilityTokenHash: z.string().nullable().optional(),
