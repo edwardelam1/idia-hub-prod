@@ -9,6 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
+  initializeTaxonomy,
+  getNanoBitesFor,
+  getIndustryById,
+  type NanoBite,
+} from '@/taxonomy';
+import { useBusinessTaxonomy } from '@/hooks/useBusinessTaxonomy';
+import {
   Package,
   Send,
   Download,
@@ -17,6 +24,10 @@ import {
   X,
   ChevronLeft,
   Sparkles,
+  Activity,
+  Radar,
+  Cpu,
+  Zap as ZapBolt,
   ShoppingCart,
   Utensils,
   Truck,
