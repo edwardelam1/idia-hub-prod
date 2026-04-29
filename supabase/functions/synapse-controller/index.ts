@@ -39,6 +39,18 @@ serve(async (req) => {
       throw new Error("Rejected: Invalid or missing user_id in payload");
     }
 
+    // ====================================================================
+    // ROUTING_GATEKEEPER — Like-for-Like compliance. Mirrors the Cashier.
+    // Strict equality only. No defaults. No coercion.
+    // ====================================================================
+    console.info(`[BEGIN: ROUTING_GATEKEEPER]`);
+    const routing = body?.routing;
+    if (routing !== "fiat" && routing !== "on-chain") {
+      console.error(`🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`);
+      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
+    }
+    console.info(`[END: ROUTING_GATEKEEPER] Compliance rail locked: ${routing}`);
+
     console.info(`[BEGIN: VALIDATING_INPUTS] Interrogating profile for User ID: ${userId}`);
 
     const { data: profile, error: profileError } = await adminClient
