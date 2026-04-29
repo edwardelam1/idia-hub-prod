@@ -3982,6 +3982,7 @@ export type Database = {
           available_credit_line: number | null
           avatar_url: string | null
           bio: string | null
+          compliance_rail: string | null
           created_at: string | null
           document_type: string | null
           ein: string | null
@@ -4019,6 +4020,7 @@ export type Database = {
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
+          compliance_rail?: string | null
           created_at?: string | null
           document_type?: string | null
           ein?: string | null
@@ -4056,6 +4058,7 @@ export type Database = {
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
+          compliance_rail?: string | null
           created_at?: string | null
           document_type?: string | null
           ein?: string | null
@@ -5388,6 +5391,27 @@ export type Database = {
           last_heartbeat?: string | null
           metadata?: Json | null
           status?: string
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          description: string | null
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          description?: string | null
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          description?: string | null
+          key?: string
+          updated_at?: string | null
+          value?: string
         }
         Relationships: []
       }
