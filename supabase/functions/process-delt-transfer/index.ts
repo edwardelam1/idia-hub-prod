@@ -83,10 +83,6 @@ serve(async (req) => {
     // 6. Parallel write using service role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Egress fee: 250 CRD per protocol spec
-    const egressFee = -250;
-    const referenceId = `EGRESS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-
     // Write ledger entry + egress log in parallel
     const [ledgerResult, egressResult] = await Promise.all([
       adminClient

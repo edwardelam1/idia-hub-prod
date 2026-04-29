@@ -444,7 +444,7 @@ export const DELTSimulationModal = ({ open, onOpenChange, feedName, feedId }: DE
                   ) : (
                     <>
                       <Zap className="h-4 w-4 mr-2" />
-                      Run Live Transfer (250 CRD)
+                      Run Live Transfer (1 CRD)
                     </>
                   )}
                 </Button>
