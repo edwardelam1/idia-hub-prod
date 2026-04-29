@@ -113,7 +113,22 @@ serve(async (req) => {
         .single(),
     ]);
     console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline...`);
+    // [BEGIN: CASHIER_HANDOFF]
+    console.info(`[BEGIN: CASHIER_HANDOFF] Bridging validated intent to Circular Settlement...`);
+    
+    // Extract the explicit routing from the incoming UI payload
+    const { routing } = body; 
 
+    const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const cashierResponse = await fetch(cashierUrl, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${anonKey}`, 
+        'apikey': anonKey 
+      },
     // Leverage the adminClient SDK to auto-generate perfect Gateway headers
     const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
       body: {
