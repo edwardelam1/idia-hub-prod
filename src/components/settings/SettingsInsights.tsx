@@ -8,7 +8,7 @@ export const SettingsInsights = () => {
     { label: 'Data Contributions', value: 142, unit: 'events', icon: Database, change: '+12 this week' },
     { label: 'Personal Health Score', value: 78, unit: '/100', icon: Activity, change: '+3 from last month' },
     { label: 'Marketplace Queries', value: 7, unit: 'of 50 max', icon: BarChart3, change: 'A La Carte quota' },
-    { label: 'Rewards Earned', value: 24.50, unit: 'IDIA-USD', icon: TrendingUp, change: 'Lifetime' },
+    { label: 'Rewards Earned', value: 24.50, unit: 'USDC', icon: TrendingUp, change: 'Lifetime' },
   ];
 
   return (
