@@ -57,6 +57,12 @@ serve(async (req) => {
       case 'recommend_pricing':
         response = await recommendPricing(data);
         break;
+      case 'publish_bundle':
+        response = await publishBundle(supabaseClient, data);
+        break;
+      case 'curate_and_publish':
+        response = await curateAndPublish(supabaseClient, data, bundleType);
+        break;
       default:
         throw new Error(`Unknown action: ${action}`);
     }
@@ -274,4 +280,63 @@ function calculateActivityDistribution(data: any[]) {
   });
 
   return distribution;
+}
+
+// Persist a curated bundle row into marketplace_bundles.
+async function publishBundle(supabaseClient: any, bundle: any) {
+  const row = {
+    title: bundle.title,
+    description: bundle.description,
+    data_json: bundle.data_json ?? {},
+    key_insights: bundle.key_insights ?? [],
+    data_points: bundle.data_points ?? [],
+    suggested_filters: bundle.suggested_filters ?? [],
+    price: bundle.price ?? bundle.recommended_price ?? 500,
+    tier: bundle.tier ?? 'Analyst',
+    category: bundle.category ?? 'general',
+    participant_count: bundle.participant_count ?? 0,
+    match_percentage: bundle.match_percentage ?? 85,
+    features: bundle.features ?? [],
+    bundle_version: 1,
+    is_active: true,
+    bundle_category: bundle.bundle_category ?? bundle.category ?? 'general',
+    data_fusion_level: bundle.data_fusion_level ?? 'single_source',
+    cross_platform_insights: bundle.cross_platform_insights ?? {},
+    predictive_analytics: bundle.predictive_analytics ?? {},
+  };
+
+  const { data, error } = await supabaseClient
+    .from('marketplace_bundles')
+    .insert(row)
+    .select()
+    .single();
+
+  if (error) throw new Error(`publish_bundle failed: ${error.message}`);
+  return { published: true, bundle: data };
+}
+
+// One-shot: curate metadata, recommend pricing, then persist.
+// `data` is the underlying source (real aggregates only — no synthetic records).
+async function curateAndPublish(supabaseClient: any, data: any, bundleType: string) {
+  const metadata = await curateBundleMetadata(data, bundleType);
+  const pricing = await recommendPricing(data);
+
+  const merged = {
+    title: metadata.title,
+    description: metadata.description,
+    key_insights: metadata.key_insights,
+    features: metadata.features,
+    suggested_filters: metadata.suggested_filters,
+    data_points: data.data_points ?? metadata.suggested_filters ?? [],
+    tier: pricing.tier,
+    price: pricing.recommended_price,
+    category: data.category ?? bundleType,
+    bundle_category: data.bundle_category ?? bundleType,
+    participant_count: data.participant_count ?? data.unique_users_count ?? data.length ?? 0,
+    match_percentage: Math.round(((data.avg_quality_score ?? 0.85) * 100)),
+    data_fusion_level: data.data_fusion_level ?? 'multi_source',
+    data_json: data.data_json ?? data.bundle_metadata ?? {},
+  };
+
+  return await publishBundle(supabaseClient, merged);
 }
