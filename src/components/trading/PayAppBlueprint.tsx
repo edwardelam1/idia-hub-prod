@@ -1029,6 +1029,126 @@ export const PayAppBlueprint = () => {
                         );
                       })}
                     </div>
+
+                    {/* ── Taxonomy: Nano-Bites + Spatial Telemetry ── */}
+                    {(() => {
+                      const industryId = expandedVertical
+                        ? VERTICAL_TO_INDUSTRY_ID[expandedVertical]
+                        : undefined;
+                      if (!industryId) return null;
+                      const industry = getIndustryById(industryId);
+                      const bites: NanoBite[] = getNanoBitesFor({ industryId });
+                      const spatial = taxonomy.getSpatialMetaFor(industryId) as {
+                        benchmarks?: string[];
+                        tech_stack?: string[];
+                        telemetry_focus?: string[];
+                        hardware_layer?: string[];
+                        math_layer?: string[];
+                      };
+                      const hasTelemetry =
+                        (spatial.telemetry_focus?.length ?? 0) > 0 ||
+                        (spatial.hardware_layer?.length ?? 0) > 0;
+                      if (!industry || (bites.length === 0 && !hasTelemetry)) return null;
+
+                      return (
+                        <div className="mt-4 space-y-3 rounded-xl border bg-card p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Activity className="h-4 w-4 text-primary" />
+                              <h4 className="text-sm font-semibold">
+                                Taxonomy Tasks · {industry.label}
+                              </h4>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">
+                              {industry.id}
+                            </Badge>
+                          </div>
+
+                          {hasTelemetry && (
+                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Radar className="h-4 w-4 text-primary" />
+                                <span className="text-xs font-semibold">
+                                  Spatial Telemetry
+                                </span>
+                              </div>
+                              {spatial.telemetry_focus && (
+                                <div className="flex flex-wrap gap-1">
+                                  {spatial.telemetry_focus.map((t) => (
+                                    <Badge key={t} variant="secondary" className="text-[10px]">
+                                      {t}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              {spatial.hardware_layer && (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <Cpu className="h-3 w-3 text-muted-foreground" />
+                                  {spatial.hardware_layer.map((h) => (
+                                    <Badge key={h} variant="outline" className="text-[10px]">
+                                      {h}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              {spatial.math_layer && (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <ZapBolt className="h-3 w-3 text-muted-foreground" />
+                                  {spatial.math_layer.map((m) => (
+                                    <Badge key={m} variant="outline" className="text-[10px]">
+                                      {m}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              {spatial.benchmarks && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Benchmarks: {spatial.benchmarks.join(' · ')}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {bites.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Nano-Bite Tasks ({bites.length})
+                              </p>
+                              <div className="grid gap-2">
+                                {bites.map((b) => (
+                                  <div
+                                    key={b.id}
+                                    className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-2"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium truncate">{b.task}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        {b.microElement} · {b.valueChainStage.replace(/_/g, ' ')}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end gap-1">
+                                      <Badge variant="outline" className="text-[9px]">
+                                        {b.cadence}
+                                      </Badge>
+                                      {b.automatable && (
+                                        <Badge className="text-[9px]" variant="secondary">
+                                          auto
+                                        </Badge>
+                                      )}
+                                      {b.requiresTier && (
+                                        <Badge className="text-[9px]" variant="default">
+                                          {b.requiresTier}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
