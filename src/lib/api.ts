@@ -13,19 +13,27 @@ const EDGE_MAP: Record<string, string> = {
   "/api/v1/best-friend/chat": "best-friend-ai",
 };
 
-export async function fetchApi<T = any>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
+export async function fetchApi<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   console.log(`[BEGIN: fetchApi] endpoint=${endpoint} method=${options.method ?? "GET"}`);
 
-  let bodyParsed: unknown = {};
+  // ====================================================================
+  // BODY EXTRACTION: Fixes blind parsing vulnerability.
+  // Ensures we handle both stringified and object-based bodies safely.
+  // ====================================================================
+  console.log(`[BEGIN: fetchApi:EXTRACT_BODY]`);
+  let bodyParsed: any = {};
   try {
-    bodyParsed = options.body ? JSON.parse(options.body as string) : {};
-    console.log(`[fetchApi:PARSE_BODY] OK keys=${Object.keys(bodyParsed as object ?? {}).join(",") || "<empty>"}`);
+    if (options.body) {
+      bodyParsed = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
+    }
+    console.log(
+      `[fetchApi:EXTRACT_BODY:SUCCESS] keys=${Object.keys((bodyParsed as object) ?? {}).join(",") || "<empty>"}`,
+    );
   } catch (parseErr: any) {
-    console.error(`🚨 [FATAL: fetchApi:PARSE_BODY] Invalid JSON body: ${parseErr?.message}`);
-    throw new Error(`fetchApi: failed to parse request body as JSON: ${parseErr?.message}`);
+    console.error(`🚨 [FATAL: fetchApi:EXTRACT_BODY] Invalid JSON body: ${parseErr?.message}`);
+    throw new Error(`fetchApi: failed to parse request body: ${parseErr?.message}`);
+  } finally {
+    console.log(`[END: fetchApi:EXTRACT_BODY]`);
   }
 
   // 1. INTERNAL EDGE FUNCTION ROUTE (preferred path)
@@ -37,10 +45,12 @@ export async function fetchApi<T = any>(
       const { data, error } = await supabase.functions.invoke(fnName, {
         body: bodyParsed,
       });
+
       if (error) {
         console.error(`🚨 [FATAL: fetchApi:INVOKE_EDGE] fn=${fnName} error=${error.message}`);
         throw error;
       }
+
       console.log(`[END: fetchApi:INVOKE_EDGE] fn=${fnName} OK`);
       return data as T;
     } catch (invokeErr: any) {
@@ -51,30 +61,44 @@ export async function fetchApi<T = any>(
     }
   }
 
-  // 2. FALLBACK: external / un-mapped endpoints. Inject anon apikey to clear Supabase perimeter.
+  // 2. FALLBACK: external / un-mapped endpoints.
   console.log(`[BEGIN: fetchApi:FETCH_FALLBACK] endpoint=${endpoint}`);
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    console.log(`[BEGIN: fetchApi:SESSION_RETRIEVAL]`);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    console.log(`[END: fetchApi:SESSION_RETRIEVAL] session_exists=${!!session}`);
+
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     if (!anonKey) {
-      console.warn(`⚠️ [fetchApi:FETCH_FALLBACK] No anon key found in env. Gateway may reject.`);
+      console.warn(`⚠️ [fetchApi:FETCH_FALLBACK] No anon key found. Perimeter rejection imminent.`);
     }
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "apikey": anonKey ?? "",
-      "Authorization": session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${anonKey ?? ""}`,
+      apikey: anonKey ?? "",
+      Authorization: session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${anonKey ?? ""}`,
     };
 
     const url = `${import.meta.env.VITE_API_BASE_URL || ""}${endpoint}`;
-    const res = await fetch(url, { ...options, headers });
+    console.log(`[BEGIN: fetchApi:NETWORK_FETCH] url=${url}`);
+
+    // FIX: Included JSON.stringify(bodyParsed) to ensure body is actually transmitted
+    const res = await fetch(url, {
+      ...options,
+      headers,
+      body: options.method !== "GET" && options.method !== "HEAD" ? JSON.stringify(bodyParsed) : undefined,
+    });
+
     if (!res.ok) {
       const text = await res.text().catch(() => "<no body>");
-      console.error(`🚨 [FATAL: fetchApi:FETCH_FALLBACK] status=${res.status} body=${text}`);
+      console.error(`🚨 [FATAL: fetchApi:NETWORK_FETCH] status=${res.status} body=${text}`);
       throw new Error(`fetchApi fallback failed: HTTP ${res.status} - ${text}`);
     }
+
     const json = await res.json();
-    console.log(`[END: fetchApi:FETCH_FALLBACK] status=${res.status}`);
+    console.log(`[END: fetchApi:NETWORK_FETCH] status=${res.status}`);
     return json as T;
   } catch (fallbackErr: any) {
     console.error(`🚨 [FATAL: fetchApi:FETCH_FALLBACK] ${fallbackErr?.message}`);
