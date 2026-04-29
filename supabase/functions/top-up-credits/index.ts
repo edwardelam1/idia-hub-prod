@@ -3,11 +3,18 @@
 
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-const ERC20_ABI = [{
-  name: "transfer", type: "function", stateMutability: "nonpayable",
-  inputs: [{ name: "to", type: "address" }, { name: "value", type: "uint256" }],
-  outputs: [{ name: "", type: "bool" }],
-}];
+const ERC20_ABI = [
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +47,9 @@ Deno.serve(async (req: Request) => {
     const payment_method: string = (body.payment_method ?? "usdc").toLowerCase();
     const routing: string = (body.routing ?? (payment_method === "usdc" ? "on-chain" : "fiat")).toLowerCase();
     const payment_reference: string = body.payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
-    console.log(`[END: ${stage}] user_id=${user_id} credit_amount=${credit_amount} usd_amount=${usd_amount} routing=${routing} wallet=${user_wallet ?? "<none>"}`);
+    console.log(
+      `[END: ${stage}] user_id=${user_id} credit_amount=${credit_amount} usd_amount=${usd_amount} routing=${routing} wallet=${user_wallet ?? "<none>"}`,
+    );
 
     stage = "VALIDATION";
     console.log(`[BEGIN: ${stage}]`);
@@ -52,17 +61,16 @@ Deno.serve(async (req: Request) => {
     }
     if (routing === "on-chain") {
       if (!user_wallet || typeof user_wallet !== "string" || !user_wallet.startsWith("0x")) {
-        throw new Error(`VALIDATION_FAILED: Buyer wallet address is missing or invalid for on-chain routing. Received: ${user_wallet}`);
+        throw new Error(
+          `VALIDATION_FAILED: Buyer wallet address is missing or invalid for on-chain routing. Received: ${user_wallet}`,
+        );
       }
     }
     console.log(`[END: ${stage}] OK`);
 
     stage = "INIT_ADMIN_CLIENT";
     console.log(`[BEGIN: ${stage}]`);
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     console.log(`[END: ${stage}]`);
 
     let txHash: string = payment_reference;
@@ -70,7 +78,8 @@ Deno.serve(async (req: Request) => {
     if (routing === "on-chain") {
       stage = "ONCHAIN_BROADCAST";
       console.log(`[BEGIN: ${stage}] Loading viem...`);
-      const { createWalletClient, http, parseUnits, isAddress, getAddress } = await import("https://esm.sh/viem@2.9.20");
+      const { createWalletClient, http, parseUnits, isAddress, getAddress } =
+        await import("https://esm.sh/viem@2.9.20");
       const { privateKeyToAccount } = await import("https://esm.sh/viem@2.9.20/accounts");
       const { base } = await import("https://esm.sh/viem@2.9.20/chains");
 
@@ -112,7 +121,7 @@ Deno.serve(async (req: Request) => {
       transaction_type: "INTERNAL_DEPOSIT",
       entry_type: "DEBIT",
       status: "completed",
-      tx_hash: txHash,
+      blockchain_tx_hash: txHash,
       metadata: {
         class: "Synapse_Purchase",
         fund: "CORPORATE_REVENUE",
@@ -145,15 +154,15 @@ Deno.serve(async (req: Request) => {
     console.log(`[END: ${stage}] newRev=${newRev}`);
 
     console.log(`[END: INVOKE] success hash=${txHash}`);
-    return new Response(
-      JSON.stringify({ success: true, hash: txHash, revenue_total: newRev }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
-    );
+    return new Response(JSON.stringify({ success: true, hash: txHash, revenue_total: newRev }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
   } catch (error: any) {
     console.error(`🚨 [FATAL: ${stage}] ${error?.message}`);
-    return new Response(
-      JSON.stringify({ error: error?.message ?? "Unknown error", failed_at: stage }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-    );
+    return new Response(JSON.stringify({ error: error?.message ?? "Unknown error", failed_at: stage }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400,
+    });
   }
 });
