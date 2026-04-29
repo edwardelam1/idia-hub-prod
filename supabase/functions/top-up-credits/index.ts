@@ -1,5 +1,5 @@
 // supabase/functions/top-up-credits/index.ts
-// Hardened payload contract: aligned with SynapseTopUp.tsx frontend.
+// Hardened payload contract: aligned with Hub and Life application financial structures.
 
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
@@ -14,14 +14,14 @@ const ERC20_ABI = [
     ],
     outputs: [{ name: "", type: "bool" }],
   },
-];
+] as const;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-console.log("[BOOT: top-up-credits] Hydration Engine v3 online.");
+console.log("[BOOT: top-up-credits] Hydration Engine v4 online.");
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -39,13 +39,19 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch((e) => {
       throw new Error(`PAYLOAD_PARSE_FAILED: ${e?.message}`);
     });
+
     // Accept BOTH naming schemes (frontend sends user_wallet+payment_method+credit_amount)
     const user_id: string | undefined = body.user_id;
     const credit_amount = Number(body.credit_amount ?? body.amount ?? 0);
     const usd_amount = Number(body.usd_amount ?? credit_amount * 0.75 ?? 0);
     const user_wallet: string | undefined = body.user_wallet ?? body.recipient_address;
     const payment_method: string = (body.payment_method ?? "usdc").toLowerCase();
-    const routing: string = (body.routing ?? (payment_method === "usdc" ? "on-chain" : "fiat")).toLowerCase();
+
+    // 🚨 FIX: Recognize 'internal_usdc' as an on-chain asset to prevent the 'fiat' fallback
+    const routing: string = (
+      body.routing ?? (["usdc", "internal_usdc"].includes(payment_method) ? "on-chain" : "fiat")
+    ).toLowerCase();
+
     const payment_reference: string = body.payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
     console.log(
       `[END: ${stage}] user_id=${user_id} credit_amount=${credit_amount} usd_amount=${usd_amount} routing=${routing} wallet=${user_wallet ?? "<none>"}`,
@@ -60,10 +66,8 @@ Deno.serve(async (req: Request) => {
       throw new Error(`VALIDATION_FAILED: credit_amount must be > 0. Received: ${body.credit_amount ?? body.amount}`);
     }
     if (routing === "on-chain") {
-      if (!user_wallet || typeof user_wallet !== "string" || !user_wallet.startsWith("0x")) {
-        throw new Error(
-          `VALIDATION_FAILED: Buyer wallet address is missing or invalid for on-chain routing. Received: ${user_wallet}`,
-        );
+      if (!user_wallet || typeof user_wallet !== "string") {
+        throw new Error(`VALIDATION_FAILED: Buyer wallet identifier is missing for on-chain routing.`);
       }
     }
     console.log(`[END: ${stage}] OK`);
@@ -75,7 +79,8 @@ Deno.serve(async (req: Request) => {
 
     let txHash: string = payment_reference;
 
-    if (routing === "on-chain") {
+    // 🚨 FIX: Only broadcast to the blockchain if it is NOT a custodial move
+    if (routing === "on-chain" && user_wallet !== "INTERNAL_CUSTODIAL_LEDGER") {
       stage = "ONCHAIN_BROADCAST";
       console.log(`[BEGIN: ${stage}] Loading viem...`);
       const { createWalletClient, http, parseUnits, isAddress, getAddress } =
@@ -110,7 +115,7 @@ Deno.serve(async (req: Request) => {
       });
       console.log(`[END: ${stage}] hash=${txHash}`);
     } else {
-      console.log(`[SKIP: ONCHAIN_BROADCAST] routing=${routing}`);
+      console.log(`[SKIP: ONCHAIN_BROADCAST] routing=${routing} wallet=${user_wallet}`);
     }
 
     stage = "LEDGER_INSERT";
@@ -124,7 +129,7 @@ Deno.serve(async (req: Request) => {
       blockchain_tx_hash: txHash,
       metadata: {
         class: "Synapse_Purchase",
-        fund: "CORPORATE_REVENUE",
+        fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
         usd_amount: usd_amount,
         payment_reference: payment_reference,
         routing: routing,
@@ -138,28 +143,32 @@ Deno.serve(async (req: Request) => {
 
     stage = "WALLET_HYDRATE";
     console.log(`[BEGIN: ${stage}]`);
+
+    // 🚨 FIX: Dynamically target Rail 1 (fiat) or Rail 3 (stablecoin) to match IDIA Life financial structure
+    const targetColumn = routing === "on-chain" ? "stablecoin_balance" : "corporate_revenue";
+
     const { data: wallet, error: fetchError } = await supabase
       .from("wallets")
-      .select("corporate_revenue")
+      .select(targetColumn)
       .eq("user_id", user_id)
       .single();
     if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
 
-    const currentRev = Number(wallet?.corporate_revenue) || 0;
-    const newRev = currentRev + credit_amount;
+    const currentBalance = Number(wallet?.[targetColumn as keyof typeof wallet]) || 0;
+    const newBalance = currentBalance + credit_amount;
 
     const { error: updateError } = await supabase
       .from("wallets")
       .update({
-        corporate_revenue: newRev,
+        [targetColumn]: newBalance,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user_id);
+
     if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
-    console.log(`[END: ${stage}] newRev=${newRev}`);
+    console.log(`[END: ${stage}] column=${targetColumn} newTotal=${newBalance}`);
 
     // [STAGE: COMPLIANCE_RAIL_LOCK] Persist this user's settlement rail on profiles.
-    // The rail funded determines the rail used to settle. No conversion (MTL Like-for-Like).
     stage = "COMPLIANCE_RAIL_LOCK";
     console.log(`[BEGIN: ${stage}] rail=${routing}`);
     if (routing === "fiat" || routing === "on-chain") {
@@ -168,7 +177,6 @@ Deno.serve(async (req: Request) => {
         .update({ compliance_rail: routing })
         .eq("user_id", user_id);
       if (railError) {
-        // Non-fatal: log but don't reverse the deposit.
         console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
       } else {
         console.log(`[END: ${stage}] Compliance rail locked: ${routing}`);
@@ -178,7 +186,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`[END: INVOKE] success hash=${txHash}`);
-    return new Response(JSON.stringify({ success: true, hash: txHash, revenue_total: newRev }), {
+    return new Response(JSON.stringify({ success: true, hash: txHash, updated_balance: newBalance }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
