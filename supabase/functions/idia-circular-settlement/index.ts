@@ -197,21 +197,33 @@ serve(async (req: Request) => {
         description: `Pro-rata yield for Ref: ${payment_reference} [${routing}]`,
       });
 
-      // 🚨 MISSING DB LINK: Explicitly update the user's wallets table
-      console.info(`[BEGIN: DB_SYNC] Hydrating stablecoin_balance for ${contributor.user_id}`);
-      const { data: contributorWallet } = await supabase
-        .from("wallets")
-        .select("stablecoin_balance")
-        .eq("user_id", contributor.user_id)
-        .single();
-
-      if (contributorWallet) {
-        const updatedBalance = Number(contributorWallet.stablecoin_balance || 0) + perContributorYield;
-        await supabase
+      // DB SYNC — Like-for-Like rail compliance.
+      // - on-chain rail: credit USDC reservoir (idia_beta_balance) in micro-USDC scale.
+      // - fiat rail:     credit fiat royalty bucket (cash_balance) in dollars.
+      console.info(`[BEGIN: DB_SYNC] Crediting yield for ${contributor.user_id} on rail=${routing}`);
+      if (routing === "on-chain") {
+        const microDelta = Math.round(Number(perContributorYield) * 1_000_000);
+        const { error: rpcErr } = await supabase.rpc("apply_usdc_delta", {
+          p_user_id: contributor.user_id,
+          p_micro_delta: microDelta,
+          p_block_number: null,
+        });
+        if (rpcErr) console.error(`[ERROR: DB_SYNC] apply_usdc_delta: ${rpcErr.message}`);
+        else console.info(`[END: DB_SYNC] +${microDelta} micro-USDC -> idia_beta_balance`);
+      } else {
+        const { data: contributorWallet } = await supabase
           .from("wallets")
-          .update({ stablecoin_balance: updatedBalance })
-          .eq("user_id", contributor.user_id);
-        console.info(`[END: DB_SYNC] Database Synced. New stablecoin_balance: $${updatedBalance}`);
+          .select("cash_balance")
+          .eq("user_id", contributor.user_id)
+          .single();
+        if (contributorWallet) {
+          const updatedBalance = Number(contributorWallet.cash_balance || 0) + perContributorYield;
+          await supabase
+            .from("wallets")
+            .update({ cash_balance: updatedBalance, updated_at: new Date().toISOString() })
+            .eq("user_id", contributor.user_id);
+          console.info(`[END: DB_SYNC] cash_balance -> $${updatedBalance}`);
+        }
       }
 
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });

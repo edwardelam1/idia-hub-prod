@@ -144,29 +144,35 @@ Deno.serve(async (req: Request) => {
     stage = "WALLET_HYDRATE";
     console.log(`[BEGIN: ${stage}]`);
 
-    // 🚨 FIX: Dynamically target Rail 1 (fiat) or Rail 3 (stablecoin) to match IDIA Life financial structure
-    const targetColumn = routing === "on-chain" ? "stablecoin_balance" : "corporate_revenue";
+    // 🛡️ ON-CHAIN RAIL: do NOT mutate wallets.idia_beta_balance here.
+    // The on-chain transfer() above is the authoritative event; the
+    // alchemy-usdc-webhook + usdc-reconcile will reflect it into the DB.
+    // FIAT RAIL: write to corporate_revenue as before.
+    let newBalance: number | null = null;
+    if (routing === "fiat") {
+      const { data: wallet, error: fetchError } = await supabase
+        .from("wallets")
+        .select("corporate_revenue")
+        .eq("user_id", user_id)
+        .single();
+      if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
 
-    const { data: wallet, error: fetchError } = await supabase
-      .from("wallets")
-      .select(targetColumn)
-      .eq("user_id", user_id)
-      .single();
-    if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
+      const currentBalance = Number(wallet?.corporate_revenue) || 0;
+      newBalance = currentBalance + credit_amount;
 
-    const currentBalance = Number(wallet?.[targetColumn as keyof typeof wallet]) || 0;
-    const newBalance = currentBalance + credit_amount;
+      const { error: updateError } = await supabase
+        .from("wallets")
+        .update({
+          corporate_revenue: newBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user_id);
 
-    const { error: updateError } = await supabase
-      .from("wallets")
-      .update({
-        [targetColumn]: newBalance,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", user_id);
-
-    if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
-    console.log(`[END: ${stage}] column=${targetColumn} newTotal=${newBalance}`);
+      if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
+      console.log(`[END: ${stage}] column=corporate_revenue newTotal=${newBalance}`);
+    } else {
+      console.log(`[SKIP: ${stage}] on-chain rail — DB updated by alchemy-usdc-webhook`);
+    }
 
     // [STAGE: COMPLIANCE_RAIL_LOCK] Persist this user's settlement rail on profiles.
     stage = "COMPLIANCE_RAIL_LOCK";
