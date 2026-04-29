@@ -85,7 +85,7 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
             userId: user.id,
-            routing: "fiat", // DUAL-RAIL COMPLIANCE: Defaulting to fiat for general UI usage
+            routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Defaulting to fiat for general UI usage
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
