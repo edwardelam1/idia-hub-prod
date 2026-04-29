@@ -472,43 +472,98 @@ serve(async (req) => {
     );
 
     // RECEIPT: every record actually shown to the AI counts as consumed.
-    // Agent-agnostic — fall back to row id when aca_hash_key is null so the
-    // synapse-controller still fires and the ledger/egress logs move.
+    console.info("[BEGIN: BestFriendAI.ReceiptTransmission] Evaluating consumption vectors.");
     let consumedReceipt: string[] = [];
+    
     if (isDataScientistMode) {
       const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       consumedReceipt = [...healthIds, ...lifeIds];
-    }
 
+      // THE MISSING WIRE: Actually send the receipt to Synapse!
+      if (consumedReceipt.length > 0) {
+        console.info(`[STATUS: BestFriendAI.ReceiptTransmission] Firing ${consumedReceipt.length} records to synapse-controller.`);
+        try {
+          // Resolve the operator ID to charge
+          const operatorId = context?.platformGuid || context?.userId;
+          if (!operatorId) throw new Error("Missing operator ID for Synapse billing.");
+
+          const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
+          
+          // HYDRATION: Pass the user's actual JWT downstream and include the apikey
+          const incomingAuthHeader = req.headers.get("Authorization");
+          const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+          const synapseRes = await fetch(synapseUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": incomingAuthHeader as string,
+              "apikey": anonKey
+            },
+            body: JSON.stringify({
+              user_id: operatorId,
+              aca_record_ids: consumedReceipt,
+              intent_type: "MARKETPLACE_RESEARCH",
+              granularity: 0.95,
+              relevance: 1.0,
+              timeliness: 1.0,
+              completeness: 1.0,
+              origin_fidelity: 1.0
+            })
+          });
+
+          if (!synapseRes.ok) {
+            const errText = await synapseRes.text();
+            console.error(`[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission] Synapse Controller rejected receipt. HTTP ${synapseRes.status}: ${errText}`);
+          } else {
+            console.info(`[STATUS: BestFriendAI.ReceiptTransmission] Synapse Controller acknowledged receipt successfully.`);
+          }
+        } catch (synErr: any) {
+          console.error(`[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission] Failed to reach Synapse network: ${synErr.message}`);
+        }
+      } else {
+        console.info("[STATUS: BestFriendAI.ReceiptTransmission] Zero records consumed. Skipping Synapse push.");
+      }
+    } else {
+      console.info("[STATUS: BestFriendAI.ReceiptTransmission] Not in Marketplace Mode. Skipping Synapse push.");
+    }
+    console.info("[END: BestFriendAI.ReceiptTransmission]");
+
+    console.info("[BEGIN: BestFriendAI.ResponseCompilation] Formatting final payload.");
+    const finalPayload = {
+      response: aiResponse,
+      timestamp: new Date().toISOString(),
+      agentStatus: "active",
+      persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
+      activeAgent: detectedAgent,
+      queryComplexity:
+        detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT"
+          ? 2.0
+          : detectedAgent === "CONSTRUCTION_AGENT"
+            ? 1.5
+            : 1.0,
+      verificationIssues: verification.issues,
+      orchestratorPlan: plan,
+      consumed_records: consumedReceipt,
+    };
+    console.info("[END: BestFriendAI.ResponseCompilation] Payload ready.");
+
+    console.info("[END: BestFriendAI.RequestGate] Closing HTTP transaction cleanly.");
     return new Response(
-      JSON.stringify({
-        response: aiResponse,
-        timestamp: new Date().toISOString(),
-        agentStatus: "active",
-        persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
-        activeAgent: detectedAgent,
-        queryComplexity:
-          detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT"
-            ? 2.0
-            : detectedAgent === "CONSTRUCTION_AGENT"
-              ? 1.5
-              : 1.0,
-        verificationIssues: verification.issues,
-        orchestratorPlan: plan,
-        consumed_records: consumedReceipt,
-      }),
+      JSON.stringify(finalPayload),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (error) {
-    console.error("Chief Researcher Error:", error);
+
+  } catch (error: any) {
+    console.error(`🚨 [FATAL STALL: BestFriendAI Global] Offset: Outer Catch | Reason: ${error.message}`, error);
     return new Response(
       JSON.stringify({
         response: `⚠️ Diagnostics Alert: ${error.message}`,
         agentStatus: "error",
         persona: "Chief Researcher",
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
