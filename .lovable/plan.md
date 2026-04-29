@@ -1,77 +1,58 @@
-## Problem
 
-We've conflated three names that mean three different things — and one of them no longer exists:
+## Goal
+Populate the IDIA Data Marketplace "Available Datasets" grid with the bundles that already exist in the backend layer. Today the UI shows nothing because:
 
-| Name | What it actually is | Where it lives |
-|---|---|---|
-| **USDC** | Real on-chain stablecoin on Base | `useWalletBalance.ts` reads `balanceOf` from contract `0x8335…2913` |
-| **IDIA-BETA** | Internal vault scrip (sidecar credits) | `wallets.idia_beta_balance` column |
-| **IDIA-USD** | Decommissioned. Does not exist. | (nothing — purge all references) |
+1. `marketplace_bundles` table has **0 rows** (verified).
+2. `useMarketplaceBundles` hook returns `[]` without ever querying Supabase.
+3. The hook also reads `bundle.contacts_count`, but the table column is actually `participant_count` — so even if rows existed they would mis-map.
+4. `ai-data-curator` edge function generates bundle metadata via Gemini, but never persists it. `create-health-data-bundle` is an empty file.
 
-Two concrete bugs flow from this:
-
-1. **`useWalletBalance` reads on-chain USDC but stuffs it into a field named `idia_beta_balance`** — the on-chain truth is being mislabeled as internal scrip.
-2. **`idia-circular-settlement` writes to `wallets.stablecoin_balance`** — that column does not exist. Real columns are `idia_beta_balance`, `idia_usd_balance` (deprecated), `corporate_revenue`, `cash_balance`, etc. These payout writes are silently failing or erroring.
-3. **`SynapseCreditsContext` invents a `stablecoin_balance` rail** by reading `idia_beta_balance` and labeling currency as `"IDIA-BETA"` while the dashboard tile labels it `USDC`. Three layers, three different names, none correct.
-
-## Decision (confirmed with you)
-
-- **USDC = on-chain only**, sourced from the Base contract via `useWalletBalance`.
-- **IDIA-BETA = internal scrip**, kept in DB but **not surfaced** in the dashboard.
-- **IDIA-USD = removed everywhere** — concept, label, currency string, dead.
-- Dashboard "Rail 3" tile shows the **on-chain USDC reading from the contract**, not a DB column.
+Per the Golden Rule (no synthetic/simulated data in production tables), we will not hand-fabricate datasets. Instead we will (a) wire the UI to the real table, and (b) wire the existing AI-curator edge function so it actually writes its output into `marketplace_bundles`, then trigger one curation run so the catalog is populated from the live data the curator has access to.
 
 ## Plan
 
-### 1. `src/hooks/useWalletBalance.ts`
-Rename the field so the on-chain truth is honestly labeled.
-- `interface WalletBalance { usdc_balance: number }` (was `idia_beta_balance`)
-- All `setBalance({ idia_beta_balance: … })` → `setBalance({ usdc_balance: … })`
-- Update consumers: `SynapsePurchaseModal.tsx` reads `walletBalance?.idia_beta_balance` → `walletBalance?.usdc_balance` (and rename the local `availableInternalUSDC` to `availableUSDC` since "internal" is wrong — it's on-chain).
+### 1. Fix the read path (UI ↔ DB)
+File: `src/hooks/useMarketplaceBundles.tsx`
+- Replace the stub `return []` with a real query:
+  ```ts
+  supabase
+    .from('marketplace_bundles')
+    .select('*')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+  ```
+- Map DB column `participant_count` → interface field `contacts_count` so existing UI (`DataMarketplace.tsx`, `BundleCard`) keeps working without UI changes.
+- Keep the 30s `refetchInterval` so newly curated bundles surface live.
 
-### 2. `src/contexts/SynapseCreditsContext.tsx`
-Stop pretending `wallets.idia_beta_balance` is a stablecoin and stop emitting an IDIA-USD currency code.
-- Drop `stablecoin_currency` from `BalanceData` (no replacement — IDIA-USD is dead).
-- Rename `ProtocolState.stablecoin_balance` → `usdc_balance`.
-- Source `usdc_balance` from `useWalletBalance` (on-chain) — **not** from `wallets.idia_beta_balance`.
-- Remove the `idia_beta_balance` read from the wallets `.select(...)` (it stays in DB but isn't surfaced here).
-- Update the `[END: Synapse.Engine]` log: `Beta[…]` → `USDC[…]`.
+### 2. Make the curator persist its output
+File: `supabase/functions/ai-data-curator/index.ts`
+- Add a new action `publish_bundle` that takes the curated metadata (title, description, key_insights, features, suggested_filters, tier, recommended_price, category, data_json, participant_count, match_percentage, bundle_category, data_fusion_level) and inserts a row into `marketplace_bundles` with `is_active=true`, `bundle_version=1`.
+- Add a convenience action `curate_and_publish` that runs `analyze_data` → `curate_bundle` → `recommend_pricing` → insert in one call, so a single invocation produces a publishable bundle.
+- Use the existing service-role client already created in the function. CORS unchanged.
 
-### 3. `src/components/dashboards/IndividualDashboard.tsx`
-- `rail3_Stablecoin` → `rail3_USDC`, sourced from `protocolState?.usdc_balance`.
-- Tile already labels "Rail 3: USDC" — keep label, drop the misleading "Beta" caption underneath; replace with "On-Chain (Base)".
+### 3. One-time catalog backfill (no fabricated data)
+File: new `supabase/functions/seed-marketplace-catalog/index.ts` (admin-only, `verify_jwt = true`)
+- Pulls live, anonymized aggregates from existing pipeline tables (`universal_data_bundles`, staged lifestyle data already produced by `process-lifestyle-data`). No invented records.
+- For each distinct `bundle_category` present in `universal_data_bundles`, calls `ai-data-curator` action `curate_and_publish` to produce one Analyst, one Professional, and one Enterprise tier entry, sized & priced from the real underlying aggregates per the Marketplace bundle pricing tiers memory (Analyst 300–500 CR, Professional 500–2000 CR, Enterprise 2000–5000 CR).
+- If `universal_data_bundles` is empty, the function returns `{ seeded: 0, reason: "no source aggregates yet" }` rather than fabricating rows. (Honors the Golden Rule.)
 
-### 4. `supabase/functions/idia-circular-settlement/index.ts`
-Fix the broken column write (lines ~200–215). `wallets.stablecoin_balance` does not exist.
-- Since payouts on the on-chain rail (`routing === "on-chain"`) settle via the actual USDC ERC-20 transfer above (`yieldHash`), the on-chain balance is already authoritative. **Remove the DB-side balance update entirely for on-chain settlements** — the ledger insert (`synapse_credit_ledger`) is the audit record; on-chain truth is read live by `useWalletBalance`.
-- For `routing === "fiat"` payouts, credit `wallets.cash_balance` (Life royalty silo) instead, with `total_earned` increment, mirroring the existing `distribute_data_royalty` RPC pattern.
+### 4. Column-name alignment
+Don't migrate the table — we only need the UI hook to translate `participant_count` ↔ `contacts_count`. No schema change.
 
-### 5. `supabase/functions/top-up-credits/index.ts`
-Already correct in shape (writes `corporate_revenue` for fiat, would need on-chain handling). Audit the `targetColumn = routing === "on-chain" ? "stablecoin_balance" : "corporate_revenue"` line (~148) — the `stablecoin_balance` branch is also writing to a non-existent column. Replace with: on-chain top-ups should NOT update a DB balance column (USDC truth is on-chain); only insert the `synapse_credit_ledger` event with the `blockchain_tx_hash`.
-
-### 6. Purge `IDIA-USD` literal strings
-Sweep and remove the string `"IDIA-USD"` and `idia_usd_balance` reads from UI surfaces:
-- `WithdrawCryptoModal.tsx` ("IDIA-USD → USDC", "Convert IDIA-USD to USDC") — relabel as "USDC withdrawal" (no conversion, it's already USDC).
-- Any "stablecoin_currency" badge readers.
-
-The DB column `wallets.idia_usd_balance` stays (no schema change) but is no longer read or written.
-
-## Out of scope
-- No DB migration. Schema stays; we're just removing reads/writes to a column that doesn't exist (`stablecoin_balance`) and ignoring the deprecated `idia_usd_balance`.
-- IDIA-BETA stays in `wallets.idia_beta_balance` for backend bookkeeping but is no longer rendered.
+### 5. Trigger initial population
+After deploy, invoke `seed-marketplace-catalog` once from the admin client. Whatever real aggregates exist will produce real bundles. The Marketplace grid will then render them via the now-live hook.
 
 ## Files touched
-- `src/hooks/useWalletBalance.ts`
-- `src/contexts/SynapseCreditsContext.tsx`
-- `src/components/dashboards/IndividualDashboard.tsx`
-- `src/components/billing/SynapsePurchaseModal.tsx`
-- `src/components/billing/WithdrawCryptoModal.tsx`
-- `src/components/billing/StablecoinPanel.tsx` (label cleanup)
-- `supabase/functions/idia-circular-settlement/index.ts`
-- `supabase/functions/top-up-credits/index.ts`
+- `src/hooks/useMarketplaceBundles.tsx` — real query + column rename
+- `supabase/functions/ai-data-curator/index.ts` — add `publish_bundle` + `curate_and_publish` actions
+- `supabase/functions/seed-marketplace-catalog/index.ts` — new admin function
+- `supabase/config.toml` — register new function
 
-## Verification
-1. Dashboard "Rail 3: USDC" must equal the value `useWalletBalance` logs (on-chain `balanceOf`).
-2. Run a small fiat top-up → `wallets.corporate_revenue` increments, no errors about missing `stablecoin_balance`.
-3. Run an on-chain top-up → no DB balance write attempted; `synapse_credit_ledger` row created with `blockchain_tx_hash`; dashboard reflects new on-chain balance after next 15s poll.
-4. `rg "stablecoin_balance|IDIA-USD|idia_usd_balance" src supabase/functions` returns zero hits.
+## What this does NOT do
+- Does not insert hand-written/mock bundles. If `universal_data_bundles` has no aggregates yet, the marketplace stays empty until the upstream pipeline produces them — which is the correct behavior under the Golden Rule.
+- Does not change `BundleCard`, `MarketplaceFilters`, or any UI component. The shape consumed by `DataMarketplace.tsx` is preserved by the hook's mapping layer.
+
+## Verification after build
+1. `select count(*) from marketplace_bundles where is_active` > 0 once seeded.
+2. `/marketplace` route shows BundleCards with real titles/tiers/prices.
+3. Hook returns `contacts_count` populated from `participant_count`.

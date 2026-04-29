@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface MarketplaceBundle {
   bundle_id: string;
@@ -24,9 +25,22 @@ export const useMarketplaceBundles = () => {
   const { data: bundles, isLoading, error, refetch } = useQuery({
     queryKey: ['marketplace-bundles'],
     queryFn: async () => {
-      // Return empty array – no Supabase. Real data will come from AWS API.
-      console.log('Marketplace bundles: awaiting AWS API integration');
-      return [] as MarketplaceBundle[];
+      const { data, error } = await supabase
+        .from('marketplace_bundles')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to load marketplace bundles', error);
+        throw error;
+      }
+
+      // DB column is participant_count; UI/interface expects contacts_count.
+      return (data ?? []).map((row: any) => ({
+        ...row,
+        contacts_count: row.participant_count ?? 0,
+      })) as MarketplaceBundle[];
     },
     refetchInterval: 30 * 1000,
   });
