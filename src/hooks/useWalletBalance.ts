@@ -18,13 +18,13 @@ const USDC_ABI = [
 ] as const;
 
 interface WalletBalance {
-  idia_beta_balance: number;
+  usdc_balance: number;
 }
 
 export const useWalletBalance = () => {
   console.log("[useWalletBalance][Hook] START: Initializing hook.");
 
-  const [balance, setBalance] = useState<WalletBalance>({ idia_beta_balance: 0 });
+  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
   const [loading, setLoading] = useState(true);
 
   const fetchBalance = useCallback(async () => {
@@ -46,7 +46,7 @@ export const useWalletBalance = () => {
 
       if (!user) {
         console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active user session found. Defaulting to 0.");
-        setBalance({ idia_beta_balance: 0 });
+        setBalance({ usdc_balance: 0 });
         return;
       }
 
@@ -72,7 +72,7 @@ export const useWalletBalance = () => {
 
       if (!walletAddress || !walletAddress.startsWith("0x")) {
         console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid wallet address missing. Defaulting to 0.");
-        setBalance({ idia_beta_balance: 0 });
+        setBalance({ usdc_balance: 0 });
         return;
       }
 
@@ -102,13 +102,13 @@ export const useWalletBalance = () => {
         `[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified on-chain truth is $${hydratedBalance} USDC.`,
       );
 
-      setBalance({ idia_beta_balance: hydratedBalance });
+      setBalance({ usdc_balance: hydratedBalance });
     } catch (err: any) {
       console.error(
         "🚨 [useWalletBalance][fetchBalance] FATAL ERROR: Exception caught during fetch routine.",
         err.message,
       );
-      setBalance({ idia_beta_balance: 0 });
+      setBalance({ usdc_balance: 0 });
     } finally {
       console.log("[useWalletBalance][fetchBalance] END: Fetch routine complete.");
       setLoading(false);

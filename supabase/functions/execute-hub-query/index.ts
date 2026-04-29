@@ -8,7 +8,7 @@ const corsHeaders = {
 // War Chest revenue split (100% accounted)
 const REVENUE_SPLIT = {
   CORPORATE_REVENUE: 0.6, // 60% → IDIA recognized revenue
-  USER_LIQUIDITY_POOL: 0.3, // 30% → distributed as IDIA-USD in Life app
+  USER_LIQUIDITY_POOL: 0.3, // 30% → distributed as USDC to contributors
   ECOSYSTEM_WAR_CHEST: 0.1, // 10% → escrowed for Phase 2 liquidity
 };
 

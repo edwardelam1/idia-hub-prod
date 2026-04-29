@@ -62,7 +62,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
 
       setStep('success');
       toast.success('Withdrawal initiated', {
-        description: `${formatIdiaUsd(parsedAmount)} IDIA-USD → USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       });
       await refreshBalance();
       setTimeout(handleClose, 2500);
@@ -81,7 +81,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             Withdraw to Crypto Wallet
           </DialogTitle>
           <DialogDescription>
-            Convert IDIA-USD to USDC and send to your Web3 wallet via Circle.
+            Send USDC to your Web3 wallet via Circle.
           </DialogDescription>
         </DialogHeader>
 
@@ -90,11 +90,11 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             <div className="bg-muted/50 border border-border rounded-lg p-3 text-sm">
               <span className="text-muted-foreground">Available: </span>
               <span className="font-bold text-foreground font-mono">{formatIdiaUsd(currentBalance)}</span>
-              <span className="text-muted-foreground"> IDIA-USD</span>
+              <span className="text-muted-foreground"> USDC</span>
             </div>
 
             <div className="space-y-2">
-              <Label>Withdrawal Amount (IDIA-USD)</Label>
+              <Label>Withdrawal Amount (USDC)</Label>
               <div className="flex items-center gap-0">
                 <span className="flex items-center justify-center h-10 px-3 bg-muted border border-r-0 border-input rounded-l-md text-sm font-medium text-muted-foreground">$</span>
                 <Input

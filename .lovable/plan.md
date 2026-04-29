@@ -1,83 +1,77 @@
-## Compliance Routing — End-to-End Wire for Best Friend AI
+## Problem
 
-The Cashier already enforces `routing ∈ {"fiat","on-chain"}`. The fatal stall is happening because the Best Friend → Synapse Controller → Cashier chain never carries that field. We also have a duplicated `CASHIER_HANDOFF` block in `synapse-controller` that double-declares `const { routing } = body` (will not compile cleanly and double-fires the cashier).
+We've conflated three names that mean three different things — and one of them no longer exists:
 
-### The chain we're fixing
+| Name | What it actually is | Where it lives |
+|---|---|---|
+| **USDC** | Real on-chain stablecoin on Base | `useWalletBalance.ts` reads `balanceOf` from contract `0x8335…2913` |
+| **IDIA-BETA** | Internal vault scrip (sidecar credits) | `wallets.idia_beta_balance` column |
+| **IDIA-USD** | Decommissioned. Does not exist. | (nothing — purge all references) |
 
-```text
-BestFriendPage.tsx ──(routing)──▶ best-friend-ai
-                                       │
-                                       ▼
-                              synapse-controller ──(routing)──▶ idia-circular-settlement
-```
+Two concrete bugs flow from this:
 
-Every hop must carry `routing` exactly as `"fiat"` or `"on-chain"` (no defaults, no coercion — same contract as the Blast Wall).
+1. **`useWalletBalance` reads on-chain USDC but stuffs it into a field named `idia_beta_balance`** — the on-chain truth is being mislabeled as internal scrip.
+2. **`idia-circular-settlement` writes to `wallets.stablecoin_balance`** — that column does not exist. Real columns are `idia_beta_balance`, `idia_usd_balance` (deprecated), `corporate_revenue`, `cash_balance`, etc. These payout writes are silently failing or erroring.
+3. **`SynapseCreditsContext` invents a `stablecoin_balance` rail** by reading `idia_beta_balance` and labeling currency as `"IDIA-BETA"` while the dashboard tile labels it `USDC`. Three layers, three different names, none correct.
 
----
+## Decision (confirmed with you)
 
-### 1. Persist the user's compliance rail (source of truth)
+- **USDC = on-chain only**, sourced from the Base contract via `useWalletBalance`.
+- **IDIA-BETA = internal scrip**, kept in DB but **not surfaced** in the dashboard.
+- **IDIA-USD = removed everywhere** — concept, label, currency string, dead.
+- Dashboard "Rail 3" tile shows the **on-chain USDC reading from the contract**, not a DB column.
 
-Add a `compliance_rail` field on `profiles` so the rail used to fund credits is the rail used to burn them. Set/refresh whenever a top-up succeeds.
+## Plan
 
-- **Migration**: add column `profiles.compliance_rail text` (nullable, no default — null forces UI to ask).
-- **`top-up-credits`** (and `SynapseTopUp` success path): on successful top-up, write `"on-chain"` if `paymentRail === "usdc"`, else `"fiat"`.
-- No backfill — existing users without a rail get prompted on first Marketplace Mode query.
+### 1. `src/hooks/useWalletBalance.ts`
+Rename the field so the on-chain truth is honestly labeled.
+- `interface WalletBalance { usdc_balance: number }` (was `idia_beta_balance`)
+- All `setBalance({ idia_beta_balance: … })` → `setBalance({ usdc_balance: … })`
+- Update consumers: `SynapsePurchaseModal.tsx` reads `walletBalance?.idia_beta_balance` → `walletBalance?.usdc_balance` (and rename the local `availableInternalUSDC` to `availableUSDC` since "internal" is wrong — it's on-chain).
 
-### 2. Frontend — `src/pages/BestFriendPage.tsx`
+### 2. `src/contexts/SynapseCreditsContext.tsx`
+Stop pretending `wallets.idia_beta_balance` is a stablecoin and stop emitting an IDIA-USD currency code.
+- Drop `stablecoin_currency` from `BalanceData` (no replacement — IDIA-USD is dead).
+- Rename `ProtocolState.stablecoin_balance` → `usdc_balance`.
+- Source `usdc_balance` from `useWalletBalance` (on-chain) — **not** from `wallets.idia_beta_balance`.
+- Remove the `idia_beta_balance` read from the wallets `.select(...)` (it stays in DB but isn't surfaced here).
+- Update the `[END: Synapse.Engine]` log: `Beta[…]` → `USDC[…]`.
 
-- On mount, fetch `profiles.compliance_rail` for the active user; hold in component state as `complianceRail`.
-- In `handleSendMessage`, when `marketplaceMode === true`:
-  - If `complianceRail` is null/missing → show a small inline modal/toast: "Choose your settlement rail (Fiat / USDC)" with two buttons; on choose, persist to `profiles.compliance_rail` and continue.
-  - Pass `routing: complianceRail` inside the `body` of the `supabase.functions.invoke("best-friend-ai", ...)` call.
-- Add a tiny pill near the Marketplace Mode toggle showing the active rail (`FIAT` or `ON-CHAIN`) with a click-to-change action that updates `profiles.compliance_rail`.
+### 3. `src/components/dashboards/IndividualDashboard.tsx`
+- `rail3_Stablecoin` → `rail3_USDC`, sourced from `protocolState?.usdc_balance`.
+- Tile already labels "Rail 3: USDC" — keep label, drop the misleading "Beta" caption underneath; replace with "On-Chain (Base)".
 
-### 3. Edge — `supabase/functions/best-friend-ai/index.ts`
+### 4. `supabase/functions/idia-circular-settlement/index.ts`
+Fix the broken column write (lines ~200–215). `wallets.stablecoin_balance` does not exist.
+- Since payouts on the on-chain rail (`routing === "on-chain"`) settle via the actual USDC ERC-20 transfer above (`yieldHash`), the on-chain balance is already authoritative. **Remove the DB-side balance update entirely for on-chain settlements** — the ledger insert (`synapse_credit_ledger`) is the audit record; on-chain truth is read live by `useWalletBalance`.
+- For `routing === "fiat"` payouts, credit `wallets.cash_balance` (Life royalty silo) instead, with `total_earned` increment, mirroring the existing `distribute_data_royalty` RPC pattern.
 
-In the existing `BestFriendAI.ReceiptTransmission` block (around line 497) when POSTing to `synapse-controller`:
+### 5. `supabase/functions/top-up-credits/index.ts`
+Already correct in shape (writes `corporate_revenue` for fiat, would need on-chain handling). Audit the `targetColumn = routing === "on-chain" ? "stablecoin_balance" : "corporate_revenue"` line (~148) — the `stablecoin_balance` branch is also writing to a non-existent column. Replace with: on-chain top-ups should NOT update a DB balance column (USDC truth is on-chain); only insert the `synapse_credit_ledger` event with the `blockchain_tx_hash`.
 
-- Extract `const routing = body?.routing` from the inbound request payload.
-- Hard-stop early if `marketplaceMode && routing !== "fiat" && routing !== "on-chain"` — return a 400 with `error: "ROUTING_HARD_STOP"` so the UI can prompt the user. No defaults.
-- Add `routing` into the JSON body sent to `synapse-controller`.
+### 6. Purge `IDIA-USD` literal strings
+Sweep and remove the string `"IDIA-USD"` and `idia_usd_balance` reads from UI surfaces:
+- `WithdrawCryptoModal.tsx` ("IDIA-USD → USDC", "Convert IDIA-USD to USDC") — relabel as "USDC withdrawal" (no conversion, it's already USDC).
+- Any "stablecoin_currency" badge readers.
 
-### 4. Edge — `supabase/functions/synapse-controller/index.ts` (cleanup + propagate)
+The DB column `wallets.idia_usd_balance` stays (no schema change) but is no longer read or written.
 
-Two issues to fix in one pass:
+## Out of scope
+- No DB migration. Schema stays; we're just removing reads/writes to a column that doesn't exist (`stablecoin_balance`) and ignoring the deprecated `idia_usd_balance`.
+- IDIA-BETA stays in `wallets.idia_beta_balance` for backend bookkeeping but is no longer rendered.
 
-1. **Duplicated CASHIER_HANDOFF**: lines ~115–169 contain the same block twice, and `const { routing } = body` is declared twice in the same scope. Delete the second copy entirely. Keep one clean handoff.
-2. **Gatekeeper parity**: at the top of the handler, after parsing `body`, validate:
-   ```ts
-   const { routing } = body;
-   if (routing !== "fiat" && routing !== "on-chain") {
-     throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
-   }
-   ```
-   so failures surface here with full context instead of inside the Cashier.
-3. Keep the single `adminClient.functions.invoke("idia-circular-settlement", { body: { ..., routing } })` call.
+## Files touched
+- `src/hooks/useWalletBalance.ts`
+- `src/contexts/SynapseCreditsContext.tsx`
+- `src/components/dashboards/IndividualDashboard.tsx`
+- `src/components/billing/SynapsePurchaseModal.tsx`
+- `src/components/billing/WithdrawCryptoModal.tsx`
+- `src/components/billing/StablecoinPanel.tsx` (label cleanup)
+- `supabase/functions/idia-circular-settlement/index.ts`
+- `supabase/functions/top-up-credits/index.ts`
 
-### 5. Cashier — `idia-circular-settlement`
-
-No changes. The Blast Wall stays as-is and will now always receive a valid `routing`.
-
----
-
-### Logging protocol
-
-All new branches keep the `[BEGIN: STAGE] / [END: STAGE]` convention:
-- `[BEGIN: ROUTING_RESOLUTION]` in best-friend-ai when reading `routing` from the payload.
-- `[BEGIN: ROUTING_GATEKEEPER]` in synapse-controller mirroring the Cashier.
-- `[STATUS] Compliance rail locked: <fiat|on-chain>` on success.
-
-### Files touched
-
-- `supabase/migrations/<new>.sql` — add `profiles.compliance_rail`.
-- `src/pages/BestFriendPage.tsx` — fetch/prompt/persist rail, send `routing` in invoke body, pill UI.
-- `supabase/functions/best-friend-ai/index.ts` — read `routing` from body, validate, forward to synapse-controller.
-- `supabase/functions/synapse-controller/index.ts` — delete duplicated CASHIER_HANDOFF block, add top-of-handler `ROUTING_GATEKEEPER`, ensure single invoke carries `routing`.
-- `supabase/functions/top-up-credits/index.ts` (+ `SynapseTopUp.tsx` follow-through) — write `compliance_rail` on successful top-up.
-- Redeploy: `best-friend-ai`, `synapse-controller`, `top-up-credits`.
-
-### Out of scope
-
-- Cashier code (already compliant).
-- Viem / blockchain logic.
-- Any conversion between rails — explicitly forbidden by MTL posture.
+## Verification
+1. Dashboard "Rail 3: USDC" must equal the value `useWalletBalance` logs (on-chain `balanceOf`).
+2. Run a small fiat top-up → `wallets.corporate_revenue` increments, no errors about missing `stablecoin_balance`.
+3. Run an on-chain top-up → no DB balance write attempted; `synapse_credit_ledger` row created with `blockchain_tx_hash`; dashboard reflects new on-chain balance after next 15s poll.
+4. `rg "stablecoin_balance|IDIA-USD|idia_usd_balance" src supabase/functions` returns zero hits.

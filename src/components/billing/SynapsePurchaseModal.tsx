@@ -71,7 +71,7 @@ const SynapsePurchaseModal = ({
 
   // Bring in the internal IDIA Life wallet balances (CUSTODIAL TRUTH)
   const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
-  const availableInternalUSDC = walletBalance?.idia_beta_balance ?? 0;
+  const availableUSDC = walletBalance?.usdc_balance ?? 0;
 
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
@@ -127,12 +127,12 @@ const SynapsePurchaseModal = ({
     try {
       // 1. LIQUIDITY VERIFICATION
       console.log(
-        `[SynapsePurchaseModal] INFO: Checking internal vault liquidity. Required: $${usdAmount}, Available: $${availableInternalUSDC}`,
+        `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
       );
-      if (availableInternalUSDC < usdAmount) {
-        console.error("[SynapsePurchaseModal] ERROR: Insufficient custodial funds.");
+      if (availableUSDC < usdAmount) {
+        console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
         throw new Error(
-          `Insufficient Internal USDC balance ($${availableInternalUSDC.toFixed(2)}). Please fund your IDIA Life wallet.`,
+          `Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`,
         );
       }
 
@@ -331,8 +331,8 @@ const SynapsePurchaseModal = ({
 
               <div className="bg-muted/50 border border-border rounded-xl p-4 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">IDIA Life Balance</span>
-                  <span className="text-primary font-bold">${availableInternalUSDC.toFixed(2)} USDC</span>
+                  <span className="text-muted-foreground">USDC Balance (On-Chain)</span>
+                  <span className="text-primary font-bold">${availableUSDC.toFixed(2)} USDC</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credits to Add</span>

@@ -51,16 +51,16 @@ const IndividualDashboard = () => {
   // ========================================================================
   const rail1_Operating = protocolState?.hub_operating_cash ?? 0;
   const rail2_Gas = protocolState?.synapse_gas_credits ?? 0;
-  const rail3_Stablecoin = protocolState?.stablecoin_balance ?? 0;
+  const rail3_USDC = protocolState?.usdc_balance ?? 0;
   const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? 0;
 
   useEffect(() => {
     if (protocolState) {
       console.info(
-        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1: $${rail1_Operating} | R2: ${rail2_Gas} | R3: ${rail3_Stablecoin} | S3: $${silo3_LifeYield}`,
+        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1: $${rail1_Operating} | R2: ${rail2_Gas} | R3-USDC: ${rail3_USDC} | S3: $${silo3_LifeYield}`,
       );
     }
-  }, [protocolState, rail1_Operating, rail2_Gas, rail3_Stablecoin, silo3_LifeYield]);
+  }, [protocolState, rail1_Operating, rail2_Gas, rail3_USDC, silo3_LifeYield]);
 
   // ─── DYNAMIC LEDGER INTERROGATION ─────────────────────
   const { data: stats } = useQuery({
@@ -153,8 +153,10 @@ const IndividualDashboard = () => {
             <TrendingUp className="h-3 w-3" /> Rail 3: USDC
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-xl font-mono font-bold text-amber-500">{rail3_Stablecoin.toLocaleString()}</span>
-            <span className="text-[8px] font-bold text-amber-500/70 uppercase">Beta</span>
+            <span className="text-xl font-mono font-bold text-amber-500">
+              ${rail3_USDC.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[8px] font-bold text-amber-500/70 uppercase">On-Chain (Base)</span>
           </div>
           <Progress value={100} className="h-0.5 mt-2 bg-amber-500/20" />
         </Card>

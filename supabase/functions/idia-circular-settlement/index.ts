@@ -197,21 +197,29 @@ serve(async (req: Request) => {
         description: `Pro-rata yield for Ref: ${payment_reference} [${routing}]`,
       });
 
-      // 🚨 MISSING DB LINK: Explicitly update the user's wallets table
-      console.info(`[BEGIN: DB_SYNC] Hydrating stablecoin_balance for ${contributor.user_id}`);
-      const { data: contributorWallet } = await supabase
-        .from("wallets")
-        .select("stablecoin_balance")
-        .eq("user_id", contributor.user_id)
-        .single();
-
-      if (contributorWallet) {
-        const updatedBalance = Number(contributorWallet.stablecoin_balance || 0) + perContributorYield;
-        await supabase
+      // ROUTING-AWARE DB SYNC
+      // - On-chain: USDC balance is read live from the Base contract (useWalletBalance).
+      //   No DB column to update — the on-chain transfer (yieldHash) is the source of truth.
+      // - Fiat: Credit the user's Life royalty silo (wallets.cash_balance + total_earned).
+      if (routing === "fiat") {
+        console.info(`[BEGIN: DB_SYNC] Crediting fiat royalty silo for ${contributor.user_id}`);
+        const { data: contributorWallet } = await supabase
           .from("wallets")
-          .update({ stablecoin_balance: updatedBalance })
-          .eq("user_id", contributor.user_id);
-        console.info(`[END: DB_SYNC] Database Synced. New stablecoin_balance: $${updatedBalance}`);
+          .select("cash_balance, total_earned")
+          .eq("user_id", contributor.user_id)
+          .single();
+
+        if (contributorWallet) {
+          const newCash = Number(contributorWallet.cash_balance || 0) + perContributorYield;
+          const newEarned = Number(contributorWallet.total_earned || 0) + perContributorYield;
+          await supabase
+            .from("wallets")
+            .update({ cash_balance: newCash, total_earned: newEarned, updated_at: new Date().toISOString() })
+            .eq("user_id", contributor.user_id);
+          console.info(`[END: DB_SYNC] Fiat silo synced. cash_balance=$${newCash}`);
+        }
+      } else {
+        console.info(`[SKIP: DB_SYNC] On-chain routing — USDC truth lives on Base, no DB write needed.`);
       }
 
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });
