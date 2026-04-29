@@ -77,7 +77,21 @@ serve(async (req: Request) => {
 
       // Compliance: Prepend 0x if missing to satisfy viem hex validation
       const formattedKey = rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`;
-      account = privateKeyToAccount(formattedKey as `0x${string}`);
+      const rawKey = Deno.env.get("PRIVATE_KEY");
+      if (!rawKey) {
+        throw new Error(
+          "PRIVATE_KEY secret is missing. Check your Supabase project settings for uppercase 'PRIVATE_KEY'.",
+        );
+      }
+
+      // Ensure 0x prefix and remove any accidental whitespace
+      const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
+
+      try {
+        account = privateKeyToAccount(formattedKey as `0x${string}`);
+      } catch (keyErr: any) {
+        throw new Error(`PRIVATE_KEY format error: ${keyErr.message}. Ensure the key is exactly 64 hex characters.`);
+      }
       client = createWalletClient({
         account,
         chain: base,
