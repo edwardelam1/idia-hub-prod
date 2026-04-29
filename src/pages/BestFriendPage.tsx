@@ -65,11 +65,7 @@ const BestFriendPage = () => {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user?.id) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("compliance_rail")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data } = await supabase.from("profiles").select("compliance_rail").eq("user_id", user.id).maybeSingle();
       const rail = (data as any)?.compliance_rail;
       if (rail === "fiat" || rail === "on-chain") setComplianceRail(rail);
     })();
@@ -217,7 +213,7 @@ const BestFriendPage = () => {
           variant="outline"
           className="h-6 text-[10px] gap-1 px-2 border-emerald-200 text-emerald-700 bg-emerald-50"
         >
-          <Activity className="h-3 w-3" /> PIPELINE_LIVE
+          <Activity className="h-3 w-3" /> PIPELINE LIVE
         </Badge>
       </div>
 
@@ -297,8 +293,8 @@ const BestFriendPage = () => {
         <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <button
-            onClick={() => setMarketplaceMode(!marketplaceMode)}
-            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
+              onClick={() => setMarketplaceMode(!marketplaceMode)}
+              className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
             >
               <Search size={14} /> Marketplace Mode (1 CR)
             </button>
@@ -334,8 +330,8 @@ const BestFriendPage = () => {
           <DialogHeader>
             <DialogTitle>Choose Your Settlement Rail</DialogTitle>
             <DialogDescription>
-              Federal Like-for-Like compliance: the rail you fund credits with is the rail used to settle
-              earnings. This cannot convert between fiat and crypto. Pick the rail that matches how you topped up.
+              Federal Like-for-Like compliance: the rail you fund credits with is the rail used to settle earnings. This
+              cannot convert between fiat and crypto. Pick the rail that matches how you topped up.
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
@@ -355,9 +351,7 @@ const BestFriendPage = () => {
             </button>
           </div>
           <DialogFooter>
-            <p className="text-[10px] text-muted-foreground">
-              You can change this later from this same pill.
-            </p>
+            <p className="text-[10px] text-muted-foreground">You can change this later from this same pill.</p>
           </DialogFooter>
         </DialogContent>
       </Dialog>
