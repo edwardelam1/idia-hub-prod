@@ -1,34 +1,34 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { useBillingData } from '@/hooks/useBillingData';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBillingData } from "@/hooks/useBillingData";
+import { toast } from "sonner";
 
 const PLANS = [
-  { id: 'analyst', name: 'Analyst', price: 9995, credits: 5000, label: '$9,995/yr' },
-  { id: 'professional', name: 'Professional', price: 24995, credits: 20000, label: '$24,995/yr' },
-  { id: 'enterprise', name: 'Enterprise', price: 49995, credits: 50000, label: '$49,995+/yr' },
+  { id: "analyst", name: "Analyst", price: 9995, credits: 5000, label: "$9,995/yr" },
+  { id: "professional", name: "Professional", price: 24995, credits: 20000, label: "$24,995/yr" },
+  { id: "enterprise", name: "Enterprise", price: 49995, credits: 50000, label: "$49,995+/yr" },
 ];
 
 const UniversalPurchaseScreen = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const preselectedPlan = searchParams.get('plan') || 'analyst';
+  const preselectedPlan = searchParams.get("plan") || "analyst";
   const { user } = useAuth();
   const { paymentMethods } = useBillingData();
 
   const [selectedPlan, setSelectedPlan] = useState(preselectedPlan);
-  const [selectedPM, setSelectedPM] = useState('');
-  const [step, setStep] = useState<'review' | 'processing' | 'success'>('review');
+  const [selectedPM, setSelectedPM] = useState("");
+  const [step, setStep] = useState<"review" | "processing" | "success">("review");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const plan = PLANS.find(p => p.id === selectedPlan) || PLANS[0];
+  const plan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
 
   // Worldpay SDK Port: handles tokenized response from hosted fields
   const handleWorldpayResponse = async (token: string) => {
@@ -36,10 +36,10 @@ const UniversalPurchaseScreen = () => {
     try {
       // 1. Send token to secure vaulting edge function
       // 2. Initialize subscription
-      toast.success('Payment Method Secured');
-      setStep('success');
+      toast.success("Payment Method Secured");
+      setStep("success");
     } catch (err) {
-      toast.error('Worldpay integration failed');
+      toast.error("Worldpay integration failed");
     } finally {
       setIsProcessing(false);
     }
@@ -47,64 +47,69 @@ const UniversalPurchaseScreen = () => {
 
   const handlePurchase = async () => {
     if (!selectedPM) {
-      toast.error('Please select a payment method or complete Worldpay authorization');
+      toast.error("Please select a payment method or complete Worldpay authorization");
       return;
     }
 
-    setStep('processing');
+    setStep("processing");
     const userId = user?.user_id;
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create a unified payment reference for provenance tracking
+      const paymentReference = `SUB-${Date.now()}`;
+
+      // ====================================================================
+      // FIX: Explicitly call the settlement API with strict routing
+      // ====================================================================
+      const { error: settlementError } = await supabase.functions.invoke("idia-circular-settlement", {
+        body: {
+          total_fiat_amount: plan.price,
+          contributing_users: [{ user_id: userId, amount: plan.price }],
+          payment_reference: paymentReference,
+          payment_method: "fiat", // Define the method explicitly
+          routing: "fiat", // Provide the strict routing flag
+        },
+      });
+
+      if (settlementError) {
+        console.error("Settlement engine rejection:", settlementError);
+        throw new Error("Financial settlement rejected by gateway.");
+      }
 
       const expiresAt = new Date();
       expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
-      const { error: subError } = await supabase.from('user_subscriptions').insert({
+      const { error: subError } = await supabase.from("user_subscriptions").insert({
         user_id: userId,
         tier: plan.name,
-        status: 'active',
+        status: "active",
         started_at: new Date().toISOString(),
         expires_at: expiresAt.toISOString(),
       } as any);
       if (subError) throw subError;
 
-      await supabase.from('user_invoices').insert({
+      await supabase.from("user_invoices").insert({
         user_id: userId,
         invoice_number: `INV-${Date.now()}`,
         amount: plan.price,
-        status: 'paid',
+        status: "paid",
         period: `${new Date().getFullYear()} Annual`,
       } as any);
 
-      const { data: lastEntry } = await supabase
-        .from('synapse_credit_ledger')
-        .select('balance_after')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle() as any;
+      // We rely on the `idia-circular-settlement` edge function to properly
+      // increment credits in `synapse_credit_ledger` to maintain single-source truth.
+      // We removed the direct `synapse_credit_ledger` insert here to prevent
+      // double-crediting or bypassing the compliance gateway.
 
-      const currentBalance = Number(lastEntry?.balance_after ?? 0);
-
-      await supabase.from('synapse_credit_ledger').insert({
-        user_id: userId,
-        entry_type: 'subscription_purchase',
-        amount: plan.credits,
-        balance_after: currentBalance + plan.credits,
-        description: `${plan.name} plan subscription - ${plan.credits.toLocaleString()} CRD`,
-        reference_id: `SUB-${Date.now()}`,
-      } as any);
-
-      setStep('success');
+      setStep("success");
       toast.success(`${plan.name} plan activated!`);
     } catch (err: any) {
-      toast.error(err.message || 'Purchase failed');
-      setStep('review');
+      toast.error(err.message || "Purchase failed");
+      setStep("review");
     }
   };
 
-  if (step === 'processing') {
+  if (step === "processing") {
     return (
       <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
@@ -114,7 +119,7 @@ const UniversalPurchaseScreen = () => {
     );
   }
 
-  if (step === 'success') {
+  if (step === "success") {
     return (
       <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <CheckCircle2 className="w-16 h-16 text-emerald-500" />
@@ -122,7 +127,9 @@ const UniversalPurchaseScreen = () => {
         <p className="text-muted-foreground text-sm text-center">
           {plan.credits.toLocaleString()} CRD have been added to your ledger. Your subscription is now active.
         </p>
-        <Button onClick={() => navigate('/billing')} className="mt-4">Go to Billing</Button>
+        <Button onClick={() => navigate("/billing")} className="mt-4">
+          Go to Billing
+        </Button>
       </div>
     );
   }
@@ -145,12 +152,14 @@ const UniversalPurchaseScreen = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {PLANS.map(p => (
+            {PLANS.map((p) => (
               <div
                 key={p.id}
                 onClick={() => setSelectedPlan(p.id)}
                 className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  selectedPlan === p.id ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/30'
+                  selectedPlan === p.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-muted-foreground/30"
                 }`}
               >
                 <h3 className="font-semibold text-foreground">{p.name}</h3>
@@ -165,17 +174,23 @@ const UniversalPurchaseScreen = () => {
       {/* Payment — Worldpay SDK Port */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">Secure Payment Gateway</CardTitle>
+          <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
+            Secure Payment Gateway
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {paymentMethods.length > 0 && (
             <div>
               <p className="text-sm font-medium text-foreground mb-2">Saved Payment Methods</p>
               <Select value={selectedPM} onValueChange={setSelectedPM}>
-                <SelectTrigger><SelectValue placeholder="Select a saved method" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a saved method" />
+                </SelectTrigger>
                 <SelectContent>
                   {paymentMethods.map((pm: any) => (
-                    <SelectItem key={pm.id} value={pm.id}>{pm.display_label} •••• {pm.identifier}</SelectItem>
+                    <SelectItem key={pm.id} value={pm.id}>
+                      {pm.display_label} •••• {pm.identifier}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -218,7 +233,7 @@ const UniversalPurchaseScreen = () => {
 
       <Button className="w-full gap-2" size="lg" onClick={handlePurchase} disabled={isProcessing}>
         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-        {isProcessing ? 'Processing...' : 'Authorize & Enroll'}
+        {isProcessing ? "Processing..." : "Authorize & Enroll"}
       </Button>
 
       <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
