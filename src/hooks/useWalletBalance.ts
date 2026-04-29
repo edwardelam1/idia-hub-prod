@@ -91,7 +91,7 @@ export const useWalletBalance = () => {
         abi: USDC_ABI,
         functionName: "balanceOf",
         args: [walletAddress as `0x${string}`],
-      });
+      } as any); // 🚨 CAST TO ANY: Force TS to stop looking for authorizationList
 
       console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Raw BigInt retrieved: ${rawBalance.toString()}`);
 
