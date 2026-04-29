@@ -1,175 +1,55 @@
-# Business Taxonomy Engine — App Builder Only
+# Fix: `top-up-credits` 400 — "Buyer wallet address is missing"
 
-The taxonomy module will be built as a self-contained data layer, but **the only consumer in v1 is `PayAppBlueprint.tsx`**. No other Hub module (Settings, Onboarding, Marketplace, Best Friend, MyReports, Compliance) will be touched.
+## Root cause
 
----
+The error string `"VALIDATION_FAILED: Buyer wallet address is missing or 'undefined'. Received: undefined"` does **not** exist in the current repo source for `supabase/functions/top-up-credits/index.ts`. That means the **deployed** Edge Function is a stale/older revision than the file in the repo, and it is rejecting the request before any of the current logic runs.
 
-## 1. New module: `src/taxonomy/`
+In addition there is a real **payload contract mismatch** that will break the current repo version too as soon as it deploys:
 
-Pure data + types + selectors. No UI, no Supabase, no side effects.
+- Frontend (`src/components/billing/SynapseTopUp.tsx`) sends:
+  ```
+  { user_id, credit_amount, usd_amount, user_wallet, payment_method: "usdc" | "worldpay" }
+  ```
+- Function (`supabase/functions/top-up-credits/index.ts`) reads:
+  ```
+  body.recipient_address    // never sent
+  body.routing              // never sent → defaults to "fiat", on-chain branch skipped
+  body.amount / body.credit_amount
+  ```
 
-```text
-src/taxonomy/
-├── types.ts           Sector, Industry, Archetype, NanoBite, ValueChainStage,
-│                       RevenueModel, ProductionMethod, TaxonomyNode, Classification
-├── sectors.ts         Primary, Secondary, Tertiary, Quaternary, Quinary
-├── industries/
-│   ├── primary.ts     Extractive, Agricultural, Genetic, Harvesting
-│   ├── secondary.ts   Manufacturing (Industrial + Consumer), Processing, Construction
-│   ├── tertiary.ts    Retail (Boutique + Mass), Hospitality, QSR, Banking, Transport
-│   ├── quaternary.ts  SaaS, Consulting, R&D, Creator (6 sub-models)
-│   └── quinary.ts     Executive / Policy
-├── archetypes.ts      8 HBS models + Pipe vs Platform flag
-├── positioning.ts     Boutique ↔ Mass spectrum (variety, volume, lead time, pricing)
-├── production.ts      JobShop | Batch | AssemblyLine | ContinuousFlow + breakEven()
-├── valueChain.ts      Porter primary + support activities
-├── nanoBites/         Task atoms keyed by (industryId, valueChainStage)
-│   ├── retail.ts
-│   ├── saas.ts
-│   ├── consulting.ts
-│   ├── creator.ts
-│   ├── manufacturing.ts
-│   └── ... one per seeded industry
-├── codes/
-│   ├── naics.ts       Curated ~200 codes covering seeded industries
-│   └── gics.ts        Curated subset
-├── selectors.ts       getNanoBitesFor(...), recommendArchetype(...), breakEven(...)
-└── index.ts           Public surface
-```
+So even after a fresh deploy, the on-chain path would never execute, and any future re-introduction of a wallet check would 400 again.
 
-Isotropic shape — every node and bite shares one record type so any component
-consuming `TaxonomyNode[]` or `NanoBite[]` works across every vertical.
+## Plan
 
-```ts
-interface NanoBite {
-  id: string;
-  industryId: string;
-  valueChainStage: ValueChainStage;
-  microElement: string;     // "Stock Control"
-  task: string;             // "SKU labeling"
-  cadence: 'daily' | 'weekly' | 'monthly' | 'event';
-  automatable: boolean;
-}
-```
+Align both sides on a single, explicit contract and force a redeploy so the stale revision is replaced.
 
-Break-even helper lives here:
-```text
-QBE = FC / (P − VC)
-```
+### 1. `supabase/functions/top-up-credits/index.ts`
 
----
+- Accept the frontend's actual field names (`user_wallet`, `payment_method`, `credit_amount`, `usd_amount`).
+- Derive `routing` from `payment_method` (`"usdc"` → `"on-chain"`, `"worldpay"` → `"fiat"`).
+- Validate inputs with granular `[BEGIN: VALIDATION] / [END: VALIDATION]` logs and a clear error per missing field (so the next 400 tells us exactly which field is undefined).
+- For the on-chain branch, require `user_wallet` (not `recipient_address`) and validate with viem `isAddress`.
+- Keep the ledger + `wallets.corporate_revenue` hydration logic unchanged.
+- Keep CORS headers identical so preflight stays green.
 
-## 2. Hook: `src/hooks/useBusinessTaxonomy.ts`
+### 2. `src/components/billing/SynapseTopUp.tsx`
 
-Single seam used **only** by the App Builder. Includes the granular logging
-pattern requested.
+- Add `routing: paymentRail === "usdc" ? "on-chain" : "fiat"` to the payload (belt-and-braces; function will also derive it).
+- Also send `recipient_address: activeAddress` alongside `user_wallet` for backward compatibility with any in-flight stale deploy.
+- No UI changes.
 
-```ts
-useBusinessTaxonomy(businessId: string) → {
-  classification,                  // current selections (in-memory for v1)
-  setClassification,
-  hydrateNanoBites(stage),         // logs START / SUCCESS / FATAL / END
-  recommendedArchetype(),
-  breakEvenFor({ fc, vc, price })
-}
-```
+### 3. Force redeploy
 
-No Supabase persistence in v1 — classification is held in App Builder local
-state and serialized into the generated `merchant_blueprint.json`. Persistence
-to a `business_classification` column is explicitly deferred.
+After the edits, explicitly redeploy `top-up-credits` so the current source replaces whatever stale revision is throwing the "Buyer wallet address" message. Then tail logs once with the test invocation to confirm the new `[BEGIN: VALIDATION]` lines appear.
 
----
+### 4. Out of scope
 
-## 3. Reusable components (App Builder only)
+- No changes to `idia-circular-settlement` (Viem logic).
+- No changes to `synapse-controller` or `src/lib/api.ts` (already hardened in the previous turn).
+- No DB migrations.
 
-Dropped into `src/components/trading/blueprint/`:
+## Files touched
 
-- `<TaxonomyPicker depth="industry" />` — cascading Sector → Industry → Sub
-- `<ArchetypeSlider />` — Boutique ↔ Mass slider; recomputes recommended
-  production method + break-even live
-- `<ValueChainStrip />` — horizontal Porter-chain selector
-- `<NanoBitePanel stage cadence />` — renders filtered bites for a stage
-
-All four are generic over `TaxonomyNode[]` / `NanoBite[]`.
-
----
-
-## 4. Integration into `PayAppBlueprint.tsx` (the only touchpoint)
-
-Add a new "Business Classification" step at the top of the blueprint flow,
-before vertical/sub-module selection:
-
-1. **Classification step** — `TaxonomyPicker` + `ArchetypeSlider` produce a
-   `Classification { sector, industry, archetype, productionMethod }`.
-2. **Value-chain step** — `ValueChainStrip` lets the merchant pick which
-   stages their app covers (Inbound Logistics, Operations, Outbound, etc.).
-3. **Nano-bite injection** — for each selected stage, `NanoBitePanel`
-   surfaces industry-specific tasks. Selected bites become the app's
-   data-capture / payment-trigger rails:
-   - Boutique / Job Shop → milestone-based IDIA Pay triggers
-     ("Consultation Complete", "Material Sourced")
-   - Mass Market / Continuous Flow → high-velocity micro-transactions tied
-     to sensor data or SKU scans
-4. **Break-even widget** — inline `QBE = FC / (P − VC)` calculator showing
-   real-time "Survival Velocity" once the merchant enters FC, VC, P.
-5. **Blueprint output** — the existing `merchant_blueprint.json` gains a
-   `taxonomy` block:
-   ```json
-   {
-     "taxonomy": {
-       "sector": "tertiary",
-       "industry": "retail.boutique",
-       "archetype": "job_shop",
-       "productionMethod": "make_to_order",
-       "valueChainStages": ["operations", "service"],
-       "nanoBites": ["retail.ops.sku_labeling", "retail.svc.return_handling"],
-       "breakEven": { "fc": 12000, "vc": 8, "price": 45, "qbe": 324 }
-     }
-   }
-   ```
-
-The existing vertical/sub-module UI in `PayAppBlueprint` stays — the new
-classification flow runs **before** it and pre-filters the vertical list to
-match the chosen sector/industry.
-
----
-
-## 5. Coverage shipped in v1
-
-- **Sectors:** all 5
-- **Industries seeded with full nano-bite sets:** Extractive, Agricultural,
-  Genetic, Harvesting, Manufacturing (Industrial + Consumer), Processing,
-  Construction, Retail (Boutique + Mass), Hospitality, QSR, Banking,
-  Transport, SaaS (Growth/Mid/Enterprise), Consulting, R&D, Creator
-  (6 sub-models), Executive/Policy
-- **Archetypes:** all 8 HBS models + Pipe/Platform flag
-- **Production methods:** Job Shop, Batch, Assembly Line, Continuous Flow
-  + break-even helper
-- **Codes:** ~200 curated NAICS + GICS, structured to load full tables later
-
----
-
-## 6. Explicitly out of scope (kept inside App Builder boundary)
-
-- Settings → Business Profile classification card — **not touched**
-- Ecosystem Onboarding vertical step — **not touched**
-- Marketplace filters / bundle metadata — **not touched**
-- Best Friend Store Clerk Mode — **not touched**
-- MyReports / Compliance Dashboard — **not touched**
-- Supabase `business_classification` column — **not added**
-- Edge function bundle metadata changes — **not made**
-- Per-bite SOP authoring UI
-
-These remain available as future follow-ups but are not built now.
-
----
-
-## Deliverables
-
-1. `src/taxonomy/` module — types, seeded data, selectors, pure helpers
-2. `useBusinessTaxonomy` hook with the granular `[IDIA_CORE_OP]` logging
-3. Four reusable components under `src/components/trading/blueprint/`:
-   `TaxonomyPicker`, `ArchetypeSlider`, `ValueChainStrip`, `NanoBitePanel`
-4. `PayAppBlueprint.tsx` updated to host the classification step, value-chain
-   step, nano-bite injection, break-even widget, and extended JSON output
-5. No changes to any other Hub module, no DB migration, no edge function edits
+- `supabase/functions/top-up-credits/index.ts` — rewrite payload parsing + validation + logging.
+- `src/components/billing/SynapseTopUp.tsx` — add `routing` and `recipient_address` to payload.
+- Redeploy: `top-up-credits`.

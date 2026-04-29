@@ -158,6 +158,10 @@ const SynapseTopUp = () => {
         usd_amount: usdAmount,
         user_wallet: activeAddress, 
         payment_method: paymentRail,
+        // Belt-and-braces for Edge Function contract
+        recipient_address: activeAddress,
+        routing: paymentRail === "usdc" ? "on-chain" : "fiat",
+        amount: displayCredits,
       };
 
       console.log("[SynapseTopUp][handlePurchase][API_INVOKE] START: Dispatching settlement payload to Edge Function.", JSON.stringify(payload));
