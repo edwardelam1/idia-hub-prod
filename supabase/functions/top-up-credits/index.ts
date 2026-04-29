@@ -158,6 +158,25 @@ Deno.serve(async (req: Request) => {
     if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
     console.log(`[END: ${stage}] newRev=${newRev}`);
 
+    // [STAGE: COMPLIANCE_RAIL_LOCK] Persist this user's settlement rail on profiles.
+    // The rail funded determines the rail used to settle. No conversion (MTL Like-for-Like).
+    stage = "COMPLIANCE_RAIL_LOCK";
+    console.log(`[BEGIN: ${stage}] rail=${routing}`);
+    if (routing === "fiat" || routing === "on-chain") {
+      const { error: railError } = await supabase
+        .from("profiles")
+        .update({ compliance_rail: routing })
+        .eq("user_id", user_id);
+      if (railError) {
+        // Non-fatal: log but don't reverse the deposit.
+        console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
+      } else {
+        console.log(`[END: ${stage}] Compliance rail locked: ${routing}`);
+      }
+    } else {
+      console.warn(`[SKIP: ${stage}] Non-canonical routing="${routing}". Skipping rail persistence.`);
+    }
+
     console.log(`[END: INVOKE] success hash=${txHash}`);
     return new Response(JSON.stringify({ success: true, hash: txHash, revenue_total: newRev }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
