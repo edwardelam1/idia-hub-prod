@@ -107,7 +107,7 @@ const requestSchema = z.object({
       isMarketplaceMode: z.boolean().optional(),
       platformGuid: z.string().optional(),
       userId: z.string().optional(),
-      routing: context.routing, // DUAL-RAIL COMPLIANCE: Strict enum passthrough
+      routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Strict enum passthrough
       marketplace: z
         .object({
           healthRecords: z.array(z.any()).optional().default([]),
