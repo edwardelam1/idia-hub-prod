@@ -136,7 +136,7 @@ const BestFriendPage = () => {
           .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id)
-          .limit(100);
+          .limit(1000000000);
         realPipelineData = healthData || [];
       }
 
