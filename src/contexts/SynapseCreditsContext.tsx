@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
 
 // ========================================================================
 // IDIA PROTOCOL: TRIPLE-RAIL SOVEREIGN INTERFACES
@@ -14,8 +15,8 @@ interface ProtocolState {
   // RAIL 2: COMPUTATIONAL GAS (CREDITS)
   synapse_gas_credits: number;
 
-  // RAIL 3: STABLECOIN LIQUIDITY (USDC / IDIA-BETA)
-  stablecoin_balance: number;
+  // RAIL 3: USDC (on-chain truth, sourced from Base contract — NOT IDIA-BETA, NOT IDIA-USD)
+  usdc_balance: number;
 
   // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
   fbo_royalty_balance: number;
@@ -28,10 +29,9 @@ interface BalanceData {
   available_credits: number;
   hub_operating_cash: number;
   fbo_balance: number;
-  stablecoin_balance: number;
+  usdc_balance: number;
   wallet_address: string;
   currency: string;
-  stablecoin_currency: string;
   last_updated: string;
 }
 
@@ -55,6 +55,7 @@ const SynapseCreditsContext = createContext<SynapseCreditsContextType | undefine
 
 export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
+  const { balance: onChainBalance } = useWalletBalance();
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
   const [protocolState, setProtocolState] = useState<ProtocolState | null>(null);
   const [burnRate, setBurnRate] = useState<BurnRateData | null>(null);
@@ -79,7 +80,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       // 1. VAULT DISCOVERY: Accessing physical silos
       const { data: vault, error: vaultError } = await (supabase
         .from("wallets")
-        .select("hub_cash_balance, cash_balance, idia_beta_balance, wallet_address")
+        .select("hub_cash_balance, cash_balance, wallet_address")
         .eq("user_id", activeId)
         .maybeSingle() as any);
 
@@ -112,12 +113,14 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const fiatOperating = Number(vault?.hub_cash_balance ?? 0);
       const fiatRoyalty = Number(vault?.cash_balance ?? 0);
       const computationalGas = Number(gasBalance ?? 0);
-      const stablecoinLiquidity = Number(vault?.idia_beta_balance ?? 0); // No commingling
+      // USDC = on-chain truth, read live from Base contract via useWalletBalance.
+      // NEVER read from wallets.idia_beta_balance (that's internal scrip, not USDC).
+      const usdcOnChain = Number(onChainBalance?.usdc_balance ?? 0);
 
       const newState: ProtocolState = {
         hub_operating_cash: fiatOperating,
         synapse_gas_credits: computationalGas,
-        stablecoin_balance: stablecoinLiquidity,
+        usdc_balance: usdcOnChain,
         fbo_royalty_balance: fiatRoyalty,
         wallet_address: vault?.wallet_address || "",
       };
@@ -126,10 +129,9 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
         available_credits: computationalGas,
         hub_operating_cash: fiatOperating,
         fbo_balance: fiatRoyalty,
-        stablecoin_balance: stablecoinLiquidity,
+        usdc_balance: usdcOnChain,
         wallet_address: vault?.wallet_address || "",
         currency: "USD",
-        stablecoin_currency: "IDIA-BETA",
         last_updated: new Date().toISOString(),
       };
 
@@ -142,7 +144,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       });
 
       console.info(
-        `[END: Synapse.Engine] Finality Resolved. Rails: Cash[$${fiatOperating}] | Gas[${computationalGas}] | Beta[${stablecoinLiquidity}]`,
+        `[END: Synapse.Engine] Finality Resolved. Rails: Cash[$${fiatOperating}] | Gas[${computationalGas}] | USDC[${usdcOnChain}]`,
       );
     } catch (err: any) {
       console.error(`[FATAL: Synapse.Engine] State Stall: ${err.message}`);
@@ -151,7 +153,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, onChainBalance?.usdc_balance]);
 
   useEffect(() => {
     fetchSovereignState();
