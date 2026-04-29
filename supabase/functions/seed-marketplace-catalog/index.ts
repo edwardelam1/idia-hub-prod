@@ -7,10 +7,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const TIERS: Array<{ tier: string; minParticipants: number }> = [
-  { tier: "Analyst", minParticipants: 25 },
-  { tier: "Professional", minParticipants: 100 },
-  { tier: "Enterprise", minParticipants: 500 },
+// Tier gates are based on RECORD volume of real anonymized data.
+// Participant counts in early Hub stages are tiny; volume reflects depth.
+const TIERS: Array<{ tier: string; minRecords: number }> = [
+  { tier: "Analyst", minRecords: 10 },
+  { tier: "Professional", minRecords: 250 },
+  { tier: "Enterprise", minRecords: 1000 },
 ];
 
 serve(async (req) => {
@@ -23,63 +25,88 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Pull live aggregates produced by the upstream pipeline.
-    // GOLDEN RULE: never fabricate. If empty, we exit with seeded=0.
-    const { data: aggregates, error: aggErr } = await supabase
-      .from("universal_data_bundles")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Pull live anonymized aggregates from the real source-of-truth tables:
+    //   staged_health_data       (biometric + activity records)
+    //   staged_lifestyle_data    (lifestyle / behavioral / social events)
+    // GOLDEN RULE: never fabricate. If both are empty, exit with seeded=0.
+    const [healthRes, lifestyleRes] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("activity_type,faculty,data_quality_score,user_id,pseudo_user_id"),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("event_category,event_type,data_quality_score,user_id,pseudo_user_id"),
+    ]);
 
-    if (aggErr) throw aggErr;
+    if (healthRes.error) throw healthRes.error;
+    if (lifestyleRes.error) throw lifestyleRes.error;
 
-    if (!aggregates || aggregates.length === 0) {
+    const healthRows = healthRes.data ?? [];
+    const lifestyleRows = lifestyleRes.data ?? [];
+
+    if (healthRows.length === 0 && lifestyleRows.length === 0) {
       return new Response(
         JSON.stringify({
           seeded: 0,
           reason:
-            "No source aggregates in universal_data_bundles. Upstream pipeline must run first.",
+            "No anonymized records in staged_health_data or staged_lifestyle_data. Upstream pipeline must run first.",
         }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Group aggregates by bundle_category so we can spawn one bundle per category per tier.
+    // Group by category. Health -> faculty (biometric / activity / etc.).
+    // Lifestyle -> event_category (social / behavioral / location).
     const byCategory: Record<string, any[]> = {};
-    for (const row of aggregates) {
-      const cat = row.bundle_category ?? "general";
-      (byCategory[cat] ??= []).push(row);
+    for (const r of healthRows) {
+      const cat = `health.${(r as any).faculty ?? (r as any).activity_type ?? "general"}`;
+      (byCategory[cat] ??= []).push(r);
+    }
+    for (const r of lifestyleRows) {
+      const cat = `lifestyle.${(r as any).event_category ?? "general"}`;
+      (byCategory[cat] ??= []).push(r);
     }
 
     let seeded = 0;
     const errors: string[] = [];
 
     for (const [category, rows] of Object.entries(byCategory)) {
-      const totalUsers = rows.reduce(
-        (sum, r: any) => sum + (r.unique_users_count ?? 0),
-        0,
-      );
+      const totalRecords = rows.length;
+      const uniqueUsers = new Set(
+        rows
+          .map((r: any) => r.pseudo_user_id ?? r.user_id)
+          .filter((v) => v != null),
+      ).size;
       const avgQuality =
-        rows.reduce((sum, r: any) => sum + (r.quality_score ?? 0), 0) /
-        rows.length;
+        rows.reduce((sum, r: any) => sum + (r.data_quality_score ?? 0), 0) /
+        totalRecords;
 
-      for (const { tier, minParticipants } of TIERS) {
-        if (totalUsers < minParticipants) continue;
+      for (const { tier, minRecords } of TIERS) {
+        if (totalRecords < minRecords) continue;
 
         const payload = {
           action: "curate_and_publish",
           bundleType: category,
           data: {
-            length: rows.length,
-            participant_count: totalUsers,
-            unique_users_count: totalUsers,
+            length: totalRecords,
+            participant_count: uniqueUsers,
+            unique_users_count: uniqueUsers,
             avg_quality_score: avgQuality,
             category,
             bundle_category: category,
-            data_fusion_level: rows.length > 1 ? "multi_source" : "single_source",
-            data_json: { source_aggregate_ids: rows.map((r: any) => r.id) },
-            geographic_coverage: "Multiple zones",
+            tier,
+            data_fusion_level:
+              category.startsWith("health.") && byCategory[`lifestyle.${category.split(".")[1]}`]
+                ? "multi_source"
+                : "single_source",
+            data_json: {
+              source: category.startsWith("health.")
+                ? "staged_health_data"
+                : "staged_lifestyle_data",
+              record_count: totalRecords,
+              unique_users: uniqueUsers,
+            },
+            geographic_coverage: "Anonymized zones",
           },
         };
 
