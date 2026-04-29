@@ -73,9 +73,11 @@ serve(async (req: Request) => {
       currentStep = "CONFIGURING_BLOCKCHAIN";
       console.info(`[BEGIN: ${currentStep}]`);
 
-      const rawKey = Deno.env.get("PRIVATE_KEY");
+      const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
       if (!rawKey) {
-        throw new Error("ENVIRONMENT_ERROR: PRIVATE_KEY secret is missing. Check your Supabase project settings.");
+        throw new Error(
+          "ENVIRONMENT_ERROR: RELAYER_PRIVATE_KEY secret is missing. Check your Supabase project settings.",
+        );
       }
 
       // Compliance: Ensure 0x prefix and remove any accidental whitespace
@@ -84,7 +86,9 @@ serve(async (req: Request) => {
       try {
         account = privateKeyToAccount(formattedKey as `0x${string}`);
       } catch (keyErr: any) {
-        throw new Error(`PRIVATE_KEY format error: ${keyErr.message}. Ensure the key is exactly 64 hex characters.`);
+        throw new Error(
+          `RELAYER_PRIVATE_KEY format error: ${keyErr.message}. Ensure the key is exactly 64 hex characters.`,
+        );
       }
       client = createWalletClient({
         account,

@@ -88,8 +88,8 @@ Deno.serve(async (req: Request) => {
       }
       const safeAddress = getAddress(user_wallet!);
 
-      let rawPk = Deno.env.get("PRIVATE_KEY") || "";
-      if (!rawPk) throw new Error("CONFIG_MISSING: PRIVATE_KEY env var is not set.");
+      let rawPk = Deno.env.get("RELAYER_PRIVATE_KEY") || "";
+      if (!rawPk) throw new Error("CONFIG_MISSING: RELAYER_PRIVATE_KEY env var is not set.");
       if (!rawPk.startsWith("0x")) rawPk = "0x" + rawPk;
 
       const account = privateKeyToAccount(rawPk as `0x${string}`);
