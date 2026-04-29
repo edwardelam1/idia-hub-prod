@@ -4,3 +4,6 @@ project_id = "zxyngqciipcvveigrzqt"
 [functions.create-health-data-bundle]
 [functions.top-up-credits]
 verify_jwt = false
+
+[functions.seed-marketplace-catalog]
+verify_jwt = false
