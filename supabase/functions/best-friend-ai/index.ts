@@ -507,7 +507,7 @@ serve(async (req) => {
 
           // [BEGIN: ROUTING_RESOLUTION] Like-for-Like compliance gate.
           // Routing must be explicit on the inbound payload — no defaults, no coercion.
-          const routing = (body as any)?.routing ?? (body as any)?.context?.routing;
+          const routing = context?.routing;
           if (routing !== "fiat" && routing !== "on-chain") {
             console.error(
               `🚨 [FATAL STALL: ROUTING_RESOLUTION] Missing/invalid routing. Received: ${routing ?? "undefined"}`,
