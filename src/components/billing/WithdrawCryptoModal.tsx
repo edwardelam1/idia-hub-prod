@@ -62,7 +62,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
 
       setStep('success');
       toast.success('Withdrawal initiated', {
-        description: `${formatIdiaUsd(parsedAmount)} IDIA-USD → USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
       });
       await refreshBalance();
       setTimeout(handleClose, 2500);
