@@ -111,23 +111,56 @@ serve(async (req) => {
         .single(),
     ]);
     console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline...`);
-    
-    // Leverage the adminClient SDK to auto-generate perfect Gateway headers
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke(
-      "idia-circular-settlement",
-      {
-        body: {
-          total_fiat_amount: 0.75,
-          buyer_id: userId,
-          payment_reference: referenceId,
-          contributing_users: [{ user_id: userId }]
-        }
-      }
-    );
 
-    if (cashierError) {
-        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
-        throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
+    // 🚨 GATEWAY PATCH:
+    // Backend->Backend Edge calls MUST use the ANON KEY (a real JWT) for both
+    // Authorization and apikey headers. The Service Role secret (sb_secret_*)
+    // is NOT a valid JWT and will be rejected at the Supabase Gateway with 401.
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!anonKey) {
+      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF:PRECHECK] Missing SUPABASE_ANON_KEY in env.`);
+      throw new Error("CASHIER_HANDOFF precheck failed: SUPABASE_ANON_KEY not configured.");
+    }
+
+    const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
+    const cashierBody = {
+      total_fiat_amount: 0.75,
+      buyer_id: userId,
+      payment_reference: referenceId,
+      contributing_users: [{ user_id: userId }],
+    };
+
+    console.info(`[BEGIN: CASHIER_HANDOFF:FETCH] url=${cashierUrl}`);
+    let cashierData: any = null;
+    try {
+      const cashierResp = await fetch(cashierUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey": anonKey,
+        },
+        body: JSON.stringify(cashierBody),
+      });
+
+      const cashierText = await cashierResp.text();
+      console.info(`[CASHIER_HANDOFF:FETCH] status=${cashierResp.status} body=${cashierText.slice(0, 500)}`);
+
+      if (!cashierResp.ok) {
+        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF:FETCH] Gateway/Cashier rejected. status=${cashierResp.status}`);
+        throw new Error(`Circular Settlement Failed: HTTP ${cashierResp.status} - ${cashierText}`);
+      }
+
+      try {
+        cashierData = cashierText ? JSON.parse(cashierText) : {};
+      } catch (parseErr: any) {
+        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF:PARSE] Non-JSON cashier response: ${parseErr?.message}`);
+        throw new Error(`Circular Settlement returned non-JSON: ${parseErr?.message}`);
+      }
+      console.info(`[END: CASHIER_HANDOFF:FETCH] OK ingestionHash=${cashierData?.ingestionHash ?? "<none>"}`);
+    } catch (cashierErr: any) {
+      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] ${cashierErr?.message}`);
+      throw cashierErr;
     }
     console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed to Base.`);
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
