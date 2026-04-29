@@ -112,8 +112,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const fiatOperating = Number(vault?.hub_cash_balance ?? 0);
       const fiatRoyalty = Number(vault?.cash_balance ?? 0);
       const computationalGas = Number(gasBalance ?? 0);
-      // wallets.idia_beta_balance is canonical micro-USDC (1 USDC = 1_000_000).
-      const stablecoinLiquidity = Number(vault?.idia_beta_balance ?? 0) / 1_000_000;
+      const stablecoinLiquidity = Number(vault?.idia_beta_balance ?? 0); // No commingling
 
       const newState: ProtocolState = {
         hub_operating_cash: fiatOperating,

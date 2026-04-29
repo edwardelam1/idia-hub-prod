@@ -5695,51 +5695,6 @@ export type Database = {
           },
         ]
       }
-      usdc_onchain_events: {
-        Row: {
-          amount_micro: number
-          block_number: number | null
-          direction: string
-          from_address: string
-          id: string
-          log_index: number
-          raw_payload: Json | null
-          received_at: string
-          source: string
-          to_address: string
-          tx_hash: string
-          wallet_user_id: string | null
-        }
-        Insert: {
-          amount_micro: number
-          block_number?: number | null
-          direction: string
-          from_address: string
-          id?: string
-          log_index: number
-          raw_payload?: Json | null
-          received_at?: string
-          source?: string
-          to_address: string
-          tx_hash: string
-          wallet_user_id?: string | null
-        }
-        Update: {
-          amount_micro?: number
-          block_number?: number | null
-          direction?: string
-          from_address?: string
-          id?: string
-          log_index?: number
-          raw_payload?: Json | null
-          received_at?: string
-          source?: string
-          to_address?: string
-          tx_hash?: string
-          wallet_user_id?: string | null
-        }
-        Relationships: []
-      }
       user_aca_records: {
         Row: {
           aca_hash_key: string
@@ -6125,8 +6080,6 @@ export type Database = {
           platform_guid: string | null
           total_earned: number | null
           updated_at: string | null
-          usdc_last_block: number | null
-          usdc_last_synced_at: string | null
           user_id: string
           wallet_address: string
         }
@@ -6144,8 +6097,6 @@ export type Database = {
           platform_guid?: string | null
           total_earned?: number | null
           updated_at?: string | null
-          usdc_last_block?: number | null
-          usdc_last_synced_at?: string | null
           user_id: string
           wallet_address: string
         }
@@ -6163,8 +6114,6 @@ export type Database = {
           platform_guid?: string | null
           total_earned?: number | null
           updated_at?: string | null
-          usdc_last_block?: number | null
-          usdc_last_synced_at?: string | null
           user_id?: string
           wallet_address?: string
         }
@@ -6368,14 +6317,6 @@ export type Database = {
         Args: { lat: number; lng: number }
         Returns: string
       }
-      apply_usdc_delta: {
-        Args: {
-          p_block_number?: number
-          p_micro_delta: number
-          p_user_id: string
-        }
-        Returns: number
-      }
       calculate_business_health_index: {
         Args: { p_business_id: string; p_location_id?: string }
         Returns: number
@@ -6544,14 +6485,6 @@ export type Database = {
           error_count: number
           processed_count: number
         }[]
-      }
-      set_usdc_balance: {
-        Args: {
-          p_block_number?: number
-          p_micro_balance: number
-          p_user_id: string
-        }
-        Returns: number
       }
       settle_sovereign_transaction: {
         Args: {
