@@ -39,6 +39,18 @@ serve(async (req) => {
       throw new Error("Rejected: Invalid or missing user_id in payload");
     }
 
+    // ====================================================================
+    // ROUTING_GATEKEEPER — Like-for-Like compliance. Mirrors the Cashier.
+    // Strict equality only. No defaults. No coercion.
+    // ====================================================================
+    console.info(`[BEGIN: ROUTING_GATEKEEPER]`);
+    const routing = body?.routing;
+    if (routing !== "fiat" && routing !== "on-chain") {
+      console.error(`🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`);
+      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
+    }
+    console.info(`[END: ROUTING_GATEKEEPER] Compliance rail locked: ${routing}`);
+
     console.info(`[BEGIN: VALIDATING_INPUTS] Interrogating profile for User ID: ${userId}`);
 
     const { data: profile, error: profileError } = await adminClient
@@ -112,61 +124,30 @@ serve(async (req) => {
         .select("id")
         .single(),
     ]);
-    console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline...`);
-    // [BEGIN: CASHIER_HANDOFF]
-    console.info(`[BEGIN: CASHIER_HANDOFF] Bridging validated intent to Circular Settlement...`);
-    
-    // Extract the explicit routing from the incoming UI payload
-    const { routing } = body; 
-
-    const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    // [STAGE: RESULT_VERIFICATION] verify DB integrity before settling
+    // [STAGE: RESULT_VERIFICATION] Verify DB integrity before settling.
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
-    
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
-      body: {
-        total_fiat_amount: 0.75,
-        routing: routing,
-        buyer_id: userId,
-        payment_reference: referenceId,
-        contributing_users: [{ user_id: userId }],
+
+    // [BEGIN: CASHIER_HANDOFF] Bridge validated intent to Circular Settlement.
+    console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline (rail=${routing}).`);
+    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke(
+      "idia-circular-settlement",
+      {
+        body: {
+          total_fiat_amount: 0.75,
+          routing,
+          buyer_id: userId,
+          payment_reference: referenceId,
+          contributing_users: [{ user_id: userId }],
+        },
       },
-    });
+    );
 
     if (cashierError) {
       console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
       throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
     }
-    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed to Base.`);
-   // [STAGE: RESULT_VERIFICATION] Check DB writes before moving money
-    if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
-    if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
-
-    // [STAGE: CASHIER_HANDOFF]
-    console.info(`[BEGIN: CASHIER_HANDOFF] Bridging validated intent to Circular Settlement...`);
-    
-    // Extract the explicit routing from the incoming UI payload
-    const { routing } = body; 
-
-    // Leverage the adminClient SDK to auto-generate perfect Gateway headers and bypass 401s
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
-      body: {
-        total_fiat_amount: 0.75,
-        routing: routing,
-        buyer_id: userId,
-        payment_reference: referenceId,
-        contributing_users: [{ user_id: userId }],
-      },
-    });
-
-    if (cashierError) {
-      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
-      throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
-    }
-    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed.`);
+    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split deployed via ${routing}.`);
 
     // [STAGE: FINAL_LINKING] Bind the egress log to the financial ledger entry
     await adminClient
