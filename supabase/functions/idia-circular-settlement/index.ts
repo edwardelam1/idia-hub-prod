@@ -39,39 +39,60 @@ serve(async (req: Request) => {
     }
     console.info(`[END: ${currentStep}] Inputs verified. Amount: $${total_fiat_amount}, Contributors: ${contributing_users.length}`);
 
-    currentStep = "CONFIGURING_BLOCKCHAIN";
+    // ====================================================================
+    // COMPLIANCE BLAST WALL: Like-for-Like routing gatekeeper.
+    // Strict equality only — no defaults, no coercion, no lowercasing.
+    // ====================================================================
+    currentStep = "ROUTING_GATEKEEPER";
     console.info(`[BEGIN: ${currentStep}]`);
-    const account = privateKeyToAccount(Deno.env.get("PRIVATE_KEY") as `0x${string}`);
-    const client = createWalletClient({ 
-      account, 
-      chain: base, 
-      transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org") 
-    }).extend(publicActions);
-    console.info(`[END: ${currentStep}] Blockchain client ready at address: ${account.address}`);
+    const routing = payoutData?.routing;
+    if (routing !== "fiat" && routing !== "on-chain") {
+      console.error(`[FATAL STALL: ROUTING] Hard stop enforced. Explicit routing parameter missing or invalid.`);
+      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
+    }
+    console.info(`[END: ${currentStep}] routing=${routing}`);
 
-    currentStep = "FETCHING_MASTER_NONCE";
-    console.info(`[BEGIN: ${currentStep}]`);
-    let masterNonce = await client.getTransactionCount({ 
-      address: account.address, 
-      blockTag: 'pending' 
-    });
-    console.info(`[END: ${currentStep}] Master Nonce secured: ${masterNonce}`);
+    // Declared up-front so both routes can reference them in ledger inserts / response
+    let ingestionHash: string = payment_reference || `FIAT-${crypto.randomUUID().slice(0, 8)}`;
+    let account: any = null;
+    let client: any = null;
+    let masterNonce = 0;
 
-    currentStep = "BROADCASTING_INGESTION";
-    console.info(`[BEGIN: ${currentStep}] Treasury -> Register ($${total_fiat_amount})`);
-    
-    const ingestionHash = await client.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [SYSTEM_CASH_REGISTER, parseUnits(total_fiat_amount.toString(), 6)],
-      account,
-      nonce: masterNonce++
-    });
-    
-    const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
-    if (ingestionReceipt.status !== 'success') throw new Error(`Ingestion Reverted on-chain.`);
-    console.info(`[END: ${currentStep}] Ingestion Confirmed. Hash: ${ingestionHash}`);
+    if (routing === "on-chain") {
+      currentStep = "CONFIGURING_BLOCKCHAIN";
+      console.info(`[BEGIN: ${currentStep}]`);
+      account = privateKeyToAccount(Deno.env.get("PRIVATE_KEY") as `0x${string}`);
+      client = createWalletClient({
+        account,
+        chain: base,
+        transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org"),
+      }).extend(publicActions);
+      console.info(`[END: ${currentStep}] Blockchain client ready at address: ${account.address}`);
+
+      currentStep = "FETCHING_MASTER_NONCE";
+      console.info(`[BEGIN: ${currentStep}]`);
+      masterNonce = await client.getTransactionCount({
+        address: account.address,
+        blockTag: 'pending',
+      });
+      console.info(`[END: ${currentStep}] Master Nonce secured: ${masterNonce}`);
+
+      currentStep = "BROADCASTING_INGESTION";
+      console.info(`[BEGIN: ${currentStep}] Treasury -> Register ($${total_fiat_amount})`);
+      ingestionHash = await client.writeContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [SYSTEM_CASH_REGISTER, parseUnits(total_fiat_amount.toString(), 6)],
+        account,
+        nonce: masterNonce++,
+      });
+      const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
+      if (ingestionReceipt.status !== 'success') throw new Error(`Ingestion Reverted on-chain.`);
+      console.info(`[END: ${currentStep}] Ingestion Confirmed. Hash: ${ingestionHash}`);
+    } else {
+      console.info(`[STATUS] Fiat routing explicitly detected. Ledger updated. Bypassing on-chain execution.`);
+    }
 
     currentStep = "DISSEMINATING_YIELD";
     console.info(`[BEGIN: ${currentStep}] Calculating pro-rata yield distribution.`);
@@ -90,27 +111,32 @@ serve(async (req: Request) => {
         
       const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
 
-      const yieldHash = await client.writeContract({
-        address: USDC_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
-        account,
-        nonce: masterNonce++
-      });
+      let yieldHash: string = ingestionHash;
+      let yieldStatus: 'completed' | 'failed' = 'completed';
 
-      const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash });
+      if (routing === "on-chain") {
+        yieldHash = await client.writeContract({
+          address: USDC_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
+          account,
+          nonce: masterNonce++,
+        });
+        const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash });
+        yieldStatus = yieldReceipt.status === 'success' ? 'completed' : 'failed';
+      }
 
       await supabase.from('synapse_credit_ledger').insert({
         user_id: contributor.user_id,
         amount: perContributorYield,
         entry_type: 'deposit',
         transaction_type: 'DATA_SALE_PAYOUT',
-        status: yieldReceipt.status === 'success' ? 'completed' : 'failed',
+        status: yieldStatus,
         blockchain_tx_hash: yieldHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
-        description: `Pro-rata yield for Ref: ${payment_reference}`
+        description: `Pro-rata yield for Ref: ${payment_reference} [${routing}]`
       });
 
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });
@@ -134,7 +160,7 @@ serve(async (req: Request) => {
         blockchain_tx_hash: ingestionHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
-        description: `60% Corporate Revenue: ${payment_reference}`
+        description: `60% Corporate Revenue: ${payment_reference} [${routing}]`
       }),
       supabase.from('synapse_credit_ledger').insert({
         user_id: buyer_id,
@@ -145,20 +171,19 @@ serve(async (req: Request) => {
         blockchain_tx_hash: ingestionHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
-        description: `10% Ecosystem War Chest: ${payment_reference}`
+        description: `10% Ecosystem War Chest: ${payment_reference} [${routing}]`
       })
     ]);
 
     console.info(`[END: ${currentStep}] Revenue silos successfully hydrated.`);
     
-    // PLUGGED: Fixed syntax leak and corrupted JSON key
-    return new Response(JSON.stringify({ 
-      success: true, 
-      ingestionHash, 
-      payouts: contributorPayouts 
-    }), {
+    const responseBody = routing === "on-chain"
+      ? { success: true, routing, ingestionHash, payouts: contributorPayouts }
+      : { success: true, routing, ledger_only: true, contributors_credited: contributorPayouts.length };
+
+    return new Response(JSON.stringify(responseBody), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200
+      status: 200,
     });
 
   } catch (error: any) {
