@@ -8,6 +8,14 @@ import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } fr
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ConversationMessage {
   role: "user" | "assistant";
@@ -15,6 +23,8 @@ interface ConversationMessage {
   liabilityTokenHash?: string | null;
   creditDeducted?: boolean;
 }
+
+type ComplianceRail = "fiat" | "on-chain";
 
 // NATIVE CRYPTO GENERATOR FOR THE DIGIRAMP ANCHOR
 async function generateDigiRampAnchor(liabilityTokenHash: string) {
@@ -33,6 +43,9 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
+  const [complianceRail, setComplianceRail] = useState<ComplianceRail | null>(null);
+  const [railPickerOpen, setRailPickerOpen] = useState(false);
+  const [pendingSendAfterRail, setPendingSendAfterRail] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
@@ -45,8 +58,62 @@ const BestFriendPage = () => {
     }
   }, [conversation, isLoading]);
 
-  const handleSendMessage = async () => {
+  // Hydrate compliance_rail from profiles on mount
+  useEffect(() => {
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("compliance_rail")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const rail = (data as any)?.compliance_rail;
+      if (rail === "fiat" || rail === "on-chain") setComplianceRail(rail);
+    })();
+  }, []);
+
+  const persistRail = async (rail: ComplianceRail) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) throw new Error("Not authenticated");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ compliance_rail: rail } as any)
+      .eq("user_id", user.id);
+    if (error) throw error;
+    setComplianceRail(rail);
+  };
+
+  const handleRailChoice = async (rail: ComplianceRail) => {
+    try {
+      await persistRail(rail);
+      toast.success(`Settlement rail locked: ${rail.toUpperCase()}`);
+      setRailPickerOpen(false);
+      if (pendingSendAfterRail) {
+        setPendingSendAfterRail(false);
+        // Re-trigger send now that rail exists
+        setTimeout(() => handleSendMessage(rail), 0);
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const handleSendMessage = async (overrideRail?: ComplianceRail) => {
     if (!currentMessage.trim() || isLoading || isProcessing.current) return;
+
+    const activeRail = overrideRail ?? complianceRail;
+
+    // Marketplace Mode requires a locked compliance rail (Like-for-Like / MTL).
+    if (marketplaceMode && activeRail !== "fiat" && activeRail !== "on-chain") {
+      setPendingSendAfterRail(true);
+      setRailPickerOpen(true);
+      return;
+    }
 
     isProcessing.current = true;
     setIsLoading(true);
@@ -81,11 +148,13 @@ const BestFriendPage = () => {
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
+          // Top-level: best-friend-ai forwards this to synapse-controller → cashier
+          routing: activeRail,
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
             userId: user.id,
-            routing: z.enum(["fiat", "on-chain"]), // DUAL-RAIL COMPLIANCE: Defaulting to fiat for general UI usage
+            routing: activeRail,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
