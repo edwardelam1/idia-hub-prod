@@ -84,6 +84,7 @@ export const usePipelineActivity = () => {
       supabase.removeChannel(healthChannel);
       supabase.removeChannel(ledgerChannel);
       supabase.removeChannel(egressChannel);
+      supabase.removeChannel(deltChannel);
     };
   }, []);
 
