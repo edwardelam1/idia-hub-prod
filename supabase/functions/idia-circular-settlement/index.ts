@@ -106,31 +106,54 @@ serve(async (req: Request) => {
       console.info(`[END: ${currentStep}] Master Nonce secured: ${masterNonce}`);
 
       currentStep = "BROADCASTING_INGESTION";
-      console.info(`[BEGIN: ${currentStep}] Treasury -> Register ($${total_fiat_amount})`);
+
+      // Calculate the Net System Cut (60% Corporate + 10% War Chest = 70%)
+      const systemRetainedRevenue = total_fiat_amount * (REVENUE_SPLIT.CORPORATE + REVENUE_SPLIT.WAR_CHEST);
+
+      console.info(`[BEGIN: ${currentStep}] Treasury -> Register ($${systemRetainedRevenue.toFixed(6)})`);
       ingestionHash = await client.writeContract({
         address: USDC_ADDRESS,
         abi: ERC20_ABI,
         functionName: "transfer",
-        args: [SYSTEM_CASH_REGISTER, parseUnits(total_fiat_amount.toString(), 6)],
+        // 🚨 NET ROUTING FIX: Only send the 70% cut to the Cash Register
+        args: [SYSTEM_CASH_REGISTER, parseUnits(systemRetainedRevenue.toFixed(6), 6)],
         account,
         nonce: masterNonce++,
       });
       const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
-      if (ingestionReceipt.status !== "success") throw new Error(`Ingestion Reverted on-chain.`);
+      if (ingestionReceipt.status !== "success") throw new Error(`[FATAL] Ingestion Reverted on-chain.`);
       console.info(`[END: ${currentStep}] Ingestion Confirmed. Hash: ${ingestionHash}`);
-      // 🚨 FIX 1: RPC Mempool Propagation Buffer
+
       console.info(`[NETWORK] Delaying 2.5s for sequencer to clear EIP-7702 delegated mempool...`);
       await new Promise((resolve) => setTimeout(resolve, 2500));
     } else {
       console.info(`[STATUS] Fiat routing explicitly detected. Ledger updated. Bypassing on-chain execution.`);
     }
 
-    currentStep = "DISSEMINATING_YIELD";
+    currentStep = "DISSEMINATING_YIELD_AND_SYNCING_DB";
     console.info(`[BEGIN: ${currentStep}] Calculating pro-rata yield distribution.`);
     const totalRoyaltyPool = total_fiat_amount * REVENUE_SPLIT.DATA_YIELD;
     const perContributorYield = totalRoyaltyPool / contributing_users.length;
     const contributorPayouts = [];
 
+    // 🚨 SERVER-SIDE FIX 1: Charge the Buyer!
+    console.info(`[BEGIN: DB_SYNC] Deducting Synapse Credits from Buyer: ${buyer_id}`);
+    const { data: buyerWallet, error: buyerFetchError } = await supabase
+      .from("wallets")
+      .select("synapse_gas_credits")
+      .eq("user_id", buyer_id)
+      .single();
+
+    if (!buyerFetchError && buyerWallet) {
+      // Deduct the cost from their gas credits (preventing negative balances)
+      const newCreditBalance = Math.max(0, buyerWallet.synapse_gas_credits - total_fiat_amount);
+      await supabase.from("wallets").update({ synapse_gas_credits: newCreditBalance }).eq("user_id", buyer_id);
+      console.info(`[END: DB_SYNC] Buyer charged. New Credit Balance: ${newCreditBalance}`);
+    } else {
+      console.error(`[STALL: DB_SYNC] Could not fetch buyer wallet to charge credits.`, buyerFetchError);
+    }
+
+    // 🚨 SERVER-SIDE FIX 2: Pay the Data Owners (On-Chain & Database)
     for (const contributor of contributing_users) {
       console.info(`[BEGIN: Step 6A] Payout for user ${contributor.user_id}`);
 
@@ -150,12 +173,16 @@ serve(async (req: Request) => {
           address: USDC_ADDRESS,
           abi: ERC20_ABI,
           functionName: "transfer",
+          // Send exactly the 30% cut to the user's wallet
           args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
           account,
           nonce: masterNonce++,
         });
         const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash });
         yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
+
+        console.info(`[NETWORK] Delaying 2.5s for sequencer to clear EIP-7702 delegated mempool...`);
+        await new Promise((resolve) => setTimeout(resolve, 2500));
       }
 
       await supabase.from("synapse_credit_ledger").insert({
@@ -170,10 +197,27 @@ serve(async (req: Request) => {
         description: `Pro-rata yield for Ref: ${payment_reference} [${routing}]`,
       });
 
+      // 🚨 MISSING DB LINK: Explicitly update the user's wallets table
+      console.info(`[BEGIN: DB_SYNC] Hydrating stablecoin_balance for ${contributor.user_id}`);
+      const { data: contributorWallet } = await supabase
+        .from("wallets")
+        .select("stablecoin_balance")
+        .eq("user_id", contributor.user_id)
+        .single();
+
+      if (contributorWallet) {
+        const updatedBalance = Number(contributorWallet.stablecoin_balance || 0) + perContributorYield;
+        await supabase
+          .from("wallets")
+          .update({ stablecoin_balance: updatedBalance })
+          .eq("user_id", contributor.user_id);
+        console.info(`[END: DB_SYNC] Database Synced. New stablecoin_balance: $${updatedBalance}`);
+      }
+
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });
       console.info(`[END: Step 6A] Payout complete for ${contributor.user_id}. Hash: ${yieldHash}`);
     }
-    console.info(`[END: ${currentStep}] Pro-rata yield successfully dispersed.`);
+    console.info(`[END: ${currentStep}] Pro-rata yield fully dispersed and unified ledger synced.`);
 
     currentStep = "HYDRATING_PROTOCOL_REVENUE";
     console.info(`[BEGIN: ${currentStep}] Ledger reconciliation for 60/10 Split.`);
