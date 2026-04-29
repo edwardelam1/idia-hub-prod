@@ -122,14 +122,10 @@ serve(async (req) => {
     const cashierUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     
-    const cashierResponse = await fetch(cashierUrl, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${anonKey}`, 
-        'apikey': anonKey 
-      },
-    // Leverage the adminClient SDK to auto-generate perfect Gateway headers
+    // [STAGE: RESULT_VERIFICATION] verify DB integrity before settling
+    if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
+    if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
+    
     const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
       body: {
         total_fiat_amount: 0.75,
@@ -145,10 +141,34 @@ serve(async (req) => {
       throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
     }
     console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed to Base.`);
+   // [STAGE: RESULT_VERIFICATION] Check DB writes before moving money
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
-    // Bind the egress log to the financial ledger entry
+    // [STAGE: CASHIER_HANDOFF]
+    console.info(`[BEGIN: CASHIER_HANDOFF] Bridging validated intent to Circular Settlement...`);
+    
+    // Extract the explicit routing from the incoming UI payload
+    const { routing } = body; 
+
+    // Leverage the adminClient SDK to auto-generate perfect Gateway headers and bypass 401s
+    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
+      body: {
+        total_fiat_amount: 0.75,
+        routing: routing,
+        buyer_id: userId,
+        payment_reference: referenceId,
+        contributing_users: [{ user_id: userId }],
+      },
+    });
+
+    if (cashierError) {
+      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
+      throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
+    }
+    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split successfully deployed.`);
+
+    // [STAGE: FINAL_LINKING] Bind the egress log to the financial ledger entry
     await adminClient
       .from("egress_logs")
       .update({ synapse_ledger_entry_id: ledgerResult.data.id })
@@ -160,15 +180,13 @@ serve(async (req) => {
         success: true,
         liability_token_hash: liabilityTokenHash,
         financials: {
-          gas_consumed: 1,
-          minting_fee: 0,
-          total_cr_deducted: 1,
+          gas_consumed: FLAT_FEE_CR,
+          total_cr_deducted: FLAT_FEE_CR,
           fiat_equivalent_value: 0.75,
         },
         audit: {
           records_processed: aca_record_ids.length,
           intent: intent_type,
-          complexity_multiplier: 1.0,
         },
       }),
       {
@@ -176,6 +194,7 @@ serve(async (req) => {
       },
     );
   } catch (error: any) {
+    console.error(`🚨 [TOP-LEVEL FATAL] ${error.message}`);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
