@@ -118,6 +118,9 @@ serve(async (req: Request) => {
       const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
       if (ingestionReceipt.status !== "success") throw new Error(`Ingestion Reverted on-chain.`);
       console.info(`[END: ${currentStep}] Ingestion Confirmed. Hash: ${ingestionHash}`);
+      // 🚨 FIX 1: RPC Mempool Propagation Buffer
+      console.info(`[NETWORK] Delaying 2.5s for sequencer to clear EIP-7702 delegated mempool...`);
+      await new Promise((resolve) => setTimeout(resolve, 2500));
     } else {
       console.info(`[STATUS] Fiat routing explicitly detected. Ledger updated. Bypassing on-chain execution.`);
     }
