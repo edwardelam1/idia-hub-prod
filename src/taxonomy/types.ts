@@ -71,6 +71,8 @@ export interface NanoBite {
   task: string;             // "SKU labeling"
   cadence: Cadence;
   automatable: boolean;
+  /** Optional gating tier for IDIA Pay feature unlocks. Additive, non-breaking. */
+  requiresTier?: 'basic' | 'pro' | 'enterprise';
 }
 
 export interface PositioningSpec {

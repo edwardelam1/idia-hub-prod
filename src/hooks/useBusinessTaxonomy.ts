@@ -3,6 +3,7 @@ import {
   EMPTY_CLASSIFICATION,
   breakEven,
   getNanoBitesFor,
+  getIndustryById,
   recommendArchetype,
   recommendedProductionFor,
   type BreakEvenInput,
@@ -51,6 +52,24 @@ export const useBusinessTaxonomy = (businessId: string) => {
 
   const breakEvenFor = useCallback((input: BreakEvenInput) => breakEven(input), []);
 
+  /**
+   * Returns spatial telemetry metadata for verticals that expose it
+   * (e.g. Hospitality: benchmarks, tech_stack, telemetry_focus, hardware_layer, math_layer).
+   */
+  const getSpatialMetaFor = useCallback((industryId: string) => {
+    console.log(`[IDIA_CORE_OP]: STARTING Spatial-Meta lookup for: ${industryId}`);
+    const node = getIndustryById(industryId);
+    const meta = (node?.meta ?? {}) as {
+      benchmarks?: string[];
+      tech_stack?: string[];
+      telemetry_focus?: string[];
+      hardware_layer?: string[];
+      math_layer?: string[];
+    };
+    console.log(`[IDIA_CORE_OP]: ENDING Spatial-Meta lookup. Found ${Object.keys(meta).length} keys.`);
+    return meta;
+  }, []);
+
   return {
     classification,
     setClassification,
@@ -58,6 +77,7 @@ export const useBusinessTaxonomy = (businessId: string) => {
     recommendedArchetype,
     recommendedProductionFor,
     breakEvenFor,
+    getSpatialMetaFor,
     loading,
   };
 };
