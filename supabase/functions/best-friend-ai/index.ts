@@ -538,7 +538,7 @@ serve(async (req) => {
             body: JSON.stringify({
               user_id: operatorId,
               aca_record_ids: consumedReceipt,
-              intent_type: "MARKETPLACE_RESEARCH",
+              intent_type: "MARKETPLACE RESEARCH",
               routing,
               granularity: 0.95,
               relevance: 1.0,
