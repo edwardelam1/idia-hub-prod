@@ -72,19 +72,13 @@ serve(async (req: Request) => {
     if (routing === "on-chain") {
       currentStep = "CONFIGURING_BLOCKCHAIN";
       console.info(`[BEGIN: ${currentStep}]`);
-      const rawKey = Deno.env.get("PRIVATE_KEY");
-      if (!rawKey) throw new Error("PRIVATE_KEY secret is missing from Supabase environment.");
 
-      // Compliance: Prepend 0x if missing to satisfy viem hex validation
-      const formattedKey = rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`;
       const rawKey = Deno.env.get("PRIVATE_KEY");
       if (!rawKey) {
-        throw new Error(
-          "PRIVATE_KEY secret is missing. Check your Supabase project settings for uppercase 'PRIVATE_KEY'.",
-        );
+        throw new Error("ENVIRONMENT_ERROR: PRIVATE_KEY secret is missing. Check your Supabase project settings.");
       }
 
-      // Ensure 0x prefix and remove any accidental whitespace
+      // Compliance: Ensure 0x prefix and remove any accidental whitespace
       const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
 
       try {
