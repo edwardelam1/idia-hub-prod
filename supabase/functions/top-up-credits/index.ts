@@ -116,18 +116,18 @@ Deno.serve(async (req: Request) => {
     stage = "LEDGER_INSERT";
     console.log(`[BEGIN: ${stage}]`);
     const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
-      user_id,
-      amount: -credit_amount,
+      user_id: user_id,
+      amount: credit_amount,
       transaction_type: "INTERNAL_DEPOSIT",
-      entry_type: "DEBIT",
+      entry_type: "deposit",
       status: "completed",
       blockchain_tx_hash: txHash,
       metadata: {
         class: "Synapse_Purchase",
         fund: "CORPORATE_REVENUE",
-        usd_amount,
-        payment_reference,
-        routing,
+        usd_amount: usd_amount,
+        payment_reference: payment_reference,
+        routing: routing,
         user_wallet: user_wallet ?? null,
       },
     });
@@ -145,10 +145,15 @@ Deno.serve(async (req: Request) => {
       .single();
     if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
 
-    const newRev = (Number(wallet?.corporate_revenue) || 0) + credit_amount;
+    const currentRev = Number(wallet?.corporate_revenue) || 0;
+    const newRev = currentRev + credit_amount;
+
     const { error: updateError } = await supabase
       .from("wallets")
-      .update({ corporate_revenue: newRev, updated_at: new Date().toISOString() })
+      .update({
+        corporate_revenue: newRev,
+        updated_at: new Date().toISOString(),
+      })
       .eq("user_id", user_id);
     if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
     console.log(`[END: ${stage}] newRev=${newRev}`);
