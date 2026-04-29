@@ -566,6 +566,25 @@ export const PayAppBlueprint = () => {
   const [provisioningCode] = useState(generateProvisioningCode());
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
+
+  // ── Business Taxonomy Engine bootstrap ──────────────────────────────────────
+  // Maps the App Builder's vertical IDs to formal taxonomy IndustryNode IDs.
+  const VERTICAL_TO_INDUSTRY_ID: Record<string, string> = {
+    hospitality: 'tertiary.hospitality',
+    retail: 'tertiary.retail.boutique',
+    logistics: 'tertiary.transport',
+    financial: 'tertiary.banking',
+    manufacturing: 'secondary.manufacturing.consumer',
+    construction: 'secondary.construction',
+    agriculture: 'primary.agricultural',
+    mining: 'primary.extractive',
+    professional: 'quaternary.consulting',
+    media: 'quaternary.creator.audience_owned',
+  };
+  const taxonomy = useBusinessTaxonomy('pay-app-builder');
+  useEffect(() => {
+    initializeTaxonomy();
+  }, []);
   const dragDataRef = useRef<{ id: string; name: string; parentId?: string; parentName?: string; color?: string } | null>(null);
 
   // Business Assigment State
