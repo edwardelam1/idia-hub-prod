@@ -287,25 +287,80 @@ const BestFriendPage = () => {
             className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border"
           />
           <Button
-            onClick={handleSendMessage}
+            onClick={() => handleSendMessage()}
             disabled={isLoading || !currentMessage.trim()}
             className="absolute right-2 top-2 h-10 w-10 rounded-xl p-0"
           >
             {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
           </Button>
         </div>
-        <div className="flex items-center justify-between px-1">
-          <button
+        <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
             className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
-          >
-            <Search size={14} /> Marketplace Mode (1 CR)
-          </button>
+            >
+              <Search size={14} /> Marketplace Mode (1 CR)
+            </button>
+            <button
+              onClick={() => setRailPickerOpen(true)}
+              title="Compliance settlement rail (Like-for-Like / MTL)"
+              className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2.5 rounded-full border transition-all ${
+                complianceRail === "on-chain"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : complianceRail === "fiat"
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}
+            >
+              <Shield size={12} />
+              {complianceRail ? `RAIL: ${complianceRail.toUpperCase()}` : "RAIL: NOT SET"}
+            </button>
+          </div>
           <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50">
             Tell Your Best Friend Everything...
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={railPickerOpen}
+        onOpenChange={(open) => {
+          setRailPickerOpen(open);
+          if (!open) setPendingSendAfterRail(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose Your Settlement Rail</DialogTitle>
+            <DialogDescription>
+              Federal Like-for-Like compliance: the rail you fund credits with is the rail used to settle
+              earnings. This cannot convert between fiat and crypto. Pick the rail that matches how you topped up.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <button
+              onClick={() => handleRailChoice("fiat")}
+              className="flex flex-col items-start gap-1 p-4 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-50 transition-all text-left"
+            >
+              <span className="text-xs font-black uppercase tracking-widest text-blue-700">Fiat (Worldpay)</span>
+              <span className="text-[10px] text-blue-700/80">USD ledger only. No blockchain.</span>
+            </button>
+            <button
+              onClick={() => handleRailChoice("on-chain")}
+              className="flex flex-col items-start gap-1 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left"
+            >
+              <span className="text-xs font-black uppercase tracking-widest text-emerald-700">USDC (On-Chain)</span>
+              <span className="text-[10px] text-emerald-700/80">Base network. Settles via smart contract.</span>
+            </button>
+          </div>
+          <DialogFooter>
+            <p className="text-[10px] text-muted-foreground">
+              You can change this later from this same pill.
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
