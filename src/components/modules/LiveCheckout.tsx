@@ -7,7 +7,7 @@ import { Receipt, X } from "lucide-react";
  * to finalize a transaction. Not a top-level vertical view.
  */
 interface LiveCheckoutProps {
-  open: boolean;
+  open?: boolean;
   total?: number;
   currency?: string;
   onClose: () => void;
@@ -15,7 +15,7 @@ interface LiveCheckoutProps {
 }
 
 export const LiveCheckout = ({
-  open,
+  open = true,
   total = 0,
   currency = "USD",
   onClose,
