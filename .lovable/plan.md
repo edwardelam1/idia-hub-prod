@@ -1,97 +1,62 @@
+# Wrap real POSModule with omni-vertical chassis
 
-# Finish: Granular Address in Card + Red Deactivate Button
+## Source of truth
 
-The DB already has `street_address_1`, `street_address_2`, `city`, `state`, `postal_code`, `country`, `provisioning_active`, and `deactivated_at`. The Add Organization dialog already writes to them. The detail card on the right side of `/organizations` was never updated — it still shows/edits a single `address` string and has no Deactivate control.
+The real `POSModule.tsx` you just pasted is now the baseline. Lovable's current on-disk copy is a stripped placeholder and will be **fully replaced** with the version you pasted, then modified per your 7 steps. Nothing in the data/cart/payment layer will be invented or altered.
 
-All changes are in **`src/components/management/OrganizationManagement.tsx`** only.
+## What gets preserved verbatim
 
-## 1. Detail card — replace single HQ Address with granular block
+- All imports you pasted (toast, supabase, `getBusinessId`, `LiveCheckout`, `recordPosTransaction`, `MenuItem`/`CartItem` interfaces).
+- All state: `cart`, `searchTerm`, `selectedCategory`, `customerInfo`, `isCheckoutOpen`, `isNfcPaymentOpen`, `isGiftCardOpen`, `isLiveCheckoutOpen`, `giftCardData`, `isProcessingPayment`, `notifications`, `cartNotification`, `menuItems`, `categories`.
+- All effects: `loadMenuItems` on mount, real-time `merchant-notifications` subscription.
+- All handlers: `loadMenuItems`, `addToCart`, `removeFromCart`, `updateQuantity`, `calculateTotal`, `calculateTax`, `calculateGrandTotal`, `handleCheckout`, `processPayment` (incl. terminal-payment edge call), `processNfcPayment`, `processGiftCardPayment`.
+- The Mobile Cart Toggle Button.
+- The Desktop Cart Sidebar (header, scrollable items, summary, Live + Standard Checkout buttons).
+- All 4 dialogs: Checkout, NFC Payment, Gift Card, Live Checkout.
 
-Inside the "Operational Profile" column (currently lines ~744–759), replace the single HQ Address field with a stacked group of labeled rows that mirror the Add dialog:
+## The 7 changes (additive only)
 
-- Street Address 1
-- Street Address 2 (only shown in display mode if present; always shown in edit mode)
-- City  /  State  /  ZIP (3-col grid, same as the dialog)
+1. **Imports** — add `Activity, Flame, Radio, Server, Clock` to the existing `lucide-react` import line. (`AlertCircle`, `Users`, and `Zap` are already imported in your paste.)
 
-Display mode: render each value as the existing dense `text-xs font-medium text-slate-900` rows. If `street_address_1` is empty, fall back to parsing `selectedBusiness.address` so legacy rows still show something.
+2. **Component signature** — add the props interface and accept `activeBites`:
+   ```ts
+   interface POSModuleProps {
+     activeBites?: string[];
+   }
+   export const POSModule = ({ activeBites = [] }: POSModuleProps) => {
+   ```
 
-Edit mode: render `Input`s bound to `editForm.street_address_1`, `editForm.street_address_2`, `editForm.city`, `editForm.state` (uppercase, maxLength 2), `editForm.postal_code` — same `h-8 text-xs` styling already used in the card.
+3. **Dynamic state** — declare immediately after the opening brace, **above** the existing `useState` calls:
+   ```ts
+   const hasSpatialFlow = activeBites.includes('hosp.ops.guest_flow_tracking');
+   const hasKitchenTelemetry = activeBites.includes('hosp.ops.kitchen_telemetry');
+   const hasQSRLineSpeed = activeBites.includes('qsr.ops.line');
+   const hasBoutiqueConsult = activeBites.includes('retail.boutique.ops.consult');
+   const [activeView, setActiveView] = useState<"pos" | "spatial" | "kds">("pos");
+   ```
 
-The header MapPin preview (line 652) keeps using `selectedBusiness.address?.split(",")[0]` as today, but we recompute `address` on save (see below) so it stays in sync.
+4. **Inject telemetry header + nav** — directly inside `<div className="flex-1 flex flex-col p-2 min-h-0 overflow-hidden pb-20 md:pb-0">` (the Menu Items Section wrapper), at the very top, before the existing `<Card>` that holds "Point of Sale" + search + category filter. Inserts the 4-card telemetry grid and the 3-button view switcher exactly as you specified.
 
-## 2. `handleUpdateBusiness` — persist granular fields
+5. **Wrap existing POS view** — wrap the existing **Point-of-Sale `<Card>`** (title + search + category filter) **and** the existing **Menu Grid scrollable area** (`filteredItems.map`) together in:
+   ```tsx
+   {activeView === "pos" && (
+     <>
+       {/* existing Card + existing Menu Grid */}
+     </>
+   )}
+   ```
+   Nothing inside is renamed, reordered, or restyled.
 
-Update the `supabase.from("businesses").update({...})` payload to include:
+6. **Append Spatial Matrix + Autonomic KDS views** — after the `activeView === "pos"` block (still inside the same Menu Items Section wrapper), paste the two new view blocks exactly as you supplied them.
 
-```ts
-street_address_1: editForm.street_address_1,
-street_address_2: editForm.street_address_2 || null,
-city: editForm.city,
-state: editForm.state,
-postal_code: editForm.postal_code,
-```
+7. **Untouched** — Mobile Cart Toggle, Desktop Cart Sidebar, Checkout Dialog, NFC Payment Dialog, Gift Card Dialog, Live Checkout Dialog all remain byte-identical to your paste.
 
-And recompose the legacy `address` string the same way `handleCreateBusiness` does, so list rows / header preview stay consistent:
+## Files changed
 
-```ts
-const composedAddress = [
-  editForm.street_address_1,
-  editForm.street_address_2,
-  `${editForm.city ?? ""}, ${editForm.state ?? ""} ${editForm.postal_code ?? ""}`.trim(),
-].filter(Boolean).join(", ");
-```
+- `src/components/modules/POSModule.tsx` — replaced with your pasted version + the 6 additive edits above. No other file touched.
 
-Send `address: composedAddress` in the same update.
+## Risks / call-outs
 
-## 3. Red Deactivate button (header, left of Edit)
-
-In the action cluster (lines 659–692), when **not** in edit mode, render a Deactivate / Reactivate button immediately **before** the Edit button:
-
-- If `selectedBusiness.provisioning_active !== false` → label "Deactivate", `bg-red-600 hover:bg-red-700 text-white`, `size="sm"`, `h-7 px-2 text-xs`.
-- If already deactivated → label "Reactivate", same size but `bg-emerald-600 hover:bg-emerald-700`.
-- Hidden while `isEditingCard` is true (matches Edit visibility rules).
-
-Add a `handleToggleProvisioning` handler:
-
-```ts
-const handleToggleProvisioning = async () => {
-  const next = !(selectedBusiness.provisioning_active !== false);
-  const { error } = await supabase
-    .from("businesses")
-    .update({
-      provisioning_active: next,
-      deactivated_at: next ? null : new Date().toISOString(),
-    })
-    .eq("id", selectedBusiness.id);
-  if (error) {
-    toast({ title: "Action Failed", description: error.message, variant: "destructive" });
-    return;
-  }
-  toast({
-    title: next ? "Provisioning Restored" : "Provisioning Deactivated",
-    description: next
-      ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
-      : `${selectedBusiness.name} can no longer access IDIA Pay.`,
-  });
-  fetchBusinesses();
-};
-```
-
-Wrap the destructive action in a small `confirm()` ("Cut off this organization from IDIA Pay?") before calling — single confirm, no extra dialog component needed.
-
-## 4. Visual signal for deactivated rows (light touch)
-
-In the left-side Registry list row, when `org.provisioning_active === false`, append a small `bg-red-100 text-red-700` "Suspended" pill next to the tier badge so deactivated orgs are scannable. No layout changes.
-
-## Out of scope
-
-- No DB migration (already done).
-- No changes to the Add Organization dialog.
-- No changes to pending verification flow, search, taxonomy, or RLS.
-
-## Acceptance
-
-- Editing a card shows discrete inputs for Street 1, Street 2, City, State, ZIP — saving writes them all and the composed `address`.
-- A bright red **Deactivate** button sits to the **left** of **Edit** in the card header. Tapping it (after confirm) flips `provisioning_active` to false, sets `deactivated_at`, toasts the user, and the button flips to a green **Reactivate**.
-- Deactivated orgs show a "Suspended" pill in the left list.
-- No regressions to Add Organization, pending verifications, or list filtering.
+- Your paste references `@/lib/business-access` (`getBusinessId`) and `@/hooks/use-pos-data` (`recordPosTransaction`). I'll verify both exist on disk before writing. If either is missing in this Lovable project, I'll stop and tell you — I will **not** stub them.
+- Your paste also calls edge functions `process-terminal-payment`, `process-nfc-payment`, `redeem-gift-card`. I'll verify they exist under `supabase/functions/`. If any are missing, I'll flag it — not stub it.
+- The JSX in your paste has some lines where attribute values appear stripped (e.g. `<Badge variant=` with nothing after). I'll restore the obvious idiomatic values (`variant="secondary"`, etc.) only where the chat formatting clearly truncated them, and I'll list every such restoration at the end so you can review. If there's any line where intent is genuinely ambiguous, I'll pause and ask rather than guess.
