@@ -92,18 +92,18 @@ export function useEnterpriseReports(periodDays = 30) {
       const [
         membersRes, entriesRes, inventoryRes, historyRes,
         posRes, glRes, menuRes, poRes, suppliersRes, locRes
-      ] = await (Promise.all as any)([
-        supabase.from("employees").select("id, name, role, hourly_rate, overtime_rate, status").eq("business_id", businessId),
-        supabase.from("employee_time_entries").select("*").eq("business_id", businessId).gte("clock_in", sinceISO),
-        supabase.from("inventory_items").select("id, name, current_stock, current_cost, par_level, is_active").eq("business_id", businessId).eq("is_active", true),
-        supabase.from("inventory_history").select("*").eq("business_id", businessId).gte("created_at", sinceISO),
-        supabase.from("pos_transactions").select("items, total_amount").eq("business_id" as any, businessId).gte("created_at", sinceISO).eq("payment_status", "completed"),
+      ] = await Promise.all<any>([
+        (supabase.from as any)("employees").select("id, name, role, hourly_rate, overtime_rate, status").eq("business_id", businessId),
+        (supabase.from as any)("employee_time_entries").select("*").eq("business_id", businessId).gte("clock_in", sinceISO),
+        (supabase.from as any)("inventory_items").select("id, name, current_stock, current_cost, par_level, is_active").eq("business_id", businessId).eq("is_active", true),
+        (supabase.from as any)("inventory_history").select("*").eq("business_id", businessId).gte("created_at", sinceISO),
+        (supabase.from as any)("pos_transactions").select("items, total_amount").eq("business_id", businessId).gte("created_at", sinceISO).eq("payment_status", "completed"),
         (supabase.from as any)("gl_journal_entries").select("*").eq("business_id", businessId).gte("created_at", sinceISO),
-        supabase.from("menu_items").select("id, name, category, base_price, cost_price, is_active").eq("business_id", businessId),
-        supabase.from("purchase_orders").select("id, status, total_amount, invoice_amount, invoice_status").eq("business_id", businessId).gte("created_at", sinceISO),
-        supabase.from("suppliers").select("id").eq("business_id", businessId).eq("is_active", true),
-        supabase.from("business_locations").select("id, name").eq("business_id", businessId),
-      ]);
+        (supabase.from as any)("menu_items").select("id, name, category, base_price, cost_price, is_active").eq("business_id", businessId),
+        (supabase.from as any)("purchase_orders").select("id, status, total_amount, invoice_amount, invoice_status").eq("business_id", businessId).gte("created_at", sinceISO),
+        (supabase.from as any)("suppliers").select("id").eq("business_id", businessId).eq("is_active", true),
+        (supabase.from as any)("business_locations").select("id, name").eq("business_id", businessId),
+      ]) as any[];
 
       const members = (membersRes.data || []) as any[];
       const entries = (entriesRes.data || []) as any[];
