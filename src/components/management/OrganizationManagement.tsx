@@ -342,48 +342,78 @@ const ClientOrganizations = () => {
                 <Plus className="w-4 h-4 text-indigo-600" /> Manual Organization Entry
               </DialogTitle>
             </DialogHeader>
-            <ScrollArea className="max-h-[70vh] px-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">
-                    Legal Entity Name <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    value={formData.legalName}
-                    onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
-                    className="text-sm"
-                    placeholder="Enter business name"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">Blueprint Category</Label>
-                  <Select
-                    value={formData.businessType}
-                    onValueChange={(v) => setFormData({ ...formData, businessType: v })}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DETAILED_BUSINESS_TYPES.map((type) => (
-                        <SelectItem key={type} value={type} className="text-sm">
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">Headquarters Address</Label>
-                  <Input
-                    value={formData.hqAddress}
-                    onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
-                    className="text-sm"
-                    placeholder="123 Main St..."
-                  />
-                </div>
+            <div className="px-6 py-4 space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Legal Entity Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.legalName}
+                  onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
+                  className="text-sm"
+                  placeholder="Enter business name"
+                />
               </div>
-            </ScrollArea>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Headquarters Address <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.hqAddress}
+                  onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
+                  className="text-sm"
+                  placeholder="123 Main St, City, State"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Blueprint Category <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.businessType}
+                  onValueChange={(v) => setFormData({ ...formData, businessType: v })}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select taxonomy category..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {TAXONOMY_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.label} className="text-sm">
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5" />
+                  Associated User (Owner) <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.ownerUserId}
+                  onValueChange={(v) => setFormData({ ...formData, ownerUserId: v })}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select an existing platform user..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {eligibleUsers.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">No profiles available.</div>
+                    ) : (
+                      eligibleUsers.map((u) => (
+                        <SelectItem key={u.user_id} value={u.user_id} className="text-sm font-mono">
+                          {u.display}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Every business must be tethered to at least one platform user.
+                </p>
+              </div>
+            </div>
             <DialogFooter className="px-6 py-4 border-t bg-slate-50/50 gap-2">
               <Button variant="outline" onClick={() => setShowNewOrgModal(false)}>
                 Cancel
