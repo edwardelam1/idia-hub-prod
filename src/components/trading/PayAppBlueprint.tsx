@@ -1414,6 +1414,10 @@ export const PayAppBlueprint = () => {
                           .filter(m => !m.isDefault)
                           .map(module => {
                             const Icon = module.icon || Package;
+                            const route = getRoute(module.id);
+                            const componentLabels = (route?.components ?? []).map((c) =>
+                              c.replace(/^default-/, '').replace(/-/g, ' '),
+                            );
                             return (
                               <div
                                 key={module.id}
@@ -1437,6 +1441,29 @@ export const PayAppBlueprint = () => {
                                   <span className="text-[8px] text-muted-foreground line-clamp-1">
                                     {module.parentName}
                                   </span>
+                                )}
+                                {componentLabels.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap justify-center gap-0.5">
+                                    {componentLabels.slice(0, 3).map((c) => (
+                                      <Badge
+                                        key={c}
+                                        variant="outline"
+                                        className="text-[7px] px-1 py-0 capitalize"
+                                      >
+                                        {c}
+                                      </Badge>
+                                    ))}
+                                    {componentLabels.length > 3 && (
+                                      <Badge variant="outline" className="text-[7px] px-1 py-0">
+                                        +{componentLabels.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                                {!route && (
+                                  <Badge variant="destructive" className="mt-1 text-[7px] px-1 py-0">
+                                    unmapped
+                                  </Badge>
                                 )}
                               </div>
                             );
