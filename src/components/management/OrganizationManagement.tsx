@@ -236,18 +236,30 @@ const ClientOrganizations = () => {
     if (!editForm.name) return;
     setIsSubmitting(true);
     try {
+      const composedAddress = [
+        editForm.street_address_1,
+        editForm.street_address_2,
+        `${editForm.city ?? ""}, ${editForm.state ?? ""} ${editForm.postal_code ?? ""}`.trim(),
+      ]
+        .filter((p) => p && p.trim() && p.trim() !== ",")
+        .join(", ");
       const { error } = await supabase
         .from("businesses")
         .update({
           name: editForm.name,
           tax_id: editForm.tax_id,
           business_type: editForm.business_type,
-          address: editForm.address,
+          address: composedAddress || editForm.address,
+          street_address_1: editForm.street_address_1 || null,
+          street_address_2: editForm.street_address_2 || null,
+          city: editForm.city || null,
+          state: editForm.state || null,
+          postal_code: editForm.postal_code || null,
           email: editForm.email,
           phone: editForm.phone,
           subscription_tier: editForm.subscription_tier,
           data_coop_enabled: editForm.data_coop_enabled,
-        })
+        } as any)
         .eq("id", selectedBusiness.id);
       if (error) throw error;
 
@@ -259,6 +271,36 @@ const ClientOrganizations = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleToggleProvisioning = async () => {
+    if (!selectedBusiness) return;
+    const isActive = selectedBusiness.provisioning_active !== false;
+    const next = !isActive;
+    if (!next) {
+      const ok = window.confirm(
+        `Cut off "${selectedBusiness.name}" from IDIA Pay? Their provisioning code will be deactivated immediately.`,
+      );
+      if (!ok) return;
+    }
+    const { error } = await supabase
+      .from("businesses")
+      .update({
+        provisioning_active: next,
+        deactivated_at: next ? null : new Date().toISOString(),
+      } as any)
+      .eq("id", selectedBusiness.id);
+    if (error) {
+      toast({ title: "Action Failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: next ? "Provisioning Restored" : "Provisioning Deactivated",
+      description: next
+        ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
+        : `${selectedBusiness.name} can no longer access IDIA Pay.`,
+    });
+    fetchBusinesses();
   };
 
   const handleSelectBusiness = (org: any) => {
@@ -602,9 +644,16 @@ const ClientOrganizations = () => {
                   >
                     <div className="flex justify-between items-start mb-0.5">
                       <h4 className="text-sm font-medium text-slate-900 truncate pr-2">{org.name}</h4>
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0 capitalize">
-                        {org.subscription_tier}
-                      </Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {org.provisioning_active === false && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-red-100 text-red-700 hover:bg-red-100 border-red-200">
+                            Suspended
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 capitalize">
+                          {org.subscription_tier}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mb-1.5">
                       {org.business_type || "Unspecified"}
@@ -680,14 +729,33 @@ const ClientOrganizations = () => {
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsEditingCard(true)}
-                        className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" /> Edit
-                      </Button>
+                      <>
+                        {selectedBusiness.provisioning_active === false ? (
+                          <Button
+                            size="sm"
+                            onClick={handleToggleProvisioning}
+                            className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            Reactivate
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={handleToggleProvisioning}
+                            className="h-7 px-2 text-xs bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditingCard(true)}
+                          className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
+                        >
+                          <Edit2 className="w-3 h-3 mr-1" /> Edit
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -741,16 +809,59 @@ const ClientOrganizations = () => {
                           </p>
                         )}
                       </div>
-                      <div>
+                      <div className="space-y-1.5">
                         <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                           HQ Address
                         </Label>
                         {isEditingCard ? (
-                          <Input
-                            value={editForm.address}
-                            onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            className="h-8 text-xs mt-0.5"
-                          />
+                          <div className="space-y-1.5 mt-0.5">
+                            <Input
+                              value={editForm.street_address_1 ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, street_address_1: e.target.value })}
+                              className="h-8 text-xs"
+                              placeholder="Street Address 1"
+                            />
+                            <Input
+                              value={editForm.street_address_2 ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, street_address_2: e.target.value })}
+                              className="h-8 text-xs"
+                              placeholder="Street Address 2 (optional)"
+                            />
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <Input
+                                value={editForm.city ?? ""}
+                                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                                className="h-8 text-xs"
+                                placeholder="City"
+                              />
+                              <Input
+                                value={editForm.state ?? ""}
+                                onChange={(e) =>
+                                  setEditForm({ ...editForm, state: e.target.value.toUpperCase().slice(0, 2) })
+                                }
+                                className="h-8 text-xs uppercase"
+                                placeholder="ST"
+                                maxLength={2}
+                              />
+                              <Input
+                                value={editForm.postal_code ?? ""}
+                                onChange={(e) => setEditForm({ ...editForm, postal_code: e.target.value })}
+                                className="h-8 text-xs"
+                                placeholder="ZIP"
+                              />
+                            </div>
+                          </div>
+                        ) : selectedBusiness.street_address_1 ? (
+                          <div className="text-xs font-medium text-slate-900 mt-0.5 leading-snug">
+                            <div className="truncate">{selectedBusiness.street_address_1}</div>
+                            {selectedBusiness.street_address_2 && (
+                              <div className="truncate">{selectedBusiness.street_address_2}</div>
+                            )}
+                            <div className="truncate">
+                              {[selectedBusiness.city, selectedBusiness.state].filter(Boolean).join(", ")}
+                              {selectedBusiness.postal_code ? ` ${selectedBusiness.postal_code}` : ""}
+                            </div>
+                          </div>
                         ) : (
                           <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.address || "No location set"}

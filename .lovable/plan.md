@@ -1,74 +1,97 @@
-# Restructure Client Organizations — Minimal Density Pass
 
-The current page (`src/components/management/OrganizationManagement.tsx`) uses oversized typography (`text-4xl`, `text-2xl`, `text-xl`), oversized inputs/buttons (`h-14`, `size="lg"`, `py-6 px-8`), and heavy padding (`p-8`, `gap-10`). Goal: bring it down to a tight, professional information-density similar to a modern admin console (think Linear / Stripe dashboard) — without changing any logic, data flow, or features.
+# Finish: Granular Address in Card + Red Deactivate Button
 
-## Scope (visual/density only)
+The DB already has `street_address_1`, `street_address_2`, `city`, `state`, `postal_code`, `country`, `provisioning_active`, and `deactivated_at`. The Add Organization dialog already writes to them. The detail card on the right side of `/organizations` was never updated — it still shows/edits a single `address` string and has no Deactivate control.
 
-No changes to: data fetching, mutations, modal logic, edit/save flow, status logic, or routes. Strictly Tailwind class adjustments and a few minor structural tweaks for compactness.
+All changes are in **`src/components/management/OrganizationManagement.tsx`** only.
 
-## Changes
+## 1. Detail card — replace single HQ Address with granular block
 
-### 1. Page header
-- `h1`: `text-4xl font-extrabold` → `text-xl font-semibold`
-- Subtitle: `text-lg text-gray-500 mt-1` → `text-sm text-muted-foreground`
-- "Add Organization" button: drop `size="lg"`, drop `text-xl py-6 px-8 rounded-xl shadow-lg`, use default size with `gap-2`, icon `h-4 w-4`. Keep indigo color.
-- Outer container: `space-y-6 ... p-4` → `space-y-4 ... p-6`; keep `max-w-[1400px]` and the flex column / 100vh layout.
+Inside the "Operational Profile" column (currently lines ~744–759), replace the single HQ Address field with a stacked group of labeled rows that mirror the Add dialog:
 
-### 2. Add Organization dialog
-- Title `text-2xl` → `text-base`, icon `w-6 h-6` → `w-4 h-4`
-- Labels `text-lg font-bold` → `text-xs font-medium`
-- Inputs / Select trigger `h-14 text-xl` → default height + `text-sm`
-- Footer buttons: drop `size="lg" text-xl py-6 px-8`, use defaults
-- Header/footer padding `px-8 py-6` → `px-6 py-4`; grid `gap-6` → `gap-4`
+- Street Address 1
+- Street Address 2 (only shown in display mode if present; always shown in edit mode)
+- City  /  State  /  ZIP (3-col grid, same as the dialog)
 
-### 3. Pending Verifications strip
-- Card title `text-xl font-bold` + `w-6 h-6` icon → `text-sm font-medium` + `w-4 h-4`
-- Header padding `py-4 px-6` → `py-2 px-4`
-- Badge `text-base px-3 py-1` → default small
-- Row company name `text-lg font-bold` → `text-sm font-medium`; row padding `p-4` → `px-4 py-2`
-- "Process Application" button: drop `size="lg" text-base`, default size, smaller label is fine
-- Verification modal title `text-2xl` → `text-base`; body `text-lg` → `text-sm`; button drop `size="lg" text-lg`
+Display mode: render each value as the existing dense `text-xs font-medium text-slate-900` rows. If `street_address_1` is empty, fall back to parsing `selectedBusiness.address` so legacy rows still show something.
 
-### 4. Master list (left panel, 35%)
-- "Registry List" `text-2xl font-bold` → `text-sm font-semibold uppercase tracking-wide text-muted-foreground`
-- Count badge: smaller, default
-- Search input `h-14 text-lg` + `h-5 w-5` icon → `h-9 text-sm` + `h-4 w-4` icon
-- Container padding `p-5` → `p-3`
-- Row button `p-6` → `px-3 py-2.5`; org name `text-xl font-bold` → `text-sm font-medium`; type `text-base font-medium ... mb-4` → `text-xs text-muted-foreground mb-1.5`
-- Tier badge `text-sm px-2 py-1` → default `text-[10px]` style
-- Status icons `w-6 h-6` → `w-3.5 h-3.5`, gap `gap-3` → `gap-2`
-- Selected state: keep left border accent but slim it (`border-l-2`), drop `shadow-md`
+Edit mode: render `Input`s bound to `editForm.street_address_1`, `editForm.street_address_2`, `editForm.city`, `editForm.state` (uppercase, maxLength 2), `editForm.postal_code` — same `h-8 text-xs` styling already used in the card.
 
-### 5. Detail panel (right, 65%)
-- Outer wrapper padding `p-8` → `p-4`; inner card `rounded-2xl shadow-lg` → `rounded-lg shadow-sm`
-- Card header gradient block `p-8` → `px-5 py-4`; building icon container `p-5 rounded-2xl` + `h-12 w-12` icon → `p-2.5 rounded-md` + `h-5 w-5` icon; gap `gap-6` → `gap-3`
-- Org name `text-4xl font-extrabold` → `text-lg font-semibold`; edit input `h-14 text-2xl` → default `h-9 text-sm`
-- Header badges/meta `text-base` + `w-5 h-5` → `text-xs` + `w-3.5 h-3.5`; gap `mt-3` → `mt-1`
-- Edit/Save/Cancel buttons: drop `size="lg" text-lg`, use `size="sm"`; icons `w-5 h-5` → `w-3.5 h-3.5`
-- Body grid `p-8 ... gap-10` → `p-5 ... gap-6`; section spacing `space-y-6` / `space-y-5` → `space-y-4` / `space-y-3`
-- Section headings `text-lg font-bold uppercase tracking-widest ... border-b-2 pb-2` → `text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5`
-- Field labels `text-sm font-bold uppercase` → `text-xs font-medium text-muted-foreground` (no uppercase)
-- Field values: `text-2xl font-bold` / `text-xl font-medium` → `text-sm font-medium` (mono fields keep `font-mono`)
-- Read-only value top margin `mt-2` → `mt-1`
-- Edit-mode inputs/selects: `h-14 text-xl` → `h-9 text-sm`; option items `text-lg` → `text-sm`
-- Email/phone leading icons `w-6 h-6` → `w-3.5 h-3.5`
-- Network Capabilities tiles: `p-6 rounded-xl border-2` → `p-3 rounded-md border`; tile label `text-lg font-bold` + `w-6 h-6` icon → `text-xs font-medium` + `w-3.5 h-3.5` icon; status icons (`getStatusIcon`) shrink from `w-6 h-6` → `w-4 h-4`; switch `scale-125` → default scale; grid `gap-6` → `gap-3`
-- Empty state: icon `w-24 h-24` → `w-10 h-10`; text `text-xl font-medium` → `text-sm text-muted-foreground`
+The header MapPin preview (line 652) keeps using `selectedBusiness.address?.split(",")[0]` as today, but we recompute `address` on save (see below) so it stays in sync.
 
-### 6. `getStatusIcon` helper
-Update the three returns to `w-4 h-4` (single source so tiles + list inherit the smaller size). Verify the list rows use their own sizing locally so they remain consistent at `w-3.5 h-3.5`.
+## 2. `handleUpdateBusiness` — persist granular fields
+
+Update the `supabase.from("businesses").update({...})` payload to include:
+
+```ts
+street_address_1: editForm.street_address_1,
+street_address_2: editForm.street_address_2 || null,
+city: editForm.city,
+state: editForm.state,
+postal_code: editForm.postal_code,
+```
+
+And recompose the legacy `address` string the same way `handleCreateBusiness` does, so list rows / header preview stay consistent:
+
+```ts
+const composedAddress = [
+  editForm.street_address_1,
+  editForm.street_address_2,
+  `${editForm.city ?? ""}, ${editForm.state ?? ""} ${editForm.postal_code ?? ""}`.trim(),
+].filter(Boolean).join(", ");
+```
+
+Send `address: composedAddress` in the same update.
+
+## 3. Red Deactivate button (header, left of Edit)
+
+In the action cluster (lines 659–692), when **not** in edit mode, render a Deactivate / Reactivate button immediately **before** the Edit button:
+
+- If `selectedBusiness.provisioning_active !== false` → label "Deactivate", `bg-red-600 hover:bg-red-700 text-white`, `size="sm"`, `h-7 px-2 text-xs`.
+- If already deactivated → label "Reactivate", same size but `bg-emerald-600 hover:bg-emerald-700`.
+- Hidden while `isEditingCard` is true (matches Edit visibility rules).
+
+Add a `handleToggleProvisioning` handler:
+
+```ts
+const handleToggleProvisioning = async () => {
+  const next = !(selectedBusiness.provisioning_active !== false);
+  const { error } = await supabase
+    .from("businesses")
+    .update({
+      provisioning_active: next,
+      deactivated_at: next ? null : new Date().toISOString(),
+    })
+    .eq("id", selectedBusiness.id);
+  if (error) {
+    toast({ title: "Action Failed", description: error.message, variant: "destructive" });
+    return;
+  }
+  toast({
+    title: next ? "Provisioning Restored" : "Provisioning Deactivated",
+    description: next
+      ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
+      : `${selectedBusiness.name} can no longer access IDIA Pay.`,
+  });
+  fetchBusinesses();
+};
+```
+
+Wrap the destructive action in a small `confirm()` ("Cut off this organization from IDIA Pay?") before calling — single confirm, no extra dialog component needed.
+
+## 4. Visual signal for deactivated rows (light touch)
+
+In the left-side Registry list row, when `org.provisioning_active === false`, append a small `bg-red-100 text-red-700` "Suspended" pill next to the tier badge so deactivated orgs are scannable. No layout changes.
 
 ## Out of scope
-- No color palette changes beyond removing heavy shadows/borders.
-- No component library swaps.
-- No copy changes.
-- No changes to the dialog form fields, validation, or submission handlers.
 
-## Files touched
-- `src/components/management/OrganizationManagement.tsx` (only file)
+- No DB migration (already done).
+- No changes to the Add Organization dialog.
+- No changes to pending verification flow, search, taxonomy, or RLS.
 
 ## Acceptance
-- All text on the page renders at standard admin-console sizes (≤ `text-sm` for body, `text-xs` for labels, single `text-lg` heading max).
-- Buttons, inputs, and badges use shadcn defaults (no `size="lg"`, no `h-14`, no `text-xl/2xl/4xl`).
-- Master list shows visibly more rows in the same viewport.
-- All existing functionality (search, add, edit/save, pending review modal) continues to work unchanged.
+
+- Editing a card shows discrete inputs for Street 1, Street 2, City, State, ZIP — saving writes them all and the composed `address`.
+- A bright red **Deactivate** button sits to the **left** of **Edit** in the card header. Tapping it (after confirm) flips `provisioning_active` to false, sets `deactivated_at`, toasts the user, and the button flips to a green **Reactivate**.
+- Deactivated orgs show a "Suspended" pill in the left list.
+- No regressions to Add Organization, pending verifications, or list filtering.
