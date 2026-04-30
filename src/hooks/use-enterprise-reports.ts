@@ -92,7 +92,7 @@ export function useEnterpriseReports(periodDays = 30) {
       const [
         membersRes, entriesRes, inventoryRes, historyRes,
         posRes, glRes, menuRes, poRes, suppliersRes, locRes
-      ] = await Promise.all([
+      ] = await (Promise.all as any)([
         supabase.from("employees").select("id, name, role, hourly_rate, overtime_rate, status").eq("business_id", businessId),
         supabase.from("employee_time_entries").select("*").eq("business_id", businessId).gte("clock_in", sinceISO),
         supabase.from("inventory_items").select("id, name, current_stock, current_cost, par_level, is_active").eq("business_id", businessId).eq("is_active", true),
