@@ -657,6 +657,7 @@ export type Database = {
           logo_url: string | null
           name: string
           phone: string | null
+          provisioning_code: string
           subscription_tier: string | null
           tax_id: string | null
           updated_at: string | null
@@ -674,6 +675,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           phone?: string | null
+          provisioning_code: string
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
@@ -691,6 +693,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           phone?: string | null
+          provisioning_code?: string
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
@@ -6512,6 +6515,7 @@ export type Database = {
         }
         Returns: number
       }
+      generate_business_provisioning_code: { Args: never; Returns: string }
       generate_pseudonym:
         | { Args: { input_id: string }; Returns: string }
         | { Args: { input_text: string }; Returns: string }
