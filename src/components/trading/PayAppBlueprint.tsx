@@ -15,6 +15,7 @@ import {
   type NanoBite,
 } from '@/taxonomy';
 import { useBusinessTaxonomy } from '@/hooks/useBusinessTaxonomy';
+import { PAY_APP_ROUTING, getRoute } from '@/taxonomy/payAppRouting';
 import {
   Package,
   Send,
