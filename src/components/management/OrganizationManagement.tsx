@@ -614,7 +614,9 @@ const ClientOrganizations = () => {
                     </h3>
                     <div className="space-y-2">
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Blueprint</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Blueprint
+                        </Label>
                         {isEditingCard ? (
                           <Select
                             value={editForm.business_type}
@@ -638,7 +640,9 @@ const ClientOrganizations = () => {
                         )}
                       </div>
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Tax ID</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Tax ID
+                        </Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.tax_id}
@@ -652,7 +656,9 @@ const ClientOrganizations = () => {
                         )}
                       </div>
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">HQ Address</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          HQ Address
+                        </Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.address}
@@ -666,7 +672,9 @@ const ClientOrganizations = () => {
                         )}
                       </div>
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provisioning Code</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Provisioning Code
+                        </Label>
                         <p className="text-xs font-mono font-medium text-slate-900 mt-0.5 truncate">
                           {selectedBusiness.provisioning_code || "—"}
                         </p>
@@ -680,7 +688,9 @@ const ClientOrganizations = () => {
                     </h3>
                     <div className="space-y-2">
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Email</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Email
+                        </Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.email}
@@ -694,7 +704,9 @@ const ClientOrganizations = () => {
                         )}
                       </div>
                       <div>
-                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Phone</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          Phone
+                        </Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.phone}
@@ -720,7 +732,7 @@ const ClientOrganizations = () => {
                       >
                         <div className="flex items-center justify-between">
                           <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
-                            <ShieldCheck className="w-3 h-3 text-emerald-600" /> Shield
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" /> T-1-P Verified
                           </Label>
                           {getStatusIcon(selectedBusiness.t1p_status)}
                         </div>
