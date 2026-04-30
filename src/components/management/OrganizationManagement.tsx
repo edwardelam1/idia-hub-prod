@@ -236,18 +236,30 @@ const ClientOrganizations = () => {
     if (!editForm.name) return;
     setIsSubmitting(true);
     try {
+      const composedAddress = [
+        editForm.street_address_1,
+        editForm.street_address_2,
+        `${editForm.city ?? ""}, ${editForm.state ?? ""} ${editForm.postal_code ?? ""}`.trim(),
+      ]
+        .filter((p) => p && p.trim() && p.trim() !== ",")
+        .join(", ");
       const { error } = await supabase
         .from("businesses")
         .update({
           name: editForm.name,
           tax_id: editForm.tax_id,
           business_type: editForm.business_type,
-          address: editForm.address,
+          address: composedAddress || editForm.address,
+          street_address_1: editForm.street_address_1 || null,
+          street_address_2: editForm.street_address_2 || null,
+          city: editForm.city || null,
+          state: editForm.state || null,
+          postal_code: editForm.postal_code || null,
           email: editForm.email,
           phone: editForm.phone,
           subscription_tier: editForm.subscription_tier,
           data_coop_enabled: editForm.data_coop_enabled,
-        })
+        } as any)
         .eq("id", selectedBusiness.id);
       if (error) throw error;
 
@@ -259,6 +271,36 @@ const ClientOrganizations = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleToggleProvisioning = async () => {
+    if (!selectedBusiness) return;
+    const isActive = selectedBusiness.provisioning_active !== false;
+    const next = !isActive;
+    if (!next) {
+      const ok = window.confirm(
+        `Cut off "${selectedBusiness.name}" from IDIA Pay? Their provisioning code will be deactivated immediately.`,
+      );
+      if (!ok) return;
+    }
+    const { error } = await supabase
+      .from("businesses")
+      .update({
+        provisioning_active: next,
+        deactivated_at: next ? null : new Date().toISOString(),
+      } as any)
+      .eq("id", selectedBusiness.id);
+    if (error) {
+      toast({ title: "Action Failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({
+      title: next ? "Provisioning Restored" : "Provisioning Deactivated",
+      description: next
+        ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
+        : `${selectedBusiness.name} can no longer access IDIA Pay.`,
+    });
+    fetchBusinesses();
   };
 
   const handleSelectBusiness = (org: any) => {
