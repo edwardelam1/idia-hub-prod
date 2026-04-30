@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,8 @@ import {
   type NanoBite,
 } from '@/taxonomy';
 import { useBusinessTaxonomy } from '@/hooks/useBusinessTaxonomy';
-import { PAY_APP_ROUTING, getRoute } from '@/taxonomy/payAppRouting';
+import { PAY_APP_ROUTING, getRoute, assertPayAppRoutingCoverage } from '@/taxonomy/payAppRouting';
+import { getSubModuleCoverage } from '@/taxonomy/selectors';
 import {
   Package,
   Send,
@@ -585,6 +586,9 @@ export const PayAppBlueprint = () => {
   const taxonomy = useBusinessTaxonomy('pay-app-builder');
   useEffect(() => {
     initializeTaxonomy();
+    // Boot-time smoke assertion — ensures every UI sub-module resolves through PAY_APP_ROUTING.
+    const allSubModuleIds = verticalCategories.flatMap((v) => v.subModules.map((s) => s.id));
+    assertPayAppRoutingCoverage(allSubModuleIds);
   }, []);
   const dragDataRef = useRef<{ id: string; name: string; parentId?: string; parentName?: string; color?: string } | null>(null);
 
@@ -1544,8 +1548,77 @@ export const PayAppBlueprint = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dev-only Coverage Panel — verifies every sub-module routes to bites + modules */}
+      {import.meta.env.DEV && <CoveragePanel />}
     </div>
   );
 };
 
 export default PayAppBlueprint;
+
+/**
+ * CoveragePanel — dev-only diagnostic showing per-sub-module routing coverage:
+ * industryId resolution, mounted module count, and hydrated nano-bite count.
+ * Hidden from production builds via `import.meta.env.DEV` gate at the call site.
+ */
+const CoveragePanel = () => {
+  const allSubModuleIds = verticalCategories.flatMap((v) => v.subModules.map((s) => s.id));
+  const rows = getSubModuleCoverage(allSubModuleIds);
+  const totals = {
+    subModules: rows.length,
+    routed: rows.filter((r) => r.industryResolved).length,
+    unrouted: rows.filter((r) => !r.industryResolved).length,
+    bites: rows.reduce((s, r) => s + r.biteCount, 0),
+    modules: rows.reduce((s, r) => s + r.moduleCount, 0),
+    zeroBites: rows.filter((r) => r.industryResolved && r.biteCount === 0).length,
+  };
+  const grouped = rows.reduce<Record<string, typeof rows>>((acc, r) => {
+    (acc[r.verticalId] ||= []).push(r);
+    return acc;
+  }, {});
+
+  return (
+    <Card className="border-dashed border-amber-500/40 bg-amber-500/5">
+      <CardHeader>
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Activity className="h-4 w-4 text-amber-500" />
+          Routing Coverage (dev only)
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {totals.routed}/{totals.subModules} sub-modules routed · {totals.modules} module mounts · {totals.bites} nano-bites · {totals.unrouted} unrouted · {totals.zeroBites} routed-but-empty
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-[320px] overflow-y-auto space-y-3 text-xs">
+          {Object.entries(grouped).map(([verticalId, verticalRows]) => (
+            <div key={verticalId} className="border border-border/40 rounded-md p-2">
+              <div className="font-semibold mb-1 text-foreground/80">{verticalId}</div>
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1">
+                {verticalRows.map((r) => (
+                  <Fragment key={r.subModuleId}>
+                    <div className="font-mono truncate">
+                      {r.industryResolved ? '✓' : '✗'} {r.name}
+                    </div>
+                    <Badge variant="outline" className="text-[10px] h-5">
+                      {r.moduleCount} mod
+                    </Badge>
+                    <Badge
+                      variant={r.biteCount === 0 ? 'destructive' : 'secondary'}
+                      className="text-[10px] h-5"
+                    >
+                      {r.biteCount} bites
+                    </Badge>
+                    <code className="text-[10px] text-muted-foreground truncate">
+                      {r.industryId}
+                    </code>
+                  </Fragment>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
