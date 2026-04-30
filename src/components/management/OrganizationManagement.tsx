@@ -644,9 +644,16 @@ const ClientOrganizations = () => {
                   >
                     <div className="flex justify-between items-start mb-0.5">
                       <h4 className="text-sm font-medium text-slate-900 truncate pr-2">{org.name}</h4>
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0 capitalize">
-                        {org.subscription_tier}
-                      </Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {org.provisioning_active === false && (
+                          <Badge className="text-[10px] px-1.5 py-0 bg-red-100 text-red-700 hover:bg-red-100 border-red-200">
+                            Suspended
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 capitalize">
+                          {org.subscription_tier}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mb-1.5">
                       {org.business_type || "Unspecified"}
