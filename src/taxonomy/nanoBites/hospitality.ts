@@ -29,4 +29,40 @@ export const HOSPITALITY_BITES: NanoBite[] = [
   { id: 'hosp.bar.pricing.happy_hour_window',  industryId: 'tertiary.hospitality.bar_nightlife', valueChainStage: 'marketing_sales', microElement: 'Dynamic Pricing', task: 'Apply time-windowed Happy Hour pricing automatically',                                 cadence: 'event', automatable: true,  requiresTier: 'basic' },
   { id: 'hosp.bar.pricing.amenity_time_charge', industryId: 'tertiary.hospitality.bar_nightlife', valueChainStage: 'marketing_sales', microElement: 'Dynamic Pricing', task: 'Bill time-based amenity usage (table, simulator, lane) by the minute',               cadence: 'event', automatable: true,  requiresTier: 'pro' },
   { id: 'hosp.bar.analytics.pour_variance',    industryId: 'tertiary.hospitality.bar_nightlife', valueChainStage: 'technology',      microElement: 'Analytics',       task: 'Reconcile poured vs. sold volume and flag variance',                                  cadence: 'daily', automatable: true,  requiresTier: 'enterprise' },
+  // ── Fine Dining ──
+  { id: 'hosp.fd.reservation', industryId: 'tertiary.hospitality.fine_dining', valueChainStage: 'operations',      microElement: 'Reservation', task: 'Reservation & deposit management',          cadence: 'daily', automatable: true },
+  { id: 'hosp.fd.coursing',    industryId: 'tertiary.hospitality.fine_dining', valueChainStage: 'operations',      microElement: 'Coursing',    task: 'Multi-course pacing & fire',                cadence: 'event', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.fd.wine',        industryId: 'tertiary.hospitality.fine_dining', valueChainStage: 'inbound_logistics', microElement: 'Wine List', task: 'Wine-list & cellar inventory',              cadence: 'weekly', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.fd.tipout',      industryId: 'tertiary.hospitality.fine_dining', valueChainStage: 'marketing_sales', microElement: 'Tip Pool',    task: 'Tip-pool distribution',                     cadence: 'daily', automatable: true },
+  { id: 'hosp.fd.guest',       industryId: 'tertiary.hospitality.fine_dining', valueChainStage: 'service',         microElement: 'Guest CRM',   task: 'VIP & allergen guest profile',              cadence: 'daily', automatable: true, requiresTier: 'pro' },
+  // ── Diner ──
+  { id: 'hosp.dn.tableturn',   industryId: 'tertiary.hospitality.diner', valueChainStage: 'operations',     microElement: 'Table Turn',  task: 'Table-turn time tracking',         cadence: 'daily', automatable: true },
+  { id: 'hosp.dn.allday',      industryId: 'tertiary.hospitality.diner', valueChainStage: 'operations',     microElement: 'All-day Menu',task: 'All-day menu + breakfast switch',  cadence: 'daily', automatable: true },
+  { id: 'hosp.dn.tabs',        industryId: 'tertiary.hospitality.diner', valueChainStage: 'service',        microElement: 'Tab',         task: 'Counter & booth tab merge',        cadence: 'event', automatable: true },
+  { id: 'hosp.dn.tipout',      industryId: 'tertiary.hospitality.diner', valueChainStage: 'marketing_sales',microElement: 'Tip Out',     task: 'Server tip-out split',             cadence: 'daily', automatable: true },
+  { id: 'hosp.dn.loyalty',     industryId: 'tertiary.hospitality.diner', valueChainStage: 'marketing_sales',microElement: 'Loyalty',     task: 'Frequent-diner punch loyalty',     cadence: 'event', automatable: true },
+  // ── Home Services ──
+  { id: 'hosp.hs.dispatch',    industryId: 'tertiary.hospitality.home_services', valueChainStage: 'operations',     microElement: 'Dispatch', task: 'Tech dispatch & ETA',          cadence: 'daily', automatable: true },
+  { id: 'hosp.hs.quote',       industryId: 'tertiary.hospitality.home_services', valueChainStage: 'marketing_sales',microElement: 'Quote',    task: 'On-site quote & approval',     cadence: 'event', automatable: true },
+  { id: 'hosp.hs.recurring',   industryId: 'tertiary.hospitality.home_services', valueChainStage: 'marketing_sales',microElement: 'Recurring',task: 'Recurring service plan',       cadence: 'monthly', automatable: true },
+  { id: 'hosp.hs.photo',       industryId: 'tertiary.hospitality.home_services', valueChainStage: 'service',        microElement: 'Photo Proof', task: 'Before/after photo proof',  cadence: 'event', automatable: true },
+  { id: 'hosp.hs.review',      industryId: 'tertiary.hospitality.home_services', valueChainStage: 'service',        microElement: 'Review',   task: 'Post-service review request',  cadence: 'event', automatable: true },
+  // ── Theme Park ──
+  { id: 'hosp.tp.ticket',      industryId: 'tertiary.hospitality.theme_park', valueChainStage: 'marketing_sales',microElement: 'Ticket',     task: 'Ticket & multi-day pass scan',     cadence: 'daily', automatable: true },
+  { id: 'hosp.tp.queue',       industryId: 'tertiary.hospitality.theme_park', valueChainStage: 'operations',     microElement: 'Queue',      task: 'Virtual queue / fast-pass',        cadence: 'daily', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.tp.foodbev',     industryId: 'tertiary.hospitality.theme_park', valueChainStage: 'service',        microElement: 'F&B',        task: 'In-park F&B mobile order',         cadence: 'daily', automatable: true },
+  { id: 'hosp.tp.merch',       industryId: 'tertiary.hospitality.theme_park', valueChainStage: 'service',        microElement: 'Merch',      task: 'Park-wide merch ship-to-home',     cadence: 'daily', automatable: true },
+  { id: 'hosp.tp.safety',      industryId: 'tertiary.hospitality.theme_park', valueChainStage: 'infrastructure', microElement: 'Ride Safety',task: 'Ride pre-op safety checklist',     cadence: 'daily', automatable: true, requiresTier: 'enterprise' },
+  // ── Café & Bakery ──
+  { id: 'hosp.cb.openclose',   industryId: 'tertiary.hospitality.cafe_bakery', valueChainStage: 'operations',     microElement: 'Open/Close', task: 'Open/close cash & prep checklist', cadence: 'daily', automatable: true },
+  { id: 'hosp.cb.bake',        industryId: 'tertiary.hospitality.cafe_bakery', valueChainStage: 'operations',     microElement: 'Bake List',  task: 'Daily bake list from forecast',    cadence: 'daily', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.cb.preorder',    industryId: 'tertiary.hospitality.cafe_bakery', valueChainStage: 'service',        microElement: 'Pre-order',  task: 'Cake / catering pre-order',        cadence: 'event', automatable: true },
+  { id: 'hosp.cb.loyalty',     industryId: 'tertiary.hospitality.cafe_bakery', valueChainStage: 'marketing_sales',microElement: 'Loyalty',    task: 'Beverage loyalty stamp',           cadence: 'event', automatable: true },
+  { id: 'hosp.cb.waste',       industryId: 'tertiary.hospitality.cafe_bakery', valueChainStage: 'operations',     microElement: 'Waste Log',  task: 'End-of-day waste log',             cadence: 'daily', automatable: true },
+  // ── Catering ──
+  { id: 'hosp.cat.event',      industryId: 'tertiary.hospitality.catering', valueChainStage: 'operations',      microElement: 'Event Order',task: 'Banquet-event order (BEO)',        cadence: 'event', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.cat.proposal',   industryId: 'tertiary.hospitality.catering', valueChainStage: 'marketing_sales', microElement: 'Proposal',   task: 'Quote & proposal generation',      cadence: 'event', automatable: true },
+  { id: 'hosp.cat.staffing',   industryId: 'tertiary.hospitality.catering', valueChainStage: 'human_resources', microElement: 'Staffing',   task: 'Event-staffing assignment',        cadence: 'event', automatable: true },
+  { id: 'hosp.cat.delivery',   industryId: 'tertiary.hospitality.catering', valueChainStage: 'outbound_logistics', microElement: 'Delivery',task: 'Hot-box load & delivery route',   cadence: 'event', automatable: true },
+  { id: 'hosp.cat.invoice',    industryId: 'tertiary.hospitality.catering', valueChainStage: 'marketing_sales', microElement: 'Invoice',    task: 'Final-count invoice & gratuity',   cadence: 'event', automatable: true },
 ];
