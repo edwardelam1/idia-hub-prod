@@ -563,7 +563,7 @@ export const PayAppBlueprint = () => {
   const [selectedSubModules, setSelectedSubModules] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [provisioningCode] = useState(generateProvisioningCode());
+  const [provisioningCode, setProvisioningCode] = useState(generateProvisioningCode());
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
 
@@ -590,6 +590,14 @@ export const PayAppBlueprint = () => {
   // Business Assigment State
   const [approvedBusinesses, setApprovedBusinesses] = useState<any[]>([]);
   const [selectedBusiness, setSelectedBusiness] = useState<string>('');
+
+  // Dynamically regenerate the provisioning code when a new business profile is selected
+  useEffect(() => {
+    if (selectedBusiness) {
+      console.log(`[PayAppBlueprint] New business profile selected (${selectedBusiness}). Generating new provisioning code.`);
+      setProvisioningCode(generateProvisioningCode());
+    }
+  }, [selectedBusiness]);
 
   useEffect(() => {
     // Fetch live, verified business organizations from the central registry
