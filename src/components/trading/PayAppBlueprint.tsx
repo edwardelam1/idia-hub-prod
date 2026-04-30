@@ -1141,6 +1141,39 @@ export const PayAppBlueprint = () => {
                         (spatial.hardware_layer?.length ?? 0) > 0;
                       if (!industry || (bites.length === 0 && !hasTelemetry)) return null;
 
+                      const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+                      const toggleBite = (biteId: string) => {
+                        taxonomy.setClassification((prev) => {
+                          const next = new Set(prev.selectedNanoBiteIds);
+                          if (next.has(biteId)) next.delete(biteId);
+                          else next.add(biteId);
+                          return {
+                            ...prev,
+                            industryId: prev.industryId ?? industryId,
+                            selectedNanoBiteIds: Array.from(next),
+                          };
+                        });
+                      };
+                      const selectAll = () => {
+                        taxonomy.setClassification((prev) => ({
+                          ...prev,
+                          industryId: prev.industryId ?? industryId,
+                          selectedNanoBiteIds: Array.from(
+                            new Set([...prev.selectedNanoBiteIds, ...bites.map((b) => b.id)]),
+                          ),
+                        }));
+                      };
+                      const clearAll = () => {
+                        const biteSet = new Set(bites.map((b) => b.id));
+                        taxonomy.setClassification((prev) => ({
+                          ...prev,
+                          selectedNanoBiteIds: prev.selectedNanoBiteIds.filter(
+                            (id) => !biteSet.has(id),
+                          ),
+                        }));
+                      };
+                      const selectedHere = bites.filter((b) => selectedBiteIds.has(b.id)).length;
+
                       return (
                         <div className="mt-4 space-y-3 rounded-xl border bg-card p-4">
                           <div className="flex items-center justify-between">
@@ -1202,20 +1235,41 @@ export const PayAppBlueprint = () => {
 
                           {bites.length > 0 && (
                             <div className="space-y-2">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                Nano-Bite Tasks ({bites.length})
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  Nano-Bite Tasks · {selectedHere}/{bites.length} active
+                                </p>
+                                <div className="flex gap-1">
+                                  <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={selectAll}>
+                                    All
+                                  </Button>
+                                  <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={clearAll}>
+                                    None
+                                  </Button>
+                                </div>
+                              </div>
                               <div className="grid gap-2">
-                                {bites.map((b) => (
-                                  <div
+                                {bites.map((b) => {
+                                  const isOn = selectedBiteIds.has(b.id);
+                                  return (
+                                  <label
                                     key={b.id}
-                                    className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-2"
+                                    className={`flex items-start justify-between gap-3 rounded-md border p-2 cursor-pointer transition-colors ${
+                                      isOn ? 'border-primary bg-primary/10' : 'bg-muted/30 hover:bg-muted/50'
+                                    }`}
                                   >
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-medium truncate">{b.task}</p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        {b.microElement} · {b.valueChainStage.replace(/_/g, ' ')}
-                                      </p>
+                                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                                      <Checkbox
+                                        checked={isOn}
+                                        onCheckedChange={() => toggleBite(b.id)}
+                                        className="mt-0.5"
+                                      />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-medium truncate">{b.task}</p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {b.microElement} · {b.valueChainStage.replace(/_/g, ' ')}
+                                        </p>
+                                      </div>
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end gap-1">
                                       <Badge variant="outline" className="text-[9px]">
@@ -1232,8 +1286,9 @@ export const PayAppBlueprint = () => {
                                         </Badge>
                                       )}
                                     </div>
-                                  </div>
-                                ))}
+                                  </label>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
