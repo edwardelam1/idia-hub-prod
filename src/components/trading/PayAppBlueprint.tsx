@@ -1548,6 +1548,9 @@ export const PayAppBlueprint = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dev-only Coverage Panel — verifies every sub-module routes to bites + modules */}
+      {import.meta.env.DEV && <CoveragePanel />}
     </div>
   );
 };
