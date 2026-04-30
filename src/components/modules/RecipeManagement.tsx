@@ -161,7 +161,7 @@ export const RecipeManagement = () => {
         .eq('business_id', businessId);
 
       if (!error && data) {
-        setRecipes(data.map(r => ({
+        setRecipes((data as any[]).map((r: any) => ({
           id: r.id,
           business_id: r.business_id,
           name: r.name,
@@ -173,7 +173,7 @@ export const RecipeManagement = () => {
           difficulty: (r as any).difficulty || 'Easy',
           base_price: (r as any).base_price || 0,
           allergens: (r as any).allergens || [],
-          instructions: r.instructions,
+          instructions: typeof r.instructions === 'string' ? r.instructions : '',
           image_url: (r as any).image_url || null,
           created_at: r.created_at || '',
           ingredients: ((r as any).recipe_ingredients || []).map((ing: any) => ({
