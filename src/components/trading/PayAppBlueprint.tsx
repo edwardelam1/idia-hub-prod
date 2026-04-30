@@ -15,6 +15,7 @@ import {
   type NanoBite,
 } from '@/taxonomy';
 import { useBusinessTaxonomy } from '@/hooks/useBusinessTaxonomy';
+import { PAY_APP_ROUTING, getRoute } from '@/taxonomy/payAppRouting';
 import {
   Package,
   Send,
@@ -768,7 +769,47 @@ export const PayAppBlueprint = () => {
 
   const generateBlueprintJSON = () => {
     const businessName = approvedBusinesses.find(b => b.id.toString() === selectedBusiness)?.name || 'Unassigned';
-    
+
+    // Compose the per-sub-module bundles: every selected custom module gets
+    // its routing entry resolved into ComponentRegistry keys + hydrated bites.
+    const customSelected = selectedModules.filter(m => !m.isDefault);
+    const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+    const bundles = customSelected.map((m) => {
+      const route = getRoute(m.id);
+      if (!route) {
+        return {
+          subModuleId: m.id,
+          name: m.name,
+          vertical: m.parentName ?? null,
+          industryId: null,
+          components: [],
+          nanoBites: [],
+          unmapped: true,
+        };
+      }
+      const allBites = getNanoBitesFor({ industryId: route.industryId });
+      const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
+      // If the operator hasn't curated bites yet, ship all bites for this industry
+      // so the device receives a working default kit. Empty array stays empty.
+      const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
+        id: b.id,
+        task: b.task,
+        microElement: b.microElement,
+        valueChainStage: b.valueChainStage,
+        cadence: b.cadence,
+        automatable: b.automatable,
+        requiresTier: b.requiresTier ?? null,
+      }));
+      return {
+        subModuleId: route.subModuleId,
+        name: route.name,
+        vertical: m.parentName ?? null,
+        industryId: route.industryId,
+        components: route.components,
+        nanoBites,
+      };
+    });
+
     return {
       version: '2.0.0',
       clientOrganization: businessName,
@@ -776,11 +817,12 @@ export const PayAppBlueprint = () => {
       createdAt: new Date().toISOString(),
       modules: {
         default: defaultModules.map(m => ({ id: m.id, name: m.name })),
-        custom: selectedModules.filter(m => !m.isDefault).map(m => ({
+        custom: customSelected.map(m => ({
           id: m.id,
           name: m.name,
           vertical: m.parentName || null
-        }))
+        })),
+        bundles,
       },
       verticals: [...new Set(selectedModules.filter(m => m.parentName).map(m => m.parentName))],
       taxonomy: {
@@ -1372,6 +1414,10 @@ export const PayAppBlueprint = () => {
                           .filter(m => !m.isDefault)
                           .map(module => {
                             const Icon = module.icon || Package;
+                            const route = getRoute(module.id);
+                            const componentLabels = (route?.components ?? []).map((c) =>
+                              c.replace(/^default-/, '').replace(/-/g, ' '),
+                            );
                             return (
                               <div
                                 key={module.id}
@@ -1395,6 +1441,29 @@ export const PayAppBlueprint = () => {
                                   <span className="text-[8px] text-muted-foreground line-clamp-1">
                                     {module.parentName}
                                   </span>
+                                )}
+                                {componentLabels.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap justify-center gap-0.5">
+                                    {componentLabels.slice(0, 3).map((c) => (
+                                      <Badge
+                                        key={c}
+                                        variant="outline"
+                                        className="text-[7px] px-1 py-0 capitalize"
+                                      >
+                                        {c}
+                                      </Badge>
+                                    ))}
+                                    {componentLabels.length > 3 && (
+                                      <Badge variant="outline" className="text-[7px] px-1 py-0">
+                                        +{componentLabels.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                                {!route && (
+                                  <Badge variant="destructive" className="mt-1 text-[7px] px-1 py-0">
+                                    unmapped
+                                  </Badge>
                                 )}
                               </div>
                             );

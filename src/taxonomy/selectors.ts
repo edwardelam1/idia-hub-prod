@@ -11,6 +11,7 @@ import { ALL_INDUSTRIES } from './industries';
 import { ALL_NANO_BITES } from './nanoBites';
 import { POSITIONING_SPECS } from './positioning';
 import { PRODUCTION_METHODS } from './production';
+import { getRoute } from './payAppRouting';
 
 export function getIndustriesBySector(sector: SectorId): IndustryNode[] {
   return ALL_INDUSTRIES.filter((i) => i.sector === sector);
@@ -73,4 +74,15 @@ export function serializeClassification(c: Classification) {
     nanoBites: c.selectedNanoBiteIds,
     breakEven: c.breakEven ?? null,
   };
+}
+
+/**
+ * Resolve nano-bites for a Pay App sub-module ID (e.g. 'hosp-fine-dining')
+ * by routing through PAY_APP_ROUTING → industryId → bites.
+ * Returns [] when the sub-module is unmapped.
+ */
+export function getNanoBitesForSubModule(subModuleId: string): NanoBite[] {
+  const route = getRoute(subModuleId);
+  if (!route) return [];
+  return getNanoBitesFor({ industryId: route.industryId });
 }
