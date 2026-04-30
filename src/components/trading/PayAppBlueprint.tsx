@@ -787,15 +787,54 @@ export const PayAppBlueprint = () => {
     toast.success('Blueprint downloaded');
   };
 
-  const handleSendToDevice = () => {
+  const handleSendToDevice = async () => {
     if (!selectedBusiness) {
       toast.error('Please assign a business profile before deploying.');
       return;
     }
-    setConfirmDialogOpen(false);
-    toast.success('Blueprint queued for edge device deployment', {
-      description: `Provisioning code: ${provisioningCode}`
-    });
+
+    console.log(`[PayAppBlueprint] BEGIN: handleSendToDevice execution for code: ${provisioningCode}`);
+
+    try {
+      // 1. Generate the dynamic payload
+      const blueprintPayload = generateBlueprintJSON();
+
+      // 2. Transmit to the edge provisioning table
+      const { error } = await supabase
+        .from('device_provisioning_blueprints' as any)
+        .upsert({
+          code: provisioningCode,
+          business_id: selectedBusiness,
+          payload: blueprintPayload,
+          status: 'active'
+        }, { onConflict: 'code' });
+
+      if (error) {
+        console.error(
+          '[PayAppBlueprint] Supabase error in handleSendToDevice:',
+          error.message,
+          error.details,
+          error.hint
+        );
+        toast.error('Failed to deploy blueprint to the network.');
+        return;
+      }
+
+      setConfirmDialogOpen(false);
+      toast.success('Blueprint deployed to edge network', {
+        description: `Provisioning code: ${provisioningCode} is now LIVE.`
+      });
+
+    } catch (err: any) {
+      console.error(
+        '[PayAppBlueprint] Unexpected exception in handleSendToDevice:',
+        err.message,
+        err.stack
+      );
+      toast.error('Critical failure deploying blueprint.');
+    } finally {
+      console.log(`[PayAppBlueprint] END: handleSendToDevice execution for code: ${provisioningCode}`);
+    }
   };
 
   const customModulesCount = selectedModules.filter(m => !m.isDefault).length;

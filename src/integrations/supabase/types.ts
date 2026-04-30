@@ -1484,6 +1484,44 @@ export type Database = {
         }
         Relationships: []
       }
+      device_provisioning_blueprints: {
+        Row: {
+          business_id: string
+          code: string
+          created_at: string
+          id: string
+          payload: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          code: string
+          created_at?: string
+          id?: string
+          payload: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          code?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_provisioning_blueprints_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       digiramp_testnet_migration: {
         Row: {
           digiramp_id: string
