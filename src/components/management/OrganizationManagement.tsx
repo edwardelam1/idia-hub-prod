@@ -809,16 +809,59 @@ const ClientOrganizations = () => {
                           </p>
                         )}
                       </div>
-                      <div>
+                      <div className="space-y-1.5">
                         <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                           HQ Address
                         </Label>
                         {isEditingCard ? (
-                          <Input
-                            value={editForm.address}
-                            onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            className="h-8 text-xs mt-0.5"
-                          />
+                          <div className="space-y-1.5 mt-0.5">
+                            <Input
+                              value={editForm.street_address_1 ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, street_address_1: e.target.value })}
+                              className="h-8 text-xs"
+                              placeholder="Street Address 1"
+                            />
+                            <Input
+                              value={editForm.street_address_2 ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, street_address_2: e.target.value })}
+                              className="h-8 text-xs"
+                              placeholder="Street Address 2 (optional)"
+                            />
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <Input
+                                value={editForm.city ?? ""}
+                                onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                                className="h-8 text-xs"
+                                placeholder="City"
+                              />
+                              <Input
+                                value={editForm.state ?? ""}
+                                onChange={(e) =>
+                                  setEditForm({ ...editForm, state: e.target.value.toUpperCase().slice(0, 2) })
+                                }
+                                className="h-8 text-xs uppercase"
+                                placeholder="ST"
+                                maxLength={2}
+                              />
+                              <Input
+                                value={editForm.postal_code ?? ""}
+                                onChange={(e) => setEditForm({ ...editForm, postal_code: e.target.value })}
+                                className="h-8 text-xs"
+                                placeholder="ZIP"
+                              />
+                            </div>
+                          </div>
+                        ) : selectedBusiness.street_address_1 ? (
+                          <div className="text-xs font-medium text-slate-900 mt-0.5 leading-snug">
+                            <div className="truncate">{selectedBusiness.street_address_1}</div>
+                            {selectedBusiness.street_address_2 && (
+                              <div className="truncate">{selectedBusiness.street_address_2}</div>
+                            )}
+                            <div className="truncate">
+                              {[selectedBusiness.city, selectedBusiness.state].filter(Boolean).join(", ")}
+                              {selectedBusiness.postal_code ? ` ${selectedBusiness.postal_code}` : ""}
+                            </div>
+                          </div>
                         ) : (
                           <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.address || "No location set"}
