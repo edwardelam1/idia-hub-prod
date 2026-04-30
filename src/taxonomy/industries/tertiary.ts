@@ -14,14 +14,14 @@ export const TERTIARY_INDUSTRIES: IndustryNode[] = [
     defaultProductionMethod: 'job_shop',
     defaultArchetype: 'mid_market',
     meta: {
-      benchmarks: ['Ritz-Carlton', 'Omni Hotels', 'Drury Hotels'],
-      tech_stack: ['Agilysys', 'Mews', 'QSR Automations'],
+      benchmarks: ['Luxury Tier', 'Upper-Upscale Tier', 'Mid-Scale Tier'],
+      tech_stack: ['Property Management System', 'Point-of-Sale', 'Kitchen Display System'],
       telemetry_focus: ['Guest Flow', 'Dwell Time', 'Speed of Service'],
       hardware_layer: ['LiDAR (SPAD)', 'UWB DW3000', 'IMU Wearables'],
       math_layer: ['Quaternions', 'Kalman Filter', 'Particle Filter (AMCL)'],
     },
   },
-  { id: 'tertiary.qsr',             parentId: 'tertiary', sector: 'tertiary', label: 'QSR (Quick-Service)',   naics: '722513',                 tags: ['qsr','high_velocity'],              defaultProductionMethod: 'batch',           defaultArchetype: 'mass_market' },
+  { id: 'tertiary.qsr',             parentId: 'tertiary', sector: 'tertiary', label: 'Quick-Service Dining',  naics: '722513',                 tags: ['quick_service','high_velocity'],    defaultProductionMethod: 'batch',           defaultArchetype: 'mass_market' },
   { id: 'tertiary.banking',         parentId: 'tertiary', sector: 'tertiary', label: 'Banking & Financial',   naics: '522',    gics: '40',     tags: ['regulated','service'],              defaultProductionMethod: 'assembly_line',   defaultArchetype: 'mid_market'  },
   { id: 'tertiary.transport',       parentId: 'tertiary', sector: 'tertiary', label: 'Transportation & Logistics', naics: '484', gics: '2030', tags: ['logistics','fleet'],               defaultProductionMethod: 'continuous_flow', defaultArchetype: 'mass_market' },
 ];
