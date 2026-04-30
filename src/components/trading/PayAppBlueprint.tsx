@@ -783,6 +783,10 @@ export const PayAppBlueprint = () => {
         }))
       },
       verticals: [...new Set(selectedModules.filter(m => m.parentName).map(m => m.parentName))],
+      taxonomy: {
+        industryId: taxonomy.classification.industryId ?? null,
+        nanoBites: taxonomy.classification.selectedNanoBiteIds,
+      },
       compliance: {
         delt_enabled: true,
         pci_level: 1,
