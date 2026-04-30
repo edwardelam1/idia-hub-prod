@@ -536,41 +536,41 @@ const ClientOrganizations = () => {
         </div>
 
         {/* RIGHT PANEL: BUSINESS DETAIL CARD */}
-        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50 overflow-y-auto">
+        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50 min-h-0">
           {selectedBusiness ? (
-            <div className="p-4 animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="p-3 flex-1 min-h-0 animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden h-full flex flex-col">
                 {/* CARD HEADER */}
-                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-4 flex flex-col xl:flex-row xl:items-start justify-between relative gap-3">
-                  <div className="flex items-center gap-3 w-full">
-                    <div className="bg-white/10 backdrop-blur-md p-2.5 rounded-md border border-white/20 shrink-0">
-                      <Building2 className="h-5 w-5 text-white" />
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="bg-white/10 backdrop-blur-md p-2 rounded-md border border-white/20 shrink-0">
+                      <Building2 className="h-4 w-4 text-white" />
                     </div>
-                    <div className="w-full min-w-0">
+                    <div className="min-w-0 flex-1">
                       {isEditingCard ? (
                         <Input
                           value={editForm.name}
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="h-9 text-sm font-semibold bg-white/20 border-white/40 text-white placeholder:text-white/50 mb-1 w-full"
+                          className="h-7 text-sm font-semibold bg-white/20 border-white/40 text-white placeholder:text-white/50 w-full"
                         />
                       ) : (
-                        <h2 className="text-lg font-semibold text-white tracking-tight truncate">
+                        <h2 className="text-sm font-semibold text-white tracking-tight truncate">
                           {selectedBusiness.name}
                         </h2>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-xs px-2 py-0 border-none">
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-[10px] px-1.5 py-0 border-none">
                           {selectedBusiness.subscription_tier}
                         </Badge>
-                        <span className="text-xs text-slate-300 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" /> {selectedBusiness.address?.split(",")[0]}
+                        <span className="text-[11px] text-slate-300 flex items-center gap-1 truncate">
+                          <MapPin className="w-3 h-3 shrink-0" /> {selectedBusiness.address?.split(",")[0]}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* EDIT/SAVE ACTIONS */}
-                  <div className="flex flex-row items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {isEditingCard ? (
                       <>
                         <Button
@@ -580,17 +580,17 @@ const ClientOrganizations = () => {
                             setIsEditingCard(false);
                             setEditForm({ ...selectedBusiness });
                           }}
-                          className="text-white hover:bg-white/20"
+                          className="h-7 px-2 text-xs text-white hover:bg-white/20"
                         >
-                          <X className="w-3.5 h-3.5 mr-1.5" /> Cancel
+                          <X className="w-3 h-3 mr-1" /> Cancel
                         </Button>
                         <Button
                           size="sm"
                           onClick={handleUpdateBusiness}
                           disabled={isSubmitting}
-                          className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                          className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600 text-white"
                         >
-                          <Save className="w-3.5 h-3.5 mr-1.5" /> Save
+                          <Save className="w-3 h-3 mr-1" /> Save
                         </Button>
                       </>
                     ) : (
@@ -598,145 +598,151 @@ const ClientOrganizations = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => setIsEditingCard(true)}
-                        className="text-white hover:bg-white/20 border border-white/30 bg-white/5"
+                        className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
                       >
-                        <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Edit Profile
+                        <Edit2 className="w-3 h-3 mr-1" /> Edit
                       </Button>
                     )}
                   </div>
                 </div>
 
-                {/* CARD BODY */}
-                <div className="p-5 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5">
+                {/* CARD BODY — dense two-column, no scroll */}
+                <div className="p-4 grid grid-cols-2 gap-x-5 gap-y-3 flex-1">
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Operational Profile
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Blueprint Classification</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Blueprint</Label>
                         {isEditingCard ? (
                           <Select
                             value={editForm.business_type}
                             onValueChange={(v) => setEditForm({ ...editForm, business_type: v })}
                           >
-                            <SelectTrigger className="h-9 text-sm mt-1">
+                            <SelectTrigger className="h-8 text-xs mt-0.5">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                              {DETAILED_BUSINESS_TYPES.map((t) => (
-                                <SelectItem key={t} value={t} className="text-sm">
-                                  {t}
+                            <SelectContent className="max-h-72">
+                              {TAXONOMY_CATEGORIES.map((c) => (
+                                <SelectItem key={c.id} value={c.label} className="text-xs">
+                                  {c.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.business_type || "Uncategorized"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Tax Identification</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Tax ID</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.tax_id}
                             onChange={(e) => setEditForm({ ...editForm, tax_id: e.target.value })}
-                            className="h-9 text-sm font-mono mt-1"
+                            className="h-8 text-xs font-mono mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-mono font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-mono font-medium text-slate-900 mt-0.5">
                             {selectedBusiness.tax_id || "Not on file"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Headquarters Address</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">HQ Address</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.address}
                             onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.address || "No location set"}
                           </p>
                         )}
                       </div>
+                      <div>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provisioning Code</Label>
+                        <p className="text-xs font-mono font-medium text-slate-900 mt-0.5 truncate">
+                          {selectedBusiness.provisioning_code || "—"}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5">
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Communication
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Corporate Email</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Email</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.email}
                             onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1 flex items-center gap-2">
-                            <Mail className="w-3.5 h-3.5 text-slate-400" /> {selectedBusiness.email || "N/A"}
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 flex items-center gap-1.5 truncate">
+                            <Mail className="w-3 h-3 text-slate-400 shrink-0" /> {selectedBusiness.email || "N/A"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Corporate Phone</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Phone</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.phone}
                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1 flex items-center gap-2">
-                            <Phone className="w-3.5 h-3.5 text-slate-400" /> {selectedBusiness.phone || "N/A"}
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 flex items-center gap-1.5 truncate">
+                            <Phone className="w-3 h-3 text-slate-400 shrink-0" /> {selectedBusiness.phone || "N/A"}
                           </p>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="col-span-1 xl:col-span-2 pt-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5 mb-3">
+                  <div className="col-span-2 pt-1">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1 mb-2">
                       Network Capabilities
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> T-1-P Shield
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" /> Shield
                           </Label>
                           {getStatusIcon(selectedBusiness.t1p_status)}
                         </div>
                       </div>
 
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50 border-indigo-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50 border-indigo-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> IDIA Pay UI
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <Smartphone className="w-3 h-3 text-indigo-600" /> Pay UI
                           </Label>
                           {getStatusIcon(selectedBusiness.idia_pay_status)}
                         </div>
                       </div>
 
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.data_coop_enabled ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.data_coop_enabled ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <Network className="w-3.5 h-3.5 text-blue-600" /> Data Co-op
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <Network className="w-3 h-3 text-blue-600" /> Data Co-op
                           </Label>
                           {isEditingCard ? (
                             <Switch
