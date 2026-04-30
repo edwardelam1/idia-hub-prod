@@ -56,7 +56,9 @@ export type Database = {
       affiliate_campaigns: {
         Row: {
           budget: number | null
+          budget_allocation: number | null
           business_id: string
+          campaign_name: string | null
           campaign_type: string | null
           commission_rate: number | null
           created_at: string
@@ -72,7 +74,9 @@ export type Database = {
         }
         Insert: {
           budget?: number | null
+          budget_allocation?: number | null
           business_id: string
+          campaign_name?: string | null
           campaign_type?: string | null
           commission_rate?: number | null
           created_at?: string
@@ -88,7 +92,9 @@ export type Database = {
         }
         Update: {
           budget?: number | null
+          budget_allocation?: number | null
           business_id?: string
+          campaign_name?: string | null
           campaign_type?: string | null
           commission_rate?: number | null
           created_at?: string
@@ -117,6 +123,8 @@ export type Database = {
           metadata: Json | null
           status: string | null
           transaction_date: string | null
+          transaction_type: string | null
+          transaction_value: number | null
         }
         Insert: {
           amount?: number
@@ -130,6 +138,8 @@ export type Database = {
           metadata?: Json | null
           status?: string | null
           transaction_date?: string | null
+          transaction_type?: string | null
+          transaction_value?: number | null
         }
         Update: {
           amount?: number
@@ -143,6 +153,8 @@ export type Database = {
           metadata?: Json | null
           status?: string | null
           transaction_date?: string | null
+          transaction_type?: string | null
+          transaction_value?: number | null
         }
         Relationships: [
           {
@@ -237,10 +249,12 @@ export type Database = {
           conversion_count: number | null
           created_at: string
           date: string
+          engagement_duration_avg: number | null
           experience_id: string | null
           id: string
           metadata: Json | null
           revenue_attributed: number | null
+          revenue_generated: number | null
           total_interactions: number | null
           unique_users: number | null
         }
@@ -249,10 +263,12 @@ export type Database = {
           conversion_count?: number | null
           created_at?: string
           date?: string
+          engagement_duration_avg?: number | null
           experience_id?: string | null
           id?: string
           metadata?: Json | null
           revenue_attributed?: number | null
+          revenue_generated?: number | null
           total_interactions?: number | null
           unique_users?: number | null
         }
@@ -261,10 +277,12 @@ export type Database = {
           conversion_count?: number | null
           created_at?: string
           date?: string
+          engagement_duration_avg?: number | null
           experience_id?: string | null
           id?: string
           metadata?: Json | null
           revenue_attributed?: number | null
+          revenue_generated?: number | null
           total_interactions?: number | null
           unique_users?: number | null
         }
@@ -281,11 +299,14 @@ export type Database = {
       ar_experiences: {
         Row: {
           business_id: string
+          conversion_rate: number | null
           created_at: string
           description: string | null
           experience_type: string | null
           id: string
+          is_active: boolean | null
           metadata: Json | null
+          revenue_attributed: number | null
           status: string | null
           title: string
           total_interactions: number | null
@@ -294,11 +315,14 @@ export type Database = {
         }
         Insert: {
           business_id: string
+          conversion_rate?: number | null
           created_at?: string
           description?: string | null
           experience_type?: string | null
           id?: string
+          is_active?: boolean | null
           metadata?: Json | null
+          revenue_attributed?: number | null
           status?: string | null
           title: string
           total_interactions?: number | null
@@ -307,11 +331,14 @@ export type Database = {
         }
         Update: {
           business_id?: string
+          conversion_rate?: number | null
           created_at?: string
           description?: string | null
           experience_type?: string | null
           id?: string
+          is_active?: boolean | null
           metadata?: Json | null
+          revenue_attributed?: number | null
           status?: string | null
           title?: string
           total_interactions?: number | null
@@ -2003,6 +2030,93 @@ export type Database = {
           },
         ]
       }
+      employee_shift_schedules: {
+        Row: {
+          break_minutes: number | null
+          business_id: string
+          created_at: string
+          end_time: string
+          id: string
+          location: string | null
+          notes: string | null
+          schedule_date: string
+          start_time: string
+          status: string
+          team_member_id: string
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id: string
+          created_at?: string
+          end_time: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          schedule_date: string
+          start_time: string
+          status?: string
+          team_member_id: string
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          schedule_date?: string
+          start_time?: string
+          status?: string
+          team_member_id?: string
+        }
+        Relationships: []
+      }
+      employee_time_entries: {
+        Row: {
+          break_minutes: number | null
+          business_id: string
+          clock_in: string
+          clock_out: string | null
+          created_at: string
+          id: string
+          location: string | null
+          notes: string | null
+          overtime_hours: number | null
+          status: string
+          team_member_id: string
+          total_hours: number | null
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id: string
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          team_member_id: string
+          total_hours?: number | null
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          team_member_id?: string
+          total_hours?: number | null
+        }
+        Relationships: []
+      }
       employee_timesheets: {
         Row: {
           approval_status: string | null
@@ -3077,16 +3191,20 @@ export type Database = {
           category: string
           created_at: string | null
           current_cost: number | null
+          current_stock: number | null
           id: string
           individual_unit_uom: string | null
           is_active: boolean | null
           lead_time_days: number | null
           minimum_order_quantity: number | null
+          minimum_shelf_life_days: number | null
           name: string
           par_level: number | null
+          requires_batch_tracking: boolean | null
           shelf_life_days: number | null
           storage_requirements: string | null
           supplier_id: string | null
+          tolerance_variance_pct: number | null
           unit_of_measure: string
           updated_at: string | null
           vendor_sku: string | null
@@ -3097,16 +3215,20 @@ export type Database = {
           category: string
           created_at?: string | null
           current_cost?: number | null
+          current_stock?: number | null
           id?: string
           individual_unit_uom?: string | null
           is_active?: boolean | null
           lead_time_days?: number | null
           minimum_order_quantity?: number | null
+          minimum_shelf_life_days?: number | null
           name: string
           par_level?: number | null
+          requires_batch_tracking?: boolean | null
           shelf_life_days?: number | null
           storage_requirements?: string | null
           supplier_id?: string | null
+          tolerance_variance_pct?: number | null
           unit_of_measure: string
           updated_at?: string | null
           vendor_sku?: string | null
@@ -3117,16 +3239,20 @@ export type Database = {
           category?: string
           created_at?: string | null
           current_cost?: number | null
+          current_stock?: number | null
           id?: string
           individual_unit_uom?: string | null
           is_active?: boolean | null
           lead_time_days?: number | null
           minimum_order_quantity?: number | null
+          minimum_shelf_life_days?: number | null
           name?: string
           par_level?: number | null
+          requires_batch_tracking?: boolean | null
           shelf_life_days?: number | null
           storage_requirements?: string | null
           supplier_id?: string | null
+          tolerance_variance_pct?: number | null
           unit_of_measure?: string
           updated_at?: string | null
           vendor_sku?: string | null

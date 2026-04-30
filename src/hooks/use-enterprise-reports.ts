@@ -93,8 +93,8 @@ export function useEnterpriseReports(periodDays = 30) {
         membersRes, entriesRes, inventoryRes, historyRes,
         posRes, glRes, menuRes, poRes, suppliersRes, locRes
       ] = await Promise.all([
-        supabase.from("team_members").select("id, name, role, hourly_rate, overtime_rate, status").eq("business_id", businessId),
-        supabase.from("time_entries").select("*").eq("business_id", businessId).gte("clock_in", sinceISO),
+        supabase.from("employees").select("id, name, role, hourly_rate, overtime_rate, status").eq("business_id", businessId),
+        supabase.from("employee_time_entries").select("*").eq("business_id", businessId).gte("clock_in", sinceISO),
         supabase.from("inventory_items").select("id, name, current_stock, current_cost, par_level, is_active").eq("business_id", businessId).eq("is_active", true),
         supabase.from("inventory_history").select("*").eq("business_id", businessId).gte("created_at", sinceISO),
         supabase.from("pos_transactions").select("items, total_amount").eq("business_id", businessId).gte("created_at", sinceISO).eq("payment_status", "completed"),
@@ -293,7 +293,7 @@ export function useOverviewStats() {
         const [posRes, locRes, teamRes, invRes, poRes] = await Promise.all([
           supabase.from("pos_transactions").select("total_amount").eq("business_id", businessId).gte("created_at", thirtyDaysAgo.toISOString()).eq("payment_status", "completed"),
           supabase.from("business_locations").select("id").eq("business_id", businessId).eq("is_active", true),
-          supabase.from("team_members").select("id").eq("business_id", businessId).eq("status", "active"),
+          supabase.from("employees").select("id").eq("business_id", businessId).eq("status", "active"),
           supabase.from("inventory_items").select("current_stock, current_cost").eq("business_id", businessId).eq("is_active", true),
           supabase.from("purchase_orders").select("id, invoice_status").eq("business_id", businessId),
         ]);
@@ -344,8 +344,8 @@ export function useTodayStats() {
 
         const [posRes, teamRes, activeRes, invRes] = await Promise.all([
           supabase.from("pos_transactions").select("total_amount").eq("business_id", businessId).gte("created_at", todayStart.toISOString()).eq("payment_status", "completed"),
-          supabase.from("team_members").select("id, status").eq("business_id", businessId),
-          supabase.from("time_entries").select("id").eq("business_id", businessId).is("clock_out", null).eq("status", "active"),
+          supabase.from("employees").select("id, status").eq("business_id", businessId),
+          supabase.from("employee_time_entries").select("id").eq("business_id", businessId).is("clock_out", null).eq("status", "active"),
           supabase.from("inventory_items").select("current_stock, par_level").eq("business_id", businessId).eq("is_active", true),
         ]);
 
