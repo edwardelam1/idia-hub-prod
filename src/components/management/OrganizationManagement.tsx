@@ -393,14 +393,63 @@ const ClientOrganizations = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
-                  Headquarters Address <span className="text-red-500">*</span>
+                  Street Address 1 <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  value={formData.hqAddress}
-                  onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
+                  value={formData.streetAddress1}
+                  onChange={(e) => setFormData({ ...formData, streetAddress1: e.target.value })}
                   className="text-sm"
-                  placeholder="123 Main St, City, State"
+                  placeholder="123 Main Street"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Street Address 2 <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  value={formData.streetAddress2}
+                  onChange={(e) => setFormData({ ...formData, streetAddress2: e.target.value })}
+                  className="text-sm"
+                  placeholder="Suite, Unit, Floor (optional)"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    City <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="text-sm"
+                    placeholder="City"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    State <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.state}
+                    onChange={(e) =>
+                      setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })
+                    }
+                    className="text-sm uppercase"
+                    placeholder="CA"
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    ZIP <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.postalCode}
+                    onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                    className="text-sm"
+                    placeholder="94103"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
@@ -411,11 +460,11 @@ const ClientOrganizations = () => {
                   onValueChange={(v) => setFormData({ ...formData, businessType: v })}
                 >
                   <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select taxonomy category..." />
+                    <SelectValue placeholder="Select Pay App vertical..." />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    {TAXONOMY_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.label} className="text-sm">
+                    {BLUEPRINT_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id} className="text-sm">
                         {cat.label}
                       </SelectItem>
                     ))}
