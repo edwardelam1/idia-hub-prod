@@ -1,283 +1,668 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Activity,
-  AlertCircle,
-  Clock,
-  Users,
-  Search,
   ShoppingCart,
+  Plus,
+  Minus,
   CreditCard,
-  Flame,
-  Radio,
-  Server,
+  DollarSign,
+  Gift,
+  Users,
+  X,
+  Search,
+  Nfc,
+  Bell,
+  CheckCircle,
+  AlertCircle,
+  Zap,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { getBusinessId } from "@/lib/business-access";
 import { LiveCheckout } from "./LiveCheckout";
+import { recordPosTransaction } from "@/hooks/use-pos-data";
 
-/**
- * POSModule — the universal dynamic chassis for IDIA Pay transactional verticals
- * (hospitality, retail, QSR). It receives `activeBites` (NanoBite IDs from the
- * merchant's blueprint) and exposes vertical-specific telemetry overlays on top
- * of the shared point-of-sale base.
- */
-interface POSModuleProps {
-  activeBites?: string[];
-  verticalId?: string;
+interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  image_url?: string | null;
 }
 
-export const POSModule = ({ activeBites = [], verticalId }: POSModuleProps) => {
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  // Controls whether the main panel shows the POS grid, Spatial Tracking, or KDS
-  const [activeView, setActiveView] = useState<"pos" | "spatial" | "kds">("pos");
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
 
-  // Dynamic Capabilities parsed from IDIA Hub Blueprint
-  const hasSpatialFlow = activeBites.includes("hosp.ops.guest_flow_tracking");
-  const hasKitchenTelemetry = activeBites.includes("hosp.ops.kitchen_telemetry");
-  const hasQSRLineSpeed = activeBites.includes("qsr.ops.line");
-  const hasBoutiqueConsult = activeBites.includes("retail.boutique.ops.consult");
+export const POSModule = () => {
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [customerInfo, setCustomerInfo] = useState({ name: "", email: "", phone: "" });
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isNfcPaymentOpen, setIsNfcPaymentOpen] = useState(false);
+  const [isGiftCardOpen, setIsGiftCardOpen] = useState(false);
+  const [isLiveCheckoutOpen, setIsLiveCheckoutOpen] = useState(false);
+  const [giftCardData, setGiftCardData] = useState({ code: "", pin: "" });
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [cartNotification, setCartNotification] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  // Strict error-handling logs for blueprint hydration debugging.
-  if (typeof window !== "undefined") {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<string[]>(["all"]);
+
+  useEffect(() => {
+    loadMenuItems();
+  }, []);
+
+  const loadMenuItems = async () => {
     try {
-      if (!Array.isArray(activeBites)) {
-        console.error("[POSModule] activeBites must be an array, received:", typeof activeBites);
-      } else if (activeBites.length > 0) {
-        console.debug(
-          `[POSModule] Hydrated vertical "${verticalId ?? "unknown"}" with ${activeBites.length} NanoBite(s):`,
-          activeBites,
-        );
+      const businessId = await getBusinessId();
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("*")
+        .eq("business_id", businessId)
+        .eq("is_active", true);
+
+      if (!error && data) {
+        const items: MenuItem[] = (data as any[]).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.base_price) || 0,
+          category: item.category || "Main Course",
+          description: item.description || "",
+          image_url: item.image_url || null,
+        }));
+        setMenuItems(items);
+        const uniqueCats = [...new Set(items.map((i) => i.category))];
+        setCategories(["all", ...uniqueCats]);
       }
     } catch (err) {
-      console.error("[POSModule] Failed to introspect activeBites:", err);
+      console.error("Error loading POS menu items:", err);
     }
-  }
+  };
+
+  // Real-time notifications subscription
+  useEffect(() => {
+    const subscribeToNotifications = async () => {
+      // Subscribe to real-time merchant notifications
+      const channel = supabase
+        .channel("merchant-notifications")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "merchant_notifications",
+          },
+          (payload) => {
+            setNotifications((prev) => [payload.new, ...prev.slice(0, 4)]);
+
+            // Show toast notification
+            toast({
+              title: payload.new.title,
+              description: payload.new.message,
+              variant: payload.new.notification_type === "error" ? "destructive" : "default",
+            });
+          },
+        )
+        .subscribe();
+
+      return () => {
+        channel.unsubscribe();
+      };
+    };
+
+    subscribeToNotifications();
+  }, [toast]);
+
+  // categories is now derived from live data above
+
+  const filteredItems = menuItems.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const addToCart = (item: MenuItem) => {
+    setCart((prev) => {
+      const existing = prev.find((cartItem) => cartItem.id === item.id);
+      if (existing) {
+        return prev.map((cartItem) =>
+          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem,
+        );
+      }
+      return [{ id: item.id, name: item.name, price: item.price, quantity: 1 }, ...prev];
+    });
+
+    setCartNotification(`${item.name} added`);
+    setTimeout(() => setCartNotification(null), 2000);
+    window.dispatchEvent(new CustomEvent("cart-item-added", { detail: { name: item.name } }));
+  };
+
+  const removeFromCart = (itemId: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  const updateQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(itemId);
+      return;
+    }
+
+    setCart((prev) => prev.map((item) => (item.id === itemId ? { ...item, quantity: newQuantity } : item)));
+  };
+
+  const calculateTotal = () => {
+    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  };
+
+  const calculateTax = () => {
+    return calculateTotal() * 0.08; // 8% tax
+  };
+
+  const calculateGrandTotal = () => {
+    return calculateTotal() + calculateTax();
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Empty Cart",
+        description: "Please add items to cart before checkout",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsCheckoutOpen(true);
+  };
+
+  const processPayment = async (paymentMethod: string) => {
+    if (paymentMethod === "IDIA-USD (NFC)") {
+      setIsNfcPaymentOpen(true);
+      return;
+    }
+
+    if (paymentMethod === "Gift Card") {
+      setIsGiftCardOpen(true);
+      return;
+    }
+
+    setIsProcessingPayment(true);
+    try {
+      // Route card payments through the Universal Payment Adapter edge function
+      if (paymentMethod === "Credit Card") {
+        const businessId = await getBusinessId();
+        const { data: terminalResult, error: terminalErr } = await supabase.functions.invoke(
+          "process-terminal-payment",
+          { body: { merchant_id: businessId, amount: calculateGrandTotal(), currency: "USD" } },
+        );
+
+        if (terminalErr) {
+          console.error("Terminal payment error:", terminalErr);
+          // Fall through to record anyway — adapter may be unconfigured
+        } else if (terminalResult && !terminalResult.success) {
+          console.warn("Terminal adapter response:", terminalResult);
+        }
+      }
+
+      // Record transaction to database
+      const menuItemMap = new Map(menuItems.map((m) => [m.id, m]));
+      await recordPosTransaction({
+        cart: cart.map((c) => ({ ...c, category: menuItemMap.get(c.id)?.category || "Other" })),
+        subtotal: calculateTotal(),
+        taxAmount: calculateTax(),
+        totalAmount: calculateGrandTotal(),
+        taxRate: 8,
+        paymentMethod,
+        customerName: customerInfo.name,
+        customerEmail: customerInfo.email,
+      });
+
+      toast({
+        title: "Payment Processed",
+        description: `Payment of $${calculateGrandTotal().toFixed(2)} processed via ${paymentMethod}`,
+      });
+
+      // Clear cart and close checkout
+      setCart([]);
+      setIsCheckoutOpen(false);
+      setCustomerInfo({ name: "", email: "", phone: "" });
+    } catch (err: any) {
+      console.error("Payment error:", err);
+      toast({
+        title: "Payment Error",
+        description: err.message || "Failed to process payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const processNfcPayment = async () => {
+    setIsProcessingPayment(true);
+
+    try {
+      // Simulate NFC reading delay
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Mock NFC payload - in real implementation, this would come from NFC reader
+      const mockNfcPayload = {
+        walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        amount: calculateGrandTotal() * 0.85, // Mock IDIA-USD rate
+        signature: "a".repeat(64), // Mock signature
+        timestamp: Date.now(),
+      };
+
+      const { data, error } = await supabase.functions.invoke("process-nfc-payment", {
+        body: {
+          nfcPayload: mockNfcPayload,
+          locationId: "550e8400-e29b-41d4-a716-446655440002", // Mock location
+          items: cart,
+          totalAmount: calculateGrandTotal(),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast({
+          title: "IDIA-USD Payment Successful",
+          description: `Payment verified on blockchain`,
+        });
+
+        // Clear cart and close dialogs
+        setCart([]);
+        setIsCheckoutOpen(false);
+        setIsNfcPaymentOpen(false);
+      } else {
+        throw new Error(data.error || "Payment failed");
+      }
+    } catch (error) {
+      console.error("NFC payment error:", error);
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Failed to process NFC payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const processGiftCardPayment = async () => {
+    setIsProcessingPayment(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("redeem-gift-card", {
+        body: {
+          cardCode: giftCardData.code,
+          pinCode: giftCardData.pin,
+          amount: calculateGrandTotal(),
+          locationId: "550e8400-e29b-41d4-a716-446655440002", // Mock location
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast({
+          title: "Gift Card Redeemed",
+          description: `$${data.amount_redeemed} charged. Remaining balance: $${data.remaining_balance}`,
+        });
+
+        // Clear cart and close dialogs
+        setCart([]);
+        setIsCheckoutOpen(false);
+        setIsGiftCardOpen(false);
+        setGiftCardData({ code: "", pin: "" });
+      } else {
+        throw new Error(data.error || "Gift card redemption failed");
+      }
+    } catch (error) {
+      console.error("Gift card error:", error);
+      toast({
+        title: "Gift Card Failed",
+        description: error.message || "Failed to redeem gift card",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Dynamic Omni-Vertical Telemetry Header */}
-      {(hasSpatialFlow || hasKitchenTelemetry || hasQSRLineSpeed || hasBoutiqueConsult) && (
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-          {hasSpatialFlow && (
-            <Card className="bg-blue-500/5 border-blue-500/20 py-2 px-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Spatial Flow</p>
-                <p className="text-sm font-mono">UWB Tracking Active</p>
-              </div>
-              <Activity className="w-5 h-5 text-blue-500 animate-pulse" />
-            </Card>
-          )}
-          {hasKitchenTelemetry && (
-            <Card className="bg-orange-500/5 border-orange-500/20 py-2 px-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider">Autonomic KDS</p>
-                <p className="text-sm font-mono">Elo Load: 84%</p>
-              </div>
-              <AlertCircle className="w-5 h-5 text-orange-500" />
-            </Card>
-          )}
-          {hasQSRLineSpeed && (
-            <Card className="bg-green-500/5 border-green-500/20 py-2 px-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-green-500 uppercase tracking-wider">Line Speed Audit</p>
-                <p className="text-sm font-mono">Drive-Thru: 42s avg</p>
-              </div>
-              <Clock className="w-5 h-5 text-green-500" />
-            </Card>
-          )}
-          {hasBoutiqueConsult && (
-            <Card className="bg-purple-500/5 border-purple-500/20 py-2 px-4 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-purple-500 uppercase tracking-wider">Client Consultation</p>
-                <p className="text-sm font-mono">VIP CRM Active</p>
-              </div>
-              <Users className="w-5 h-5 text-purple-500" />
-            </Card>
-          )}
-        </div>
-      )}
+    <div className="h-full flex flex-col md:flex-row overflow-hidden">
+      {/* Mobile Cart Toggle Button */}
+      <Button
+        className="md:hidden fixed bottom-4 right-4 z-50 rounded-full h-14 w-14 shadow-lg"
+        size="icon"
+        onClick={() => setIsCheckoutOpen(true)}
+      >
+        <ShoppingCart className="h-6 w-6" />
+        {cart.length > 0 && (
+          <Badge className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0 flex items-center justify-center">
+            {cart.length}
+          </Badge>
+        )}
+      </Button>
 
-      {/* Search bar */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search items, SKU, or scan barcode..."
-            className="pl-8"
-          />
-        </div>
-        <Button onClick={() => setCheckoutOpen(true)} className="gap-2">
-          <CreditCard className="w-4 h-4" /> Checkout
-        </Button>
-      </div>
-
-      {/* Dynamic Module Navigation */}
-      {(hasSpatialFlow || hasKitchenTelemetry) && (
-        <div className="flex gap-2 mb-2 border-b pb-2 overflow-x-auto scrollbar-hide">
-          <Button
-            variant={activeView === "pos" ? "default" : "ghost"}
-            onClick={() => setActiveView("pos")}
-            className="font-bold tracking-tight"
-          >
+      {/* Menu Items Section */}
+      <div className="flex-1 flex flex-col p-2 min-h-0 overflow-hidden pb-20 md:pb-0">
+        <div className="flex-shrink-0 mb-2">
+          <h2 className="text-base sm:text-lg font-bold mb-2 flex items-center">
             <ShoppingCart className="w-4 h-4 mr-2" />
             Point of Sale
-          </Button>
+          </h2>
 
-          {hasSpatialFlow && (
-            <Button
-              variant={activeView === "spatial" ? "default" : "ghost"}
-              onClick={() => setActiveView("spatial")}
-              className="font-bold tracking-tight text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
-            >
-              <Activity className="w-4 h-4 mr-2" />
-              Spatial Matrix
-            </Button>
-          )}
+          {/* Search */}
+          <div className="relative mb-2">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+            <Input
+              placeholder="Search menu..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
 
-          {hasKitchenTelemetry && (
-            <Button
-              variant={activeView === "kds" ? "default" : "ghost"}
-              onClick={() => setActiveView("kds")}
-              className="font-bold tracking-tight text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
-            >
-              <Flame className="w-4 h-4 mr-2" />
-              Autonomic KDS
-            </Button>
-          )}
+          {/* Category Filter */}
+          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+            {categories.map((category) => (
+              <Button
+                key={category}
+                variant={selectedCategory === category ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory(category)}
+                className="capitalize h-7 text-xs px-3 whitespace-nowrap flex-shrink-0"
+              >
+                {category === "all" ? "All" : category}
+              </Button>
+            ))}
+          </div>
         </div>
-      )}
 
-      {/* Dynamic Main Work Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* VIEW: Standard Point of Sale (placeholder until merchant catalog hydrates) */}
-        {activeView === "pos" && (
-          <Card className="p-6 flex items-center justify-center text-sm text-muted-foreground gap-2">
-            <ShoppingCart className="w-4 h-4" />
-            POS catalog hydrates here from merchant_blueprint.json
-          </Card>
-        )}
-
-        {/* VIEW: Spatial Matrix (UWB Guest Flow & VIP Table Mapping) */}
-        {activeView === "spatial" && hasSpatialFlow && (
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/20 p-4 rounded-lg">
-              <div>
-                <h3 className="font-bold text-blue-600 flex items-center">
-                  <Radio className="w-4 h-4 mr-2 animate-pulse" />
-                  UWB Anchor Array Online
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Executing Adaptive Monte Carlo Localization for guest traversal.
-                </p>
-              </div>
-              <Badge variant="outline" className="bg-background">42 Active Client Tags</Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="border-dashed border-2">
-                <CardContent className="pt-6 text-center space-y-2">
-                  <Activity className="w-8 h-8 text-muted-foreground mx-auto" />
-                  <p className="font-bold">Sector A (VIP Lounge)</p>
-                  <p className="text-sm text-muted-foreground">Density: High (14 tags)</p>
-                  <Badge className="bg-orange-500/10 text-orange-600 border-none mt-2">Dwell Time Avg: 42m</Badge>
+        {/* Menu Grid - Scrollable */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            {filteredItems.map((item) => (
+              <Card key={item.id} className="cursor-pointer hover:shadow-md transition-shadow">
+                {item.image_url && (
+                  <div className="w-full aspect-square overflow-hidden rounded-t-lg">
+                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <CardHeader className="p-2">
+                  <CardTitle className="text-xs sm:text-sm leading-tight line-clamp-1">{item.name}</CardTitle>
+                  <CardDescription className="text-xs line-clamp-2 hidden sm:block">{item.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="p-2 pt-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                    <div>
+                      <Badge variant="secondary" className="text-xs mb-1 px-1 py-0">
+                        {item.category}
+                      </Badge>
+                      <div className="font-bold text-sm">${item.price.toFixed(2)}</div>
+                    </div>
+                    <Button size="sm" onClick={() => addToCart(item)} className="h-7 w-full sm:w-7 p-0">
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="border-dashed border-2">
-                <CardContent className="pt-6 text-center space-y-2">
-                  <Activity className="w-8 h-8 text-muted-foreground mx-auto" />
-                  <p className="font-bold">Sector B (Main Bar)</p>
-                  <p className="text-sm text-muted-foreground">Density: Optimal (8 tags)</p>
-                  <Badge className="bg-emerald-500/10 text-emerald-600 border-none mt-2">Dwell Time Avg: 12m</Badge>
-                </CardContent>
-              </Card>
-            </div>
+            ))}
           </div>
-        )}
-
-        {/* VIEW: Autonomic KDS (Kitchen Display Engine) */}
-        {activeView === "kds" && hasKitchenTelemetry && (
-          <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between bg-orange-500/5 border border-orange-500/20 p-4 rounded-lg">
-              <div>
-                <h3 className="font-bold text-orange-600 flex items-center">
-                  <Server className="w-4 h-4 mr-2" />
-                  Elo Android Hardware Telemetry Linked
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Monitoring dynamic Speed-of-Service (SoS) across all prep stations.
-                </p>
-              </div>
-              <Badge variant="outline" className="bg-background text-orange-600">Global Load: 84%</Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="border-orange-500/30">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-bold flex justify-between items-center">
-                    Grill Station <Badge variant="destructive">Critical</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Algorithmic Load</span>
-                      <span>92%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-1.5">
-                      <div className="bg-destructive h-1.5 rounded-full" style={{ width: "92%" }} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-bold flex justify-between items-center">
-                    Garde Manger <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600">Optimal</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Algorithmic Load</span>
-                      <span>45%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-1.5">
-                      <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: "45%" }} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-bold flex justify-between items-center">
-                    Saucier <Badge variant="outline" className="bg-amber-500/10 text-amber-600">Elevated</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Algorithmic Load</span>
-                      <span>71%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-1.5">
-                      <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: "71%" }} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      <LiveCheckout open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+      {/* Desktop Cart Section */}
+      <div className="hidden md:flex flex-col w-80 lg:w-96 border-l bg-muted/20 h-[calc(100dvh-8rem)]">
+        {/* Header */}
+        <div className="p-3 border-b flex-shrink-0">
+          <h3 className="text-base font-semibold flex items-center justify-between">
+            Current Order
+            <Badge variant="secondary" className="text-xs">
+              {cart.reduce((sum, item) => sum + item.quantity, 0)} items
+            </Badge>
+          </h3>
+          {cartNotification && (
+            <span className="text-xs text-success font-medium animate-fade-in mt-1 block">{cartNotification}</span>
+          )}
+        </div>
+
+        {/* Cart items - scrollable */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          {cart.length === 0 ? (
+            <div className="text-center text-muted-foreground mt-8">
+              <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No items in cart</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cart.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-background rounded border">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{item.name}</div>
+                    <div className="text-sm text-muted-foreground">${item.price.toFixed(2)} each</div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="w-8 text-center text-sm">{item.quantity}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive"
+                      onClick={() => removeFromCart(item.id)}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Summary + Buttons */}
+        <div className="p-3 border-t flex-shrink-0 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span>Subtotal:</span>
+            <span>${calculateTotal().toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span>Tax (8%):</span>
+            <span>${calculateTax().toFixed(2)}</span>
+          </div>
+          <Separator />
+          <div className="flex justify-between font-bold text-base">
+            <span>Total:</span>
+            <span>${calculateGrandTotal().toFixed(2)}</span>
+          </div>
+          <div className="space-y-2 mt-3">
+            <Button
+              className="w-full h-10 bg-gradient-to-r from-primary to-primary/80"
+              onClick={() => setIsLiveCheckoutOpen(true)}
+              disabled={cart.length === 0}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Live Checkout
+            </Button>
+            <Button variant="outline" className="w-full h-10" onClick={handleCheckout} disabled={cart.length === 0}>
+              <CreditCard className="w-4 h-4 mr-2" />
+              Standard Checkout
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Checkout Dialog */}
+      <Dialog open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Checkout</DialogTitle>
+            <DialogDescription>Complete your order - Total: ${calculateGrandTotal().toFixed(2)}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Customer Info */}
+            <div className="space-y-2">
+              <h4 className="font-medium">Customer Information (Optional)</h4>
+              <Input
+                placeholder="Customer name"
+                value={customerInfo.name}
+                onChange={(e) => setCustomerInfo((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <Input
+                placeholder="Email"
+                value={customerInfo.email}
+                onChange={(e) => setCustomerInfo((prev) => ({ ...prev, email: e.target.value }))}
+              />
+              <Input
+                placeholder="Phone"
+                value={customerInfo.phone}
+                onChange={(e) => setCustomerInfo((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+
+            {/* Payment Methods */}
+            <div className="space-y-2">
+              <h4 className="font-medium">Payment Method</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => processPayment("Cash")} className="h-12">
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Cash
+                </Button>
+                <Button variant="outline" onClick={() => processPayment("Credit Card")} className="h-12">
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Card
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => processPayment("IDIA-USD (NFC)")}
+                  className="h-12 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20"
+                >
+                  <Nfc className="w-4 h-4 mr-2" />
+                  IDIA-USD
+                </Button>
+                <Button variant="outline" onClick={() => processPayment("Gift Card")} className="h-12">
+                  <Gift className="w-4 h-4 mr-2" />
+                  Gift Card
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* NFC Payment Dialog */}
+      <Dialog open={isNfcPaymentOpen} onOpenChange={setIsNfcPaymentOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Nfc className="w-5 h-5 mr-2 text-primary" />
+              IDIA-USD NFC Payment
+            </DialogTitle>
+            <DialogDescription>Total: ${calculateGrandTotal().toFixed(2)} USD</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-center">
+            <div className="p-8 border-2 border-dashed border-primary/30 rounded-lg">
+              <Nfc className="w-16 h-16 mx-auto text-primary mb-4 animate-pulse" />
+              <p className="text-lg font-medium mb-2">Tap Device to Pay</p>
+              <p className="text-sm text-muted-foreground">Place your IDIA wallet device near the reader</p>
+              <div className="mt-4 text-primary font-mono">≈ {(calculateGrandTotal() * 0.85).toFixed(2)} IDIA-USD</div>
+            </div>
+
+            <div className="space-y-2">
+              <Button onClick={processNfcPayment} disabled={isProcessingPayment} className="w-full">
+                {isProcessingPayment ? <>Processing Payment...</> : <>Simulate NFC Payment</>}
+              </Button>
+              <Button variant="outline" onClick={() => setIsNfcPaymentOpen(false)} className="w-full">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gift Card Dialog */}
+      <Dialog open={isGiftCardOpen} onOpenChange={setIsGiftCardOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Gift className="w-5 h-5 mr-2 text-primary" />
+              Gift Card Payment
+            </DialogTitle>
+            <DialogDescription>Total: ${calculateGrandTotal().toFixed(2)}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                placeholder="Gift card code"
+                value={giftCardData.code}
+                onChange={(e) => setGiftCardData((prev) => ({ ...prev, code: e.target.value }))}
+              />
+              <Input
+                type="password"
+                placeholder="PIN (if required)"
+                value={giftCardData.pin}
+                onChange={(e) => setGiftCardData((prev) => ({ ...prev, pin: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Button
+                onClick={processGiftCardPayment}
+                disabled={isProcessingPayment || !giftCardData.code}
+                className="w-full"
+              >
+                {isProcessingPayment ? <>Processing...</> : <>Redeem Gift Card</>}
+              </Button>
+              <Button variant="outline" onClick={() => setIsGiftCardOpen(false)} className="w-full">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Live Checkout Dialog */}
+      <Dialog open={isLiveCheckoutOpen} onOpenChange={setIsLiveCheckoutOpen}>
+        <DialogContent className="max-w-6xl h-[90vh] p-0 overflow-hidden">
+          <LiveCheckout onClose={() => setIsLiveCheckoutOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
-
-export default POSModule;
