@@ -712,8 +712,8 @@ const ClientOrganizations = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="max-h-72">
-                              {TAXONOMY_CATEGORIES.map((c) => (
-                                <SelectItem key={c.id} value={c.label} className="text-xs">
+                              {BLUEPRINT_CATEGORIES.map((c) => (
+                                <SelectItem key={c.id} value={c.id} className="text-xs">
                                   {c.label}
                                 </SelectItem>
                               ))}
@@ -721,7 +721,7 @@ const ClientOrganizations = () => {
                           </Select>
                         ) : (
                           <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
-                            {selectedBusiness.business_type || "Uncategorized"}
+                            {getPayAppVerticalLabel(selectedBusiness.business_type) || "Uncategorized"}
                           </p>
                         )}
                       </div>
