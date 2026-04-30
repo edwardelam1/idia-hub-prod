@@ -92,9 +92,14 @@ export function useTeamData() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const businessId = getBusinessId();
+  const [businessId, setBusinessId] = useState<string>("");
+
+  useEffect(() => {
+    getBusinessId().then(setBusinessId);
+  }, []);
 
   const fetchAll = useCallback(async () => {
+    if (!businessId) return;
     setLoading(true);
     try {
       const [membersRes, templatesRes, hoursRes, schedulesRes, entriesRes] = await Promise.all([
