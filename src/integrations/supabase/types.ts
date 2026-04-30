@@ -648,6 +648,8 @@ export type Database = {
           address: string | null
           business_health_score: number | null
           business_type: string
+          city: string | null
+          country: string | null
           created_at: string | null
           data_coop_enabled: boolean | null
           email: string | null
@@ -657,7 +659,11 @@ export type Database = {
           logo_url: string | null
           name: string
           phone: string | null
+          postal_code: string | null
           provisioning_code: string
+          state: string | null
+          street_address_1: string | null
+          street_address_2: string | null
           subscription_tier: string | null
           tax_id: string | null
           updated_at: string | null
@@ -666,6 +672,8 @@ export type Database = {
           address?: string | null
           business_health_score?: number | null
           business_type: string
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           data_coop_enabled?: boolean | null
           email?: string | null
@@ -675,7 +683,11 @@ export type Database = {
           logo_url?: string | null
           name: string
           phone?: string | null
+          postal_code?: string | null
           provisioning_code?: string
+          state?: string | null
+          street_address_1?: string | null
+          street_address_2?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
@@ -684,6 +696,8 @@ export type Database = {
           address?: string | null
           business_health_score?: number | null
           business_type?: string
+          city?: string | null
+          country?: string | null
           created_at?: string | null
           data_coop_enabled?: boolean | null
           email?: string | null
@@ -693,7 +707,11 @@ export type Database = {
           logo_url?: string | null
           name?: string
           phone?: string | null
+          postal_code?: string | null
           provisioning_code?: string
+          state?: string | null
+          street_address_1?: string | null
+          street_address_2?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null

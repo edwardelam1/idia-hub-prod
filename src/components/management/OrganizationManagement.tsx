@@ -10,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ALL_INDUSTRIES } from "@/taxonomy/industries";
+import {
+  PAY_APP_VERTICAL_OPTIONS,
+  getPayAppVerticalLabel,
+} from "@/taxonomy/payAppVerticals";
 import {
   Building2,
   Search,
@@ -31,8 +34,11 @@ import {
   User as UserIcon,
 } from "lucide-react";
 
-// Taxonomy-aligned categories (single source of truth)
-const TAXONOMY_CATEGORIES = ALL_INDUSTRIES.map((i) => ({ id: i.id, label: i.label }));
+// Blueprint Category dropdown is sourced from the Pay App Vertical Catalog —
+// the same list the Pay App Builder uses to hydrate merchant_blueprint.json.
+// We persist the vertical `id` (e.g. "hospitality") into businesses.business_type
+// so the Builder can preselect the correct module bundle automatically.
+const BLUEPRINT_CATEGORIES = PAY_APP_VERTICAL_OPTIONS;
 
 const ClientOrganizations = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,7 +66,11 @@ const ClientOrganizations = () => {
   const [formData, setFormData] = useState({
     legalName: "",
     businessType: "",
-    hqAddress: "",
+    streetAddress1: "",
+    streetAddress2: "",
+    city: "",
+    state: "",
+    postalCode: "",
     ownerUserId: "",
   });
 
@@ -129,14 +139,31 @@ const ClientOrganizations = () => {
   }, [toast]);
 
   const handleCreateBusiness = async () => {
-    if (!formData.legalName || !formData.businessType || !formData.hqAddress || !formData.ownerUserId) {
+    if (
+      !formData.legalName ||
+      !formData.businessType ||
+      !formData.streetAddress1 ||
+      !formData.city ||
+      !formData.state ||
+      !formData.postalCode ||
+      !formData.ownerUserId
+    ) {
       toast({
         title: "Validation Error",
-        description: "Name, Address, Category, and Owner User are required.",
+        description:
+          "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
         variant: "destructive",
       });
       return;
     }
+    // Compose a single-line address for legacy `address` column / display fallbacks.
+    const composedAddress = [
+      formData.streetAddress1,
+      formData.streetAddress2,
+      `${formData.city}, ${formData.state} ${formData.postalCode}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
     setIsSubmitting(true);
     try {
       const { data: businessData, error: businessError } = await supabase
@@ -145,12 +172,18 @@ const ClientOrganizations = () => {
           {
             name: formData.legalName,
             business_type: formData.businessType,
-            address: formData.hqAddress,
+            address: composedAddress,
+            street_address_1: formData.streetAddress1,
+            street_address_2: formData.streetAddress2 || null,
+            city: formData.city,
+            state: formData.state,
+            postal_code: formData.postalCode,
+            country: "US",
             subscription_tier: "Enterprise",
             data_coop_enabled: true,
             business_health_score: 100,
           },
-        ])
+        ] as any)
         .select()
         .single();
       if (businessError) throw businessError;
@@ -159,7 +192,7 @@ const ClientOrganizations = () => {
         {
           business_id: businessData.id,
           name: "Primary Headquarters",
-          address: formData.hqAddress,
+          address: composedAddress,
           is_active: true,
         },
       ]);
@@ -184,7 +217,11 @@ const ClientOrganizations = () => {
       setFormData({
         legalName: "",
         businessType: "",
-        hqAddress: "",
+        streetAddress1: "",
+        streetAddress2: "",
+        city: "",
+        state: "",
+        postalCode: "",
         ownerUserId: "",
       });
       fetchBusinesses();
@@ -247,7 +284,7 @@ const ClientOrganizations = () => {
         contactPhone: "+1 (555) 000-0000",
         responsibleParty: request.requestedBy,
         responsibleRole: request.requestedRole || "Signatory",
-        businessBlueprintType: TAXONOMY_CATEGORIES[0]?.label ?? "Uncategorized",
+        businessBlueprintType: BLUEPRINT_CATEGORIES[0]?.id ?? "uncategorized",
         guidValidated: true,
         confidence: 99.4,
       });
@@ -356,14 +393,63 @@ const ClientOrganizations = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
-                  Headquarters Address <span className="text-red-500">*</span>
+                  Street Address 1 <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  value={formData.hqAddress}
-                  onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
+                  value={formData.streetAddress1}
+                  onChange={(e) => setFormData({ ...formData, streetAddress1: e.target.value })}
                   className="text-sm"
-                  placeholder="123 Main St, City, State"
+                  placeholder="123 Main Street"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Street Address 2 <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  value={formData.streetAddress2}
+                  onChange={(e) => setFormData({ ...formData, streetAddress2: e.target.value })}
+                  className="text-sm"
+                  placeholder="Suite, Unit, Floor (optional)"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    City <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="text-sm"
+                    placeholder="City"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    State <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.state}
+                    onChange={(e) =>
+                      setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })
+                    }
+                    className="text-sm uppercase"
+                    placeholder="CA"
+                    maxLength={2}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">
+                    ZIP <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.postalCode}
+                    onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                    className="text-sm"
+                    placeholder="94103"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
@@ -374,11 +460,11 @@ const ClientOrganizations = () => {
                   onValueChange={(v) => setFormData({ ...formData, businessType: v })}
                 >
                   <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select taxonomy category..." />
+                    <SelectValue placeholder="Select Pay App vertical..." />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    {TAXONOMY_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.label} className="text-sm">
+                    {BLUEPRINT_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id} className="text-sm">
                         {cat.label}
                       </SelectItem>
                     ))}
@@ -626,8 +712,8 @@ const ClientOrganizations = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="max-h-72">
-                              {TAXONOMY_CATEGORIES.map((c) => (
-                                <SelectItem key={c.id} value={c.label} className="text-xs">
+                              {BLUEPRINT_CATEGORIES.map((c) => (
+                                <SelectItem key={c.id} value={c.id} className="text-xs">
                                   {c.label}
                                 </SelectItem>
                               ))}
@@ -635,7 +721,7 @@ const ClientOrganizations = () => {
                           </Select>
                         ) : (
                           <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
-                            {selectedBusiness.business_type || "Uncategorized"}
+                            {getPayAppVerticalLabel(selectedBusiness.business_type) || "Uncategorized"}
                           </p>
                         )}
                       </div>
