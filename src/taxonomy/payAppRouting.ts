@@ -229,3 +229,32 @@ export const PAY_APP_ROUTING: Record<string, SubModuleRoute> = {
 
 export const getRoute = (subModuleId: string): SubModuleRoute | undefined =>
   PAY_APP_ROUTING[subModuleId];
+
+/**
+ * Boot-time smoke assertion — verifies that every sub-module ID referenced by
+ * the Pay App Builder's `verticalCategories` resolves through PAY_APP_ROUTING
+ * to a canonical industryId. Logs unmapped IDs in dev, never throws in prod.
+ */
+export function assertPayAppRoutingCoverage(subModuleIds: string[]): {
+  total: number;
+  mapped: number;
+  unmapped: string[];
+} {
+  const unmapped = subModuleIds.filter((id) => !PAY_APP_ROUTING[id]);
+  const report = {
+    total: subModuleIds.length,
+    mapped: subModuleIds.length - unmapped.length,
+    unmapped,
+  };
+  if (unmapped.length > 0) {
+    console.warn(
+      `[PAY_APP_ROUTING]: ${unmapped.length}/${subModuleIds.length} sub-modules UNMAPPED`,
+      unmapped,
+    );
+  } else {
+    console.log(
+      `[PAY_APP_ROUTING]: ✓ Coverage 100% — ${report.mapped}/${report.total} sub-modules mapped`,
+    );
+  }
+  return report;
+}
