@@ -74,3 +74,16 @@ export function serializeClassification(c: Classification) {
     breakEven: c.breakEven ?? null,
   };
 }
+
+/**
+ * Resolve nano-bites for a Pay App sub-module ID (e.g. 'hosp-fine-dining')
+ * by routing through PAY_APP_ROUTING → industryId → bites.
+ * Returns [] when the sub-module is unmapped.
+ */
+export function getNanoBitesForSubModule(subModuleId: string): NanoBite[] {
+  // Local import to avoid a circular dep at module-init time.
+  const { getRoute } = require('./payAppRouting') as typeof import('./payAppRouting');
+  const route = getRoute(subModuleId);
+  if (!route) return [];
+  return getNanoBitesFor({ industryId: route.industryId });
+}
