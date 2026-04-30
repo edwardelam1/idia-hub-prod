@@ -552,6 +552,57 @@ export const POSModule = () => {
               />
             </div>
 
+            {/* Receipt Preview */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Receipt Preview</h4>
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                  {cart.length} {cart.length === 1 ? "item" : "items"}
+                </Badge>
+              </div>
+              <ScrollArea className="max-h-40 pr-2">
+                <div className="space-y-1">
+                  {cart.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">Cart is empty</p>
+                  ) : (
+                    cart.map((item) => (
+                      <div key={item.id} className="flex items-baseline justify-between text-xs font-mono">
+                        <span className="truncate pr-2">
+                          {item.quantity}× {item.name}
+                        </span>
+                        <span className="text-muted-foreground">
+                          ${(item.price * item.quantity).toFixed(2)}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+              <Separator />
+              <div className="space-y-0.5 text-xs font-mono">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>${calculateTotal().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tax (8%)</span>
+                  <span>${calculateTax().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-sm pt-1">
+                  <span>Total</span>
+                  <span>${calculateGrandTotal().toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-dashed">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Transaction Type
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {customerInfo.name ? "Customer Sale" : "Walk-In Sale"}
+                </Badge>
+              </div>
+            </div>
+
             {/* Payment Methods */}
             <div className="space-y-2">
               <h4 className="font-medium">Payment Method</h4>
