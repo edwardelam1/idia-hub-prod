@@ -46,12 +46,6 @@ const ShippingModule = lazyNamed(() => import("@/components/modules/warehouse/Sh
 const CountingModule = lazyNamed(() => import("@/components/modules/warehouse/CountingModule"), "CountingModule");
 const TruckingModule = lazyNamed(() => import("@/components/modules/warehouse/TruckingModule"), "TruckingModule");
 
-// --- Role Consoles (preserved) ---
-const OwnerDashboard = lazyNamed(() => import("@/components/dashboards/OwnerDashboard"), "OwnerDashboard");
-const ManagerDashboard = lazyNamed(() => import("@/components/dashboards/ManagerDashboard"), "ManagerDashboard");
-const EmployeeDashboard = lazyNamed(() => import("@/components/dashboards/EmployeeDashboard"), "EmployeeDashboard");
-const WarehouseDashboard = lazyNamed(() => import("@/components/dashboards/WarehouseDashboard"), "WarehouseDashboard");
-
 export const ComponentRegistry: Record<string, React.LazyExoticComponent<ComponentType<any>>> = {
   // Default Modules
   "default-pos": POSModule,
@@ -81,12 +75,17 @@ export const ComponentRegistry: Record<string, React.LazyExoticComponent<Compone
   "hosp-fine-dining": LiveCheckout,
   "hosp-cafe": LiveCheckout,
   "retail-fashion": POSModule,
+};
 
-  // Role Consoles
-  "role-owner": OwnerDashboard,
-  "role-manager": ManagerDashboard,
-  "role-employee": EmployeeDashboard,
-  "role-warehouse": WarehouseDashboard,
+/**
+ * Back-compat shim for the legacy DynamicModuleLoader (verticalId + activeBites
+ * surface). Returns the lazy component so callers can render it inside their
+ * own <Suspense> boundary.
+ */
+export const resolveModule = (
+  verticalId: string,
+): React.LazyExoticComponent<ComponentType<any>> | null => {
+  return ComponentRegistry[verticalId] ?? null;
 };
 
 interface DynamicModuleLoaderProps {
