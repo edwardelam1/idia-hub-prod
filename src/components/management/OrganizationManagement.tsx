@@ -247,7 +247,7 @@ const ClientOrganizations = () => {
         contactPhone: "+1 (555) 000-0000",
         responsibleParty: request.requestedBy,
         responsibleRole: request.requestedRole || "Signatory",
-        businessBlueprintType: DETAILED_BUSINESS_TYPES[0],
+        businessBlueprintType: TAXONOMY_CATEGORIES[0]?.label ?? "Uncategorized",
         guidValidated: true,
         confidence: 99.4,
       });
