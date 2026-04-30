@@ -44,7 +44,7 @@ export const InviteMemberDialog = ({ open, onOpenChange, templates, onSubmit }: 
     try {
       // Search existing team members across all businesses as a proxy for IDIA Life users
       const { data } = await supabase
-        .from("team_members")
+        .from("employees")
         .select("id, name, email")
         .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(10);

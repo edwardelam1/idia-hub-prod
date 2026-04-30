@@ -92,17 +92,22 @@ export function useTeamData() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const businessId = getBusinessId();
+  const [businessId, setBusinessId] = useState<string>("");
+
+  useEffect(() => {
+    getBusinessId().then(setBusinessId);
+  }, []);
 
   const fetchAll = useCallback(async () => {
+    if (!businessId) return;
     setLoading(true);
     try {
       const [membersRes, templatesRes, hoursRes, schedulesRes, entriesRes] = await Promise.all([
-        supabase.from("team_members").select("*").eq("business_id", businessId).order("created_at", { ascending: false }),
+        supabase.from("employees").select("*").eq("business_id", businessId).order("created_at", { ascending: false }),
         supabase.from("permission_templates").select("*").eq("business_id", businessId).order("created_at"),
         supabase.from("business_hours").select("*").eq("business_id", businessId).order("day_of_week"),
-        supabase.from("team_schedules").select("*").eq("business_id", businessId).order("schedule_date"),
-        supabase.from("time_entries").select("*").eq("business_id", businessId).order("clock_in", { ascending: false }),
+        supabase.from("employee_shift_schedules").select("*").eq("business_id", businessId).order("schedule_date"),
+        supabase.from("employee_time_entries").select("*").eq("business_id", businessId).order("clock_in", { ascending: false }),
       ]);
 
       if (membersRes.data) setMembers(membersRes.data as unknown as TeamMemberRow[]);
@@ -120,7 +125,7 @@ export function useTeamData() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const addMember = async (data: Partial<TeamMemberRow>) => {
-    const { error, data: newMember } = await supabase.from("team_members").insert({
+    const { error, data: newMember } = await supabase.from("employees").insert({
       business_id: businessId,
       name: data.name || "",
       email: data.email || "",
@@ -137,7 +142,7 @@ export function useTeamData() {
   };
 
   const updateMember = async (id: string, data: Partial<TeamMemberRow>) => {
-    const { error } = await supabase.from("team_members").update({
+    const { error } = await supabase.from("employees").update({
       ...data,
       updated_at: new Date().toISOString(),
     } as any).eq("id", id);
@@ -203,7 +208,7 @@ export function useTeamData() {
   };
 
   const addSchedule = async (data: Partial<ScheduleRow>) => {
-    const { error } = await supabase.from("team_schedules").insert({
+    const { error } = await supabase.from("employee_shift_schedules").insert({
       business_id: businessId,
       team_member_id: data.team_member_id,
       schedule_date: data.schedule_date,
@@ -219,7 +224,7 @@ export function useTeamData() {
   };
 
   const deleteSchedule = async (id: string) => {
-    const { error } = await supabase.from("team_schedules").delete().eq("id", id);
+    const { error } = await supabase.from("employee_shift_schedules").delete().eq("id", id);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return false; }
     await fetchAll();
     return true;

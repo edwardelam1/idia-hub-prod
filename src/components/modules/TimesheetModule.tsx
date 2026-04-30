@@ -46,9 +46,9 @@ export const TimesheetModule = () => {
     try {
       const businessId = await getBusinessId();
       const [membersRes, entriesRes, schedulesRes] = await Promise.all([
-        supabase.from("team_members").select("id, name, role").eq("business_id", businessId),
-        supabase.from("time_entries").select("*").eq("business_id", businessId).order("clock_in", { ascending: false }).limit(200),
-        supabase.from("team_schedules").select("*").eq("business_id", businessId).order("schedule_date", { ascending: true }).limit(200),
+        supabase.from("employees").select("id, name, role").eq("business_id", businessId),
+        supabase.from("employee_time_entries").select("*").eq("business_id", businessId).order("clock_in", { ascending: false }).limit(200),
+        supabase.from("employee_shift_schedules").select("*").eq("business_id", businessId).order("schedule_date", { ascending: true }).limit(200),
       ]);
 
       const members = (membersRes.data || []) as any[];
@@ -100,7 +100,7 @@ export const TimesheetModule = () => {
   const todayHours = todayEntries.reduce((s, e) => s + (e.total_hours || 0), 0);
 
   const handleApprove = async (id: string) => {
-    const { error } = await supabase.from("time_entries").update({ status: "approved" } as any).eq("id", id);
+    const { error } = await supabase.from("employee_time_entries").update({ status: "approved" } as any).eq("id", id);
     if (!error) {
       toast({ title: "Approved", description: "Time entry approved" });
       load();
@@ -110,7 +110,7 @@ export const TimesheetModule = () => {
   const handleApproveAll = async () => {
     const ids = pendingApprovals.map(e => e.id);
     for (const id of ids) {
-      await supabase.from("time_entries").update({ status: "approved" } as any).eq("id", id);
+      await supabase.from("employee_time_entries").update({ status: "approved" } as any).eq("id", id);
     }
     toast({ title: "All Approved", description: `${ids.length} entries approved` });
     load();

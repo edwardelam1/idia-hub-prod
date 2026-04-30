@@ -26,7 +26,7 @@ export const useEventPublisher = () => {
     try {
       if (navigator.onLine) {
         console.info("[BEGIN: EventPublisher.LivePush] Handshaking with live ledger.");
-        const { error } = await supabase.from("financial_event_log").insert([eventBody]);
+        const { error } = await supabase.from("financial_event_log").insert([eventBody as any]);
         if (error) throw error;
         console.info("[END: EventPublisher.LivePush] Success.");
       } else {

@@ -66,7 +66,7 @@ export const TransactionLedgerTab = () => {
   const loadGLEntries = async () => {
     const businessId = await getBusinessId();
     const entries = await fetchJournalEntries(businessId);
-    setGlEntries(entries as GLEntry[]);
+    setGlEntries(entries as unknown as GLEntry[]);
   };
 
   const filtered = transactions.filter(t => {
