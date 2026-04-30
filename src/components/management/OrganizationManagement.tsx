@@ -698,7 +698,17 @@ const ClientOrganizations = () => {
                           {selectedBusiness.subscription_tier}
                         </Badge>
                         <span className="text-[11px] text-slate-300 flex items-center gap-1 truncate">
-                          <MapPin className="w-3 h-3 shrink-0" /> {selectedBusiness.address?.split(",")[0]}
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {(() => {
+                            const street =
+                              selectedBusiness.street_address_1 ||
+                              selectedBusiness.address?.split(",")[0]?.trim();
+                            const cityState = [selectedBusiness.city, selectedBusiness.state]
+                              .filter(Boolean)
+                              .join(", ");
+                            const preview = [street, cityState].filter(Boolean).join(" • ");
+                            return preview || "No location set";
+                          })()}
                         </span>
                       </div>
                     </div>
