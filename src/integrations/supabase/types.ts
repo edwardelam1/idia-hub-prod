@@ -675,7 +675,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           phone?: string | null
-          provisioning_code: string
+          provisioning_code?: string
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
