@@ -729,14 +729,33 @@ const ClientOrganizations = () => {
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsEditingCard(true)}
-                        className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" /> Edit
-                      </Button>
+                      <>
+                        {selectedBusiness.provisioning_active === false ? (
+                          <Button
+                            size="sm"
+                            onClick={handleToggleProvisioning}
+                            className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            Reactivate
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={handleToggleProvisioning}
+                            className="h-7 px-2 text-xs bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditingCard(true)}
+                          className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
+                        >
+                          <Edit2 className="w-3 h-3 mr-1" /> Edit
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
