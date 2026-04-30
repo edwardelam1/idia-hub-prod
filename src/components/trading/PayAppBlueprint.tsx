@@ -592,26 +592,56 @@ export const PayAppBlueprint = () => {
   const [selectedBusiness, setSelectedBusiness] = useState<string>('');
 
   useEffect(() => {
-    // Fetch recently approved business organizations from the onboarding pipeline
+    // Fetch live, verified business organizations from the central registry
     const fetchApprovedBusinesses = async () => {
-      const { data } = await supabase
-        .from('account_conversion_requests' as any)
-        .select('*')
-        .eq('status', 'approved')
-        .order('updated_at', { ascending: false });
+      console.log('[PayAppBlueprint] Starting fetchApprovedBusinesses execution...');
 
-      if (data) {
-        const formatted = data.map((req: any) => ({
-          id: req.id,
-          name: req.company_name,
-          industry: req.industry
+      try {
+        const { data, error } = await supabase
+          .from('businesses')
+          .select('id, name, business_type')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error(
+            '[PayAppBlueprint] Supabase error in fetchApprovedBusinesses:',
+            error.message,
+            error.details,
+            error.hint
+          );
+          toast.error('Failed to fetch live business profiles.');
+          return;
+        }
+
+        if (!data) {
+          console.warn('[PayAppBlueprint] fetchApprovedBusinesses returned no data and no error (possible silent stall).');
+          setApprovedBusinesses([]);
+          return;
+        }
+
+        console.log(`[PayAppBlueprint] Successfully fetched ${data.length} businesses from registry.`);
+
+        const formatted = data.map((bus: any) => ({
+          id: bus.id,
+          name: bus.name,
+          industry: bus.business_type || 'Unspecified'
         }));
-        setApprovedBusinesses([
-          { id: 'internal', name: 'Internal Sandbox Project', industry: 'technology' },
-          ...formatted
-        ]);
+
+        // Setting live data exclusively. Mock/Sim targets removed.
+        setApprovedBusinesses(formatted);
+
+      } catch (err: any) {
+        console.error(
+          '[PayAppBlueprint] Unexpected exception in fetchApprovedBusinesses:',
+          err.message,
+          err.stack
+        );
+        toast.error('Critical failure fetching business registry.');
+      } finally {
+        console.log('[PayAppBlueprint] Ending fetchApprovedBusinesses execution.');
       }
     };
+
     fetchApprovedBusinesses();
   }, []);
 
