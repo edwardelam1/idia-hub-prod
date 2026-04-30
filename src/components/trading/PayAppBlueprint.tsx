@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1596,24 +1596,23 @@ const CoveragePanel = () => {
               <div className="font-semibold mb-1 text-foreground/80">{verticalId}</div>
               <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1">
                 {verticalRows.map((r) => (
-                  <>
-                    <div key={`${r.subModuleId}-name`} className="font-mono truncate">
+                  <Fragment key={r.subModuleId}>
+                    <div className="font-mono truncate">
                       {r.industryResolved ? '✓' : '✗'} {r.name}
                     </div>
-                    <Badge key={`${r.subModuleId}-mod`} variant="outline" className="text-[10px] h-5">
+                    <Badge variant="outline" className="text-[10px] h-5">
                       {r.moduleCount} mod
                     </Badge>
                     <Badge
-                      key={`${r.subModuleId}-bite`}
                       variant={r.biteCount === 0 ? 'destructive' : 'secondary'}
                       className="text-[10px] h-5"
                     >
                       {r.biteCount} bites
                     </Badge>
-                    <code key={`${r.subModuleId}-id`} className="text-[10px] text-muted-foreground truncate">
+                    <code className="text-[10px] text-muted-foreground truncate">
                       {r.industryId}
                     </code>
-                  </>
+                  </Fragment>
                 ))}
               </div>
             </div>
