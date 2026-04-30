@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ALL_INDUSTRIES } from "@/taxonomy/industries";
 import {
   Building2,
   Search,
@@ -27,20 +28,11 @@ import {
   X,
   Mail,
   Phone,
+  User as UserIcon,
 } from "lucide-react";
 
-const DETAILED_BUSINESS_TYPES = [
-  "QSR / Fast Casual",
-  "Full Service Restaurant",
-  "Retail - Apparel & Goods",
-  "Retail - Grocery & Convenience",
-  "Health, Beauty & Spa",
-  "Professional & Legal Services",
-  "Event Venue & Nightlife",
-  "Hospitality & Lodging",
-  "Manufacturing & Logistics",
-  "Data Infrastructure Utility",
-];
+// Taxonomy-aligned categories (single source of truth)
+const TAXONOMY_CATEGORIES = ALL_INDUSTRIES.map((i) => ({ id: i.id, label: i.label }));
 
 const ClientOrganizations = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,18 +53,15 @@ const ClientOrganizations = () => {
 
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [eligibleUsers, setEligibleUsers] = useState<
+    { user_id: string; display: string; account_type: string | null }[]
+  >([]);
 
   const [formData, setFormData] = useState({
     legalName: "",
-    taxId: "",
     businessType: "",
     hqAddress: "",
-    contactEmail: "",
-    contactPhone: "",
-    subscriptionTier: "Enterprise",
-    t1pStatus: "approved",
-    idiaPayStatus: "approved",
-    dataCoopEnabled: true,
+    ownerUserId: "",
   });
 
   const { toast } = useToast();
@@ -120,13 +109,30 @@ const ClientOrganizations = () => {
       }
     };
     fetchRequests();
+    const fetchEligibleUsers = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("user_id, account_type, occupation, location")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (data) {
+        setEligibleUsers(
+          data.map((p: any) => ({
+            user_id: p.user_id,
+            account_type: p.account_type,
+            display: `${p.user_id.slice(0, 8)} · ${p.occupation || p.location || p.account_type || "user"}`,
+          })),
+        );
+      }
+    };
+    fetchEligibleUsers();
   }, [toast]);
 
   const handleCreateBusiness = async () => {
-    if (!formData.legalName || !formData.businessType || !formData.hqAddress) {
+    if (!formData.legalName || !formData.businessType || !formData.hqAddress || !formData.ownerUserId) {
       toast({
         title: "Validation Error",
-        description: "Name, Blueprint, and Address are required.",
+        description: "Name, Address, Category, and Owner User are required.",
         variant: "destructive",
       });
       return;
@@ -138,13 +144,10 @@ const ClientOrganizations = () => {
         .insert([
           {
             name: formData.legalName,
-            tax_id: formData.taxId,
             business_type: formData.businessType,
-            email: formData.contactEmail,
-            phone: formData.contactPhone,
             address: formData.hqAddress,
-            subscription_tier: formData.subscriptionTier,
-            data_coop_enabled: formData.dataCoopEnabled,
+            subscription_tier: "Enterprise",
+            data_coop_enabled: true,
             business_health_score: 100,
           },
         ])
@@ -157,25 +160,32 @@ const ClientOrganizations = () => {
           business_id: businessData.id,
           name: "Primary Headquarters",
           address: formData.hqAddress,
-          contact_email: formData.contactEmail,
-          phone: formData.contactPhone,
           is_active: true,
         },
       ]);
+
+      // CRITICAL: Tether business to at least one user via the business_users junction.
+      const { error: linkError } = await supabase.from("business_users").insert([
+        {
+          business_id: businessData.id,
+          user_id: formData.ownerUserId,
+          role: "owner",
+          is_active: true,
+          accepted_at: new Date().toISOString(),
+        },
+      ]);
+      if (linkError) {
+        console.error("[OrgMgmt] Failed to link owner user:", linkError);
+        throw new Error(`Owner association failed: ${linkError.message}`);
+      }
 
       toast({ title: "Organization Added", description: `${formData.legalName} provisioned successfully.` });
       setShowNewOrgModal(false);
       setFormData({
         legalName: "",
-        taxId: "",
         businessType: "",
         hqAddress: "",
-        contactEmail: "",
-        contactPhone: "",
-        subscriptionTier: "Enterprise",
-        t1pStatus: "approved",
-        idiaPayStatus: "approved",
-        dataCoopEnabled: true,
+        ownerUserId: "",
       });
       fetchBusinesses();
     } catch (error: any) {
