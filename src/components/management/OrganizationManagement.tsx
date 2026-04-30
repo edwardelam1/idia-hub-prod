@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ALL_INDUSTRIES } from "@/taxonomy/industries";
 import {
   Building2,
   Search,
@@ -27,20 +28,11 @@ import {
   X,
   Mail,
   Phone,
+  User as UserIcon,
 } from "lucide-react";
 
-const DETAILED_BUSINESS_TYPES = [
-  "QSR / Fast Casual",
-  "Full Service Restaurant",
-  "Retail - Apparel & Goods",
-  "Retail - Grocery & Convenience",
-  "Health, Beauty & Spa",
-  "Professional & Legal Services",
-  "Event Venue & Nightlife",
-  "Hospitality & Lodging",
-  "Manufacturing & Logistics",
-  "Data Infrastructure Utility",
-];
+// Taxonomy-aligned categories (single source of truth)
+const TAXONOMY_CATEGORIES = ALL_INDUSTRIES.map((i) => ({ id: i.id, label: i.label }));
 
 const ClientOrganizations = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,18 +53,15 @@ const ClientOrganizations = () => {
 
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [eligibleUsers, setEligibleUsers] = useState<
+    { user_id: string; display: string; account_type: string | null }[]
+  >([]);
 
   const [formData, setFormData] = useState({
     legalName: "",
-    taxId: "",
     businessType: "",
     hqAddress: "",
-    contactEmail: "",
-    contactPhone: "",
-    subscriptionTier: "Enterprise",
-    t1pStatus: "approved",
-    idiaPayStatus: "approved",
-    dataCoopEnabled: true,
+    ownerUserId: "",
   });
 
   const { toast } = useToast();
@@ -120,13 +109,30 @@ const ClientOrganizations = () => {
       }
     };
     fetchRequests();
+    const fetchEligibleUsers = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("user_id, account_type, occupation, location")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (data) {
+        setEligibleUsers(
+          data.map((p: any) => ({
+            user_id: p.user_id,
+            account_type: p.account_type,
+            display: `${p.user_id.slice(0, 8)} · ${p.occupation || p.location || p.account_type || "user"}`,
+          })),
+        );
+      }
+    };
+    fetchEligibleUsers();
   }, [toast]);
 
   const handleCreateBusiness = async () => {
-    if (!formData.legalName || !formData.businessType || !formData.hqAddress) {
+    if (!formData.legalName || !formData.businessType || !formData.hqAddress || !formData.ownerUserId) {
       toast({
         title: "Validation Error",
-        description: "Name, Blueprint, and Address are required.",
+        description: "Name, Address, Category, and Owner User are required.",
         variant: "destructive",
       });
       return;
@@ -138,13 +144,10 @@ const ClientOrganizations = () => {
         .insert([
           {
             name: formData.legalName,
-            tax_id: formData.taxId,
             business_type: formData.businessType,
-            email: formData.contactEmail,
-            phone: formData.contactPhone,
             address: formData.hqAddress,
-            subscription_tier: formData.subscriptionTier,
-            data_coop_enabled: formData.dataCoopEnabled,
+            subscription_tier: "Enterprise",
+            data_coop_enabled: true,
             business_health_score: 100,
           },
         ])
@@ -157,25 +160,32 @@ const ClientOrganizations = () => {
           business_id: businessData.id,
           name: "Primary Headquarters",
           address: formData.hqAddress,
-          contact_email: formData.contactEmail,
-          phone: formData.contactPhone,
           is_active: true,
         },
       ]);
+
+      // CRITICAL: Tether business to at least one user via the business_users junction.
+      const { error: linkError } = await supabase.from("business_users").insert([
+        {
+          business_id: businessData.id,
+          user_id: formData.ownerUserId,
+          role: "owner",
+          is_active: true,
+          accepted_at: new Date().toISOString(),
+        },
+      ]);
+      if (linkError) {
+        console.error("[OrgMgmt] Failed to link owner user:", linkError);
+        throw new Error(`Owner association failed: ${linkError.message}`);
+      }
 
       toast({ title: "Organization Added", description: `${formData.legalName} provisioned successfully.` });
       setShowNewOrgModal(false);
       setFormData({
         legalName: "",
-        taxId: "",
         businessType: "",
         hqAddress: "",
-        contactEmail: "",
-        contactPhone: "",
-        subscriptionTier: "Enterprise",
-        t1pStatus: "approved",
-        idiaPayStatus: "approved",
-        dataCoopEnabled: true,
+        ownerUserId: "",
       });
       fetchBusinesses();
     } catch (error: any) {
@@ -237,7 +247,7 @@ const ClientOrganizations = () => {
         contactPhone: "+1 (555) 000-0000",
         responsibleParty: request.requestedBy,
         responsibleRole: request.requestedRole || "Signatory",
-        businessBlueprintType: DETAILED_BUSINESS_TYPES[0],
+        businessBlueprintType: TAXONOMY_CATEGORIES[0]?.label ?? "Uncategorized",
         guidValidated: true,
         confidence: 99.4,
       });
@@ -332,48 +342,78 @@ const ClientOrganizations = () => {
                 <Plus className="w-4 h-4 text-indigo-600" /> Manual Organization Entry
               </DialogTitle>
             </DialogHeader>
-            <ScrollArea className="max-h-[70vh] px-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">
-                    Legal Entity Name <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    value={formData.legalName}
-                    onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
-                    className="text-sm"
-                    placeholder="Enter business name"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">Blueprint Category</Label>
-                  <Select
-                    value={formData.businessType}
-                    onValueChange={(v) => setFormData({ ...formData, businessType: v })}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DETAILED_BUSINESS_TYPES.map((type) => (
-                        <SelectItem key={type} value={type} className="text-sm">
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700">Headquarters Address</Label>
-                  <Input
-                    value={formData.hqAddress}
-                    onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
-                    className="text-sm"
-                    placeholder="123 Main St..."
-                  />
-                </div>
+            <div className="px-6 py-4 space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Legal Entity Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.legalName}
+                  onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
+                  className="text-sm"
+                  placeholder="Enter business name"
+                />
               </div>
-            </ScrollArea>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Headquarters Address <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.hqAddress}
+                  onChange={(e) => setFormData({ ...formData, hqAddress: e.target.value })}
+                  className="text-sm"
+                  placeholder="123 Main St, City, State"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  Blueprint Category <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.businessType}
+                  onValueChange={(v) => setFormData({ ...formData, businessType: v })}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select taxonomy category..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {TAXONOMY_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.label} className="text-sm">
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5" />
+                  Associated User (Owner) <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.ownerUserId}
+                  onValueChange={(v) => setFormData({ ...formData, ownerUserId: v })}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Select an existing platform user..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {eligibleUsers.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-slate-500">No profiles available.</div>
+                    ) : (
+                      eligibleUsers.map((u) => (
+                        <SelectItem key={u.user_id} value={u.user_id} className="text-sm font-mono">
+                          {u.display}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Every business must be tethered to at least one platform user.
+                </p>
+              </div>
+            </div>
             <DialogFooter className="px-6 py-4 border-t bg-slate-50/50 gap-2">
               <Button variant="outline" onClick={() => setShowNewOrgModal(false)}>
                 Cancel
@@ -496,41 +536,41 @@ const ClientOrganizations = () => {
         </div>
 
         {/* RIGHT PANEL: BUSINESS DETAIL CARD */}
-        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50 overflow-y-auto">
+        <div className="w-full lg:w-[65%] flex flex-col bg-slate-50 min-h-0">
           {selectedBusiness ? (
-            <div className="p-4 animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="p-3 flex-1 min-h-0 animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden h-full flex flex-col">
                 {/* CARD HEADER */}
-                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-4 flex flex-col xl:flex-row xl:items-start justify-between relative gap-3">
-                  <div className="flex items-center gap-3 w-full">
-                    <div className="bg-white/10 backdrop-blur-md p-2.5 rounded-md border border-white/20 shrink-0">
-                      <Building2 className="h-5 w-5 text-white" />
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="bg-white/10 backdrop-blur-md p-2 rounded-md border border-white/20 shrink-0">
+                      <Building2 className="h-4 w-4 text-white" />
                     </div>
-                    <div className="w-full min-w-0">
+                    <div className="min-w-0 flex-1">
                       {isEditingCard ? (
                         <Input
                           value={editForm.name}
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="h-9 text-sm font-semibold bg-white/20 border-white/40 text-white placeholder:text-white/50 mb-1 w-full"
+                          className="h-7 text-sm font-semibold bg-white/20 border-white/40 text-white placeholder:text-white/50 w-full"
                         />
                       ) : (
-                        <h2 className="text-lg font-semibold text-white tracking-tight truncate">
+                        <h2 className="text-sm font-semibold text-white tracking-tight truncate">
                           {selectedBusiness.name}
                         </h2>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-xs px-2 py-0 border-none">
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge className="bg-white/20 text-white hover:bg-white/30 text-[10px] px-1.5 py-0 border-none">
                           {selectedBusiness.subscription_tier}
                         </Badge>
-                        <span className="text-xs text-slate-300 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" /> {selectedBusiness.address?.split(",")[0]}
+                        <span className="text-[11px] text-slate-300 flex items-center gap-1 truncate">
+                          <MapPin className="w-3 h-3 shrink-0" /> {selectedBusiness.address?.split(",")[0]}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* EDIT/SAVE ACTIONS */}
-                  <div className="flex flex-row items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {isEditingCard ? (
                       <>
                         <Button
@@ -540,17 +580,17 @@ const ClientOrganizations = () => {
                             setIsEditingCard(false);
                             setEditForm({ ...selectedBusiness });
                           }}
-                          className="text-white hover:bg-white/20"
+                          className="h-7 px-2 text-xs text-white hover:bg-white/20"
                         >
-                          <X className="w-3.5 h-3.5 mr-1.5" /> Cancel
+                          <X className="w-3 h-3 mr-1" /> Cancel
                         </Button>
                         <Button
                           size="sm"
                           onClick={handleUpdateBusiness}
                           disabled={isSubmitting}
-                          className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                          className="h-7 px-2 text-xs bg-emerald-500 hover:bg-emerald-600 text-white"
                         >
-                          <Save className="w-3.5 h-3.5 mr-1.5" /> Save
+                          <Save className="w-3 h-3 mr-1" /> Save
                         </Button>
                       </>
                     ) : (
@@ -558,145 +598,151 @@ const ClientOrganizations = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => setIsEditingCard(true)}
-                        className="text-white hover:bg-white/20 border border-white/30 bg-white/5"
+                        className="h-7 px-2 text-xs text-white hover:bg-white/20 border border-white/30 bg-white/5"
                       >
-                        <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Edit Profile
+                        <Edit2 className="w-3 h-3 mr-1" /> Edit
                       </Button>
                     )}
                   </div>
                 </div>
 
-                {/* CARD BODY */}
-                <div className="p-5 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5">
+                {/* CARD BODY — dense two-column, no scroll */}
+                <div className="p-4 grid grid-cols-2 gap-x-5 gap-y-3 flex-1">
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Operational Profile
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Blueprint Classification</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Blueprint</Label>
                         {isEditingCard ? (
                           <Select
                             value={editForm.business_type}
                             onValueChange={(v) => setEditForm({ ...editForm, business_type: v })}
                           >
-                            <SelectTrigger className="h-9 text-sm mt-1">
+                            <SelectTrigger className="h-8 text-xs mt-0.5">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                              {DETAILED_BUSINESS_TYPES.map((t) => (
-                                <SelectItem key={t} value={t} className="text-sm">
-                                  {t}
+                            <SelectContent className="max-h-72">
+                              {TAXONOMY_CATEGORIES.map((c) => (
+                                <SelectItem key={c.id} value={c.label} className="text-xs">
+                                  {c.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.business_type || "Uncategorized"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Tax Identification</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Tax ID</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.tax_id}
                             onChange={(e) => setEditForm({ ...editForm, tax_id: e.target.value })}
-                            className="h-9 text-sm font-mono mt-1"
+                            className="h-8 text-xs font-mono mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-mono font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-mono font-medium text-slate-900 mt-0.5">
                             {selectedBusiness.tax_id || "Not on file"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Headquarters Address</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">HQ Address</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.address}
                             onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1">
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 truncate">
                             {selectedBusiness.address || "No location set"}
                           </p>
                         )}
                       </div>
+                      <div>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Provisioning Code</Label>
+                        <p className="text-xs font-mono font-medium text-slate-900 mt-0.5 truncate">
+                          {selectedBusiness.provisioning_code || "—"}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5">
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Communication
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Corporate Email</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Email</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.email}
                             onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1 flex items-center gap-2">
-                            <Mail className="w-3.5 h-3.5 text-slate-400" /> {selectedBusiness.email || "N/A"}
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 flex items-center gap-1.5 truncate">
+                            <Mail className="w-3 h-3 text-slate-400 shrink-0" /> {selectedBusiness.email || "N/A"}
                           </p>
                         )}
                       </div>
                       <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Corporate Phone</Label>
+                        <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Phone</Label>
                         {isEditingCard ? (
                           <Input
                             value={editForm.phone}
                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                            className="h-9 text-sm mt-1"
+                            className="h-8 text-xs mt-0.5"
                           />
                         ) : (
-                          <p className="text-sm font-medium text-slate-900 mt-1 flex items-center gap-2">
-                            <Phone className="w-3.5 h-3.5 text-slate-400" /> {selectedBusiness.phone || "N/A"}
+                          <p className="text-xs font-medium text-slate-900 mt-0.5 flex items-center gap-1.5 truncate">
+                            <Phone className="w-3 h-3 text-slate-400 shrink-0" /> {selectedBusiness.phone || "N/A"}
                           </p>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="col-span-1 xl:col-span-2 pt-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1.5 mb-3">
+                  <div className="col-span-2 pt-1">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1 mb-2">
                       Network Capabilities
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.t1p_status === "approved" ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> T-1-P Shield
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" /> Shield
                           </Label>
                           {getStatusIcon(selectedBusiness.t1p_status)}
                         </div>
                       </div>
 
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50 border-indigo-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.idia_pay_status === "approved" ? "bg-indigo-50 border-indigo-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <Smartphone className="w-3.5 h-3.5 text-indigo-600" /> IDIA Pay UI
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <Smartphone className="w-3 h-3 text-indigo-600" /> Pay UI
                           </Label>
                           {getStatusIcon(selectedBusiness.idia_pay_status)}
                         </div>
                       </div>
 
                       <div
-                        className={`p-3 rounded-md border ${selectedBusiness.data_coop_enabled ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
+                        className={`px-2.5 py-1.5 rounded-md border ${selectedBusiness.data_coop_enabled ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-200"}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium flex items-center gap-1.5 text-slate-800">
-                            <Network className="w-3.5 h-3.5 text-blue-600" /> Data Co-op
+                          <Label className="text-[11px] font-medium flex items-center gap-1 text-slate-800">
+                            <Network className="w-3 h-3 text-blue-600" /> Data Co-op
                           </Label>
                           {isEditingCard ? (
                             <Switch
