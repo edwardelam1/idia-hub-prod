@@ -563,7 +563,7 @@ export const PayAppBlueprint = () => {
   const [selectedSubModules, setSelectedSubModules] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [provisioningCode, setProvisioningCode] = useState(generateProvisioningCode());
+  const [provisioningCode, setProvisioningCode] = useState<string>('');
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
 
@@ -591,13 +591,22 @@ export const PayAppBlueprint = () => {
   const [approvedBusinesses, setApprovedBusinesses] = useState<any[]>([]);
   const [selectedBusiness, setSelectedBusiness] = useState<string>('');
 
-  // Dynamically regenerate the provisioning code when a new business profile is selected
+  // Bind the provisioning code to the selected business — one permanent code per business, fetched from the registry.
   useEffect(() => {
-    if (selectedBusiness) {
-      console.log(`[PayAppBlueprint] New business profile selected (${selectedBusiness}). Generating new provisioning code.`);
-      setProvisioningCode(generateProvisioningCode());
+    if (!selectedBusiness) {
+      setProvisioningCode('');
+      return;
     }
-  }, [selectedBusiness]);
+    const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
+    if (business?.provisioning_code) {
+      console.log(`[PayAppBlueprint] Bound permanent provisioning code ${business.provisioning_code} to business ${selectedBusiness}.`);
+      setProvisioningCode(business.provisioning_code);
+    } else {
+      console.warn(`[PayAppBlueprint] No provisioning_code found on business ${selectedBusiness}. Registry may be out of sync.`);
+      setProvisioningCode('');
+      toast.error('Selected business is missing a provisioning code.');
+    }
+  }, [selectedBusiness, approvedBusinesses]);
 
   useEffect(() => {
     // Fetch live, verified business organizations from the central registry
@@ -607,7 +616,7 @@ export const PayAppBlueprint = () => {
       try {
         const { data, error } = await supabase
           .from('businesses')
-          .select('id, name, business_type')
+          .select('id, name, business_type, provisioning_code')
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -632,7 +641,8 @@ export const PayAppBlueprint = () => {
         const formatted = data.map((bus: any) => ({
           id: bus.id,
           name: bus.name,
-          industry: bus.business_type || 'Unspecified'
+          industry: bus.business_type || 'Unspecified',
+          provisioning_code: bus.provisioning_code,
         }));
 
         // Setting live data exclusively. Mock/Sim targets removed.
