@@ -2187,6 +2187,7 @@ export type Database = {
       }
       employees: {
         Row: {
+          aca_secured: boolean
           address: string | null
           assigned_locations: string[] | null
           business_id: string
@@ -2199,6 +2200,7 @@ export type Database = {
           hire_date: string | null
           hourly_rate: number | null
           id: string
+          is_ephemeral: boolean
           last_login: string | null
           name: string
           notes: string | null
@@ -2207,6 +2209,7 @@ export type Database = {
           permission_template_id: string | null
           permissions: Json | null
           phone: string | null
+          platform_role: string
           role: string
           salary_type: string | null
           state: string | null
@@ -2217,6 +2220,7 @@ export type Database = {
           zip: string | null
         }
         Insert: {
+          aca_secured?: boolean
           address?: string | null
           assigned_locations?: string[] | null
           business_id: string
@@ -2229,6 +2233,7 @@ export type Database = {
           hire_date?: string | null
           hourly_rate?: number | null
           id?: string
+          is_ephemeral?: boolean
           last_login?: string | null
           name: string
           notes?: string | null
@@ -2237,6 +2242,7 @@ export type Database = {
           permission_template_id?: string | null
           permissions?: Json | null
           phone?: string | null
+          platform_role?: string
           role?: string
           salary_type?: string | null
           state?: string | null
@@ -2247,6 +2253,7 @@ export type Database = {
           zip?: string | null
         }
         Update: {
+          aca_secured?: boolean
           address?: string | null
           assigned_locations?: string[] | null
           business_id?: string
@@ -2259,6 +2266,7 @@ export type Database = {
           hire_date?: string | null
           hourly_rate?: number | null
           id?: string
+          is_ephemeral?: boolean
           last_login?: string | null
           name?: string
           notes?: string | null
@@ -2267,6 +2275,7 @@ export type Database = {
           permission_template_id?: string | null
           permissions?: Json | null
           phone?: string | null
+          platform_role?: string
           role?: string
           salary_type?: string | null
           state?: string | null
@@ -7210,6 +7219,7 @@ export type Database = {
         Returns: Json
       }
       invoke_refiner_secure: { Args: { payload: Json }; Returns: undefined }
+      is_org_admin: { Args: { _business_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {
           p_aca_hash: string
@@ -7237,6 +7247,136 @@ export type Database = {
           error_count: number
           processed_count: number
         }[]
+      }
+      provision_employee_via_aca: {
+        Args: {
+          _business_id: string
+          _platform_guid: string
+          _platform_role: string
+        }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      provision_ephemeral_employee: {
+        Args: { _business_id: string }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      revoke_employee: {
+        Args: { _employee_id: string }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_usdc_balance: {
         Args: {
