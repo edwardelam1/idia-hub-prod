@@ -290,13 +290,13 @@ export function useOverviewStats() {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const [posRes, locRes, teamRes, invRes, poRes] = await Promise.all([
-          supabase.from("pos_transactions").select("total_amount").eq("business_id" as any, businessId).gte("created_at", thirtyDaysAgo.toISOString()).eq("payment_status", "completed"),
-          supabase.from("business_locations").select("id").eq("business_id", businessId).eq("is_active", true),
-          supabase.from("employees").select("id").eq("business_id", businessId).eq("status", "active"),
-          supabase.from("inventory_items").select("current_stock, current_cost").eq("business_id", businessId).eq("is_active", true),
-          supabase.from("purchase_orders").select("id, invoice_status").eq("business_id", businessId),
-        ]);
+        const [posRes, locRes, teamRes, invRes, poRes] = await Promise.all<any>([
+          (supabase.from as any)("pos_transactions").select("total_amount").eq("business_id", businessId).gte("created_at", thirtyDaysAgo.toISOString()).eq("payment_status", "completed"),
+          (supabase.from as any)("business_locations").select("id").eq("business_id", businessId).eq("is_active", true),
+          (supabase.from as any)("employees").select("id").eq("business_id", businessId).eq("status", "active"),
+          (supabase.from as any)("inventory_items").select("current_stock, current_cost").eq("business_id", businessId).eq("is_active", true),
+          (supabase.from as any)("purchase_orders").select("id, invoice_status").eq("business_id", businessId),
+        ]) as any[];
 
         const txns = (posRes.data || []) as any[];
         const totalRevenue = txns.reduce((s: number, t: any) => s + (t.total_amount || 0), 0);
@@ -342,12 +342,12 @@ export function useTodayStats() {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        const [posRes, teamRes, activeRes, invRes] = await Promise.all([
-          supabase.from("pos_transactions").select("total_amount").eq("business_id" as any, businessId).gte("created_at", todayStart.toISOString()).eq("payment_status", "completed"),
-          supabase.from("employees").select("id, status").eq("business_id", businessId),
-          supabase.from("employee_time_entries").select("id").eq("business_id", businessId).is("clock_out", null).eq("status", "active"),
-          supabase.from("inventory_items").select("current_stock, par_level").eq("business_id", businessId).eq("is_active", true),
-        ]);
+        const [posRes, teamRes, activeRes, invRes] = await Promise.all<any>([
+          (supabase.from as any)("pos_transactions").select("total_amount").eq("business_id", businessId).gte("created_at", todayStart.toISOString()).eq("payment_status", "completed"),
+          (supabase.from as any)("employees").select("id, status").eq("business_id", businessId),
+          (supabase.from as any)("employee_time_entries").select("id").eq("business_id", businessId).is("clock_out", null).eq("status", "active"),
+          (supabase.from as any)("inventory_items").select("current_stock, par_level").eq("business_id", businessId).eq("is_active", true),
+        ]) as any[];
 
         const txns = (posRes.data || []) as any[];
         const dailyRevenue = txns.reduce((s: number, t: any) => s + (t.total_amount || 0), 0);
