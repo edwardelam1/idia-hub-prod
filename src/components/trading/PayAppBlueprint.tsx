@@ -15,7 +15,8 @@ import {
   type NanoBite,
 } from '@/taxonomy';
 import { useBusinessTaxonomy } from '@/hooks/useBusinessTaxonomy';
-import { PAY_APP_ROUTING, getRoute } from '@/taxonomy/payAppRouting';
+import { PAY_APP_ROUTING, getRoute, assertPayAppRoutingCoverage } from '@/taxonomy/payAppRouting';
+import { getSubModuleCoverage } from '@/taxonomy/selectors';
 import {
   Package,
   Send,
@@ -585,6 +586,9 @@ export const PayAppBlueprint = () => {
   const taxonomy = useBusinessTaxonomy('pay-app-builder');
   useEffect(() => {
     initializeTaxonomy();
+    // Boot-time smoke assertion — ensures every UI sub-module resolves through PAY_APP_ROUTING.
+    const allSubModuleIds = verticalCategories.flatMap((v) => v.subModules.map((s) => s.id));
+    assertPayAppRoutingCoverage(allSubModuleIds);
   }, []);
   const dragDataRef = useRef<{ id: string; name: string; parentId?: string; parentName?: string; color?: string } | null>(null);
 
