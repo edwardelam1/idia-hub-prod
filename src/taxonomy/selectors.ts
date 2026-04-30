@@ -11,6 +11,7 @@ import { ALL_INDUSTRIES } from './industries';
 import { ALL_NANO_BITES } from './nanoBites';
 import { POSITIONING_SPECS } from './positioning';
 import { PRODUCTION_METHODS } from './production';
+import { getRoute } from './payAppRouting';
 
 export function getIndustriesBySector(sector: SectorId): IndustryNode[] {
   return ALL_INDUSTRIES.filter((i) => i.sector === sector);
@@ -81,8 +82,6 @@ export function serializeClassification(c: Classification) {
  * Returns [] when the sub-module is unmapped.
  */
 export function getNanoBitesForSubModule(subModuleId: string): NanoBite[] {
-  // Local import to avoid a circular dep at module-init time.
-  const { getRoute } = require('./payAppRouting') as typeof import('./payAppRouting');
   const route = getRoute(subModuleId);
   if (!route) return [];
   return getNanoBitesFor({ industryId: route.industryId });
