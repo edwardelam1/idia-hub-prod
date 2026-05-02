@@ -796,12 +796,15 @@ export const PayAppBlueprint = () => {
   };
 
   const generateBlueprintJSON = () => {
-    const businessName = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness)?.name || "Unassigned";
+    // Fallback if the business isn't found in the list
+    const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
+    const businessName = business?.name || "Unassigned";
 
-    // Compose the per-sub-module bundles: every selected custom module gets
-    // its routing entry resolved into ComponentRegistry keys + hydrated bites.
     const customSelected = selectedModules.filter((m) => !m.isDefault);
-    const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+
+    // Ensure we don't crash if taxonomy data is still initializing
+    const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
+
     const bundles = customSelected.map((m) => {
       const route = getRoute(m.id);
       if (!route) {
@@ -815,10 +818,11 @@ export const PayAppBlueprint = () => {
           unmapped: true,
         };
       }
-      const allBites = getNanoBitesFor({ industryId: route.industryId });
+
+      // Safeguard against missing industryId in the route
+      const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
-      // If the operator hasn't curated bites yet, ship all bites for this industry
-      // so the device receives a working default kit. Empty array stays empty.
+
       const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
         id: b.id,
         task: b.task,
@@ -828,6 +832,7 @@ export const PayAppBlueprint = () => {
         automatable: b.automatable,
         requiresTier: b.requiresTier ?? null,
       }));
+
       return {
         subModuleId: route.subModuleId,
         name: route.name,
@@ -854,8 +859,8 @@ export const PayAppBlueprint = () => {
       },
       verticals: [...new Set(selectedModules.filter((m) => m.parentName).map((m) => m.parentName))],
       taxonomy: {
-        industryId: taxonomy.classification.industryId ?? null,
-        nanoBites: taxonomy.classification.selectedNanoBiteIds,
+        industryId: taxonomy?.classification?.industryId ?? null,
+        nanoBites: Array.from(selectedBiteIds),
       },
       compliance: {
         delt_enabled: true,
