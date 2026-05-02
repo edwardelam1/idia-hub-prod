@@ -355,7 +355,7 @@ const ClientOrganizations = () => {
               business_type: parsedData.businessBlueprintType,
               subscription_tier: "Enterprise",
               data_coop_enabled: true,
-            },
+            } as any,
           ])
           .select()
           .single();
