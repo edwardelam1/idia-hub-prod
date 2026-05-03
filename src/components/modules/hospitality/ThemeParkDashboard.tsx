@@ -1,4 +1,3 @@
-import { Ferris as _unused } from "lucide-react"; // placeholder to satisfy lint if removed below
 import { Gamepad2 } from "lucide-react";
 import { NanoBiteOpsDashboard } from "./NanoBiteOpsDashboard";
 
