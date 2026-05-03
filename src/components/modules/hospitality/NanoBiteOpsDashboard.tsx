@@ -39,6 +39,14 @@ const TIER_VARIANT: Record<string, "secondary" | "default" | "outline"> = {
   enterprise: "outline",
 };
 
+const ACCENT_CLASS: Record<string, string> = {
+  violet: "bg-violet-500/10 text-violet-500",
+  amber: "bg-amber-500/10 text-amber-500",
+  orange: "bg-orange-500/10 text-orange-500",
+  cyan: "bg-cyan-500/10 text-cyan-500",
+  red: "bg-red-500/10 text-red-500",
+};
+
 export const NanoBiteOpsDashboard = ({
   title,
   description,
@@ -73,7 +81,7 @@ export const NanoBiteOpsDashboard = ({
   return (
     <div className="space-y-6 p-6">
       <header className="flex items-start gap-4">
-        <div className={`rounded-lg p-3 bg-${accent}-500/10 text-${accent}-500`}>
+        <div className={`rounded-lg p-3 ${ACCENT_CLASS[accent] ?? "bg-primary/10 text-primary"}`}>
           <Icon className="w-6 h-6" />
         </div>
         <div className="flex-1">
