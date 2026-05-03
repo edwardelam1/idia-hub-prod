@@ -46,6 +46,13 @@ const ShippingModule = lazyNamed(() => import("@/components/modules/warehouse/Sh
 const CountingModule = lazyNamed(() => import("@/components/modules/warehouse/CountingModule"), "CountingModule");
 const TruckingModule = lazyNamed(() => import("@/components/modules/warehouse/TruckingModule"), "TruckingModule");
 
+// --- Hospitality Density Modules (taxonomy-driven, no synthetic data) ---
+const ThemeParkDashboard = lazyNamed(() => import("@/components/modules/hospitality/ThemeParkDashboard"), "ThemeParkDashboard");
+const CMMSWorkOrders = lazyNamed(() => import("@/components/modules/hospitality/CMMSWorkOrders"), "CMMSWorkOrders");
+const KDSRouting = lazyNamed(() => import("@/components/modules/hospitality/KDSRouting"), "KDSRouting");
+const HousekeepingInventory = lazyNamed(() => import("@/components/modules/hospitality/HousekeepingInventory"), "HousekeepingInventory");
+const LifeSafetyCompliance = lazyNamed(() => import("@/components/modules/hospitality/LifeSafetyCompliance"), "LifeSafetyCompliance");
+
 export const ComponentRegistry: Record<string, React.LazyExoticComponent<ComponentType<any>>> = {
   // Default Modules
   "default-pos": POSModule,
@@ -75,6 +82,13 @@ export const ComponentRegistry: Record<string, React.LazyExoticComponent<Compone
   "hosp-fine-dining": LiveCheckout,
   "hosp-cafe": LiveCheckout,
   "retail-fashion": POSModule,
+
+  // Hospitality density (5 new operating dashboards)
+  "hosp-theme-park-ops": ThemeParkDashboard,
+  "hosp-cmms": CMMSWorkOrders,
+  "hosp-kds": KDSRouting,
+  "hosp-housekeeping-inv": HousekeepingInventory,
+  "hosp-life-safety": LifeSafetyCompliance,
 };
 
 /**
