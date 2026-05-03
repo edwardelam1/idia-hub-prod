@@ -133,6 +133,11 @@ const verticalCategories: VerticalCategory[] = [
       { id: "hosp-cafe", name: "Café & Bakery", description: "Coffee & pastries" },
       { id: "hosp-bar", name: "Bar & Lounge", description: "Beverage service" },
       { id: "hosp-catering", name: "Catering", description: "Event food service" },
+      { id: "hosp-theme-park-ops", name: "Theme Park Ops", description: "Queues, ride telemetry, biometric entitlements" },
+      { id: "hosp-cmms", name: "CMMS Work Orders", description: "Preventive maintenance & LOTO sign-offs" },
+      { id: "hosp-kds", name: "KDS Routing", description: "Zone routing for broiler / fry / garde manger" },
+      { id: "hosp-housekeeping-inv", name: "Housekeeping Inventory", description: "Cart par levels & chemical manifests" },
+      { id: "hosp-life-safety", name: "Life Safety Compliance", description: "NFPA 101, sprinkler & hood inspections" },
     ],
   },
   {
