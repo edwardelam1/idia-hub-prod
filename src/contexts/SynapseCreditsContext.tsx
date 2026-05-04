@@ -114,7 +114,6 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const fiatRoyalty = Number(vault?.cash_balance ?? 0);
       const computationalGas = Number(gasBalance ?? 0);
       // USDC = on-chain truth, read live from Base contract via useWalletBalance.
-      // NEVER read from wallets.idia_beta_balance (that's internal scrip, not USDC).
       const usdcOnChain = Number(onChainBalance?.usdc_balance ?? 0);
 
       const newState: ProtocolState = {
