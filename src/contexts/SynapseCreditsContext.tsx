@@ -15,7 +15,7 @@ interface ProtocolState {
   // RAIL 2: COMPUTATIONAL GAS (CREDITS)
   synapse_gas_credits: number;
 
-  // RAIL 3: USDC (on-chain truth, sourced from Base contract — NOT IDIA-BETA, NOT IDIA-USD)
+  // RAIL 3: USDC
   usdc_balance: number;
 
   // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
