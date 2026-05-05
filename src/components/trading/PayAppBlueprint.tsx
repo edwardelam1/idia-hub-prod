@@ -867,6 +867,23 @@ export const PayAppBlueprint = () => {
         industryId: taxonomy?.classification?.industryId ?? null,
         nanoBites: Array.from(selectedBiteIds),
       },
+      visual_identity: {
+        primary_color: (business as any)?.brand_primary_color ?? "#0F172A",
+        accent_color: (business as any)?.brand_accent_color ?? "#3B82F6",
+        background_color: (business as any)?.brand_background_color ?? "#FFFFFF",
+        logo_url: (business as any)?.logo_url ?? null,
+        display_name: businessName,
+      },
+      lexicon_overrides: {
+        // Vertical-aware label remapping for the Sovereign Terminal.
+        guest_label: bundles.some((b) => b.vertical?.toLowerCase().includes("hospitality"))
+          ? "Guest"
+          : "Customer",
+        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
+          ? "Ticket"
+          : "Order",
+        location_label: "Property",
+      },
       compliance: {
         delt_enabled: true,
         pci_level: 1,
