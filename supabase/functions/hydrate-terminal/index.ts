@@ -1,83 +1,82 @@
-// Public terminal hydration endpoint.
-// Given a pairing_code, returns the schema_payload from idia_schema_manifest_vault.
-// Uses the service role internally to bypass RLS, but exposes ONLY the matching
-// row's payload + minimal business identity. No auth required (terminals are headless).
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1"
 
-import { createClient } from "npm:@supabase/supabase-js@2";
-
+// Strict CORS to ensure the Sovereign Node can request this from any IP/Localhost
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+serve(async (req) => {
+  console.info("⚙️ [EDGE: hydrate-terminal] START: Invocation received.");
+
+  // 1. Handle CORS Preflight
+  if (req.method === 'OPTIONS') {
+    console.info("⚙️ [EDGE: hydrate-terminal] PROGRESS: Resolving CORS preflight.");
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const pairing_code: string | undefined =
-      body?.pairing_code ?? body?.code ?? body?.provisioning_code;
+    // 2. Extract Payload
+    const { pairing_code } = await req.json();
+    console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Extracted pairing_code: ${pairing_code}`);
 
-    if (!pairing_code || typeof pairing_code !== "string") {
-      return new Response(
-        JSON.stringify({ error: "pairing_code is required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    if (!pairing_code) {
+      throw new Error("Missing pairing_code in request body.");
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    // 3. Initialize Supabase Admin Client
+    // We MUST use the SERVICE_ROLE key because the terminal is currently unauthenticated 
+    // and the vault table's RLS blocks anonymous reads. The code IS the credential.
+    console.info("⚙️ [EDGE: hydrate-terminal] PROGRESS: Initializing secure Admin client.");
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { data, error } = await supabase
-      .from("idia_schema_manifest_vault")
-      .select("business_id, pairing_code, schema_payload, updated_at")
-      .eq("pairing_code", pairing_code)
-      .maybeSingle();
+    // 4. Query the Vault
+    console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Querying idia_schema_manifest_vault for code: ${pairing_code}`);
+    const { data, error } = await supabaseAdmin
+      .from('idia_schema_manifest_vault')
+      .select('schema_payload')
+      .eq('pairing_code', pairing_code)
+      .single();
 
     if (error) {
-      console.error("[hydrate-terminal] vault query error:", error);
-      return new Response(JSON.stringify({ error: "vault_lookup_failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error(`⚙️ [EDGE: hydrate-terminal] DB_ERROR: ${error.message} | Code: ${error.code}`);
+      throw new Error(`Failed to locate blueprint for code: ${pairing_code}`);
     }
 
-    if (!data) {
-      return new Response(
-        JSON.stringify({ error: "no_manifest_for_pairing_code" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    if (!data || !data.schema_payload) {
+      console.error(`⚙️ [EDGE: hydrate-terminal] LOGIC_ERROR: Record found but schema_payload is empty.`);
+      throw new Error("Corrupted blueprint in vault.");
     }
 
+    // 5. Successful Handshake
+    console.info("⚙️ [EDGE: hydrate-terminal] END: Blueprint located. Dispatching to Sovereign Node.");
     return new Response(
-      JSON.stringify({
-        business_id: data.business_id,
-        pairing_code: data.pairing_code,
-        updated_at: data.updated_at,
-        schema_payload: data.schema_payload,
+      JSON.stringify({ 
+        success: true, 
+        payload: data.schema_payload 
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      }
     );
-  } catch (err) {
-    console.error("[hydrate-terminal] unexpected:", err);
-    return new Response(JSON.stringify({ error: "internal_error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+
+  } catch (error: any) {
+    // Granular Failure Logging
+    console.error(`⚙️ [EDGE: hydrate-terminal] CRITICAL_FAILURE: ${error.message}`);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message 
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400 
+      }
+    );
   }
-});
+})
