@@ -371,12 +371,20 @@ const ClientOrganizations = () => {
             is_active: true,
           },
         ]);
-      }
 
-      setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
-      setReviewModalOpen(false);
-      fetchBusinesses();
-      toast({ title: "Application Processed" });
+        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
+        setReviewModalOpen(false);
+        fetchBusinesses();
+        toast({
+          title: "Organization Approved",
+          description: `Provisioning code: ${(businessData as any)?.provisioning_code ?? "—"}. Open the Pay App Blueprint to vault its terminal schema.`,
+        });
+      } else {
+        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
+        setReviewModalOpen(false);
+        fetchBusinesses();
+        toast({ title: "Application Rejected" });
+      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
