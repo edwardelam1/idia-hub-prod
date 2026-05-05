@@ -978,6 +978,45 @@ export const PayAppBlueprint = () => {
     }
   };
 
+  const handleVaultBlueprint = async () => {
+    if (!selectedBusiness) {
+      toast.error("Assign a business profile before vaulting.");
+      return;
+    }
+    if (!provisioningCode) {
+      toast.error("Missing provisioning code for this business.");
+      return;
+    }
+
+    try {
+      const payload = generateBlueprintJSON();
+      const { error } = await supabase
+        .from("idia_schema_manifest_vault" as any)
+        .upsert(
+          {
+            business_id: selectedBusiness,
+            pairing_code: provisioningCode,
+            schema_payload: payload,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "business_id" },
+        );
+
+      if (error) {
+        console.error("[PayAppBlueprint] Vault upsert failed:", error);
+        toast.error("Vault sync failed", { description: error.message });
+        return;
+      }
+
+      toast.success("Blueprint vaulted to Hub", {
+        description: `Terminals using ${provisioningCode} will hydrate this schema on next boot.`,
+      });
+    } catch (err: any) {
+      console.error("[PayAppBlueprint] Vault exception:", err);
+      toast.error("Critical failure vaulting blueprint.");
+    }
+  };
+
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
 
