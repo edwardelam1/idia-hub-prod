@@ -1620,6 +1620,10 @@ export const PayAppBlueprint = () => {
                 <Download className="h-4 w-4 mr-2" />
                 Download JSON
               </Button>
+              <Button variant="secondary" onClick={handleVaultBlueprint}>
+                <Shield className="h-4 w-4 mr-2" />
+                Vault to Hub
+              </Button>
               <Button onClick={() => setConfirmDialogOpen(true)}>
                 <Send className="h-4 w-4 mr-2" />
                 Deploy to Device
