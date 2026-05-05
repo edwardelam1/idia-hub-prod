@@ -867,6 +867,23 @@ export const PayAppBlueprint = () => {
         industryId: taxonomy?.classification?.industryId ?? null,
         nanoBites: Array.from(selectedBiteIds),
       },
+      visual_identity: {
+        primary_color: (business as any)?.brand_primary_color ?? "#0F172A",
+        accent_color: (business as any)?.brand_accent_color ?? "#3B82F6",
+        background_color: (business as any)?.brand_background_color ?? "#FFFFFF",
+        logo_url: (business as any)?.logo_url ?? null,
+        display_name: businessName,
+      },
+      lexicon_overrides: {
+        // Vertical-aware label remapping for the Sovereign Terminal.
+        guest_label: bundles.some((b) => b.vertical?.toLowerCase().includes("hospitality"))
+          ? "Guest"
+          : "Customer",
+        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
+          ? "Ticket"
+          : "Order",
+        location_label: "Property",
+      },
       compliance: {
         delt_enabled: true,
         pci_level: 1,
@@ -958,6 +975,45 @@ export const PayAppBlueprint = () => {
       toast.error("Critical failure deploying blueprint.");
     } finally {
       console.log(`[PayAppBlueprint] END: handleSendToDevice execution for code: ${provisioningCode}`);
+    }
+  };
+
+  const handleVaultBlueprint = async () => {
+    if (!selectedBusiness) {
+      toast.error("Assign a business profile before vaulting.");
+      return;
+    }
+    if (!provisioningCode) {
+      toast.error("Missing provisioning code for this business.");
+      return;
+    }
+
+    try {
+      const payload = generateBlueprintJSON();
+      const { error } = await supabase
+        .from("idia_schema_manifest_vault" as any)
+        .upsert(
+          {
+            business_id: selectedBusiness,
+            pairing_code: provisioningCode,
+            schema_payload: payload,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "business_id" },
+        );
+
+      if (error) {
+        console.error("[PayAppBlueprint] Vault upsert failed:", error);
+        toast.error("Vault sync failed", { description: error.message });
+        return;
+      }
+
+      toast.success("Blueprint vaulted to Hub", {
+        description: `Terminals using ${provisioningCode} will hydrate this schema on next boot.`,
+      });
+    } catch (err: any) {
+      console.error("[PayAppBlueprint] Vault exception:", err);
+      toast.error("Critical failure vaulting blueprint.");
     }
   };
 
@@ -1563,6 +1619,10 @@ export const PayAppBlueprint = () => {
               <Button variant="outline" onClick={handleDownloadBlueprint}>
                 <Download className="h-4 w-4 mr-2" />
                 Download JSON
+              </Button>
+              <Button variant="secondary" onClick={handleVaultBlueprint}>
+                <Shield className="h-4 w-4 mr-2" />
+                Vault to Hub
               </Button>
               <Button onClick={() => setConfirmDialogOpen(true)}>
                 <Send className="h-4 w-4 mr-2" />

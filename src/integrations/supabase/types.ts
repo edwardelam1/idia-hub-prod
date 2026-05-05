@@ -3092,6 +3092,41 @@ export type Database = {
         }
         Relationships: []
       }
+      idia_schema_manifest_vault: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          pairing_code: string
+          schema_payload: Json
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          pairing_code: string
+          schema_payload: Json
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          pairing_code?: string
+          schema_payload?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idia_schema_manifest_vault_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interests: {
         Row: {
           category: string | null
