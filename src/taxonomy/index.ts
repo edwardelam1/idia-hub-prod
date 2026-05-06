@@ -8,6 +8,7 @@ export * from './valueChain';
 export * from './nanoBites';
 export * from './selectors';
 export * from './telemetry';
+export * from './payAppRouting';
 export { NAICS } from './codes/naics';
 export { GICS } from './codes/gics';
 

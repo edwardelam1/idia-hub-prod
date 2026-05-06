@@ -16,42 +16,200 @@ export type Database = {
     Tables: {
       account_conversion_requests: {
         Row: {
+          address_city: string | null
+          address_state: string | null
+          address_street1: string | null
+          address_street2: string | null
+          address_zip: string | null
           company_name: string
-          contact_name: string
           contact_role: string
           created_at: string | null
+          document_paths: string[]
+          ein: string | null
+          entity_type: string | null
           id: string
           industry: string | null
+          logo_path: string | null
           request_type: string | null
           status: string | null
+          submodule_id: string | null
           updated_at: string | null
-          user_id: string | null
+          user_id: string
+          vertical_id: string | null
         }
         Insert: {
+          address_city?: string | null
+          address_state?: string | null
+          address_street1?: string | null
+          address_street2?: string | null
+          address_zip?: string | null
           company_name: string
-          contact_name: string
           contact_role: string
           created_at?: string | null
+          document_paths?: string[]
+          ein?: string | null
+          entity_type?: string | null
           id?: string
           industry?: string | null
+          logo_path?: string | null
           request_type?: string | null
           status?: string | null
+          submodule_id?: string | null
           updated_at?: string | null
-          user_id?: string | null
+          user_id: string
+          vertical_id?: string | null
         }
         Update: {
+          address_city?: string | null
+          address_state?: string | null
+          address_street1?: string | null
+          address_street2?: string | null
+          address_zip?: string | null
           company_name?: string
-          contact_name?: string
           contact_role?: string
           created_at?: string | null
+          document_paths?: string[]
+          ein?: string | null
+          entity_type?: string | null
           id?: string
           industry?: string | null
+          logo_path?: string | null
           request_type?: string | null
           status?: string | null
+          submodule_id?: string | null
           updated_at?: string | null
-          user_id?: string | null
+          user_id?: string
+          vertical_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_conversion_requests_submodule_id_fkey"
+            columns: ["submodule_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_submodules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_conversion_requests_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_campaigns: {
+        Row: {
+          budget: number | null
+          budget_allocation: number | null
+          business_id: string
+          campaign_name: string | null
+          campaign_type: string | null
+          commission_rate: number | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          metadata: Json | null
+          name: string
+          start_date: string | null
+          status: string | null
+          target_audience: Json | null
+          updated_at: string
+        }
+        Insert: {
+          budget?: number | null
+          budget_allocation?: number | null
+          business_id: string
+          campaign_name?: string | null
+          campaign_type?: string | null
+          commission_rate?: number | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          metadata?: Json | null
+          name: string
+          start_date?: string | null
+          status?: string | null
+          target_audience?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          budget?: number | null
+          budget_allocation?: number | null
+          business_id?: string
+          campaign_name?: string | null
+          campaign_type?: string | null
+          commission_rate?: number | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string
+          start_date?: string | null
+          status?: string | null
+          target_audience?: Json | null
+          updated_at?: string
         }
         Relationships: []
+      }
+      affiliate_transactions: {
+        Row: {
+          amount: number
+          business_id: string
+          campaign_id: string | null
+          commission_amount: number | null
+          created_at: string
+          creator_id: string | null
+          customer_reference: string | null
+          id: string
+          metadata: Json | null
+          status: string | null
+          transaction_date: string | null
+          transaction_type: string | null
+          transaction_value: number | null
+        }
+        Insert: {
+          amount?: number
+          business_id: string
+          campaign_id?: string | null
+          commission_amount?: number | null
+          created_at?: string
+          creator_id?: string | null
+          customer_reference?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string | null
+          transaction_date?: string | null
+          transaction_type?: string | null
+          transaction_value?: number | null
+        }
+        Update: {
+          amount?: number
+          business_id?: string
+          campaign_id?: string | null
+          commission_amount?: number | null
+          created_at?: string
+          creator_id?: string | null
+          customer_reference?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string | null
+          transaction_date?: string | null
+          transaction_type?: string | null
+          transaction_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_transactions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       api_keys: {
         Row: {
@@ -129,6 +287,110 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ar_campaign_performance: {
+        Row: {
+          business_id: string
+          conversion_count: number | null
+          created_at: string
+          date: string
+          engagement_duration_avg: number | null
+          experience_id: string | null
+          id: string
+          metadata: Json | null
+          revenue_attributed: number | null
+          revenue_generated: number | null
+          total_interactions: number | null
+          unique_users: number | null
+        }
+        Insert: {
+          business_id: string
+          conversion_count?: number | null
+          created_at?: string
+          date?: string
+          engagement_duration_avg?: number | null
+          experience_id?: string | null
+          id?: string
+          metadata?: Json | null
+          revenue_attributed?: number | null
+          revenue_generated?: number | null
+          total_interactions?: number | null
+          unique_users?: number | null
+        }
+        Update: {
+          business_id?: string
+          conversion_count?: number | null
+          created_at?: string
+          date?: string
+          engagement_duration_avg?: number | null
+          experience_id?: string | null
+          id?: string
+          metadata?: Json | null
+          revenue_attributed?: number | null
+          revenue_generated?: number | null
+          total_interactions?: number | null
+          unique_users?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ar_campaign_performance_experience_id_fkey"
+            columns: ["experience_id"]
+            isOneToOne: false
+            referencedRelation: "ar_experiences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ar_experiences: {
+        Row: {
+          business_id: string
+          conversion_rate: number | null
+          created_at: string
+          description: string | null
+          experience_type: string | null
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          revenue_attributed: number | null
+          status: string | null
+          title: string
+          total_interactions: number | null
+          total_views: number | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          conversion_rate?: number | null
+          created_at?: string
+          description?: string | null
+          experience_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          revenue_attributed?: number | null
+          status?: string | null
+          title: string
+          total_interactions?: number | null
+          total_views?: number | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          conversion_rate?: number | null
+          created_at?: string
+          description?: string | null
+          experience_type?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          revenue_attributed?: number | null
+          status?: string | null
+          title?: string
+          total_interactions?: number | null
+          total_views?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       ar_menu_items: {
         Row: {
@@ -416,6 +678,36 @@ export type Database = {
           },
         ]
       }
+      business_hours: {
+        Row: {
+          business_id: string
+          close_time: string
+          created_at: string
+          day_of_week: number
+          id: string
+          is_closed: boolean | null
+          open_time: string
+        }
+        Insert: {
+          business_id: string
+          close_time?: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_closed?: boolean | null
+          open_time?: string
+        }
+        Update: {
+          business_id?: string
+          close_time?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_closed?: boolean | null
+          open_time?: string
+        }
+        Relationships: []
+      }
       business_locations: {
         Row: {
           address: string
@@ -645,7 +937,6 @@ export type Database = {
       }
       businesses: {
         Row: {
-          address: string | null
           business_health_score: number | null
           business_type: string
           city: string | null
@@ -664,12 +955,12 @@ export type Database = {
           state: string | null
           street_address_1: string | null
           street_address_2: string | null
+          submodule_id: string | null
           subscription_tier: string | null
           tax_id: string | null
           updated_at: string | null
         }
         Insert: {
-          address?: string | null
           business_health_score?: number | null
           business_type: string
           city?: string | null
@@ -688,12 +979,12 @@ export type Database = {
           state?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
+          submodule_id?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
         }
         Update: {
-          address?: string | null
           business_health_score?: number | null
           business_type?: string
           city?: string | null
@@ -712,6 +1003,7 @@ export type Database = {
           state?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
+          submodule_id?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
@@ -722,6 +1014,13 @@ export type Database = {
             columns: ["franchise_parent_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "businesses_submodule_id_fkey"
+            columns: ["submodule_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_submodules"
             referencedColumns: ["id"]
           },
         ]
@@ -1783,6 +2082,93 @@ export type Database = {
           },
         ]
       }
+      employee_shift_schedules: {
+        Row: {
+          break_minutes: number | null
+          business_id: string
+          created_at: string
+          end_time: string
+          id: string
+          location: string | null
+          notes: string | null
+          schedule_date: string
+          start_time: string
+          status: string
+          team_member_id: string
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id: string
+          created_at?: string
+          end_time: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          schedule_date: string
+          start_time: string
+          status?: string
+          team_member_id: string
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          schedule_date?: string
+          start_time?: string
+          status?: string
+          team_member_id?: string
+        }
+        Relationships: []
+      }
+      employee_time_entries: {
+        Row: {
+          break_minutes: number | null
+          business_id: string
+          clock_in: string
+          clock_out: string | null
+          created_at: string
+          id: string
+          location: string | null
+          notes: string | null
+          overtime_hours: number | null
+          status: string
+          team_member_id: string
+          total_hours: number | null
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id: string
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          team_member_id: string
+          total_hours?: number | null
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          team_member_id?: string
+          total_hours?: number | null
+        }
+        Relationships: []
+      }
       employee_timesheets: {
         Row: {
           approval_status: string | null
@@ -1850,6 +2236,108 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      employees: {
+        Row: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        Insert: {
+          aca_secured?: boolean
+          address?: string | null
+          assigned_locations?: string[] | null
+          business_id: string
+          city?: string | null
+          created_at?: string
+          direct_deposit_enabled?: boolean | null
+          email: string
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          hire_date?: string | null
+          hourly_rate?: number | null
+          id?: string
+          is_ephemeral?: boolean
+          last_login?: string | null
+          name: string
+          notes?: string | null
+          overtime_rate?: number | null
+          pay_frequency?: string | null
+          permission_template_id?: string | null
+          permissions?: Json | null
+          phone?: string | null
+          platform_role?: string
+          role?: string
+          salary_type?: string | null
+          state?: string | null
+          status?: string
+          tax_filing_status?: string | null
+          updated_at?: string
+          user_id?: string | null
+          zip?: string | null
+        }
+        Update: {
+          aca_secured?: boolean
+          address?: string | null
+          assigned_locations?: string[] | null
+          business_id?: string
+          city?: string | null
+          created_at?: string
+          direct_deposit_enabled?: boolean | null
+          email?: string
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          hire_date?: string | null
+          hourly_rate?: number | null
+          id?: string
+          is_ephemeral?: boolean
+          last_login?: string | null
+          name?: string
+          notes?: string | null
+          overtime_rate?: number | null
+          pay_frequency?: string | null
+          permission_template_id?: string | null
+          permissions?: Json | null
+          phone?: string | null
+          platform_role?: string
+          role?: string
+          salary_type?: string | null
+          state?: string | null
+          status?: string
+          tax_filing_status?: string | null
+          updated_at?: string
+          user_id?: string | null
+          zip?: string | null
+        }
+        Relationships: []
       }
       endorsements: {
         Row: {
@@ -2537,6 +3025,7 @@ export type Database = {
       }
       hri_scores: {
         Row: {
+          alpha_score: string | null
           created_at: string | null
           hrv_score: number | null
           id: string
@@ -2548,6 +3037,7 @@ export type Database = {
           vitals_snapshot: Json | null
         }
         Insert: {
+          alpha_score?: string | null
           created_at?: string | null
           hrv_score?: number | null
           id?: string
@@ -2559,6 +3049,7 @@ export type Database = {
           vitals_snapshot?: Json | null
         }
         Update: {
+          alpha_score?: string | null
           created_at?: string | null
           hrv_score?: number | null
           id?: string
@@ -2600,6 +3091,41 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      idia_schema_manifest_vault: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          pairing_code: string
+          schema_payload: Json
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          pairing_code: string
+          schema_payload: Json
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          pairing_code?: string
+          schema_payload?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idia_schema_manifest_vault_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       interests: {
         Row: {
@@ -2718,6 +3244,45 @@ export type Database = {
           },
         ]
       }
+      inventory_history: {
+        Row: {
+          action: string
+          business_id: string
+          created_at: string
+          id: string
+          inventory_item_id: string | null
+          item_name: string
+          metadata: Json | null
+          note: string | null
+          quantity: number | null
+          unit: string | null
+        }
+        Insert: {
+          action: string
+          business_id: string
+          created_at?: string
+          id?: string
+          inventory_item_id?: string | null
+          item_name: string
+          metadata?: Json | null
+          note?: string | null
+          quantity?: number | null
+          unit?: string | null
+        }
+        Update: {
+          action?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          inventory_item_id?: string | null
+          item_name?: string
+          metadata?: Json | null
+          note?: string | null
+          quantity?: number | null
+          unit?: string | null
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           barcode: string | null
@@ -2725,15 +3290,20 @@ export type Database = {
           category: string
           created_at: string | null
           current_cost: number | null
+          current_stock: number | null
           id: string
+          individual_unit_uom: string | null
           is_active: boolean | null
           lead_time_days: number | null
           minimum_order_quantity: number | null
+          minimum_shelf_life_days: number | null
           name: string
           par_level: number | null
+          requires_batch_tracking: boolean | null
           shelf_life_days: number | null
           storage_requirements: string | null
           supplier_id: string | null
+          tolerance_variance_pct: number | null
           unit_of_measure: string
           updated_at: string | null
           vendor_sku: string | null
@@ -2744,15 +3314,20 @@ export type Database = {
           category: string
           created_at?: string | null
           current_cost?: number | null
+          current_stock?: number | null
           id?: string
+          individual_unit_uom?: string | null
           is_active?: boolean | null
           lead_time_days?: number | null
           minimum_order_quantity?: number | null
+          minimum_shelf_life_days?: number | null
           name: string
           par_level?: number | null
+          requires_batch_tracking?: boolean | null
           shelf_life_days?: number | null
           storage_requirements?: string | null
           supplier_id?: string | null
+          tolerance_variance_pct?: number | null
           unit_of_measure: string
           updated_at?: string | null
           vendor_sku?: string | null
@@ -2763,15 +3338,20 @@ export type Database = {
           category?: string
           created_at?: string | null
           current_cost?: number | null
+          current_stock?: number | null
           id?: string
+          individual_unit_uom?: string | null
           is_active?: boolean | null
           lead_time_days?: number | null
           minimum_order_quantity?: number | null
+          minimum_shelf_life_days?: number | null
           name?: string
           par_level?: number | null
+          requires_batch_tracking?: boolean | null
           shelf_life_days?: number | null
           storage_requirements?: string | null
           supplier_id?: string | null
+          tolerance_variance_pct?: number | null
           unit_of_measure?: string
           updated_at?: string | null
           vendor_sku?: string | null
@@ -3407,6 +3987,39 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_history: {
+        Row: {
+          action: string
+          business_id: string
+          created_at: string
+          id: string
+          item_name: string
+          menu_item_id: string | null
+          metadata: Json | null
+          note: string | null
+        }
+        Insert: {
+          action: string
+          business_id: string
+          created_at?: string
+          id?: string
+          item_name: string
+          menu_item_id?: string | null
+          metadata?: Json | null
+          note?: string | null
+        }
+        Update: {
+          action?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          item_name?: string
+          menu_item_id?: string | null
+          metadata?: Json | null
+          note?: string | null
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
           allergen_info: Json | null
@@ -3707,6 +4320,39 @@ export type Database = {
           metric_value?: number
           recorded_at?: string | null
           time_period?: string
+        }
+        Relationships: []
+      }
+      permission_templates: {
+        Row: {
+          business_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_system: boolean | null
+          name: string
+          permissions: Json
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name: string
+          permissions?: Json
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name?: string
+          permissions?: Json
+          updated_at?: string
         }
         Relationships: []
       }
@@ -4444,6 +5090,7 @@ export type Database = {
           pseudo_user_id: string
           raw_source: string | null
           session_context: Json | null
+          telemetry_payload: Json | null
         }
         Insert: {
           aca_hash_key?: string | null
@@ -4459,6 +5106,7 @@ export type Database = {
           pseudo_user_id: string
           raw_source?: string | null
           session_context?: Json | null
+          telemetry_payload?: Json | null
         }
         Update: {
           aca_hash_key?: string | null
@@ -4474,11 +5122,13 @@ export type Database = {
           pseudo_user_id?: string
           raw_source?: string | null
           session_context?: Json | null
+          telemetry_payload?: Json | null
         }
         Relationships: []
       }
       raw_health_data: {
         Row: {
+          aca_hash: string | null
           aca_hash_key: string | null
           activity_type: string | null
           created_at: string | null
@@ -4498,6 +5148,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          aca_hash?: string | null
           aca_hash_key?: string | null
           activity_type?: string | null
           created_at?: string | null
@@ -4517,6 +5168,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          aca_hash?: string | null
           aca_hash_key?: string | null
           activity_type?: string | null
           created_at?: string | null
@@ -4650,33 +5302,72 @@ export type Database = {
           },
         ]
       }
+      recipe_history: {
+        Row: {
+          action: string
+          business_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          note: string | null
+          recipe_id: string | null
+          recipe_name: string
+        }
+        Insert: {
+          action: string
+          business_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          note?: string | null
+          recipe_id?: string | null
+          recipe_name: string
+        }
+        Update: {
+          action?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          note?: string | null
+          recipe_id?: string | null
+          recipe_name?: string
+        }
+        Relationships: []
+      }
       recipe_ingredients: {
         Row: {
           created_at: string | null
+          gross_quantity: number | null
           id: string
           inventory_item_id: string
           notes: string | null
           quantity: number
           recipe_id: string
           unit: string
+          yield_percentage: number | null
         }
         Insert: {
           created_at?: string | null
+          gross_quantity?: number | null
           id?: string
           inventory_item_id: string
           notes?: string | null
           quantity?: number
           recipe_id: string
           unit: string
+          yield_percentage?: number | null
         }
         Update: {
           created_at?: string | null
+          gross_quantity?: number | null
           id?: string
           inventory_item_id?: string
           notes?: string | null
           quantity?: number
           recipe_id?: string
           unit?: string
+          yield_percentage?: number | null
         }
         Relationships: [
           {
@@ -4853,6 +5544,36 @@ export type Database = {
           },
         ]
       }
+      security_event_logs: {
+        Row: {
+          created_at: string | null
+          description: string
+          event_type: string
+          id: string
+          protocol: string
+          severity: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description: string
+          event_type: string
+          id?: string
+          protocol: string
+          severity: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string
+          event_type?: string
+          id?: string
+          protocol?: string
+          severity?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       security_events: {
         Row: {
           action_type: string
@@ -4883,6 +5604,42 @@ export type Database = {
           result_data?: Json
           severity?: string
           timestamp?: string
+        }
+        Relationships: []
+      }
+      security_preferences: {
+        Row: {
+          aegis_protocol: boolean | null
+          ambient_isolation: boolean | null
+          coercion_detector: boolean | null
+          digital_ward: boolean | null
+          honey_pot: boolean | null
+          impact_trauma_sync: boolean | null
+          silver_sentinel: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          aegis_protocol?: boolean | null
+          ambient_isolation?: boolean | null
+          coercion_detector?: boolean | null
+          digital_ward?: boolean | null
+          honey_pot?: boolean | null
+          impact_trauma_sync?: boolean | null
+          silver_sentinel?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          aegis_protocol?: boolean | null
+          ambient_isolation?: boolean | null
+          coercion_detector?: boolean | null
+          digital_ward?: boolean | null
+          honey_pot?: boolean | null
+          impact_trauma_sync?: boolean | null
+          silver_sentinel?: boolean | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -5127,13 +5884,22 @@ export type Database = {
       staged_health_data: {
         Row: {
           aca_hash_key: string | null
+          active_energy_kcal: number | null
           activity_type: string
+          basal_energy_kcal: number | null
+          blood_oxygen_percentage: number | null
+          blood_pressure_diastolic: number | null
+          blood_pressure_systolic: number | null
+          body_temperature_f: number | null
           created_at: string | null
           data_quality_score: number | null
+          double_support_percentage: number | null
           duration_seconds: number | null
           effort_score: number | null
           entity_id: string | null
+          environmental_audio_exposure_db: number | null
           faculty: string | null
+          heart_rate: number | null
           heart_rate_variability_ms: number | null
           id: string
           is_settled: boolean | null
@@ -5142,24 +5908,42 @@ export type Database = {
           processed_at: string | null
           pseudo_user_id: string | null
           raw_data_id: string | null
+          respiratory_rate: number | null
+          resting_heart_rate: number | null
           reward_amount: number | null
           reward_calculated: boolean | null
           settled_at: string | null
+          sleep_analysis_value: number | null
           sovereign_uuid: string | null
           status: string | null
+          step_length_cm: number | null
           steps_count: number | null
           synapse_weight_coefficient: number | null
           user_id: string | null
+          uv_exposure_index: number | null
+          vo2_max: number | null
+          walking_asymmetry_percentage: number | null
+          walking_speed_kmh: number | null
+          walking_steadiness_percentage: number | null
         }
         Insert: {
           aca_hash_key?: string | null
+          active_energy_kcal?: number | null
           activity_type: string
+          basal_energy_kcal?: number | null
+          blood_oxygen_percentage?: number | null
+          blood_pressure_diastolic?: number | null
+          blood_pressure_systolic?: number | null
+          body_temperature_f?: number | null
           created_at?: string | null
           data_quality_score?: number | null
+          double_support_percentage?: number | null
           duration_seconds?: number | null
           effort_score?: number | null
           entity_id?: string | null
+          environmental_audio_exposure_db?: number | null
           faculty?: string | null
+          heart_rate?: number | null
           heart_rate_variability_ms?: number | null
           id?: string
           is_settled?: boolean | null
@@ -5168,24 +5952,42 @@ export type Database = {
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
+          respiratory_rate?: number | null
+          resting_heart_rate?: number | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
           settled_at?: string | null
+          sleep_analysis_value?: number | null
           sovereign_uuid?: string | null
           status?: string | null
+          step_length_cm?: number | null
           steps_count?: number | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
+          uv_exposure_index?: number | null
+          vo2_max?: number | null
+          walking_asymmetry_percentage?: number | null
+          walking_speed_kmh?: number | null
+          walking_steadiness_percentage?: number | null
         }
         Update: {
           aca_hash_key?: string | null
+          active_energy_kcal?: number | null
           activity_type?: string
+          basal_energy_kcal?: number | null
+          blood_oxygen_percentage?: number | null
+          blood_pressure_diastolic?: number | null
+          blood_pressure_systolic?: number | null
+          body_temperature_f?: number | null
           created_at?: string | null
           data_quality_score?: number | null
+          double_support_percentage?: number | null
           duration_seconds?: number | null
           effort_score?: number | null
           entity_id?: string | null
+          environmental_audio_exposure_db?: number | null
           faculty?: string | null
+          heart_rate?: number | null
           heart_rate_variability_ms?: number | null
           id?: string
           is_settled?: boolean | null
@@ -5194,14 +5996,23 @@ export type Database = {
           processed_at?: string | null
           pseudo_user_id?: string | null
           raw_data_id?: string | null
+          respiratory_rate?: number | null
+          resting_heart_rate?: number | null
           reward_amount?: number | null
           reward_calculated?: boolean | null
           settled_at?: string | null
+          sleep_analysis_value?: number | null
           sovereign_uuid?: string | null
           status?: string | null
+          step_length_cm?: number | null
           steps_count?: number | null
           synapse_weight_coefficient?: number | null
           user_id?: string | null
+          uv_exposure_index?: number | null
+          vo2_max?: number | null
+          walking_asymmetry_percentage?: number | null
+          walking_speed_kmh?: number | null
+          walking_steadiness_percentage?: number | null
         }
         Relationships: []
       }
@@ -5320,6 +6131,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      synapse_controller: {
+        Row: {
+          aca_hash_key: string
+          created_at: string
+          id: string
+          raw_data: Json
+          status: string
+          user_id: string
+        }
+        Insert: {
+          aca_hash_key: string
+          created_at?: string
+          id?: string
+          raw_data: Json
+          status?: string
+          user_id: string
+        }
+        Update: {
+          aca_hash_key?: string
+          created_at?: string
+          id?: string
+          raw_data?: Json
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       synapse_credit_ledger: {
         Row: {
@@ -5551,6 +6389,68 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      taxonomy_submodules: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          vertical_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id: string
+          name: string
+          updated_at?: string
+          vertical_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          vertical_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "taxonomy_submodules_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      taxonomy_verticals: {
+        Row: {
+          color: string | null
+          created_at: string
+          icon: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       telemetry_logs: {
         Row: {
@@ -6229,6 +7129,7 @@ export type Database = {
           stablecoin_balance: number | null
           total_earned: number | null
           updated_at: string | null
+          usdc_balance: number | null
           usdc_last_block: number | null
           usdc_last_synced_at: string | null
           user_id: string
@@ -6248,6 +7149,7 @@ export type Database = {
           stablecoin_balance?: number | null
           total_earned?: number | null
           updated_at?: string | null
+          usdc_balance?: number | null
           usdc_last_block?: number | null
           usdc_last_synced_at?: string | null
           user_id: string
@@ -6267,6 +7169,7 @@ export type Database = {
           stablecoin_balance?: number | null
           total_earned?: number | null
           updated_at?: string | null
+          usdc_balance?: number | null
           usdc_last_block?: number | null
           usdc_last_synced_at?: string | null
           user_id?: string
@@ -6584,6 +7487,7 @@ export type Database = {
         Args: { p_pseudo_id: string }
         Returns: string
       }
+      has_business_access: { Args: { p_business_id: string }; Returns: boolean }
       increment_community_pool: {
         Args: { p_fiat_amount: number; p_pool_type: string }
         Returns: undefined
@@ -6623,6 +7527,7 @@ export type Database = {
         Returns: Json
       }
       invoke_refiner_secure: { Args: { payload: Json }; Returns: undefined }
+      is_org_admin: { Args: { _business_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {
           p_aca_hash: string
@@ -6650,6 +7555,136 @@ export type Database = {
           error_count: number
           processed_count: number
         }[]
+      }
+      provision_employee_via_aca: {
+        Args: {
+          _business_id: string
+          _platform_guid: string
+          _platform_role: string
+        }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      provision_ephemeral_employee: {
+        Args: { _business_id: string }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      revoke_employee: {
+        Args: { _employee_id: string }
+        Returns: {
+          aca_secured: boolean
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string
+          city: string | null
+          created_at: string
+          direct_deposit_enabled: boolean | null
+          email: string
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string
+          is_ephemeral: boolean
+          last_login: string | null
+          name: string
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string
+          role: string
+          salary_type: string | null
+          state: string | null
+          status: string
+          tax_filing_status: string | null
+          updated_at: string
+          user_id: string | null
+          zip: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_usdc_balance: {
         Args: {

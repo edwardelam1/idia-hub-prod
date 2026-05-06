@@ -15,7 +15,7 @@ interface ProtocolState {
   // RAIL 2: COMPUTATIONAL GAS (CREDITS)
   synapse_gas_credits: number;
 
-  // RAIL 3: USDC (on-chain truth, sourced from Base contract — NOT IDIA-BETA, NOT IDIA-USD)
+  // RAIL 3: USDC
   usdc_balance: number;
 
   // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
@@ -114,7 +114,6 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const fiatRoyalty = Number(vault?.cash_balance ?? 0);
       const computationalGas = Number(gasBalance ?? 0);
       // USDC = on-chain truth, read live from Base contract via useWalletBalance.
-      // NEVER read from wallets.idia_beta_balance (that's internal scrip, not USDC).
       const usdcOnChain = Number(onChainBalance?.usdc_balance ?? 0);
 
       const newState: ProtocolState = {

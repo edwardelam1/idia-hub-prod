@@ -7,3 +7,9 @@ verify_jwt = false
 
 [functions.seed-marketplace-catalog]
 verify_jwt = false
+
+[functions.hydrate-terminal]
+verify_jwt = false
+
+[functions.verify-idia-life-tap]
+verify_jwt = false
