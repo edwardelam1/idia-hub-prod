@@ -808,7 +808,17 @@ export const PayAppBlueprint = () => {
     const customSelected = selectedModules.filter((m) => !m.isDefault);
     const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
     const activeSovereignNodes: { id: string; name: string }[] = [];
-
+    const injectNode = (id: string, name: string) => {
+    console.log(`[injectNode] START: Attempting to inject node [${id}]`);
+    if (!activeSovereignNodes.some(node => node.id === id)) {
+      activeSovereignNodes.push({ id, name });
+      console.log(`[injectNode] SUCCESS: Node [${id}] injected.`);
+    } else {
+      console.log(`[injectNode] SKIP: Node [${id}] already exists in activeSovereignNodes.`);
+    }
+    console.log(`[injectNode] END: Injection logic complete.`);
+  };
+  
     const hasRetail = customSelected.some(m => m.parentId === 'retail' || m.id.includes('retail-'));
     if (hasRetail) {
       activeSovereignNodes.push(
@@ -816,9 +826,30 @@ export const PayAppBlueprint = () => {
       );
     }
 
-    // Fallback for non-hospitality verticals to ensure the wheel isn't empty
+    // Evaluate precisely what the merchant dropped into the blueprint
+    customSelected.forEach(m => {
+      const route = getRoute(m.id);
+      
+      // If the route has nb- components defined, inject them into the OS wheel
+      if (route && route.components) {
+        route.components.forEach((compId: string) => {
+          if (compId.startsWith('nb-')) {
+            // Clean up name for the wheel display
+            const cleanName = compId
+              .replace('nb-hosp-', '')
+              .replace('nb-', '')
+              .replace(/-/g, ' ')
+              .toUpperCase();
+            
+            injectNode(compId, cleanName);
+          }
+        });
+      }
+    });
+
+    // Final Fallback: if no nb- components were found, use the sub-module itself
     if (activeSovereignNodes.length === 0) {
-      customSelected.forEach(m => activeSovereignNodes.push({ id: m.id, name: m.name }));
+      customSelected.forEach(m => injectNode(m.id, m.name));
     }
     // ========================================================================
 
