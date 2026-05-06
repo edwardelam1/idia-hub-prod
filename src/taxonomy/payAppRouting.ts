@@ -297,7 +297,6 @@ export const PAY_APP_ROUTING: Record<string, SubModuleRoute> = {
   'fb-winery': { subModuleId: 'fb-winery', name: "Winery", verticalId: 'foodbev', industryId: 'secondary.foodbev.winery', components: ["default-inventory","default-warehouse-receiving"] },
   'fb-distillery': { subModuleId: 'fb-distillery', name: "Distillery", verticalId: 'foodbev', industryId: 'secondary.foodbev.distillery', components: ["default-inventory","default-warehouse-receiving"] },
   'fb-bakery-prod': { subModuleId: 'fb-bakery-prod', name: "Bakery Production", verticalId: 'foodbev', industryId: 'secondary.foodbev.bakery_production', components: ["default-inventory","default-warehouse-receiving"] },
-  'fb-food-truck': { subModuleId: 'fb-food-truck', name: "Food Truck", verticalId: 'foodbev', industryId: 'tertiary.hospitality.quick_service', components: ["nb-hosp-server", "nb-hosp-kds-routing", "nb-hosp-billing"] },
 };
 
 export const getRoute = (subModuleId: string): SubModuleRoute | undefined =>
