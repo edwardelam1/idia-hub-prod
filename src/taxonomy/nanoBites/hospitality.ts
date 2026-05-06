@@ -175,4 +175,12 @@ export const HOSPITALITY_BITES: NanoBite[] = [
   { id: 'hosp.hs.billing.damage_escrow',         industryId: 'tertiary.hospitality.home_services', valueChainStage: 'infrastructure', microElement: 'billing',    task: 'Automated pre-auth card capture and conditional release of security deposits post-checkout inspection', cadence: 'event', automatable: true,  requiresTier: 'pro' },
   { id: 'hosp.hs.cmms.property_inspection',      industryId: 'tertiary.hospitality.home_services', valueChainStage: 'operations',     microElement: 'facilities', task: 'Digital move-out inspection checklists enforcing mandatory photo uploads for damage documentation and liability shielding', cadence: 'event', automatable: false, requiresTier: 'pro' },
   { id: 'hosp.hs.finance.owner_statement',       industryId: 'tertiary.hospitality.home_services', valueChainStage: 'infrastructure', microElement: 'analytics',  task: 'Generate monthly property owner revenue statements, auto-deducting management fees, OTA commissions, and maintenance ledger costs', cadence: 'monthly', automatable: true, requiresTier: 'enterprise' },
+  // ============================================================
+  // FOOD TRUCK (tertiary.hospitality.food_truck) — relocated from foodbev
+  // ============================================================
+  { id: 'hosp.ft.ops.service_loc',  industryId: 'tertiary.hospitality.food_truck', valueChainStage: 'operations',      microElement: 'Service Loc', task: 'Service-location schedule', cadence: 'daily',  automatable: true },
+  { id: 'hosp.ft.ops.prep',         industryId: 'tertiary.hospitality.food_truck', valueChainStage: 'operations',      microElement: 'Prep',        task: 'Daily prep list',           cadence: 'daily',  automatable: true },
+  { id: 'hosp.ft.sales.mobile_pos', industryId: 'tertiary.hospitality.food_truck', valueChainStage: 'marketing_sales', microElement: 'Mobile POS',  task: 'Mobile-POS sale',           cadence: 'daily',  automatable: true },
+  { id: 'hosp.ft.infra.health',     industryId: 'tertiary.hospitality.food_truck', valueChainStage: 'infrastructure',  microElement: 'Health',      task: 'Health-permit log',         cadence: 'weekly', automatable: true, requiresTier: 'pro' },
+  { id: 'hosp.ft.ops.restock',      industryId: 'tertiary.hospitality.food_truck', valueChainStage: 'operations',      microElement: 'Restock',     task: 'Commissary restock',        cadence: 'weekly', automatable: true },
 ];
