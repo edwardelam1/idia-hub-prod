@@ -807,24 +807,7 @@ export const PayAppBlueprint = () => {
 
     const customSelected = selectedModules.filter((m) => !m.isDefault);
     const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
-
-    // ========================================================================
-    // [CRITICAL FIX]: SOVEREIGN NANO-BITE INJECTION
-    // This maps the Hub's macro-verticals directly to the strict `nb-` Nano-Bites
-    // required by IDIA Pay's ComponentRegistry and SidebarModuleWheel.
-    // ========================================================================
     const activeSovereignNodes: { id: string; name: string }[] = [];
-
-    const hasHospitality = customSelected.some(m => m.parentId === 'hospitality' || m.id.includes('hosp-'));
-    if (hasHospitality) {
-      activeSovereignNodes.push(
-        { id: "nb-hosp-server", name: "Server Terminal" },
-        { id: "nb-hosp-kds-routing", name: "Kitchen Display (KDS)" },
-        { id: "nb-hosp-billing", name: "Folio Settlement" },
-        { id: "nb-hosp-bar-terminal", name: "Bar Terminal" },
-        { id: "nb-hosp-inventory", name: "Local Inventory" }
-      );
-    }
 
     const hasRetail = customSelected.some(m => m.parentId === 'retail' || m.id.includes('retail-'));
     if (hasRetail) {
