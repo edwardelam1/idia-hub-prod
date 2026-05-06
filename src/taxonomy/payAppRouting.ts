@@ -77,6 +77,7 @@ export const PAY_APP_ROUTING: Record<string, SubModuleRoute> = {
   'hosp-cafe': { subModuleId: 'hosp-cafe', name: "Café & Bakery", verticalId: 'hospitality', industryId: 'tertiary.hospitality.cafe_bakery', components: ["nb-hosp-server", "nb-hosp-billing"] },
   'hosp-bar': { subModuleId: 'hosp-bar', name: "Bar & Lounge", verticalId: 'hospitality', industryId: 'tertiary.hospitality.bar_nightlife', components: ["nb-hosp-bar-terminal", "nb-hosp-billing"] },
   'hosp-catering': { subModuleId: 'hosp-catering', name: "Catering", verticalId: 'hospitality', industryId: 'tertiary.hospitality.catering', components: ["nb-hosp-server"] },
+  'hosp-food-truck': { subModuleId: 'hosp-food-truck', name: "Food Truck", verticalId: 'hospitality', industryId: 'tertiary.hospitality.food_truck', components: ["nb-hosp-server", "nb-hosp-kds-routing", "nb-hosp-billing"] },
   'hosp-theme-park-ops': { subModuleId: 'hosp-theme-park-ops', name: "Theme Park Ops", verticalId: 'hospitality', industryId: 'tertiary.hospitality.theme_park', components: ["nb-system-security"] },
   'hosp-cmms': { subModuleId: 'hosp-cmms', name: "CMMS Work Orders", verticalId: 'hospitality', industryId: 'tertiary.hospitality', components: ["nb-ops-cmms"] },
   'hosp-kds': { subModuleId: 'hosp-kds', name: "KDS Routing", verticalId: 'hospitality', industryId: 'tertiary.hospitality', components: ["nb-ops-kds-routing"] },
