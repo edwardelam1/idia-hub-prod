@@ -13,14 +13,11 @@ import { BANKING_BITES } from './banking';
 import { TRANSPORT_BITES } from './transport';
 import { RND_BITES } from './rnd';
 import { QUINARY_BITES } from './quinary';
-<<<<<<< HEAD
 import { OperationsNanoBites } from './operations';
-=======
 import { LOGISTICS_BITES } from './logistics';
 import { GROCER_BITES } from './grocer';
 import { RETAIL_EXTENDED_BITES } from './retail-extended';
 import { ECOMMERCE_BITES } from './ecommerce';
-// Phase 3b/3c/3d
 import { HEALTHCARE_BITES } from './healthcare';
 import { PROFESSIONAL_BITES } from './professional';
 import { PERSONAL_BITES } from './personal';
@@ -48,7 +45,6 @@ import { SECURITY_BITES } from './security';
 import { CANNABIS_BITES } from './cannabis';
 import { EDUCATION_BITES } from './education';
 import { FOODBEV_BITES } from './foodbev';
->>>>>>> b6f54ddae1854c6e150d83fac0a5c26eaad26947
 
 export const ALL_NANO_BITES: NanoBite[] = [
   ...RETAIL_BITES, ...SAAS_BITES, ...CONSULTING_BITES, ...CREATOR_BITES,
