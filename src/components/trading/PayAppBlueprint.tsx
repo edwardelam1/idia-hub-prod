@@ -133,6 +133,7 @@ const verticalCategories: VerticalCategory[] = [
       { id: "hosp-cafe", name: "Café & Bakery", description: "Coffee & pastries" },
       { id: "hosp-bar", name: "Bar & Lounge", description: "Beverage service" },
       { id: "hosp-catering", name: "Catering", description: "Event food service" },
+      { id: "hosp-food-truck", name: "Food Truck", description: "Mobile food service" },
       { id: "hosp-theme-park-ops", name: "Theme Park Ops", description: "Queues, ride telemetry, biometric entitlements" },
       { id: "hosp-cmms", name: "CMMS Work Orders", description: "Preventive maintenance & LOTO sign-offs" },
       { id: "hosp-kds", name: "KDS Routing", description: "Zone routing for broiler / fry / garde manger" },
@@ -533,7 +534,6 @@ const verticalCategories: VerticalCategory[] = [
       { id: "fb-winery", name: "Winery", description: "Wine production" },
       { id: "fb-distillery", name: "Distillery", description: "Spirits production" },
       { id: "fb-bakery-prod", name: "Bakery Production", description: "Baked goods" },
-      { id: "fb-food-truck", name: "Food Truck", description: "Mobile food" },
     ],
   },
 ];
