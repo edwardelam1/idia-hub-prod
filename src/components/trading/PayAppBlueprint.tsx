@@ -801,65 +801,63 @@ export const PayAppBlueprint = () => {
   };
 
   const generateBlueprintJSON = () => {
-    // Fallback if the business isn't found in the list
+    console.log("[generateBlueprintJSON] START: Compiling Multi-Expert Manifest.");
+
     const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
     const businessName = business?.name || "Unassigned";
 
     const customSelected = selectedModules.filter((m) => !m.isDefault);
     const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
+    
+    // State for explosion logic
     const activeSovereignNodes: { id: string; name: string }[] = [];
-    const injectNode = (id: string, name: string) => {
-    console.log(`[injectNode] START: Attempting to inject node [${id}]`);
-    if (!activeSovereignNodes.some(node => node.id === id)) {
-      activeSovereignNodes.push({ id, name });
-      console.log(`[injectNode] SUCCESS: Node [${id}] injected.`);
-    } else {
-      console.log(`[injectNode] SKIP: Node [${id}] already exists in activeSovereignNodes.`);
-    }
-    console.log(`[injectNode] END: Injection logic complete.`);
-  };
-  
-    const hasRetail = customSelected.some(m => m.parentId === 'retail' || m.id.includes('retail-'));
-    if (hasRetail) {
-      activeSovereignNodes.push(
-        { id: "retail-fashion", name: "Retail POS" }
-      );
-    }
+    const itemizedSidebarManifest: { id: string; name: string; vertical: string | null }[] = [];
 
-    // Evaluate precisely what the merchant dropped into the blueprint
-    customSelected.forEach(m => {
-      const route = getRoute(m.id);
-      
-      // If the route has nb- components defined, inject them into the OS wheel
-      if (route && route.components) {
-        route.components.forEach((compId: string) => {
-          if (compId.startsWith('nb-')) {
-            // Clean up name for the wheel display
-            const cleanName = compId
-              .replace('nb-hosp-', '')
-              .replace('nb-', '')
-              .replace(/-/g, ' ')
-              .toUpperCase();
-            
-            injectNode(compId, cleanName);
-          }
+    // Helper to safely inject unique nodes into the manifests
+    const injectNode = (id: string, name: string, verticalName: string | null) => {
+      console.log(`[injectNode] START: Evaluating expert node [${id}]`);
+      if (!activeSovereignNodes.some(node => node.id === id)) {
+        // Add to Pay Wheel
+        activeSovereignNodes.push({ id, name });
+        // Add to Sidebar Manifest
+        itemizedSidebarManifest.push({
+          id,
+          name,
+          vertical: verticalName
         });
+        console.log(`[injectNode] SUCCESS: Node [${id}] hydrated.`);
+      } else {
+        console.log(`[injectNode] SKIP: Node [${id}] already active.`);
+      }
+    };
+
+    // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
+    customSelected.forEach(signal => {
+      // Check if this signal is actually a Top-Level Vertical (the "Carton")
+      const rootVertical = verticalCategories.find(v => v.id === signal.id);
+
+      if (rootVertical) {
+        console.log(`[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`);
+        rootVertical.subModules.forEach(sub => {
+          injectNode(sub.id, sub.name, rootVertical.name);
+        });
+      } else {
+        // It's a standard individual sub-module drag
+        injectNode(signal.id, signal.name, signal.parentName || null);
       }
     });
 
-    // Final Fallback: if no nb- components were found, use the sub-module itself
-    if (activeSovereignNodes.length === 0) {
-      customSelected.forEach(m => injectNode(m.id, m.name));
-    }
-    // ========================================================================
-
-    const bundles = customSelected.map((m) => {
+    // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
+    const bundles = itemizedSidebarManifest.map((m) => {
+      console.log(`[generateBlueprintJSON] ROUTING: Fetching taxonomy for [${m.id}]`);
       const route = getRoute(m.id);
+      
       if (!route) {
+        console.warn(`[generateBlueprintJSON] UNMAPPED: No routing logic found for [${m.id}].`);
         return {
           subModuleId: m.id,
           name: m.name,
-          vertical: m.parentName ?? null,
+          vertical: m.vertical,
           industryId: null,
           components: [],
           nanoBites: [],
@@ -867,6 +865,7 @@ export const PayAppBlueprint = () => {
         };
       }
 
+      // Hydrate Nano-Bites for this specific expert node
       const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
@@ -883,29 +882,25 @@ export const PayAppBlueprint = () => {
       return {
         subModuleId: route.subModuleId,
         name: route.name,
-        vertical: m.parentName ?? null,
+        vertical: m.vertical,
         industryId: route.industryId,
         components: route.components,
         nanoBites,
       };
     });
 
-    return {
-      version: "2.0.0",
+    const finalManifest = {
+      version: "2.1.0",
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
       modules: {
-        active: activeSovereignNodes, // <--- THIS POWERS THE PAY WHEEL
+        active: activeSovereignNodes, // Powers the Sovereign OS Wheel
         default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
-        custom: customSelected.map((m) => ({
-          id: m.id,
-          name: m.name,
-          vertical: m.parentName || null,
-        })),
-        bundles,
+        custom: itemizedSidebarManifest, // Powers the IDIA Pay Itemized Sidebar
+        bundles, // Powers the HRI and routing physiology
       },
-      verticals: [...new Set(selectedModules.filter((m) => m.parentName).map((m) => m.parentName))],
+      verticals: [...new Set(itemizedSidebarManifest.map((m) => m.vertical).filter(Boolean))],
       taxonomy: {
         industryId: taxonomy?.classification?.industryId ?? null,
         nanoBites: Array.from(selectedBiteIds),
@@ -932,6 +927,9 @@ export const PayAppBlueprint = () => {
         data_residency: "us",
       },
     };
+
+    console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
+    return finalManifest;
   };
 
   const handleDownloadBlueprint = () => {
