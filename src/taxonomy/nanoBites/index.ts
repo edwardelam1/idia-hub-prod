@@ -13,10 +13,11 @@ import { BANKING_BITES } from './banking';
 import { TRANSPORT_BITES } from './transport';
 import { RND_BITES } from './rnd';
 import { QUINARY_BITES } from './quinary';
+import { OperationsNanoBites } from './operations';
 
 export const ALL_NANO_BITES: NanoBite[] = [
   ...RETAIL_BITES, ...SAAS_BITES, ...CONSULTING_BITES, ...CREATOR_BITES,
   ...MANUFACTURING_BITES, ...PRIMARY_BITES, ...PROCESSING_BITES, ...CONSTRUCTION_BITES,
-  ...HOSPITALITY_BITES, ...QSR_BITES, ...BANKING_BITES, ...TRANSPORT_BITES,
+  ...HOSPITALITY_BITES, ...QSR_BITES, ...OperationsNanoBites, ...BANKING_BITES, ...TRANSPORT_BITES,
   ...RND_BITES, ...QUINARY_BITES,
 ];

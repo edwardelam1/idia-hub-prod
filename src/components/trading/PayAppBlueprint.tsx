@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { getRoute } from "@/taxonomy/payAppRouting";
 import {
   initializeTaxonomy,
   getNanoBitesFor,
@@ -767,27 +768,122 @@ export const PayAppBlueprint = () => {
   };
 
   const generateBlueprintJSON = () => {
-    const businessName = approvedBusinesses.find(b => b.id.toString() === selectedBusiness)?.name || 'Unassigned';
-    
+    // Fallback if the business isn't found in the list
+    const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
+    const businessName = business?.name || "Unassigned";
+
+    const customSelected = selectedModules.filter((m) => !m.isDefault);
+    const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
+
+    // ========================================================================
+    // [CRITICAL FIX]: SOVEREIGN NANO-BITE INJECTION
+    // This maps the Hub's macro-verticals directly to the strict `nb-` Nano-Bites
+    // required by IDIA Pay's ComponentRegistry and SidebarModuleWheel.
+    // ========================================================================
+    const activeSovereignNodes: { id: string; name: string }[] = [];
+
+    const hasHospitality = customSelected.some(m => m.parentId === 'hospitality' || m.id.includes('hosp-'));
+    if (hasHospitality) {
+      activeSovereignNodes.push(
+        { id: "nb-hosp-server", name: "Server Terminal" },
+        { id: "nb-hosp-kds-routing", name: "Kitchen Display (KDS)" },
+        { id: "nb-hosp-billing", name: "Folio Settlement" },
+        { id: "nb-hosp-bar-terminal", name: "Bar Terminal" },
+        { id: "nb-hosp-inventory", name: "Local Inventory" }
+      );
+    }
+
+    const hasRetail = customSelected.some(m => m.parentId === 'retail' || m.id.includes('retail-'));
+    if (hasRetail) {
+      activeSovereignNodes.push(
+        { id: "retail-fashion", name: "Retail POS" }
+      );
+    }
+
+    // Fallback for non-hospitality verticals to ensure the wheel isn't empty
+    if (activeSovereignNodes.length === 0) {
+      customSelected.forEach(m => activeSovereignNodes.push({ id: m.id, name: m.name }));
+    }
+    // ========================================================================
+
+    const bundles = customSelected.map((m) => {
+      const route = getRoute(m.id);
+      if (!route) {
+        return {
+          subModuleId: m.id,
+          name: m.name,
+          vertical: m.parentName ?? null,
+          industryId: null,
+          components: [],
+          nanoBites: [],
+          unmapped: true,
+        };
+      }
+
+      const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
+      const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
+
+      const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
+        id: b.id,
+        task: b.task,
+        microElement: b.microElement,
+        valueChainStage: b.valueChainStage,
+        cadence: b.cadence,
+        automatable: b.automatable,
+        requiresTier: b.requiresTier ?? null,
+      }));
+
+      return {
+        subModuleId: route.subModuleId,
+        name: route.name,
+        vertical: m.parentName ?? null,
+        industryId: route.industryId,
+        components: route.components,
+        nanoBites,
+      };
+    });
+
     return {
-      version: '2.0.0',
+      version: "2.0.0",
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
       modules: {
-        default: defaultModules.map(m => ({ id: m.id, name: m.name })),
-        custom: selectedModules.filter(m => !m.isDefault).map(m => ({
+        active: activeSovereignNodes, // <--- THIS POWERS THE PAY WHEEL
+        default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
+        custom: customSelected.map((m) => ({
           id: m.id,
           name: m.name,
-          vertical: m.parentName || null
-        }))
+          vertical: m.parentName || null,
+        })),
+        bundles,
       },
-      verticals: [...new Set(selectedModules.filter(m => m.parentName).map(m => m.parentName))],
+      verticals: [...new Set(selectedModules.filter((m) => m.parentName).map((m) => m.parentName))],
+      taxonomy: {
+        industryId: taxonomy?.classification?.industryId ?? null,
+        nanoBites: Array.from(selectedBiteIds),
+      },
+      visual_identity: {
+        primary_color: (business as any)?.brand_primary_color ?? "#0F172A",
+        accent_color: (business as any)?.brand_accent_color ?? "#3B82F6",
+        background_color: (business as any)?.brand_background_color ?? "#FFFFFF",
+        logo_url: (business as any)?.logo_url ?? null,
+        display_name: businessName,
+      },
+      lexicon_overrides: {
+        guest_label: bundles.some((b) => b.vertical?.toLowerCase().includes("hospitality"))
+          ? "Guest"
+          : "Customer",
+        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
+          ? "Ticket"
+          : "Order",
+        location_label: "Property",
+      },
       compliance: {
         delt_enabled: true,
         pci_level: 1,
-        data_residency: 'us'
-      }
+        data_residency: "us",
+      },
     };
   };
 
