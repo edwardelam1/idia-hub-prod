@@ -10,7 +10,7 @@ export const CMMSWorkOrders = () => (
     filter={(b) =>
       b.id.includes(".cmms.") ||
       b.id.includes(".maintenance.") ||
-      b.microElement?.toLowerCase() === "facilities" ||
+      b.microElement?.toLowerCase() === "Facilities" ||
       b.microElement === "Maintenance"
     }
     emptyHint="No CMMS nano-bites mapped yet."
