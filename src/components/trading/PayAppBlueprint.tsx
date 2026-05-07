@@ -1132,6 +1132,142 @@ export const PayAppBlueprint = () => {
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
 
+  // ── Provision Code Log: fetch all schemas for the selected business ────────
+  const fetchSchemaLog = useCallback(async () => {
+    if (!selectedBusiness) {
+      setSchemaLog([]);
+      return;
+    }
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .select("id, code, label, status, updated_at, payload")
+      .eq("business_id", selectedBusiness)
+      .order("updated_at", { ascending: false });
+    if (error) {
+      console.error("[ProvisionCodeLog] fetch error", error);
+      toast.error("Failed to load provision code log");
+      return;
+    }
+    setSchemaLog((data || []) as SchemaRow[]);
+  }, [selectedBusiness]);
+
+  useEffect(() => {
+    fetchSchemaLog();
+  }, [fetchSchemaLog]);
+
+  // Hydrate the builder from a schema row's payload.
+  const handleLoadSchema = (row: SchemaRow) => {
+    const p = row.payload || {};
+    const customMods = (p.modules?.custom || []).map((m: any) => {
+      const vert = verticalCategories.find((v) => v.id === m.parentId || v.name === m.vertical);
+      return {
+        id: m.id,
+        name: m.name,
+        parentId: vert?.id ?? m.parentId,
+        parentName: vert?.name ?? m.vertical ?? m.parentName,
+        icon: vert?.icon,
+        color: vert?.color,
+      };
+    });
+    setSelectedModules([...defaultModules, ...customMods]);
+    setSelectedSubModules(new Set());
+    setProvisioningCode(row.code);
+    setLoadedSchemaId(row.id);
+    const biteIds: string[] = p.taxonomy?.nanoBites || [];
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: biteIds }));
+    toast.success(`Loaded schema: ${row.label}`);
+  };
+
+  // Live save the current builder state to the loaded schema row.
+  const handleSaveSchema = async (rowId?: string, label?: string) => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    setSchemaSaving(true);
+    try {
+      const payload = generateBlueprintJSON();
+      const targetId = rowId ?? loadedSchemaId;
+      if (targetId) {
+        const update: any = { payload, updated_at: new Date().toISOString() };
+        if (label !== undefined) update.label = label;
+        const { error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .update(update)
+          .eq("id", targetId);
+        if (error) throw error;
+        toast.success("Schema saved");
+      } else {
+        // No loaded schema → create a new row using current code
+        const { data, error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .insert({
+            code: provisioningCode || generateProvisioningCode(),
+            business_id: selectedBusiness,
+            payload,
+            status: "active",
+            label: label ?? "Untitled Schema",
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        setLoadedSchemaId(data.id);
+        setProvisioningCode(data.code);
+        toast.success("New schema created");
+      }
+      await fetchSchemaLog();
+    } catch (err: any) {
+      console.error("[ProvisionCodeLog] save error", err);
+      toast.error("Save failed", { description: err.message });
+    } finally {
+      setSchemaSaving(false);
+    }
+  };
+
+  const handleToggleSchemaStatus = async (row: SchemaRow) => {
+    const next = row.status === "active" ? "inactive" : "active";
+    const { error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .update({ status: next })
+      .eq("id", row.id);
+    if (error) {
+      toast.error("Toggle failed", { description: error.message });
+      return;
+    }
+    toast.success(`Schema ${next}`);
+    await fetchSchemaLog();
+  };
+
+  const handleNewSchema = async () => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    const newCode = generateProvisioningCode();
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .insert({
+        code: newCode,
+        business_id: selectedBusiness,
+        payload: { version: "2.1.0", provisioningCode: newCode, modules: { default: [], custom: [], bundles: [] } },
+        status: "active",
+        label: "Untitled Schema",
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error("Create failed", { description: error.message });
+      return;
+    }
+    setProvisioningCode(newCode);
+    setLoadedSchemaId(data.id);
+    setSelectedModules([...defaultModules]);
+    setSelectedSubModules(new Set());
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: [] }));
+    toast.success(`Created ${newCode}`);
+    await fetchSchemaLog();
+  };
+
   // ── Nano-Bite Command Center: aggregate bites only for SELECTED modules/sub-modules ──
   const commandCenter = (() => {
     const customSelected = selectedModules.filter((m) => !m.isDefault);
