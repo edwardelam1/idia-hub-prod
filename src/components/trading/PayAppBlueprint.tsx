@@ -840,8 +840,25 @@ export const PayAppBlueprint = () => {
 
   const handleRemoveModule = useCallback((moduleId: string) => {
     setSelectedModules((prev) => prev.filter((m) => m.id !== moduleId));
+    // Cascade-purge: drop every Nano-Bite tied to this module's industry so
+    // the background taxonomy state mirrors the Blueprint Zone exactly.
+    const industryId = getRoute(moduleId)?.industryId;
+    if (industryId) {
+      const industryBiteIds = new Set(
+        getNanoBitesFor({ industryId }).map((b) => b.id),
+      );
+      taxonomy.setClassification((prev) => {
+        const purged = (prev.selectedNanoBiteIds || []).filter(
+          (id) => !industryBiteIds.has(id),
+        );
+        console.log(
+          `[MANIFEST_INTEGRITY]: Purged ${(prev.selectedNanoBiteIds?.length || 0) - purged.length} bites for industry [${industryId}].`,
+        );
+        return { ...prev, selectedNanoBiteIds: purged };
+      });
+    }
     toast.info("Module removed");
-  }, []);
+  }, [taxonomy]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(provisioningCode);
@@ -900,23 +917,13 @@ export const PayAppBlueprint = () => {
       injectNode(signal.id, signal.name, signal.parentName || null);
     });
 
-    // LIVE-WIRE: any sub-module with an active Nano-Bite selection that wasn't
-    // dragged into the Blueprint Zone is auto-injected so the manifest mirrors
-    // taxonomy state.
-    if (selectedBiteIds.size > 0) {
-      verticalCategories.forEach((v) => {
-        v.subModules.forEach((s) => {
-          if (activeSovereignNodes.some((n) => n.id === s.id)) return;
-          const route = getRoute(s.id);
-          if (!route?.industryId) return;
-          const bites = getNanoBitesFor({ industryId: route.industryId });
-          if (bites.some((b) => selectedBiteIds.has(b.id))) {
-            console.log(`[JSON_GEN]: LIVE-WIRE injecting [${s.id}] (active bite present).`);
-            injectNode(s.id, s.name, v.name);
-          }
-        });
-      });
-    }
+    // STRICT GATE: manifest only contains sub-modules physically present in
+    // selectedModules. No auto-injection from taxonomy state — removing a
+    // module from the Blueprint Zone removes it from the JSON, period.
+    console.log(
+      "[MANIFEST_INTEGRITY]: Finalizing sidebar with IDs:",
+      itemizedSidebarManifest.map((m) => m.id),
+    );
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
     const bundles = itemizedSidebarManifest.map((m) => {
@@ -1040,16 +1047,16 @@ export const PayAppBlueprint = () => {
   const handleDownloadBlueprint = () => {
     const blueprint = generateBlueprintJSON();
     const jsonString = JSON.stringify(blueprint, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
+    const blob = new Blob([jsonString], { type: "text/plain" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "idia_blueprint_" + (provisioningCode || "manifest") + ".json";
+    link.download = "idia_manifest_" + (provisioningCode || "export") + ".txt";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
-    toast.success("Blueprint exported to local storage");
+    toast.success("Blueprint downloaded");
   };
 
   const handleSendToDevice = async () => {
