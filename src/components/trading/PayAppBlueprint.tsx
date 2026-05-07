@@ -134,10 +134,18 @@ const verticalCategories: VerticalCategory[] = [
       { id: "hosp-bar", name: "Bar & Lounge", description: "Beverage service" },
       { id: "hosp-catering", name: "Catering", description: "Event food service" },
       { id: "hosp-food-truck", name: "Food Truck", description: "Mobile food service" },
-      { id: "hosp-theme-park-ops", name: "Theme Park Ops", description: "Queues, ride telemetry, biometric entitlements" },
+      {
+        id: "hosp-theme-park-ops",
+        name: "Theme Park Ops",
+        description: "Queues, ride telemetry, biometric entitlements",
+      },
       { id: "hosp-cmms", name: "CMMS Work Orders", description: "Preventive maintenance & LOTO sign-offs" },
       { id: "hosp-kds", name: "KDS Routing", description: "Zone routing for broiler / fry / garde manger" },
-      { id: "hosp-housekeeping-inv", name: "Housekeeping Inventory", description: "Cart par levels & chemical manifests" },
+      {
+        id: "hosp-housekeeping-inv",
+        name: "Housekeeping Inventory",
+        description: "Cart par levels & chemical manifests",
+      },
       { id: "hosp-life-safety", name: "Life Safety Compliance", description: "NFPA 101, sprinkler & hood inspections" },
     ],
   },
@@ -808,7 +816,7 @@ export const PayAppBlueprint = () => {
 
     const customSelected = selectedModules.filter((m) => !m.isDefault);
     const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
-    
+
     // State for explosion logic
     const activeSovereignNodes: { id: string; name: string }[] = [];
     const itemizedSidebarManifest: { id: string; name: string; vertical: string | null }[] = [];
@@ -816,14 +824,14 @@ export const PayAppBlueprint = () => {
     // Helper to safely inject unique nodes into the manifests
     const injectNode = (id: string, name: string, verticalName: string | null) => {
       console.log(`[injectNode] START: Evaluating expert node [${id}]`);
-      if (!activeSovereignNodes.some(node => node.id === id)) {
+      if (!activeSovereignNodes.some((node) => node.id === id)) {
         // Add to Pay Wheel
         activeSovereignNodes.push({ id, name });
         // Add to Sidebar Manifest
         itemizedSidebarManifest.push({
           id,
           name,
-          vertical: verticalName
+          vertical: verticalName,
         });
         console.log(`[injectNode] SUCCESS: Node [${id}] hydrated.`);
       } else {
@@ -832,13 +840,15 @@ export const PayAppBlueprint = () => {
     };
 
     // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
-    customSelected.forEach(signal => {
+    customSelected.forEach((signal) => {
       // Check if this signal is actually a Top-Level Vertical (the "Carton")
-      const rootVertical = verticalCategories.find(v => v.id === signal.id);
+      const rootVertical = verticalCategories.find((v) => v.id === signal.id);
 
       if (rootVertical) {
-        console.log(`[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`);
-        rootVertical.subModules.forEach(sub => {
+        console.log(
+          `[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`,
+        );
+        rootVertical.subModules.forEach((sub) => {
           injectNode(sub.id, sub.name, rootVertical.name);
         });
       } else {
@@ -851,7 +861,7 @@ export const PayAppBlueprint = () => {
     const bundles = itemizedSidebarManifest.map((m) => {
       console.log(`[generateBlueprintJSON] ROUTING: Fetching taxonomy for [${m.id}]`);
       const route = getRoute(m.id);
-      
+
       if (!route) {
         console.warn(`[generateBlueprintJSON] UNMAPPED: No routing logic found for [${m.id}].`);
         return {
@@ -894,7 +904,9 @@ export const PayAppBlueprint = () => {
     // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
     // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
     bundles.forEach((b) => {
-      if (!b.industryId || !b.nanoBites?.length) return;
+      if (route && route.verticalId !== b.vertical) {
+        b.vertical = route.verticalId; // The Capitalization Fix
+      }
       const expectedNamespace = b.industryId; // e.g. 'tertiary.hospitality.food_truck'
       const before = b.nanoBites.length;
       b.nanoBites = b.nanoBites.filter((nb: any) => {
@@ -912,7 +924,9 @@ export const PayAppBlueprint = () => {
         b.vertical = route.verticalId;
       }
       if (b.nanoBites.length !== before) {
-        console.warn(`[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`);
+        console.warn(
+          `[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`,
+        );
       }
     });
 
@@ -920,7 +934,7 @@ export const PayAppBlueprint = () => {
     // Makes cross-vertical leakage structurally impossible in the JSON output.
     const bundlesByVertical: Record<string, typeof bundles> = {};
     bundles.forEach((b) => {
-      const key = b.vertical || 'unmapped';
+      const key = b.vertical || "unmapped";
       (bundlesByVertical[key] ||= []).push(b);
     });
 
@@ -949,12 +963,8 @@ export const PayAppBlueprint = () => {
         display_name: businessName,
       },
       lexicon_overrides: {
-        guest_label: bundles.some((b) => b.vertical === 'hospitality')
-          ? "Guest"
-          : "Customer",
-        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
-          ? "Ticket"
-          : "Order",
+        guest_label: bundles.some((b) => b.vertical === "hospitality") ? "Guest" : "Customer",
+        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds")) ? "Ticket" : "Order",
         location_label: "Property",
       },
       compliance: {
@@ -1066,17 +1076,15 @@ export const PayAppBlueprint = () => {
 
     try {
       const payload = generateBlueprintJSON();
-      const { error } = await supabase
-        .from("idia_schema_manifest_vault" as any)
-        .upsert(
-          {
-            business_id: selectedBusiness,
-            pairing_code: provisioningCode,
-            schema_payload: payload,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "business_id" },
-        );
+      const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
+        {
+          business_id: selectedBusiness,
+          pairing_code: provisioningCode,
+          schema_payload: payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "business_id" },
+      );
 
       if (error) {
         console.error("[PayAppBlueprint] Vault upsert failed:", error);
