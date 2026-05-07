@@ -775,21 +775,42 @@ export const PayAppBlueprint = () => {
       const dragData = dragDataRef.current;
       if (!dragData) return;
 
-      const exists = selectedModules.some((m) => m.id === dragData.id);
-      if (!exists) {
-        const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
-        setSelectedModules((prev) => [
-          ...prev,
-          {
-            id: dragData.id,
-            name: dragData.name,
-            parentId: dragData.parentId,
-            parentName: dragData.parentName,
-            icon: vertical?.icon,
-            color: dragData.color,
-          },
-        ]);
-        toast.success(`Added ${dragData.name} module`);
+      // STRICT 1:1 EXPLOSION: if the drop target is a top-level vertical
+      // (the "Carton"), explode it into its sub-modules in the Blueprint Zone
+      // so the visible UI matches the JSON exactly. Visual gravity-fall stays.
+      const rootVertical = verticalCategories.find((v) => v.id === dragData.id);
+      if (rootVertical) {
+        const newSubs = rootVertical.subModules
+          .filter((s) => !selectedModules.some((m) => m.id === s.id))
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            parentId: rootVertical.id,
+            parentName: rootVertical.name,
+            icon: rootVertical.icon,
+            color: rootVertical.color,
+          }));
+        if (newSubs.length > 0) {
+          setSelectedModules((prev) => [...prev, ...newSubs]);
+          toast.success(`Exploded ${rootVertical.name} → ${newSubs.length} modules`);
+        }
+      } else {
+        const exists = selectedModules.some((m) => m.id === dragData.id);
+        if (!exists) {
+          const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
+          setSelectedModules((prev) => [
+            ...prev,
+            {
+              id: dragData.id,
+              name: dragData.name,
+              parentId: dragData.parentId,
+              parentName: dragData.parentName,
+              icon: vertical?.icon,
+              color: dragData.color,
+            },
+          ]);
+          toast.success(`Added ${dragData.name} module`);
+        }
       }
       dragDataRef.current = null;
     },
@@ -839,23 +860,12 @@ export const PayAppBlueprint = () => {
       }
     };
 
-    // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
+    // STRICT 1:1: explosion now happens at drop time, so customSelected already
+    // contains exactly the sub-modules visible in the Blueprint Zone. No
+    // re-explosion here — JSON ships exactly what the user sees.
     customSelected.forEach((signal) => {
       console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
-      // Check if this signal is actually a Top-Level Vertical (the "Carton")
-      const rootVertical = verticalCategories.find((v) => v.id === signal.id);
-
-      if (rootVertical) {
-        console.log(
-          `[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`,
-        );
-        rootVertical.subModules.forEach((sub) => {
-          injectNode(sub.id, sub.name, rootVertical.name);
-        });
-      } else {
-        // It's a standard individual sub-module drag
-        injectNode(signal.id, signal.name, signal.parentName || null);
-      }
+      injectNode(signal.id, signal.name, signal.parentName || null);
     });
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
