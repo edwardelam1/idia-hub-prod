@@ -1810,6 +1810,7 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          label: string
           payload: Json
           status: string
           updated_at: string
@@ -1819,6 +1820,7 @@ export type Database = {
           code: string
           created_at?: string
           id?: string
+          label?: string
           payload: Json
           status?: string
           updated_at?: string
@@ -1828,6 +1830,7 @@ export type Database = {
           code?: string
           created_at?: string
           id?: string
+          label?: string
           payload?: Json
           status?: string
           updated_at?: string

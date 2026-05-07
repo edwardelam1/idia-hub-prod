@@ -876,11 +876,12 @@ export const PayAppBlueprint = () => {
         };
       }
 
-      // Hydrate Nano-Bites for this specific expert node
+      // STRICT 1:1 — only nano-bites the user explicitly selected in the
+      // Active Payload ship to JSON. No fallback to "all bites for this industry".
       const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
-      const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
+      const nanoBites = activeBites.map((b) => ({
         id: b.id,
         task: b.task,
         microElement: b.microElement,
