@@ -1198,8 +1198,9 @@ export const PayAppBlueprint = () => {
         .module-icon:hover { animation: float-settle 1s ease-in-out infinite; }
       `}</style>
 
-      {/* Header with Business Assigment */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl border bg-muted/20">
+      {/* Header + condensed stats bar (joined, touching) */}
+      <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-t-xl border border-b-0 bg-muted/20">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Package className="h-6 w-6 text-primary" />
@@ -1228,35 +1229,33 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3 ml-auto">
-          <div className="bg-muted/50 rounded-lg px-4 py-2 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Code:</span>
-            <code className="font-mono text-sm font-semibold text-primary">{provisioningCode}</code>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyCode}>
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
+      {/* Condensed Stats Bar (touching the header above) */}
+      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 rounded-b-xl border bg-muted/30 px-4 py-2 text-sm">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-primary" />
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold">{selectedModules.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-green-500" />
+            <span className="text-muted-foreground">Default</span>
+            <span className="font-semibold">{defaultModules.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            <span className="text-muted-foreground">Custom</span>
+            <span className="font-semibold">{customModulesCount}</span>
           </div>
         </div>
+        <div className="flex items-center gap-2 ml-auto pl-6 border-l border-border/60">
+          <span className="text-muted-foreground">Code:</span>
+          <code className="font-mono text-sm font-semibold text-primary">{provisioningCode}</code>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyCode}>
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
-
-      {/* Condensed Stats Bar */}
-      <div className="flex items-center justify-between gap-6 rounded-lg border bg-muted/20 px-4 py-2 text-sm">
-        <div className="flex items-center gap-2">
-          <Package className="h-4 w-4 text-primary" />
-          <span className="text-muted-foreground">Total</span>
-          <span className="font-semibold">{selectedModules.length}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-green-500" />
-          <span className="text-muted-foreground">Default</span>
-          <span className="font-semibold">{defaultModules.length}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-purple-500" />
-          <span className="text-muted-foreground">Custom</span>
-          <span className="font-semibold">{customModulesCount}</span>
-        </div>
       </div>
 
       {/* Main Builder Interface */}
