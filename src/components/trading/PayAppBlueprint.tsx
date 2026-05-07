@@ -904,25 +904,16 @@ export const PayAppBlueprint = () => {
     // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
     // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
     bundles.forEach((b) => {
+      // Normalize vertical FIRST, before any conditionals that could short-circuit.
       const route = getRoute(b.subModuleId);
-      if (route && route.verticalId !== b.vertical) {
-        b.vertical = route.verticalId; // The Capitalization Fix
+      if (route) {
+        b.vertical = route.verticalId; // The Capitalization Fix — canonical id
       }
-      const expectedNamespace = b.industryId; // e.g. 'tertiary.hospitality.food_truck'
+      const expectedNamespace = b.industryId;
       const before = b.nanoBites.length;
       b.nanoBites = b.nanoBites.filter((nb: any) => {
-        // Bites are pre-filtered by industryId in getNanoBitesFor, but we
-        // double-gate here for defense in depth.
         return true;
       });
-      // Cross-vertical guard: ensure bundle.vertical (canonical route.verticalId)
-      // matches the route. m.vertical is drag-derived UI label; reconcile.
-      if (route && route.verticalId !== b.vertical) {
-        console.warn(
-          `[generateBlueprintJSON] CONTAMINATION DETECTED: Bundle [${b.subModuleId}] had drag-vertical=[${b.vertical}], canonical=[${route.verticalId}]. Reassigning.`,
-        );
-        b.vertical = route.verticalId;
-      }
       if (b.nanoBites.length !== before) {
         console.warn(
           `[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`,
