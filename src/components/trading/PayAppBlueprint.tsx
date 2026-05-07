@@ -1258,7 +1258,27 @@ export const PayAppBlueprint = () => {
       {/* Main Builder Interface */}
       <div className="grid grid-cols-2 gap-6">
         {/* Left Pane - Available Modules */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-muted/30 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-primary" />
+                  Nano-Bite Library · {commandCenter.available.length} available
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.available.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">All bites assigned to payload.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.available.map((b) => renderBiteChip(b, "available"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-muted/30 py-4">
             <div className="flex items-center justify-between">
               <div>
@@ -1608,9 +1628,32 @@ export const PayAppBlueprint = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Right Pane - Blueprint Zone */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-primary/5 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Active Payload · {commandCenter.active.length} bites
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.active.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    No bites assigned. Click bites in the library to add them.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.active.map((b) => renderBiteChip(b, "active"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-primary/5 py-4">
             <CardTitle className="text-lg flex items-center gap-2">
               <Check className="h-5 w-5 text-primary" />
