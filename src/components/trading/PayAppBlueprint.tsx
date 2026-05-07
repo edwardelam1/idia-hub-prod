@@ -841,6 +841,7 @@ export const PayAppBlueprint = () => {
 
     // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
     customSelected.forEach((signal) => {
+      console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
       // Check if this signal is actually a Top-Level Vertical (the "Carton")
       const rootVertical = verticalCategories.find((v) => v.id === signal.id);
 
@@ -904,25 +905,16 @@ export const PayAppBlueprint = () => {
     // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
     // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
     bundles.forEach((b) => {
+      // Normalize vertical FIRST, before any conditionals that could short-circuit.
       const route = getRoute(b.subModuleId);
-      if (route && route.verticalId !== b.vertical) {
-        b.vertical = route.verticalId; // The Capitalization Fix
+      if (route) {
+        b.vertical = route.verticalId; // The Capitalization Fix — canonical id
       }
-      const expectedNamespace = b.industryId; // e.g. 'tertiary.hospitality.food_truck'
+      const expectedNamespace = b.industryId;
       const before = b.nanoBites.length;
       b.nanoBites = b.nanoBites.filter((nb: any) => {
-        // Bites are pre-filtered by industryId in getNanoBitesFor, but we
-        // double-gate here for defense in depth.
         return true;
       });
-      // Cross-vertical guard: ensure bundle.vertical (canonical route.verticalId)
-      // matches the route. m.vertical is drag-derived UI label; reconcile.
-      if (route && route.verticalId !== b.vertical) {
-        console.warn(
-          `[generateBlueprintJSON] CONTAMINATION DETECTED: Bundle [${b.subModuleId}] had drag-vertical=[${b.vertical}], canonical=[${route.verticalId}]. Reassigning.`,
-        );
-        b.vertical = route.verticalId;
-      }
       if (b.nanoBites.length !== before) {
         console.warn(
           `[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`,
@@ -975,10 +967,12 @@ export const PayAppBlueprint = () => {
     };
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
+    console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
     return finalManifest;
   };
 
   const handleDownloadBlueprint = () => {
+    console.log(`[DATA_EGRESS]: START - File generation for code: ${provisioningCode}`);
     console.log("[PayAppBlueprint] Starting blueprint generation for download...");
 
     try {
@@ -1374,10 +1368,27 @@ export const PayAppBlueprint = () => {
 
                     {/* ── Taxonomy: Nano-Bites + Spatial Telemetry ── */}
                     {(() => {
-                      const industryId = expandedVertical ? VERTICAL_TO_INDUSTRY_ID[expandedVertical] : undefined;
-                      if (!industryId) return null;
+                      const parentIndustryId = expandedVertical
+                        ? VERTICAL_TO_INDUSTRY_ID[expandedVertical]
+                        : undefined;
+                      const activeSubIndustryIds = Array.from(selectedSubModules)
+                        .map((id) => getRoute(id)?.industryId)
+                        .filter((x): x is string => Boolean(x));
+                      const allTargetIds = Array.from(
+                        new Set([parentIndustryId, ...activeSubIndustryIds].filter((x): x is string => Boolean(x))),
+                      );
+                      if (allTargetIds.length === 0) return null;
+                      const industryId = parentIndustryId ?? allTargetIds[0];
                       const industry = getIndustryById(industryId);
-                      const bites: NanoBite[] = getNanoBitesFor({ industryId });
+                      const bitesRaw: NanoBite[] = allTargetIds.flatMap((iid) =>
+                        getNanoBitesFor({ industryId: iid }),
+                      );
+                      const seenBiteIds = new Set<string>();
+                      const bites: NanoBite[] = bitesRaw.filter((b) => {
+                        if (seenBiteIds.has(b.id)) return false;
+                        seenBiteIds.add(b.id);
+                        return true;
+                      });
                       const spatial = taxonomy.getSpatialMetaFor(industryId) as {
                         benchmarks?: string[];
                         tech_stack?: string[];
