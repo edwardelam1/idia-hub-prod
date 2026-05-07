@@ -590,6 +590,19 @@ export const PayAppBlueprint = () => {
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
 
+  // ── Provision Code Log state ────────────────────────────────────────────────
+  interface SchemaRow {
+    id: string;
+    code: string;
+    label: string;
+    status: string;
+    updated_at: string;
+    payload: any;
+  }
+  const [schemaLog, setSchemaLog] = useState<SchemaRow[]>([]);
+  const [loadedSchemaId, setLoadedSchemaId] = useState<string | null>(null);
+  const [schemaSaving, setSchemaSaving] = useState(false);
+
   // ── Business Taxonomy Engine bootstrap ──────────────────────────────────────
   // Maps the App Builder's vertical IDs to formal taxonomy IndustryNode IDs.
   const VERTICAL_TO_INDUSTRY_ID: Record<string, string> = {
