@@ -6807,6 +6807,72 @@ export type Database = {
         }
         Relationships: []
       }
+      usdc_payments: {
+        Row: {
+          amount_raw: string
+          amount_usdc: number
+          block_number: number | null
+          chain_id: number
+          created_at: string | null
+          error_message: string | null
+          id: string
+          merchant_id: string | null
+          merchant_name: string | null
+          network: string
+          nonce_used: string | null
+          recipient_address: string
+          reference: string | null
+          relayed_by: string | null
+          sender_address: string
+          settled_at: string | null
+          status: string
+          tx_hash: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount_raw: string
+          amount_usdc: number
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_name?: string | null
+          network?: string
+          nonce_used?: string | null
+          recipient_address: string
+          reference?: string | null
+          relayed_by?: string | null
+          sender_address: string
+          settled_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount_raw?: string
+          amount_usdc?: number
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_name?: string | null
+          network?: string
+          nonce_used?: string | null
+          recipient_address?: string
+          reference?: string | null
+          relayed_by?: string | null
+          sender_address?: string
+          settled_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_aca_records: {
         Row: {
           aca_hash_key: string
