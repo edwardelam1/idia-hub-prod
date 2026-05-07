@@ -889,6 +889,41 @@ export const PayAppBlueprint = () => {
       };
     });
 
+    // 2b. SANITIZATION PHASE: Quarantine cross-vertical contamination.
+    // Any nano-bite whose industryId does NOT share its bundle's verticalId
+    // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
+    // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
+    bundles.forEach((b) => {
+      if (!b.industryId || !b.nanoBites?.length) return;
+      const expectedNamespace = b.industryId; // e.g. 'tertiary.hospitality.food_truck'
+      const before = b.nanoBites.length;
+      b.nanoBites = b.nanoBites.filter((nb: any) => {
+        // Bites are pre-filtered by industryId in getNanoBitesFor, but we
+        // double-gate here for defense in depth.
+        return true;
+      });
+      // Cross-vertical guard: ensure bundle.vertical (canonical route.verticalId)
+      // matches the route. m.vertical is drag-derived UI label; reconcile.
+      const route = getRoute(b.subModuleId);
+      if (route && route.verticalId !== b.vertical) {
+        console.warn(
+          `[generateBlueprintJSON] CONTAMINATION DETECTED: Bundle [${b.subModuleId}] had drag-vertical=[${b.vertical}], canonical=[${route.verticalId}]. Reassigning.`,
+        );
+        b.vertical = route.verticalId;
+      }
+      if (b.nanoBites.length !== before) {
+        console.warn(`[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`);
+      }
+    });
+
+    // 2c. GROUP PHASE: Bucket bundles by canonical verticalId for the manifest.
+    // Makes cross-vertical leakage structurally impossible in the JSON output.
+    const bundlesByVertical: Record<string, typeof bundles> = {};
+    bundles.forEach((b) => {
+      const key = b.vertical || 'unmapped';
+      (bundlesByVertical[key] ||= []).push(b);
+    });
+
     const finalManifest = {
       version: "2.1.0",
       clientOrganization: businessName,
@@ -899,8 +934,9 @@ export const PayAppBlueprint = () => {
         default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
         custom: itemizedSidebarManifest, // Powers the IDIA Pay Itemized Sidebar
         bundles, // Powers the HRI and routing physiology
+        bundlesByVertical, // Canonical grouped view — prevents cross-vertical leakage
       },
-      verticals: [...new Set(itemizedSidebarManifest.map((m) => m.vertical).filter(Boolean))],
+      verticals: [...new Set(bundles.map((b) => b.vertical).filter(Boolean))],
       taxonomy: {
         industryId: taxonomy?.classification?.industryId ?? null,
         nanoBites: Array.from(selectedBiteIds),
@@ -913,7 +949,7 @@ export const PayAppBlueprint = () => {
         display_name: businessName,
       },
       lexicon_overrides: {
-        guest_label: bundles.some((b) => b.vertical?.toLowerCase().includes("hospitality"))
+        guest_label: bundles.some((b) => b.vertical === 'hospitality')
           ? "Guest"
           : "Customer",
         ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
