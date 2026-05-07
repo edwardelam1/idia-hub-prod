@@ -75,6 +75,12 @@ import {
   Cannabis,
   Globe,
   Beer,
+  Save,
+  Power,
+  PowerOff,
+  RotateCcw,
+  Plus,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -584,6 +590,19 @@ export const PayAppBlueprint = () => {
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
 
+  // ── Provision Code Log state ────────────────────────────────────────────────
+  interface SchemaRow {
+    id: string;
+    code: string;
+    label: string;
+    status: string;
+    updated_at: string;
+    payload: any;
+  }
+  const [schemaLog, setSchemaLog] = useState<SchemaRow[]>([]);
+  const [loadedSchemaId, setLoadedSchemaId] = useState<string | null>(null);
+  const [schemaSaving, setSchemaSaving] = useState(false);
+
   // ── Business Taxonomy Engine bootstrap ──────────────────────────────────────
   // Maps the App Builder's vertical IDs to formal taxonomy IndustryNode IDs.
   const VERTICAL_TO_INDUSTRY_ID: Record<string, string> = {
@@ -775,21 +794,42 @@ export const PayAppBlueprint = () => {
       const dragData = dragDataRef.current;
       if (!dragData) return;
 
-      const exists = selectedModules.some((m) => m.id === dragData.id);
-      if (!exists) {
-        const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
-        setSelectedModules((prev) => [
-          ...prev,
-          {
-            id: dragData.id,
-            name: dragData.name,
-            parentId: dragData.parentId,
-            parentName: dragData.parentName,
-            icon: vertical?.icon,
-            color: dragData.color,
-          },
-        ]);
-        toast.success(`Added ${dragData.name} module`);
+      // STRICT 1:1 EXPLOSION: if the drop target is a top-level vertical
+      // (the "Carton"), explode it into its sub-modules in the Blueprint Zone
+      // so the visible UI matches the JSON exactly. Visual gravity-fall stays.
+      const rootVertical = verticalCategories.find((v) => v.id === dragData.id);
+      if (rootVertical) {
+        const newSubs = rootVertical.subModules
+          .filter((s) => !selectedModules.some((m) => m.id === s.id))
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            parentId: rootVertical.id,
+            parentName: rootVertical.name,
+            icon: rootVertical.icon,
+            color: rootVertical.color,
+          }));
+        if (newSubs.length > 0) {
+          setSelectedModules((prev) => [...prev, ...newSubs]);
+          toast.success(`Exploded ${rootVertical.name} → ${newSubs.length} modules`);
+        }
+      } else {
+        const exists = selectedModules.some((m) => m.id === dragData.id);
+        if (!exists) {
+          const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
+          setSelectedModules((prev) => [
+            ...prev,
+            {
+              id: dragData.id,
+              name: dragData.name,
+              parentId: dragData.parentId,
+              parentName: dragData.parentName,
+              icon: vertical?.icon,
+              color: dragData.color,
+            },
+          ]);
+          toast.success(`Added ${dragData.name} module`);
+        }
       }
       dragDataRef.current = null;
     },
@@ -839,23 +879,12 @@ export const PayAppBlueprint = () => {
       }
     };
 
-    // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
+    // STRICT 1:1: explosion now happens at drop time, so customSelected already
+    // contains exactly the sub-modules visible in the Blueprint Zone. No
+    // re-explosion here — JSON ships exactly what the user sees.
     customSelected.forEach((signal) => {
       console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
-      // Check if this signal is actually a Top-Level Vertical (the "Carton")
-      const rootVertical = verticalCategories.find((v) => v.id === signal.id);
-
-      if (rootVertical) {
-        console.log(
-          `[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`,
-        );
-        rootVertical.subModules.forEach((sub) => {
-          injectNode(sub.id, sub.name, rootVertical.name);
-        });
-      } else {
-        // It's a standard individual sub-module drag
-        injectNode(signal.id, signal.name, signal.parentName || null);
-      }
+      injectNode(signal.id, signal.name, signal.parentName || null);
     });
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
@@ -876,11 +905,12 @@ export const PayAppBlueprint = () => {
         };
       }
 
-      // Hydrate Nano-Bites for this specific expert node
+      // STRICT 1:1 — only nano-bites the user explicitly selected in the
+      // Active Payload ship to JSON. No fallback to "all bites for this industry".
       const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
-      const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
+      const nanoBites = activeBites.map((b) => ({
         id: b.id,
         task: b.task,
         microElement: b.microElement,
@@ -1101,6 +1131,142 @@ export const PayAppBlueprint = () => {
 
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
+
+  // ── Provision Code Log: fetch all schemas for the selected business ────────
+  const fetchSchemaLog = useCallback(async () => {
+    if (!selectedBusiness) {
+      setSchemaLog([]);
+      return;
+    }
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .select("id, code, label, status, updated_at, payload")
+      .eq("business_id", selectedBusiness)
+      .order("updated_at", { ascending: false });
+    if (error) {
+      console.error("[ProvisionCodeLog] fetch error", error);
+      toast.error("Failed to load provision code log");
+      return;
+    }
+    setSchemaLog((data || []) as SchemaRow[]);
+  }, [selectedBusiness]);
+
+  useEffect(() => {
+    fetchSchemaLog();
+  }, [fetchSchemaLog]);
+
+  // Hydrate the builder from a schema row's payload.
+  const handleLoadSchema = (row: SchemaRow) => {
+    const p = row.payload || {};
+    const customMods = (p.modules?.custom || []).map((m: any) => {
+      const vert = verticalCategories.find((v) => v.id === m.parentId || v.name === m.vertical);
+      return {
+        id: m.id,
+        name: m.name,
+        parentId: vert?.id ?? m.parentId,
+        parentName: vert?.name ?? m.vertical ?? m.parentName,
+        icon: vert?.icon,
+        color: vert?.color,
+      };
+    });
+    setSelectedModules([...defaultModules, ...customMods]);
+    setSelectedSubModules(new Set());
+    setProvisioningCode(row.code);
+    setLoadedSchemaId(row.id);
+    const biteIds: string[] = p.taxonomy?.nanoBites || [];
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: biteIds }));
+    toast.success(`Loaded schema: ${row.label}`);
+  };
+
+  // Live save the current builder state to the loaded schema row.
+  const handleSaveSchema = async (rowId?: string, label?: string) => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    setSchemaSaving(true);
+    try {
+      const payload = generateBlueprintJSON();
+      const targetId = rowId ?? loadedSchemaId;
+      if (targetId) {
+        const update: any = { payload, updated_at: new Date().toISOString() };
+        if (label !== undefined) update.label = label;
+        const { error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .update(update)
+          .eq("id", targetId);
+        if (error) throw error;
+        toast.success("Schema saved");
+      } else {
+        // No loaded schema → create a new row using current code
+        const { data, error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .insert({
+            code: provisioningCode || generateProvisioningCode(),
+            business_id: selectedBusiness,
+            payload,
+            status: "active",
+            label: label ?? "Untitled Schema",
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        setLoadedSchemaId(data.id);
+        setProvisioningCode(data.code);
+        toast.success("New schema created");
+      }
+      await fetchSchemaLog();
+    } catch (err: any) {
+      console.error("[ProvisionCodeLog] save error", err);
+      toast.error("Save failed", { description: err.message });
+    } finally {
+      setSchemaSaving(false);
+    }
+  };
+
+  const handleToggleSchemaStatus = async (row: SchemaRow) => {
+    const next = row.status === "active" ? "inactive" : "active";
+    const { error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .update({ status: next })
+      .eq("id", row.id);
+    if (error) {
+      toast.error("Toggle failed", { description: error.message });
+      return;
+    }
+    toast.success(`Schema ${next}`);
+    await fetchSchemaLog();
+  };
+
+  const handleNewSchema = async () => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    const newCode = generateProvisioningCode();
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .insert({
+        code: newCode,
+        business_id: selectedBusiness,
+        payload: { version: "2.1.0", provisioningCode: newCode, modules: { default: [], custom: [], bundles: [] } },
+        status: "active",
+        label: "Untitled Schema",
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error("Create failed", { description: error.message });
+      return;
+    }
+    setProvisioningCode(newCode);
+    setLoadedSchemaId(data.id);
+    setSelectedModules([...defaultModules]);
+    setSelectedSubModules(new Set());
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: [] }));
+    toast.success(`Created ${newCode}`);
+    await fetchSchemaLog();
+  };
 
   // ── Nano-Bite Command Center: aggregate bites only for SELECTED modules/sub-modules ──
   const commandCenter = (() => {
@@ -1599,6 +1765,104 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
+      {/* Provision Code Log */}
+      <Card>
+        <CardHeader className="py-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Provision Code Log
+              {selectedBusiness && (
+                <Badge variant="outline" className="ml-2 text-[10px]">
+                  {schemaLog.length} schema{schemaLog.length === 1 ? "" : "s"}
+                </Badge>
+              )}
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={handleNewSchema} disabled={!selectedBusiness}>
+              <Plus className="h-4 w-4 mr-1" /> New Schema
+            </Button>
+          </div>
+          <CardDescription className="text-xs">
+            Each row is one IDIA-XXXX-XXXX provisioning code with its own saved blueprint. Load to edit, Save to persist, Activate / Deactivate to gate egress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!selectedBusiness ? (
+            <p className="text-xs text-muted-foreground italic">Select a business to view its provisioning codes.</p>
+          ) : schemaLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No schemas yet. Click "New Schema" to mint a provisioning code.</p>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {schemaLog.map((row) => {
+                const isLoaded = loadedSchemaId === row.id;
+                const isActive = row.status === "active";
+                return (
+                  <div
+                    key={row.id}
+                    className={`flex items-center gap-3 p-2 rounded-md border transition-colors ${
+                      isLoaded ? "border-primary/60 bg-primary/5" : "border-border/60 bg-muted/20"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-xs font-semibold text-primary">{row.code}</code>
+                        <Badge
+                          variant={isActive ? "default" : "secondary"}
+                          className="text-[9px] px-1.5 py-0"
+                        >
+                          {isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        {isLoaded && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-primary/60 text-primary">
+                            Loaded
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-foreground truncate mt-0.5">{row.label}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Updated {new Date(row.updated_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant={isLoaded ? "secondary" : "outline"}
+                        onClick={() => handleLoadSchema(row)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" /> Load
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSaveSchema(row.id)}
+                        disabled={schemaSaving}
+                      >
+                        <Save className="h-3.5 w-3.5 mr-1" /> Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={isActive ? "destructive" : "default"}
+                        onClick={() => handleToggleSchemaStatus(row)}
+                      >
+                        {isActive ? (
+                          <>
+                            <PowerOff className="h-3.5 w-3.5 mr-1" /> Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-3.5 w-3.5 mr-1" /> Activate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Actions */}
       <Card>
         <CardContent className="py-4">
@@ -1608,6 +1872,14 @@ export const PayAppBlueprint = () => {
               <p className="text-sm text-muted-foreground">{selectedModules.length} modules configured</p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleSaveSchema()}
+                disabled={!selectedBusiness || schemaSaving}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {loadedSchemaId ? "Save Schema" : "Save as New"}
+              </Button>
               <Button variant="outline" onClick={handleDownloadBlueprint}>
                 <Download className="h-4 w-4 mr-2" />
                 Download JSON
