@@ -1774,6 +1774,14 @@ export const PayAppBlueprint = () => {
               <p className="text-sm text-muted-foreground">{selectedModules.length} modules configured</p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleSaveSchema()}
+                disabled={!selectedBusiness || schemaSaving}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {loadedSchemaId ? "Save Schema" : "Save as New"}
+              </Button>
               <Button variant="outline" onClick={handleDownloadBlueprint}>
                 <Download className="h-4 w-4 mr-2" />
                 Download JSON
