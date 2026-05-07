@@ -105,6 +105,7 @@ interface SelectedModule {
   parentId?: string;
   parentName?: string;
   isDefault?: boolean;
+  fromExplosion?: boolean;
   icon?: LucideIcon;
   color?: string;
 }
