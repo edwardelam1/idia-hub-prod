@@ -970,6 +970,7 @@ export const PayAppBlueprint = () => {
   };
 
   const handleDownloadBlueprint = () => {
+    console.log(`[DATA_EGRESS]: START - File generation for code: ${provisioningCode}`);
     console.log("[PayAppBlueprint] Starting blueprint generation for download...");
 
     try {
