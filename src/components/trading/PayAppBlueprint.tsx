@@ -1170,47 +1170,23 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Package className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Modules</p>
-                <p className="text-xl font-bold">{selectedModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <Shield className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Default Modules</p>
-                <p className="text-xl font-bold">{defaultModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Sparkles className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Custom Modules</p>
-                <p className="text-xl font-bold">{customModulesCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Condensed Stats Bar */}
+      <div className="flex items-center justify-between gap-6 rounded-lg border bg-muted/20 px-4 py-2 text-sm">
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-primary" />
+          <span className="text-muted-foreground">Total</span>
+          <span className="font-semibold">{selectedModules.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-green-500" />
+          <span className="text-muted-foreground">Default</span>
+          <span className="font-semibold">{defaultModules.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          <span className="text-muted-foreground">Custom</span>
+          <span className="font-semibold">{customModulesCount}</span>
+        </div>
       </div>
 
       {/* Main Builder Interface */}
