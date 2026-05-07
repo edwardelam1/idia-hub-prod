@@ -105,6 +105,7 @@ interface SelectedModule {
   parentId?: string;
   parentName?: string;
   isDefault?: boolean;
+  fromExplosion?: boolean;
   icon?: LucideIcon;
   color?: string;
 }
@@ -806,6 +807,7 @@ export const PayAppBlueprint = () => {
             name: s.name,
             parentId: rootVertical.id,
             parentName: rootVertical.name,
+            fromExplosion: true,
             icon: rootVertical.icon,
             color: rootVertical.color,
           }));
@@ -850,6 +852,8 @@ export const PayAppBlueprint = () => {
 
   const generateBlueprintJSON = () => {
     console.log("[generateBlueprintJSON] START: Compiling Multi-Expert Manifest.");
+    console.log("[JSON_GEN]: START - Evaluating state.");
+    console.log("[PROVISIONING]: Syncing payload for code:", provisioningCode);
 
     const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
     const businessName = business?.name || "Unassigned";
@@ -864,6 +868,7 @@ export const PayAppBlueprint = () => {
     // Helper to safely inject unique nodes into the manifests
     const injectNode = (id: string, name: string, verticalName: string | null) => {
       console.log(`[injectNode] START: Evaluating expert node [${id}]`);
+      console.log(`[JSON_GEN]: Node ${id} evaluated for hydration.`);
       if (!activeSovereignNodes.some((node) => node.id === id)) {
         // Add to Pay Wheel
         activeSovereignNodes.push({ id, name });
@@ -879,13 +884,39 @@ export const PayAppBlueprint = () => {
       }
     };
 
-    // STRICT 1:1: explosion now happens at drop time, so customSelected already
-    // contains exactly the sub-modules visible in the Blueprint Zone. No
-    // re-explosion here — JSON ships exactly what the user sees.
+    // STRICT 1:1: only inject sub-modules that were either explicitly dragged
+    // (not exploded) OR have at least one Nano-Bite currently selected. This
+    // suppresses "phantom" sub-modules that appeared via vertical explosion
+    // but carry no task assignments.
     customSelected.forEach((signal) => {
       console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
+      const route = getRoute(signal.id);
+      const industryBites = route?.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
+      const hasActiveBite = industryBites.some((b) => selectedBiteIds.has(b.id));
+      if (signal.fromExplosion && !hasActiveBite) {
+        console.log(`[JSON_GEN]: SKIP phantom exploded node [${signal.id}] — no active bites.`);
+        return;
+      }
       injectNode(signal.id, signal.name, signal.parentName || null);
     });
+
+    // LIVE-WIRE: any sub-module with an active Nano-Bite selection that wasn't
+    // dragged into the Blueprint Zone is auto-injected so the manifest mirrors
+    // taxonomy state.
+    if (selectedBiteIds.size > 0) {
+      verticalCategories.forEach((v) => {
+        v.subModules.forEach((s) => {
+          if (activeSovereignNodes.some((n) => n.id === s.id)) return;
+          const route = getRoute(s.id);
+          if (!route?.industryId) return;
+          const bites = getNanoBitesFor({ industryId: route.industryId });
+          if (bites.some((b) => selectedBiteIds.has(b.id))) {
+            console.log(`[JSON_GEN]: LIVE-WIRE injecting [${s.id}] (active bite present).`);
+            injectNode(s.id, s.name, v.name);
+          }
+        });
+      });
+    }
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
     const bundles = itemizedSidebarManifest.map((m) => {
@@ -1002,48 +1033,23 @@ export const PayAppBlueprint = () => {
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
     console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
     console.log(`[DATA_FLOW]: generateBlueprintJSON return — remedyRequired=${finalManifest.remedyRequiredNodes.length}`);
+    console.log(`[JSON_GEN]: END - Manifest compiled with ${bundles.length} bundles.`);
     return finalManifest;
   };
 
   const handleDownloadBlueprint = () => {
-    console.log(`[DATA_EGRESS]: START - File generation for code: ${provisioningCode}`);
-    console.log("[PayAppBlueprint] Starting blueprint generation for download...");
-
-    try {
-      // 1. Generate the JSON data
-      const blueprint = generateBlueprintJSON();
-      console.log("[PayAppBlueprint] Blueprint data generated successfully:", blueprint);
-
-      // 2. Create the Blob
-      const jsonString = JSON.stringify(blueprint, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
-
-      // 3. Create a temporary URL
-      const url = window.URL.createObjectURL(blob);
-
-      // 4. Create and trigger the anchor tag
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `merchant_blueprint_${provisioningCode || "new"}.json`;
-
-      // Append to body is necessary for some browsers (like Firefox)
-      document.body.appendChild(link);
-      link.click();
-
-      // 5. Cleanup
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        console.log("[PayAppBlueprint] Cleanup complete.");
-      }, 100);
-
-      toast.success("Blueprint downloaded successfully");
-    } catch (error: any) {
-      console.error("[PayAppBlueprint] Download failed:", error);
-      toast.error("Failed to generate download file", {
-        description: error.message,
-      });
-    }
+    const blueprint = generateBlueprintJSON();
+    const jsonString = JSON.stringify(blueprint, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "idia_blueprint_" + (provisioningCode || "manifest") + ".json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast.success("Blueprint exported to local storage");
   };
 
   const handleSendToDevice = async () => {
@@ -1053,6 +1059,7 @@ export const PayAppBlueprint = () => {
     }
 
     console.log(`[PayAppBlueprint] BEGIN: handleSendToDevice execution for code: ${provisioningCode}`);
+    console.log("[PROVISIONING]: Syncing payload for code:", provisioningCode);
 
     try {
       // 1. Generate the dynamic payload
