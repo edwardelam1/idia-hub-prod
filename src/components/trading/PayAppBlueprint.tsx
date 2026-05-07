@@ -75,6 +75,12 @@ import {
   Cannabis,
   Globe,
   Beer,
+  Save,
+  Power,
+  PowerOff,
+  RotateCcw,
+  Plus,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
