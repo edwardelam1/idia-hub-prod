@@ -841,6 +841,7 @@ export const PayAppBlueprint = () => {
 
     // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
     customSelected.forEach((signal) => {
+      console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
       // Check if this signal is actually a Top-Level Vertical (the "Carton")
       const rootVertical = verticalCategories.find((v) => v.id === signal.id);
 
@@ -966,6 +967,7 @@ export const PayAppBlueprint = () => {
     };
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
+    console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
     return finalManifest;
   };
 
