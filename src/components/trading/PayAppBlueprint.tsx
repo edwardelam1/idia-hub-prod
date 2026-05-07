@@ -1765,6 +1765,104 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
+      {/* Provision Code Log */}
+      <Card>
+        <CardHeader className="py-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Provision Code Log
+              {selectedBusiness && (
+                <Badge variant="outline" className="ml-2 text-[10px]">
+                  {schemaLog.length} schema{schemaLog.length === 1 ? "" : "s"}
+                </Badge>
+              )}
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={handleNewSchema} disabled={!selectedBusiness}>
+              <Plus className="h-4 w-4 mr-1" /> New Schema
+            </Button>
+          </div>
+          <CardDescription className="text-xs">
+            Each row is one IDIA-XXXX-XXXX provisioning code with its own saved blueprint. Load to edit, Save to persist, Activate / Deactivate to gate egress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!selectedBusiness ? (
+            <p className="text-xs text-muted-foreground italic">Select a business to view its provisioning codes.</p>
+          ) : schemaLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No schemas yet. Click "New Schema" to mint a provisioning code.</p>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {schemaLog.map((row) => {
+                const isLoaded = loadedSchemaId === row.id;
+                const isActive = row.status === "active";
+                return (
+                  <div
+                    key={row.id}
+                    className={`flex items-center gap-3 p-2 rounded-md border transition-colors ${
+                      isLoaded ? "border-primary/60 bg-primary/5" : "border-border/60 bg-muted/20"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-xs font-semibold text-primary">{row.code}</code>
+                        <Badge
+                          variant={isActive ? "default" : "secondary"}
+                          className="text-[9px] px-1.5 py-0"
+                        >
+                          {isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        {isLoaded && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-primary/60 text-primary">
+                            Loaded
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-foreground truncate mt-0.5">{row.label}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Updated {new Date(row.updated_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant={isLoaded ? "secondary" : "outline"}
+                        onClick={() => handleLoadSchema(row)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" /> Load
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSaveSchema(row.id)}
+                        disabled={schemaSaving}
+                      >
+                        <Save className="h-3.5 w-3.5 mr-1" /> Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={isActive ? "destructive" : "default"}
+                        onClick={() => handleToggleSchemaStatus(row)}
+                      >
+                        {isActive ? (
+                          <>
+                            <PowerOff className="h-3.5 w-3.5 mr-1" /> Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-3.5 w-3.5 mr-1" /> Activate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Actions */}
       <Card>
         <CardContent className="py-4">
