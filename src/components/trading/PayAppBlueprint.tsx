@@ -935,6 +935,9 @@ export const PayAppBlueprint = () => {
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
+      remedyRequiredNodes: bundles
+        .filter((b) => !b.nanoBites || b.nanoBites.length === 0)
+        .map((b) => b.subModuleId),
       modules: {
         active: activeSovereignNodes, // Powers the Sovereign OS Wheel
         default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
@@ -968,6 +971,7 @@ export const PayAppBlueprint = () => {
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
     console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
+    console.log(`[DATA_FLOW]: generateBlueprintJSON return — remedyRequired=${finalManifest.remedyRequiredNodes.length}`);
     return finalManifest;
   };
 
@@ -1098,6 +1102,72 @@ export const PayAppBlueprint = () => {
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
 
+  // ── Nano-Bite Command Center: aggregate bites only for SELECTED modules/sub-modules ──
+  const commandCenter = (() => {
+    const customSelected = selectedModules.filter((m) => !m.isDefault);
+    const sourceIds = new Set<string>();
+    customSelected.forEach((m) => {
+      const r = getRoute(m.id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    // Also include actively-checked sub-modules from the expanded vertical
+    selectedSubModules.forEach((id) => {
+      const r = getRoute(id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    if (sourceIds.size === 0) {
+      return { hasContext: false, available: [] as NanoBite[], active: [] as NanoBite[] };
+    }
+    const seen = new Set<string>();
+    const allBites: NanoBite[] = [];
+    sourceIds.forEach((iid) => {
+      getNanoBitesFor({ industryId: iid }).forEach((b) => {
+        if (!seen.has(b.id)) {
+          seen.add(b.id);
+          allBites.push(b);
+        }
+      });
+    });
+    const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+    return {
+      hasContext: true,
+      available: allBites.filter((b) => !selectedBiteIds.has(b.id)),
+      active: allBites.filter((b) => selectedBiteIds.has(b.id)),
+    };
+  })();
+
+  const moveBiteToActive = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.add(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+  const moveBiteToAvailable = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.delete(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+
+  const renderBiteChip = (b: NanoBite, side: "available" | "active") => (
+    <button
+      key={b.id}
+      type="button"
+      onClick={() => (side === "available" ? moveBiteToActive(b.id) : moveBiteToAvailable(b.id))}
+      className={`text-left text-[11px] rounded-md border px-2 py-1.5 transition-colors ${
+        side === "active"
+          ? "border-primary/50 bg-primary/10 hover:bg-primary/20"
+          : "border-border bg-muted/30 hover:bg-muted/60"
+      }`}
+      title={`${b.task} · ${b.microElement}`}
+    >
+      <span className="font-medium block truncate">{b.task}</span>
+      <span className="text-[9px] text-muted-foreground">{b.cadence}</span>
+    </button>
+  );
+
   return (
     <div className="space-y-6">
       <style>{`
@@ -1170,53 +1240,49 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Package className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Modules</p>
-                <p className="text-xl font-bold">{selectedModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <Shield className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Default Modules</p>
-                <p className="text-xl font-bold">{defaultModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Sparkles className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Custom Modules</p>
-                <p className="text-xl font-bold">{customModulesCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Condensed Stats Bar */}
+      <div className="flex items-center justify-between gap-6 rounded-lg border bg-muted/20 px-4 py-2 text-sm">
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-primary" />
+          <span className="text-muted-foreground">Total</span>
+          <span className="font-semibold">{selectedModules.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-green-500" />
+          <span className="text-muted-foreground">Default</span>
+          <span className="font-semibold">{defaultModules.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          <span className="text-muted-foreground">Custom</span>
+          <span className="font-semibold">{customModulesCount}</span>
+        </div>
       </div>
 
       {/* Main Builder Interface */}
       <div className="grid grid-cols-2 gap-6">
         {/* Left Pane - Available Modules */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-muted/30 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-primary" />
+                  Nano-Bite Library · {commandCenter.available.length} available
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.available.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">All bites assigned to payload.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.available.map((b) => renderBiteChip(b, "available"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-muted/30 py-4">
             <div className="flex items-center justify-between">
               <div>
@@ -1566,9 +1632,32 @@ export const PayAppBlueprint = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Right Pane - Blueprint Zone */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-primary/5 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Active Payload · {commandCenter.active.length} bites
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.active.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    No bites assigned. Click bites in the library to add them.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.active.map((b) => renderBiteChip(b, "active"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-primary/5 py-4">
             <CardTitle className="text-lg flex items-center gap-2">
               <Check className="h-5 w-5 text-primary" />
@@ -1700,6 +1789,7 @@ export const PayAppBlueprint = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Actions */}
