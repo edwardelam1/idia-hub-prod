@@ -935,6 +935,9 @@ export const PayAppBlueprint = () => {
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
+      remedyRequiredNodes: bundles
+        .filter((b) => !b.nanoBites || b.nanoBites.length === 0)
+        .map((b) => b.subModuleId),
       modules: {
         active: activeSovereignNodes, // Powers the Sovereign OS Wheel
         default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
@@ -968,6 +971,7 @@ export const PayAppBlueprint = () => {
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
     console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
+    console.log(`[DATA_FLOW]: generateBlueprintJSON return — remedyRequired=${finalManifest.remedyRequiredNodes.length}`);
     return finalManifest;
   };
 
