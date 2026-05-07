@@ -904,6 +904,7 @@ export const PayAppBlueprint = () => {
     // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
     // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
     bundles.forEach((b) => {
+      const route = getRoute(b.subModuleId);
       if (route && route.verticalId !== b.vertical) {
         b.vertical = route.verticalId; // The Capitalization Fix
       }
@@ -916,7 +917,6 @@ export const PayAppBlueprint = () => {
       });
       // Cross-vertical guard: ensure bundle.vertical (canonical route.verticalId)
       // matches the route. m.vertical is drag-derived UI label; reconcile.
-      const route = getRoute(b.subModuleId);
       if (route && route.verticalId !== b.vertical) {
         console.warn(
           `[generateBlueprintJSON] CONTAMINATION DETECTED: Bundle [${b.subModuleId}] had drag-vertical=[${b.vertical}], canonical=[${route.verticalId}]. Reassigning.`,
