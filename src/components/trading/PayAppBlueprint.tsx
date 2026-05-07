@@ -807,6 +807,7 @@ export const PayAppBlueprint = () => {
             name: s.name,
             parentId: rootVertical.id,
             parentName: rootVertical.name,
+            fromExplosion: true,
             icon: rootVertical.icon,
             color: rootVertical.color,
           }));
