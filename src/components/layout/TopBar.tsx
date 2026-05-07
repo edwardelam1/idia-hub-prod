@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,12 +9,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, ChevronDown, Coins, LogOut, Settings } from "lucide-react";
+import { ChevronDown, Coins, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import IdentityStatusPills from "@/components/layout/IdentityStatusPills";
+import NotificationsCenter from "@/components/notifications/NotificationsCenter";
 
 interface TopBarProps {
   userRole: string;
@@ -24,7 +23,6 @@ interface TopBarProps {
 }
 
 const TopBar = ({ userRole, onLogout }: TopBarProps) => {
-  const [notifications] = useState(3);
   const { balanceData, isLoading } = useSynapseCredits();
   const synapseCredits = balanceData?.available_credits ?? 0;
   const navigate = useNavigate();
@@ -102,14 +100,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           </div>
         )}
 
-        <Button variant="ghost" size="sm" className="relative h-8 w-8 md:h-9 md:w-9">
-          <Bell className="h-3 w-3 md:h-4 md:w-4" />
-          {notifications > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-4 w-4 md:h-5 md:w-5 flex items-center justify-center p-0 text-xs">
-              {notifications}
-            </Badge>
-          )}
-        </Button>
+        <NotificationsCenter />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
