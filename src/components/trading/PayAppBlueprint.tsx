@@ -1098,6 +1098,72 @@ export const PayAppBlueprint = () => {
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
 
+  // ── Nano-Bite Command Center: aggregate bites only for SELECTED modules/sub-modules ──
+  const commandCenter = (() => {
+    const customSelected = selectedModules.filter((m) => !m.isDefault);
+    const sourceIds = new Set<string>();
+    customSelected.forEach((m) => {
+      const r = getRoute(m.id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    // Also include actively-checked sub-modules from the expanded vertical
+    selectedSubModules.forEach((id) => {
+      const r = getRoute(id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    if (sourceIds.size === 0) {
+      return { hasContext: false, available: [] as NanoBite[], active: [] as NanoBite[] };
+    }
+    const seen = new Set<string>();
+    const allBites: NanoBite[] = [];
+    sourceIds.forEach((iid) => {
+      getNanoBitesFor({ industryId: iid }).forEach((b) => {
+        if (!seen.has(b.id)) {
+          seen.add(b.id);
+          allBites.push(b);
+        }
+      });
+    });
+    const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+    return {
+      hasContext: true,
+      available: allBites.filter((b) => !selectedBiteIds.has(b.id)),
+      active: allBites.filter((b) => selectedBiteIds.has(b.id)),
+    };
+  })();
+
+  const moveBiteToActive = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.add(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+  const moveBiteToAvailable = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.delete(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+
+  const renderBiteChip = (b: NanoBite, side: "available" | "active") => (
+    <button
+      key={b.id}
+      type="button"
+      onClick={() => (side === "available" ? moveBiteToActive(b.id) : moveBiteToAvailable(b.id))}
+      className={`text-left text-[11px] rounded-md border px-2 py-1.5 transition-colors ${
+        side === "active"
+          ? "border-primary/50 bg-primary/10 hover:bg-primary/20"
+          : "border-border bg-muted/30 hover:bg-muted/60"
+      }`}
+      title={`${b.task} · ${b.microElement}`}
+    >
+      <span className="font-medium block truncate">{b.task}</span>
+      <span className="text-[9px] text-muted-foreground">{b.cadence}</span>
+    </button>
+  );
+
   return (
     <div className="space-y-6">
       <style>{`
