@@ -1785,6 +1785,7 @@ export const PayAppBlueprint = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* Actions */}
