@@ -1374,10 +1374,27 @@ export const PayAppBlueprint = () => {
 
                     {/* ── Taxonomy: Nano-Bites + Spatial Telemetry ── */}
                     {(() => {
-                      const industryId = expandedVertical ? VERTICAL_TO_INDUSTRY_ID[expandedVertical] : undefined;
-                      if (!industryId) return null;
+                      const parentIndustryId = expandedVertical
+                        ? VERTICAL_TO_INDUSTRY_ID[expandedVertical]
+                        : undefined;
+                      const activeSubIndustryIds = Array.from(selectedSubModules)
+                        .map((id) => getRoute(id)?.industryId)
+                        .filter((x): x is string => Boolean(x));
+                      const allTargetIds = Array.from(
+                        new Set([parentIndustryId, ...activeSubIndustryIds].filter((x): x is string => Boolean(x))),
+                      );
+                      if (allTargetIds.length === 0) return null;
+                      const industryId = parentIndustryId ?? allTargetIds[0];
                       const industry = getIndustryById(industryId);
-                      const bites: NanoBite[] = getNanoBitesFor({ industryId });
+                      const bitesRaw: NanoBite[] = allTargetIds.flatMap((iid) =>
+                        getNanoBitesFor({ industryId: iid }),
+                      );
+                      const seenBiteIds = new Set<string>();
+                      const bites: NanoBite[] = bitesRaw.filter((b) => {
+                        if (seenBiteIds.has(b.id)) return false;
+                        seenBiteIds.add(b.id);
+                        return true;
+                      });
                       const spatial = taxonomy.getSpatialMetaFor(industryId) as {
                         benchmarks?: string[];
                         tech_stack?: string[];
