@@ -3065,6 +3065,45 @@ export type Database = {
         }
         Relationships: []
       }
+      hub_notifications: {
+        Row: {
+          body: string | null
+          category: string
+          created_at: string
+          id: string
+          link: string | null
+          metadata: Json
+          read_at: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          severity?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       idia_life_accounts: {
         Row: {
           created_at: string | null
