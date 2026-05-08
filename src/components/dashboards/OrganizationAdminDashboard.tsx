@@ -1,28 +1,38 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState, useMemo } from "react";
 import { Progress } from "@/components/ui/progress";
-import { Users, Building2, CreditCard, Coins, Activity } from "lucide-react";
+import { Users, Building2, CreditCard, Coins, Activity, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, SubscriptionTier } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { usePipelineActivity } from "@/hooks/usePipelineActivity";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 
 const OrganizationAdminDashboard = () => {
-  const { profile } = useAuth();
+  const { profile, subscriptionTier, piiData } = useAuth();
   const { balanceData } = useSynapseCredits();
   const { activities, activityCount } = usePipelineActivity();
+
+  // 1. TIER-BASED PROTOCOL LIMITS (The Business Logic)
+  const tierLimits: Record<SubscriptionTier, number> = {
+    none: 0,
+    base: 1000,
+    analyst: 10000,
+    professional: 50000,
+    enterprise: 250000,
+  };
+
+  const apiThreshold = useMemo(() => tierLimits[subscriptionTier] || 1000, [subscriptionTier]);
 
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeTeams: 0,
     monthlySpend: 0,
-    apiCalls: 0,
     loading: true,
   });
 
   useEffect(() => {
     const fetchOrgStats = async () => {
+      console.log("[OrgDashboard] >>> START: Reconciling Org Metrics");
       try {
         const { data: orgUser } = await supabase
           .from("business_users")
@@ -39,8 +49,7 @@ const OrganizationAdminDashboard = () => {
           const { count: teamCount } = await supabase
             .from("teams")
             .select("*", { count: "exact", head: true })
-            .eq("org_id", orgUser.org_id)
-            .eq("status", "active");
+            .eq("org_id", orgUser.org_id);
 
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -58,29 +67,26 @@ const OrganizationAdminDashboard = () => {
             totalUsers: userCount || 0,
             activeTeams: teamCount || 0,
             monthlySpend: totalSpend,
-            apiCalls: activityCount,
             loading: false,
           });
         }
       } catch (err) {
-        console.error("[OrgDashboard] !!! ERROR:", err);
+        console.error("[OrgDashboard] !!! ERROR: Failed to reconcile stats", err);
+      } finally {
+        console.log("[OrgDashboard] <<< END: Metrics Reconciliation Complete");
       }
     };
 
     if (profile?.user_id) fetchOrgStats();
-  }, [profile, activityCount]);
+  }, [profile]);
 
   const recentActivity = activities.slice(0, 4).map((activity) => ({
     id: activity.id,
-    action:
-      activity.type === "data_sale_payout"
-        ? "Settlement"
-        : activity.type === "synapse_purchase"
-          ? "Purchase"
-          : activity.type === "hub_protocol_fee"
-            ? "Protocol"
-            : "System",
-    details: activity.description || "Verified",
+    action: activity.type
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" "),
+    details: activity.description || "Protocol Verified",
     timestamp: new Date(activity.created_at).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -89,67 +95,77 @@ const OrganizationAdminDashboard = () => {
   }));
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-8 bg-white min-h-screen antialiased">
-      {/* Header: Clean & Compact */}
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-10 bg-white min-h-screen antialiased">
+      {/* Sovereign Header */}
       <header className="flex flex-col space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-widest">
-          <span>{profile?.account_type === "god_guid" ? "Sovereign" : "Enterprise"}</span>
-          <span className="h-1 w-1 rounded-full bg-slate-300" />
-          <span>IDIA Hub v3.0</span>
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldCheck className="h-4 w-4 text-purple-600" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            {piiData?.source === "secure_enclave" ? "Verified Enclave" : "Secure Session"}
+          </span>
         </div>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Operations</h1>
+        <p className="text-sm text-slate-500 font-medium">
+          {subscriptionTier.toUpperCase()} TIER • {profile?.account_type.replace("_", " ")}
+        </p>
       </header>
 
-      {/* Visualizer: Reduced height for mobile-first focus */}
-      <section>
-        <Card className="border-none shadow-none bg-slate-50 overflow-hidden rounded-2xl">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Activity className="h-4 w-4 text-purple-600" />
-              Engine Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[200px] md:h-[300px] p-0">
-            <SynapseVisualizer />
-          </CardContent>
-        </Card>
+      {/* Synapse Engine Visualizer */}
+      <section className="bg-slate-50 rounded-3xl p-2 md:p-6">
+        <div className="flex items-center justify-between px-4 py-2">
+          <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Synapse Engine™</span>
+          <div className="flex items-center gap-1.5">
+            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-[10px] font-mono font-bold text-slate-600">{activityCount} EVENTS</span>
+          </div>
+        </div>
+        <div className="h-[180px] md:h-[240px]">
+          <SynapseVisualizer />
+        </div>
       </section>
 
-      {/* Metrics: 2x2 on mobile, 1x4 on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-        <MetricCard title="Users" value={stats.totalUsers} icon={<Users />} />
-        <MetricCard title="Teams" value={stats.activeTeams} icon={<Building2 />} />
-        <MetricCard title="Gas" value={Math.floor(balanceData?.synapse_gas_credits || 0)} icon={<Coins />} highlight />
-        <MetricCard title="Spend" value={`$${stats.monthlySpend}`} icon={<CreditCard />} />
+      {/* Grid: 2x2 for Mobile, 1x4 for Desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <MetricTile title="Total Users" value={stats.totalUsers} icon={<Users />} />
+        <MetricTile title="Teams" value={stats.activeTeams} icon={<Building2 />} />
+        <MetricTile
+          title="Credits"
+          value={Math.floor(balanceData?.synapse_gas_credits || 0)}
+          icon={<Coins />}
+          variant="primary"
+        />
+        <MetricTile title="Mo. Spend" value={`$${stats.monthlySpend}`} icon={<CreditCard />} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Utilization */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Utilization</h3>
-          <div className="space-y-6 bg-slate-50 p-6 rounded-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        {/* Utilization Section */}
+        <div className="space-y-6">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Utilization</h3>
+          <div className="space-y-8">
             <div className="space-y-3">
-              <div className="flex justify-between text-sm font-medium">
-                <span className="text-slate-600">API Threshold</span>
-                <span className="text-slate-900 font-mono">{stats.apiCalls.toLocaleString()} / 15k</span>
+              <div className="flex justify-between items-end">
+                <span className="text-sm font-semibold text-slate-700">API Threshold</span>
+                <span className="text-xs font-mono text-slate-500">
+                  {activityCount.toLocaleString()} / {apiThreshold.toLocaleString()}
+                </span>
               </div>
-              <Progress value={(stats.apiCalls / 15000) * 100} className="h-1.5 bg-slate-200" />
+              <Progress value={(activityCount / apiThreshold) * 100} className="h-1 bg-slate-100" />
             </div>
           </div>
         </div>
 
-        {/* Feed: Minimalist Timeline */}
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Protocol Stream</h3>
+        {/* Live Ledger Activity */}
+        <div className="space-y-6">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Ledger Activity</h3>
           <div className="space-y-1">
             {recentActivity.map((activity) => (
               <div
                 key={activity.id}
-                className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                className="group flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100"
               >
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-slate-800">{activity.action}</span>
-                  <span className="text-xs text-slate-500 truncate max-w-[180px]">{activity.details}</span>
+                  <span className="text-[10px] text-slate-400 font-medium">{activity.details}</span>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-slate-400">{activity.timestamp}</span>
               </div>
@@ -161,19 +177,21 @@ const OrganizationAdminDashboard = () => {
   );
 };
 
-const MetricCard = ({ title, value, icon, highlight = false }: any) => (
+const MetricTile = ({ title, value, icon, variant = "default" }: any) => (
   <div
-    className={`p-4 rounded-2xl transition-all ${highlight ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white border border-slate-100 shadow-sm"}`}
+    className={`p-5 rounded-3xl transition-all ${variant === "primary" ? "bg-slate-900 text-white shadow-xl shadow-slate-200" : "bg-white border border-slate-100 shadow-sm"}`}
   >
-    <div className="flex items-center justify-between mb-3">
+    <div className="flex items-center justify-between mb-4">
+      <div className={`p-2 rounded-xl ${variant === "primary" ? "bg-slate-800" : "bg-slate-50"}`}>
+        <div className={`h-4 w-4 ${variant === "primary" ? "text-white" : "text-slate-400"}`}>{icon}</div>
+      </div>
       <span
-        className={`text-[10px] font-bold uppercase tracking-wider ${highlight ? "text-purple-200" : "text-slate-400"}`}
+        className={`text-[10px] font-bold uppercase tracking-widest ${variant === "primary" ? "text-slate-400" : "text-slate-300"}`}
       >
         {title}
       </span>
-      <div className={`h-4 w-4 ${highlight ? "text-purple-200" : "text-slate-300"}`}>{icon}</div>
     </div>
-    <div className="text-xl font-semibold tracking-tight">{value}</div>
+    <div className="text-2xl font-semibold tracking-tight">{value}</div>
   </div>
 );
 
