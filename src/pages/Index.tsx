@@ -30,6 +30,7 @@ import UpdateBankingDetails from "@/components/billing/UpdateBankingDetails";
 import UniversalPurchaseScreen from "@/components/billing/UniversalPurchaseScreen";
 import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
+import BestFriendAvatar from "@/components/ai/BestFriendAvatar"; // ADDED AVATAR IMPORT
 import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
@@ -58,10 +59,12 @@ const Index = () => {
     setUserRole(role);
     setCurrentView("app");
   };
+
   const handleRealLogin = () => {
     // Auth state change in AuthContext will set user; we just switch view
     setCurrentView("app");
   };
+
   const handleLogout = async () => {
     await authLogout();
     setUserRole("");
@@ -94,13 +97,16 @@ const Index = () => {
 
   const effectiveRole = user?.role || userRole || "team-member";
 
-  <BestFriendAvatar
-    onChatClick={() => console.log("Chat clicked")}
-    onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
-  />;
-
   return (
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
+      {/* AVATAR SAFELY PLACED INSIDE THE RENDER TREE */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <BestFriendAvatar
+          onChatClick={() => console.log("Chat clicked")}
+          onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
+        />
+      </div>
+
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={renderDashboard()} />
