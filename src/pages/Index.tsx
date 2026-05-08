@@ -30,7 +30,7 @@ import UpdateBankingDetails from "@/components/billing/UpdateBankingDetails";
 import UniversalPurchaseScreen from "@/components/billing/UniversalPurchaseScreen";
 import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
-import BestFriendAvatar from "@/components/ai/BestFriendAvatar"; // ADDED AVATAR IMPORT
+import BestFriendAvatar from "@/components/ai/BestFriendAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
@@ -61,7 +61,6 @@ const Index = () => {
   };
 
   const handleRealLogin = () => {
-    // Auth state change in AuthContext will set user; we just switch view
     setCurrentView("app");
   };
 
@@ -94,6 +93,17 @@ const Index = () => {
   if (currentView === "splash" && isLoading) return <SplashScreen onComplete={handleSplashComplete} />;
   if (currentView === "login" && !isAuthenticated)
     return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
+
+  const effectiveRole = user?.role || userRole || "team-member";
+
+  return (
+    <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
+      <div className="fixed bottom-6 right-6 z-50">
+        <BestFriendAvatar
+          onChatClick={() => console.log("Chat clicked")}
+          onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
+        />
+      </div>
 
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
