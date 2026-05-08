@@ -58,45 +58,41 @@ const buildUserFromSession = (session: Session, subscription: any, profileData: 
   };
 };
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [piiData, setPiiData] = useState<PiiData | null>(null);
-  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("none");
-  const [isLoading, setIsLoading] = useState(true);
-  const [activePerspective, setActivePerspective] = useState<AccountType>("individual");
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const switchPerspective = useCallback((type: AccountType) => {
-    setActivePerspective(type);
-  }, []);
+  useEffect(() => {
+    console.log("[AuthGate] >>> START: Session Verification");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        console.log("[AuthGate] --- SESSION: Valid session detected for ", session.user.id);
+        
+        // FETCH REAL IDENTITY DATA
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single();
 
-  // src/contexts/AuthContext.tsx
-
-  const fetchPiiData = useCallback(async (session: Session) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("life-pii-bridge", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        console.error("PII Bridge Error:", error);
-        return null;
+        if (error) {
+          console.error("[AuthGate] !!! FATAL: Profile fetch stalled", error.message);
+        } else {
+          console.log(`[AuthGate] --- IDENTITY: Role confirmed as [${data.account_type}]`);
+          setProfile(data);
+          setUser(session.user);
+        }
       }
+      setLoading(false);
+      console.log("[AuthGate] <<< END: Identity Bridge Established");
+    });
 
-      return {
-        displayName: data.display_name ?? null,
-        fullName: data.full_name ?? null,
-        email: data.email ?? null,
-        avatarUrl: data.avatar_url ?? null,
-        platformGuid: data.platform_guid ?? null,
-        source: data.source ?? "auth_metadata_stub",
-      } as PiiData;
-    } catch (err) {
-      return null;
-    }
+    return () => subscription.unsubscribe();
   }, []);
+
+  // ... rest of context logic
+};
 
   const fetchProfileAndSubscription = useCallback(
     async (session: Session) => {
