@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Users, Building2, CreditCard, Coins } from "lucide-react";
+import { Users, Building2, CreditCard, Coins, Activity } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
@@ -23,9 +23,7 @@ const OrganizationAdminDashboard = () => {
 
   useEffect(() => {
     const fetchOrgStats = async () => {
-      console.log("[OrgDashboard] >>> START: Fetching Live Org Metrics");
       try {
-        // 1. Get the Org GUID for this admin
         const { data: orgUser } = await supabase
           .from("business_users")
           .select("org_id")
@@ -33,27 +31,24 @@ const OrganizationAdminDashboard = () => {
           .single();
 
         if (orgUser?.org_id) {
-          // 2. Count Total Users in Org
           const { count: userCount } = await supabase
             .from("business_users")
             .select("*", { count: "exact", head: true })
             .eq("org_id", orgUser.org_id);
 
-          // 3. Count Active Teams
           const { count: teamCount } = await supabase
             .from("teams")
             .select("*", { count: "exact", head: true })
             .eq("org_id", orgUser.org_id)
             .eq("status", "active");
 
-          // 4. Calculate Monthly Spend (Sum of synapse_purchase in last 30 days)
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
           const { data: spendData } = await supabase
             .from("synapse_credit_ledger")
             .select("amount")
-            .eq("user_id", profile?.user_id) // Scoped to admin/org wallet
+            .eq("user_id", profile?.user_id)
             .eq("transaction_type", "synapse_purchase")
             .gte("created_at", thirtyDaysAgo.toISOString());
 
@@ -63,130 +58,123 @@ const OrganizationAdminDashboard = () => {
             totalUsers: userCount || 0,
             activeTeams: teamCount || 0,
             monthlySpend: totalSpend,
-            apiCalls: activityCount, // Using live pipeline count
+            apiCalls: activityCount,
             loading: false,
           });
         }
       } catch (err) {
-        console.error("[OrgDashboard] !!! ERROR: Failed to reconcile stats", err);
-      } finally {
-        console.log("[OrgDashboard] <<< END: Metrics Reconciliation Complete");
+        console.error("[OrgDashboard] !!! ERROR:", err);
       }
     };
 
     if (profile?.user_id) fetchOrgStats();
   }, [profile, activityCount]);
 
-  // Map live activity types (lower_case_style) to UI labels
-  const recentActivity = activities.slice(0, 5).map((activity) => ({
+  const recentActivity = activities.slice(0, 4).map((activity) => ({
     id: activity.id,
     action:
       activity.type === "data_sale_payout"
-        ? "Data Settlement"
+        ? "Settlement"
         : activity.type === "synapse_purchase"
-          ? "Credit Purchase"
+          ? "Purchase"
           : activity.type === "hub_protocol_fee"
-            ? "Protocol Settlement"
-            : activity.type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-    details: activity.description || "System protocol verified",
+            ? "Protocol"
+            : "System",
+    details: activity.description || "Verified",
     timestamp: new Date(activity.created_at).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     }),
-    type: activity.type,
   }));
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Organization Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Data Intelligence Operations • {profile?.account_type === "god_guid" ? "Sovereign View" : "Enterprise Admin"}
-        </p>
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-8 bg-white min-h-screen antialiased">
+      {/* Header: Clean & Compact */}
+      <header className="flex flex-col space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 uppercase tracking-widest">
+          <span>{profile?.account_type === "god_guid" ? "Sovereign" : "Enterprise"}</span>
+          <span className="h-1 w-1 rounded-full bg-slate-300" />
+          <span>IDIA Hub v3.0</span>
+        </div>
       </header>
 
-      <Card className="border-purple-100 bg-gradient-to-br from-white to-purple-50/30">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            Live Synapse Engine™ Visualizer
-          </CardTitle>
-          <CardDescription>Real-time network contribution • {activityCount} protocols settled</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SynapseVisualizer />
-        </CardContent>
-      </Card>
+      {/* Visualizer: Reduced height for mobile-first focus */}
+      <section>
+        <Card className="border-none shadow-none bg-slate-50 overflow-hidden rounded-2xl">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Activity className="h-4 w-4 text-purple-600" />
+              Engine Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[200px] md:h-[300px] p-0">
+            <SynapseVisualizer />
+          </CardContent>
+        </Card>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Total Users" value={stats.totalUsers} icon={<Users />} subtext="Across all teams" />
-        <MetricCard title="Active Teams" value={stats.activeTeams} icon={<Building2 />} subtext="Provisioned squads" />
-        <MetricCard
-          title="Synapse Gas"
-          value={Math.floor(balanceData?.synapse_gas_credits || 0)}
-          icon={<Coins />}
-          subtext="Operational fuel"
-          isPrimary
-        />
-        <MetricCard
-          title="Monthly Spend"
-          value={`$${stats.monthlySpend.toLocaleString()}`}
-          icon={<CreditCard />}
-          subtext="Last 30 days"
-        />
+      {/* Metrics: 2x2 on mobile, 1x4 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+        <MetricCard title="Users" value={stats.totalUsers} icon={<Users />} />
+        <MetricCard title="Teams" value={stats.activeTeams} icon={<Building2 />} />
+        <MetricCard title="Gas" value={Math.floor(balanceData?.synapse_gas_credits || 0)} icon={<Coins />} highlight />
+        <MetricCard title="Spend" value={`$${stats.monthlySpend}`} icon={<CreditCard />} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quota Utilization</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>API Threshold</span>
-                <span className="font-mono">{stats.apiCalls.toLocaleString()} / 15k</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Utilization */}
+        <div className="space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Utilization</h3>
+          <div className="space-y-6 bg-slate-50 p-6 rounded-2xl">
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm font-medium">
+                <span className="text-slate-600">API Threshold</span>
+                <span className="text-slate-900 font-mono">{stats.apiCalls.toLocaleString()} / 15k</span>
               </div>
-              <Progress value={(stats.apiCalls / 15000) * 100} className="h-2" />
+              <Progress value={(stats.apiCalls / 15000) * 100} className="h-1.5 bg-slate-200" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Live Protocol Stream</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start space-x-3 border-l-2 border-muted pl-4 py-1">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">{activity.action}</p>
-                    <p className="text-xs text-muted-foreground">{activity.details}</p>
-                    <time className="text-[10px] uppercase text-gray-400 mt-1 block">{activity.timestamp}</time>
-                  </div>
+        {/* Feed: Minimalist Timeline */}
+        <div className="space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Protocol Stream</h3>
+          <div className="space-y-1">
+            {recentActivity.map((activity) => (
+              <div
+                key={activity.id}
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-slate-800">{activity.action}</span>
+                  <span className="text-xs text-slate-500 truncate max-w-[180px]">{activity.details}</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <span className="text-[10px] font-mono font-bold text-slate-400">{activity.timestamp}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-const MetricCard = ({ title, value, icon, subtext, isPrimary = false }: any) => (
-  <Card className={isPrimary ? "border-purple-200 bg-purple-50/50" : ""}>
-    <CardHeader className="flex flex-row items-center justify-between pb-2">
-      <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
-      <div className="h-4 w-4 text-muted-foreground">{icon}</div>
-    </CardHeader>
-    <CardContent>
-      <div className={`text-2xl font-bold ${isPrimary ? "text-purple-700" : ""}`}>{value}</div>
-      <p className="text-[10px] text-muted-foreground mt-1">{subtext}</p>
-    </CardContent>
-  </Card>
+const MetricCard = ({ title, value, icon, highlight = false }: any) => (
+  <div
+    className={`p-4 rounded-2xl transition-all ${highlight ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white border border-slate-100 shadow-sm"}`}
+  >
+    <div className="flex items-center justify-between mb-3">
+      <span
+        className={`text-[10px] font-bold uppercase tracking-wider ${highlight ? "text-purple-200" : "text-slate-400"}`}
+      >
+        {title}
+      </span>
+      <div className={`h-4 w-4 ${highlight ? "text-purple-200" : "text-slate-300"}`}>{icon}</div>
+    </div>
+    <div className="text-xl font-semibold tracking-tight">{value}</div>
+  </div>
 );
 
 export default OrganizationAdminDashboard;
