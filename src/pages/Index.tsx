@@ -32,7 +32,7 @@ import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
 import { useAuth } from "@/contexts/AuthContext";
 
-const Index = () => {
+const Index = async () => { ... }
   const { user, isAuthenticated, isLoading, logout: authLogout, activePerspective } = useAuth();
   const [currentView, setCurrentView] = useState<"splash" | "login" | "app">("splash");
   const [userRole, setUserRole] = useState<string>("");
