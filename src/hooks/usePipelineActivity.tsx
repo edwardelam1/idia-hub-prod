@@ -28,6 +28,7 @@ export const usePipelineActivity = () => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const addActivity = (newActivity: Omit<PipelineActivity, "timestamp">) => {
+    console.log(`[Pipeline] New Activity Triggered: ${newActivity.type}`);
     setActivities((prev) => [{ ...newActivity, timestamp: Date.now() }, ...prev].slice(0, 10));
     setActivityCount((prev) => prev + 1);
     setIsActive(true);
@@ -36,55 +37,71 @@ export const usePipelineActivity = () => {
   };
 
   useEffect(() => {
-    // Stage 1: Apple Health Ingestion
-    const healthChannel = supabase
-      .channel("live-health")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_health_data" }, (payload) => {
-        addActivity({ id: payload.new.id, type: "apple_health_sync", details: { userId: payload.new.user_id } });
-      })
-      .subscribe();
+    console.log("[Pipeline] >>> START: Global Channel Initialization");
 
-    // Stage 2 & 5: Synapse Controller & Royalty
-    const ledgerChannel = supabase
-      .channel("live-ledger")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
-        const type = payload.new.transaction_type === "FEE" ? "synapse_controller" : "royalty_payment";
-        addActivity({ id: payload.new.id, type: type as any, details: { desc: payload.new.description } });
-      })
-      .subscribe();
+    const setupChannels = async () => {
+      try {
+        // Stage 1: Apple Health Ingestion
+        const healthChannel = supabase.channel("live-health");
+        if (healthChannel) {
+          healthChannel
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_health_data" }, (payload) => {
+              addActivity({ id: payload.new.id, type: "apple_health_sync", details: { userId: payload.new.user_id } });
+            })
+            .subscribe();
+        }
 
-    // Stage 3: Best Friend AI Egress
-    const egressChannel = supabase
-      .channel("live-egress")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
-        addActivity({ id: payload.new.id, type: "best_friend_ai", details: { type: payload.new.egress_type } });
-      })
-      .subscribe();
-    // Inside usePipelineActivity.tsx
-    const deltChannel = supabase
-      .channel("visualizer-delt")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "delt_transfers",
-        },
-        (payload) => {
-          // The attributes are now coming directly from the DB trigger
-          addActivity({
-            id: payload.new.id,
-            type: "delt_transfer",
-            details: payload.new.details,
-          });
-        },
-      )
-      .subscribe();
+        // Stage 2 & 5: Synapse Controller & Royalty
+        const ledgerChannel = supabase.channel("live-ledger");
+        if (ledgerChannel) {
+          ledgerChannel
+            .on(
+              "postgres_changes",
+              { event: "INSERT", schema: "public", table: "synapse_credit_ledger" },
+              (payload) => {
+                const type = payload.new.transaction_type === "FEE" ? "synapse_controller" : "royalty_payment";
+                addActivity({ id: payload.new.id, type: type as any, details: { desc: payload.new.description } });
+              },
+            )
+            .subscribe();
+        }
+
+        // Stage 3: Best Friend AI Egress
+        const egressChannel = supabase.channel("live-egress");
+        if (egressChannel) {
+          egressChannel
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
+              addActivity({ id: payload.new.id, type: "best_friend_ai", details: { type: payload.new.egress_type } });
+            })
+            .subscribe();
+        }
+
+        // Visualizer DELT
+        const deltChannel = supabase.channel("visualizer-delt");
+        if (deltChannel) {
+          deltChannel
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "delt_transfers" }, (payload) => {
+              addActivity({ id: payload.new.id, type: "delt_transfer", details: payload.new.details });
+            })
+            .subscribe();
+        }
+
+        return { healthChannel, ledgerChannel, egressChannel, deltChannel };
+      } catch (err) {
+        console.error("[Pipeline] !!! Realtime Setup Failed:", err);
+      }
+    };
+
+    const channelsPromise = setupChannels();
+
     return () => {
-      supabase.removeChannel(healthChannel);
-      supabase.removeChannel(ledgerChannel);
-      supabase.removeChannel(egressChannel);
-      supabase.removeChannel(deltChannel);
+      console.log("[Pipeline] >>> START: Channel Cleanup");
+      channelsPromise.then((channels) => {
+        if (channels) {
+          Object.values(channels).forEach((ch) => supabase.removeChannel(ch));
+        }
+      });
+      console.log("[Pipeline] <<< END: Cleanup Complete");
     };
   }, []);
 
