@@ -123,7 +123,7 @@ const OrganizationAdminDashboard = () => {
             {piiData?.source === "auth_metadata_stub" ? "Verified Enclave" : "Secure Session"}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 font-mono">IDIA_HUB_OPS</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 font-mono">Welcome</h1>
         <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">
           {subscriptionTier} TIER • {profile?.account_type?.replace("_", " ") || "SYSTEM"}
         </p>
