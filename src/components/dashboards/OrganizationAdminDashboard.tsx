@@ -1,198 +1,194 @@
-import { useEffect, useState, useMemo } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Users, Building2, CreditCard, Coins, Activity, ShieldCheck } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth, SubscriptionTier } from "@/contexts/AuthContext";
-import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import { usePipelineActivity } from "@/hooks/usePipelineActivity";
+import {
+  Users,
+  Building2,
+  CreditCard,
+  TrendingUp,
+  Shield,
+  FileText,
+  Coins,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
+import { usePipelineActivity } from "@/hooks/usePipelineActivity";
 
 const OrganizationAdminDashboard = () => {
-  const { profile, subscriptionTier, piiData } = useAuth();
-  const { balanceData } = useSynapseCredits();
   const { activities, activityCount } = usePipelineActivity();
 
-  // 1. TIER-BASED PROTOCOL LIMITS (The Business Logic)
-  const tierLimits: Record<SubscriptionTier, number> = {
-    none: 0,
-    base: 1000,
-    analyst: 10000,
-    professional: 50000,
-    enterprise: 250000,
+  const organizationStats = {
+    totalUsers: 24,
+    activeTeams: 6,
+    monthlySpend: 3250,
+    synapseCredits: 8500,
+    dataUsage: 78,
+    apiCalls: 12400,
   };
 
-  const apiThreshold = useMemo(() => tierLimits[subscriptionTier] || 1000, [subscriptionTier]);
-
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeTeams: 0,
-    monthlySpend: 0,
-    loading: true,
-  });
-
-  useEffect(() => {
-    const fetchOrgStats = async () => {
-      console.log("[OrgDashboard] >>> START: Reconciling Org Metrics");
-      try {
-        const { data: orgUser } = await supabase
-          .from("business_users")
-          .select("org_id")
-          .eq("user_id", profile?.user_id)
-          .single();
-
-        if (orgUser?.org_id) {
-          const { count: userCount } = await supabase
-            .from("business_users")
-            .select("*", { count: "exact", head: true })
-            .eq("org_id", orgUser.org_id);
-
-          const { count: teamCount } = await supabase
-            .from("teams")
-            .select("*", { count: "exact", head: true })
-            .eq("org_id", orgUser.org_id);
-
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-          const { data: spendData } = await supabase
-            .from("synapse_credit_ledger")
-            .select("amount")
-            .eq("user_id", profile?.user_id)
-            .eq("transaction_type", "synapse_purchase")
-            .gte("created_at", thirtyDaysAgo.toISOString());
-
-          const totalSpend = spendData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
-
-          setStats({
-            totalUsers: userCount || 0,
-            activeTeams: teamCount || 0,
-            monthlySpend: totalSpend,
-            loading: false,
-          });
-        }
-      } catch (err) {
-        console.error("[OrgDashboard] !!! ERROR: Failed to reconcile stats", err);
-      } finally {
-        console.log("[OrgDashboard] <<< END: Metrics Reconciliation Complete");
-      }
-    };
-
-    if (profile?.user_id) fetchOrgStats();
-  }, [profile]);
-
-  const recentActivity = activities.slice(0, 4).map((activity) => ({
+  // Convert pipeline activities to current ProtocolActivityType format
+  const recentActivity = activities.slice(0, 3).map((activity) => ({
     id: activity.id,
-    action: activity.type
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" "),
-    details: activity.description || "Protocol Verified",
-    timestamp: new Date(activity.created_at).toLocaleTimeString("en-US", {
+    action:
+      activity.type === "apple_health_sync"
+        ? "Data Ingestion"
+        : activity.type === "synapse_controller"
+          ? "Synapse Processing"
+          : activity.type === "best_friend_ai"
+            ? "AI Research Session"
+            : activity.type === "data_sale"
+              ? "Data Settlement"
+              : "Royalty Distributed",
+    details:
+      activity.type === "synapse_controller"
+        ? activity.details?.desc || "Gas Billed"
+        : activity.type === "best_friend_ai"
+          ? `Omni-Fetch: ${activity.details?.type}`
+          : "Protocol event verified",
+    timestamp: new Date(activity.timestamp).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     }),
+    type: activity.type,
   }));
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-10 bg-white min-h-screen antialiased">
-      {/* Sovereign Header */}
-      <header className="flex flex-col space-y-1">
-        <div className="flex items-center gap-2 mb-1">
-          <ShieldCheck className="h-4 w-4 text-purple-600" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-            {piiData?.source === "secure_enclave" ? "Verified Enclave" : "Secure Session"}
-          </span>
-        </div>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Operations</h1>
-        <p className="text-sm text-slate-500 font-medium">
-          {subscriptionTier.toUpperCase()} TIER • {profile?.account_type.replace("_", " ")}
-        </p>
-      </header>
-
-      {/* Synapse Engine Visualizer */}
-      <section className="bg-slate-50 rounded-3xl p-2 md:p-6">
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Synapse Engine™</span>
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[10px] font-mono font-bold text-slate-600">{activityCount} EVENTS</span>
-          </div>
-        </div>
-        <div className="h-[180px] md:h-[240px]">
-          <SynapseVisualizer />
-        </div>
-      </section>
-
-      {/* Grid: 2x2 for Mobile, 1x4 for Desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <MetricTile title="Total Users" value={stats.totalUsers} icon={<Users />} />
-        <MetricTile title="Teams" value={stats.activeTeams} icon={<Building2 />} />
-        <MetricTile
-          title="Credits"
-          value={Math.floor(balanceData?.synapse_gas_credits || 0)}
-          icon={<Coins />}
-          variant="primary"
-        />
-        <MetricTile title="Mo. Spend" value={`$${stats.monthlySpend}`} icon={<CreditCard />} />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Organization Dashboard</h1>
+        <p className="text-gray-600 mt-2">Manage your organization's data intelligence operations</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        {/* Utilization Section */}
-        <div className="space-y-6">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Utilization</h3>
-          <div className="space-y-8">
-            <div className="space-y-3">
-              <div className="flex justify-between items-end">
-                <span className="text-sm font-semibold text-slate-700">API Threshold</span>
-                <span className="text-xs font-mono text-slate-500">
-                  {activityCount.toLocaleString()} / {apiThreshold.toLocaleString()}
-                </span>
-              </div>
-              <Progress value={(activityCount / apiThreshold) * 100} className="h-1 bg-slate-100" />
-            </div>
-          </div>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Organization Network Activity</CardTitle>
+          <CardDescription>
+            Real-time view of your organization's contribution to the IDIA Synapse Engine™ • {activityCount} activities
+            processed
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SynapseVisualizer />
+        </CardContent>
+      </Card>
 
-        {/* Live Ledger Activity */}
-        <div className="space-y-6">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Ledger Activity</h3>
-          <div className="space-y-1">
-            {recentActivity.map((activity) => (
-              <div
-                key={activity.id}
-                className="group flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100"
-              >
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-slate-800">{activity.action}</span>
-                  <span className="text-[10px] text-slate-400 font-medium">{activity.details}</span>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-slate-400">{activity.timestamp}</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{organizationStats.totalUsers}</div>
+            <p className="text-xs text-muted-foreground">+2 from last month</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Teams</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{organizationStats.activeTeams}</div>
+            <p className="text-xs text-muted-foreground">Across departments</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Synapse Credits</CardTitle>
+            <Coins className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">
+              {organizationStats.synapseCredits.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Available balance</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Spend</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${organizationStats.monthlySpend.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">+15% from last month</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Usage Overview</CardTitle>
+            <CardDescription>Current usage against plan limits</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm">Data Usage</span>
+                <span className="text-sm font-medium">{organizationStats.dataUsage}%</span>
               </div>
-            ))}
-          </div>
-        </div>
+              <Progress value={organizationStats.dataUsage} />
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm">API Calls</span>
+                <span className="text-sm font-medium">{organizationStats.apiCalls.toLocaleString()}/15,000</span>
+              </div>
+              <Progress value={(organizationStats.apiCalls / 15000) * 100} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline Activity</CardTitle>
+            <CardDescription>Latest protocol settlements</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentActivity.length > 0 ? (
+                recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-start space-x-3">
+                    <div
+                      className={`w-2 h-2 rounded-full mt-2 ${
+                        activity.type === "apple_health_sync"
+                          ? "bg-rose-500"
+                          : activity.type === "synapse_controller"
+                            ? "bg-indigo-600"
+                            : activity.type === "best_friend_ai"
+                              ? "bg-amber-500"
+                              : activity.type === "data_sale"
+                                ? "bg-cyan-500"
+                                : "bg-emerald-500"
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{activity.action}</p>
+                      <p className="text-xs text-gray-600">{activity.details}</p>
+                      <p className="text-xs text-gray-500 mt-1">{activity.timestamp}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <p className="text-sm">No recent pipeline activity</p>
+                  <p className="text-xs">Data processing activities will appear here</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 };
-
-const MetricTile = ({ title, value, icon, variant = "default" }: any) => (
-  <div
-    className={`p-5 rounded-3xl transition-all ${variant === "primary" ? "bg-slate-900 text-white shadow-xl shadow-slate-200" : "bg-white border border-slate-100 shadow-sm"}`}
-  >
-    <div className="flex items-center justify-between mb-4">
-      <div className={`p-2 rounded-xl ${variant === "primary" ? "bg-slate-800" : "bg-slate-50"}`}>
-        <div className={`h-4 w-4 ${variant === "primary" ? "text-white" : "text-slate-400"}`}>{icon}</div>
-      </div>
-      <span
-        className={`text-[10px] font-bold uppercase tracking-widest ${variant === "primary" ? "text-slate-400" : "text-slate-300"}`}
-      >
-        {title}
-      </span>
-    </div>
-    <div className="text-2xl font-semibold tracking-tight">{value}</div>
-  </div>
-);
 
 export default OrganizationAdminDashboard;
