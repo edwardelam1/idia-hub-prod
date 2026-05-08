@@ -96,14 +96,14 @@ const Index = () => {
     return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
 
   const effectiveRole = user?.role || userRole || "team-member";
+  
+  <BestFriendAvatar
+    onChatClick={() => console.log("Chat clicked")}
+    onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
+  />;
 
   return (
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
-      {/* AVATAR SAFELY PLACED INSIDE THE RENDER TREE */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <BestFriendAvatar
-          onChatClick={() => console.log("Chat clicked")}
-          onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
         />
       </div>
 
