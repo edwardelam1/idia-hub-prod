@@ -54,22 +54,28 @@ const OrganizationAdminDashboard = () => {
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-          const { data: spendData } = await supabase
-            .from("synapse_credit_ledger")
-            .select("amount")
-            .eq("user_id", profile?.user_id)
-            .eq("transaction_type", "synapse_purchase")
-            .gte("created_at", thirtyDaysAgo.toISOString());
+          // Inside fetchOrgStats:
+// 4. Calculate Fiscal Burn directly from the Synapse Ledger
+const { data: spendData } = await supabase
+  .from("synapse_credit_ledger")
+  .select("amount")
+  .eq("user_id", user.user_id)
+  .eq("transaction_type" as any, "synapse_purchase")
+  .gte("created_at", thirtyDaysAgo.toISOString());
 
-          const totalSpend = spendData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+// Using the balance_after from your transaction JSON logic
+const { data: walletData } = await supabase
+  .from("wallets")
+  .select("usdc_balance, synapse_gas_credits")
+  .eq("user_id", user.user_id)
+  .single();
 
-          setStats({
-            totalUsers: userCount || 0,
-            activeTeams: teamCount || 0,
-            monthlySpend: totalSpend,
-            loading: false,
-          });
-        }
+setStats({
+  totalUsers: userCount || 0,
+  activeTeams: memberCount || 0,
+  monthlySpend: spendData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
+  loading: false,
+});
       } catch (err) {
         console.error("[OrgDashboard] !!! ERROR: Failed to reconcile stats", err);
       } finally {
