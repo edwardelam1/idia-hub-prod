@@ -10,10 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  PAY_APP_VERTICAL_OPTIONS,
-  getPayAppVerticalLabel,
-} from "@/taxonomy/payAppVerticals";
+import { PAY_APP_VERTICAL_OPTIONS, getPayAppVerticalLabel } from "@/taxonomy/payAppVerticals";
 import {
   Building2,
   Search,
@@ -34,10 +31,6 @@ import {
   User as UserIcon,
 } from "lucide-react";
 
-// Blueprint Category dropdown is sourced from the Pay App Vertical Catalog —
-// the same list the Pay App Builder uses to hydrate merchant_blueprint.json.
-// We persist the vertical `id` (e.g. "hospitality") into businesses.business_type
-// so the Builder can preselect the correct module bundle automatically.
 const BLUEPRINT_CATEGORIES = PAY_APP_VERTICAL_OPTIONS;
 
 const ClientOrganizations = () => {
@@ -77,68 +70,121 @@ const ClientOrganizations = () => {
   const { toast } = useToast();
 
   const fetchBusinesses = async () => {
+    console.log("[ClientOrganizations] >>> START: fetchBusinesses()");
     setIsLoadingOrgs(true);
-    const { data, error } = await supabase.from("businesses").select("*").order("created_at", { ascending: false });
 
-    if (data && !error) {
-      const enrichedData = data.map((b) => ({
-        ...b,
-        t1p_status: b.subscription_tier === "Enterprise" ? "approved" : "denied",
-        idia_pay_status: b.subscription_tier === "Enterprise" ? "approved" : "pending",
-      }));
-      setBusinesses(enrichedData);
+    try {
+      console.log("[ClientOrganizations] --- STEP: Querying 'businesses' table ordered by created_at");
+      const { data, error } = await supabase.from("businesses").select("*").order("created_at", { ascending: false });
 
-      if (selectedBusiness) {
-        const updatedSelected = enrichedData.find((b) => b.id === selectedBusiness.id);
-        if (updatedSelected && !isEditingCard) setSelectedBusiness(updatedSelected);
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Supabase SELECT failed:", error);
+        toast({ title: "Registry Fetch Failed", description: error.message, variant: "destructive" });
+        return;
       }
+
+      if (data) {
+        console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} organizations. Enriching data.`);
+        const enrichedData = data.map((b) => ({
+          ...b,
+          t1p_status: b.subscription_tier === "Enterprise" ? "approved" : "denied",
+          idia_pay_status: b.subscription_tier === "Enterprise" ? "approved" : "pending",
+        }));
+        setBusinesses(enrichedData);
+
+        if (selectedBusiness) {
+          const updatedSelected = enrichedData.find((b) => b.id === selectedBusiness.id);
+          if (updatedSelected && !isEditingCard) setSelectedBusiness(updatedSelected);
+        }
+      }
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchBusinesses:", err);
+    } finally {
+      setIsLoadingOrgs(false);
+      console.log("[ClientOrganizations] <<< END: fetchBusinesses()");
     }
-    setIsLoadingOrgs(false);
   };
 
   useEffect(() => {
+    console.log("[ClientOrganizations] >>> START: useEffect Initialization");
     fetchBusinesses();
+
     const fetchRequests = async () => {
-      const { data, error } = await supabase
-        .from("account_conversion_requests" as any)
-        .select("*")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      if (data && !error) {
-        const formatted = data.map((req: any) => ({
-          id: req.id,
-          companyName: req.company_name,
-          requestType: req.request_type,
-          requestDate: new Date(req.created_at).toLocaleDateString(),
-          requestedBy: req.contact_name,
-          requestedRole: req.contact_role,
-          platformGuid: req.user_id || "PENDING-GUID-ASSIGNMENT",
-          status: req.status,
-        }));
-        setPendingRequests(formatted);
+      console.log("[ClientOrganizations] >>> START: fetchRequests()");
+      try {
+        console.log("[ClientOrganizations] --- STEP: Querying 'account_conversion_requests'");
+        const { data, error } = await supabase
+          .from("account_conversion_requests" as any)
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("[ClientOrganizations] !!! ERROR: Failed to fetch pending requests:", error);
+          return;
+        }
+
+        if (data) {
+          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} pending requests.`);
+          const formatted = data.map((req: any) => ({
+            id: req.id,
+            companyName: req.company_name,
+            requestType: req.request_type,
+            requestDate: new Date(req.created_at).toLocaleDateString(),
+            // STRIPPED PII: Solely relying on the UUID for identification
+            requestedBy: req.user_id || "PENDING-GUID-ASSIGNMENT",
+            requestedRole: req.contact_role,
+            platformGuid: req.user_id || "PENDING-GUID-ASSIGNMENT",
+            status: req.status,
+          }));
+          setPendingRequests(formatted);
+        }
+      } catch (err) {
+        console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchRequests:", err);
+      } finally {
+        console.log("[ClientOrganizations] <<< END: fetchRequests()");
       }
     };
-    fetchRequests();
+
     const fetchEligibleUsers = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("user_id, account_type, occupation, location")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (data) {
-        setEligibleUsers(
-          data.map((p: any) => ({
-            user_id: p.user_id,
-            account_type: p.account_type,
-            display: `${p.user_id.slice(0, 8)} · ${p.occupation || p.location || p.account_type || "user"}`,
-          })),
-        );
+      console.log("[ClientOrganizations] >>> START: fetchEligibleUsers()");
+      try {
+        console.log("[ClientOrganizations] --- STEP: Querying 'profiles'");
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("user_id, account_type, occupation, location")
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("[ClientOrganizations] !!! ERROR: Failed to fetch eligible users:", error);
+          return;
+        }
+
+        if (data) {
+          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} eligible users.`);
+          setEligibleUsers(
+            data.map((p: any) => ({
+              user_id: p.user_id,
+              account_type: p.account_type,
+              display: `${p.user_id.slice(0, 8)} · ${p.account_type || "user"}`,
+            })),
+          );
+        }
+      } catch (err) {
+        console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchEligibleUsers:", err);
+      } finally {
+        console.log("[ClientOrganizations] <<< END: fetchEligibleUsers()");
       }
     };
+
+    fetchRequests();
     fetchEligibleUsers();
+    console.log("[ClientOrganizations] <<< END: useEffect Initialization Triggered");
   }, [toast]);
 
   const handleCreateBusiness = async () => {
+    console.log("[ClientOrganizations] >>> START: handleCreateBusiness()");
     if (
       !formData.legalName ||
       !formData.businessType ||
@@ -148,15 +194,16 @@ const ClientOrganizations = () => {
       !formData.postalCode ||
       !formData.ownerUserId
     ) {
+      console.warn("[ClientOrganizations] !!! WARN: Validation failed, required fields missing.");
       toast({
         title: "Validation Error",
-        description:
-          "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
+        description: "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
         variant: "destructive",
       });
+      console.log("[ClientOrganizations] <<< END: handleCreateBusiness() aborted");
       return;
     }
-    // Compose a single-line address for legacy `address` column / display fallbacks.
+
     const composedAddress = [
       formData.streetAddress1,
       formData.streetAddress2,
@@ -164,8 +211,11 @@ const ClientOrganizations = () => {
     ]
       .filter(Boolean)
       .join(", ");
+
     setIsSubmitting(true);
+
     try {
+      console.log("[ClientOrganizations] --- STEP 1: Inserting record into 'businesses'");
       const { data: businessData, error: businessError } = await supabase
         .from("businesses")
         .insert([
@@ -186,9 +236,15 @@ const ClientOrganizations = () => {
         ] as any)
         .select()
         .single();
-      if (businessError) throw businessError;
 
-      await supabase.from("business_locations").insert([
+      if (businessError) {
+        console.error("[ClientOrganizations] !!! ERROR Step 1: Failed to insert business.", businessError);
+        throw businessError;
+      }
+      console.log(`[ClientOrganizations] --- SUCCESS Step 1: Business provisioned with ID ${businessData.id}`);
+
+      console.log("[ClientOrganizations] --- STEP 2: Inserting record into 'business_locations'");
+      const { error: locationError } = await supabase.from("business_locations").insert([
         {
           business_id: businessData.id,
           name: "Primary Headquarters",
@@ -197,7 +253,13 @@ const ClientOrganizations = () => {
         },
       ]);
 
-      // CRITICAL: Tether business to at least one user via the business_users junction.
+      if (locationError) {
+        console.error("[ClientOrganizations] !!! ERROR Step 2: Failed to insert business location.", locationError);
+        throw locationError;
+      }
+      console.log("[ClientOrganizations] --- SUCCESS Step 2: Business location recorded.");
+
+      console.log("[ClientOrganizations] --- STEP 3: Tying business to user via 'business_users'");
       const { error: linkError } = await supabase.from("business_users").insert([
         {
           business_id: businessData.id,
@@ -207,10 +269,20 @@ const ClientOrganizations = () => {
           accepted_at: new Date().toISOString(),
         },
       ]);
+
       if (linkError) {
-        console.error("[OrgMgmt] Failed to link owner user:", linkError);
+        console.error("[ClientOrganizations] !!! ERROR Step 3: Failed to link owner user.", linkError);
         throw new Error(`Owner association failed: ${linkError.message}`);
       }
+      console.log(`[ClientOrganizations] --- SUCCESS Step 3: Owner ${formData.ownerUserId} tethered to business.`);
+
+      console.log("[ClientOrganizations] --- STEP 4: Injecting optimistic state into UI");
+      const newBusiness = {
+        ...businessData,
+        t1p_status: "approved",
+        idia_pay_status: "pending",
+      };
+      setBusinesses((prev) => [newBusiness, ...prev]);
 
       toast({ title: "Organization Added", description: `${formData.legalName} provisioned successfully.` });
       setShowNewOrgModal(false);
@@ -224,17 +296,23 @@ const ClientOrganizations = () => {
         postalCode: "",
         ownerUserId: "",
       });
-      fetchBusinesses();
+
+      console.log("[ClientOrganizations] --- STEP 5: Triggering background sync fetchBusinesses()");
+      await fetchBusinesses();
     } catch (error: any) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleCreateBusiness:", error);
       toast({ title: "Provisioning Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+      console.log("[ClientOrganizations] <<< END: handleCreateBusiness()");
     }
   };
 
   const handleUpdateBusiness = async () => {
+    console.log("[ClientOrganizations] >>> START: handleUpdateBusiness()");
     if (!editForm.name) return;
     setIsSubmitting(true);
+
     try {
       const composedAddress = [
         editForm.street_address_1,
@@ -243,6 +321,8 @@ const ClientOrganizations = () => {
       ]
         .filter((p) => p && p.trim() && p.trim() !== ",")
         .join(", ");
+
+      console.log(`[ClientOrganizations] --- STEP: Updating business ID ${selectedBusiness.id}`);
       const { error } = await supabase
         .from("businesses")
         .update({
@@ -261,46 +341,72 @@ const ClientOrganizations = () => {
           data_coop_enabled: editForm.data_coop_enabled,
         } as any)
         .eq("id", selectedBusiness.id);
-      if (error) throw error;
 
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Failed to update business record.", error);
+        throw error;
+      }
+
+      console.log("[ClientOrganizations] --- SUCCESS: Business record updated.");
       toast({ title: "Record Updated", description: "Enterprise profile modifications saved." });
       setIsEditingCard(false);
-      fetchBusinesses();
+      await fetchBusinesses();
     } catch (error: any) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleUpdateBusiness:", error);
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+      console.log("[ClientOrganizations] <<< END: handleUpdateBusiness()");
     }
   };
 
   const handleToggleProvisioning = async () => {
+    console.log("[ClientOrganizations] >>> START: handleToggleProvisioning()");
     if (!selectedBusiness) return;
     const isActive = selectedBusiness.provisioning_active !== false;
     const next = !isActive;
+
     if (!next) {
       const ok = window.confirm(
         `Cut off "${selectedBusiness.name}" from IDIA Pay? Their provisioning code will be deactivated immediately.`,
       );
-      if (!ok) return;
+      if (!ok) {
+        console.log("[ClientOrganizations] <<< END: handleToggleProvisioning() cancelled by user");
+        return;
+      }
     }
-    const { error } = await supabase
-      .from("businesses")
-      .update({
-        provisioning_active: next,
-        deactivated_at: next ? null : new Date().toISOString(),
-      } as any)
-      .eq("id", selectedBusiness.id);
-    if (error) {
-      toast({ title: "Action Failed", description: error.message, variant: "destructive" });
-      return;
+
+    try {
+      console.log(
+        `[ClientOrganizations] --- STEP: Updating provisioning status to ${next} for ID ${selectedBusiness.id}`,
+      );
+      const { error } = await supabase
+        .from("businesses")
+        .update({
+          provisioning_active: next,
+          deactivated_at: next ? null : new Date().toISOString(),
+        } as any)
+        .eq("id", selectedBusiness.id);
+
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Failed to toggle provisioning status.", error);
+        toast({ title: "Action Failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      console.log("[ClientOrganizations] --- SUCCESS: Provisioning status toggled.");
+      toast({
+        title: next ? "Provisioning Restored" : "Provisioning Deactivated",
+        description: next
+          ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
+          : `${selectedBusiness.name} can no longer access IDIA Pay.`,
+      });
+      await fetchBusinesses();
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleToggleProvisioning:", err);
+    } finally {
+      console.log("[ClientOrganizations] <<< END: handleToggleProvisioning()");
     }
-    toast({
-      title: next ? "Provisioning Restored" : "Provisioning Deactivated",
-      description: next
-        ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
-        : `${selectedBusiness.name} can no longer access IDIA Pay.`,
-    });
-    fetchBusinesses();
   };
 
   const handleSelectBusiness = (org: any) => {
@@ -316,15 +422,20 @@ const ClientOrganizations = () => {
     setReviewModalOpen(true);
     setAiParsing(true);
     setParsedData(null);
+
     setTimeout(() => {
       setAiParsing(false);
+
+      // STRIPPED PII: Using UUID for email synthesis and responsibility assignment
+      const safeGuidSegment = request.platformGuid.split("-")[0];
+
       setParsedData({
-        legalName: request.companyName,
+        legalName: request.companyName || "Unknown Entity",
         physicalAddress: "Extracted from Legal Documentation",
         taxId: `XX-XXX${Math.floor(1000 + Math.random() * 9000)}`,
-        contactEmail: `${request.requestedBy.split(" ")[0].toLowerCase()}@company.com`,
-        contactPhone: "+1 (555) 000-0000",
-        responsibleParty: request.requestedBy,
+        contactEmail: `id_${safeGuidSegment}@idia-network.local`,
+        contactPhone: "+1 (000) 000-0000",
+        responsibleParty: request.platformGuid, // Assigning UUID strictly
         responsibleRole: request.requestedRole || "Signatory",
         businessBlueprintType: BLUEPRINT_CATEGORIES[0]?.id ?? "uncategorized",
         guidValidated: true,
@@ -334,15 +445,25 @@ const ClientOrganizations = () => {
   };
 
   const handleProcessApplication = async () => {
+    console.log("[ClientOrganizations] >>> START: handleProcessApplication()");
     if (!selectedRequest) return;
+
     try {
       const baseStatus = t1pDecision === "denied" && idiaPayDecision === "denied" ? "rejected" : "approved";
-      await supabase
+      console.log(`[ClientOrganizations] --- STEP 1: Updating account_conversion_requests status to ${baseStatus}`);
+
+      const { error: updateError } = await supabase
         .from("account_conversion_requests" as any)
         .update({ status: baseStatus })
         .eq("id", selectedRequest.id);
 
+      if (updateError) {
+        console.error("[ClientOrganizations] !!! ERROR Step 1: Failed to update request status.", updateError);
+        throw updateError;
+      }
+
       if (baseStatus === "approved") {
+        console.log("[ClientOrganizations] --- STEP 2: Creating approved organization in 'businesses'");
         const { data: businessData, error: businessError } = await supabase
           .from("businesses")
           .insert([
@@ -359,9 +480,14 @@ const ClientOrganizations = () => {
           ])
           .select()
           .single();
-        if (businessError) throw businessError;
 
-        await supabase.from("business_locations").insert([
+        if (businessError) {
+          console.error("[ClientOrganizations] !!! ERROR Step 2: Failed to auto-provision business.", businessError);
+          throw businessError;
+        }
+
+        console.log("[ClientOrganizations] --- STEP 3: Inserting generated headquarters into 'business_locations'");
+        const { error: locError } = await supabase.from("business_locations").insert([
           {
             business_id: businessData.id,
             name: "Primary Headquarters",
@@ -372,9 +498,15 @@ const ClientOrganizations = () => {
           },
         ]);
 
+        if (locError) {
+          console.error("[ClientOrganizations] !!! ERROR Step 3: Failed to auto-provision location.", locError);
+          throw locError;
+        }
+
         setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
         setReviewModalOpen(false);
-        fetchBusinesses();
+        await fetchBusinesses();
+
         toast({
           title: "Organization Approved",
           description: `Provisioning code: ${(businessData as any)?.provisioning_code ?? "—"}. Open the Pay App Blueprint to vault its terminal schema.`,
@@ -382,11 +514,14 @@ const ClientOrganizations = () => {
       } else {
         setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
         setReviewModalOpen(false);
-        fetchBusinesses();
+        await fetchBusinesses();
         toast({ title: "Application Rejected" });
       }
     } catch (err: any) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleProcessApplication:", err);
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      console.log("[ClientOrganizations] <<< END: handleProcessApplication()");
     }
   };
 
@@ -481,9 +616,7 @@ const ClientOrganizations = () => {
                   </Label>
                   <Input
                     value={formData.state}
-                    onChange={(e) =>
-                      setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })
-                    }
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })}
                     className="text-sm uppercase"
                     placeholder="CA"
                     maxLength={2}
@@ -584,8 +717,8 @@ const ClientOrganizations = () => {
                 >
                   <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                     <h4 className="font-medium text-sm text-gray-900 truncate">{request.companyName}</h4>
-                    <span className="text-xs text-gray-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                      Req: {request.requestedBy}
+                    <span className="text-xs font-mono text-gray-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">
+                      GUID: {request.platformGuid.split("-")[0]}...
                     </span>
                   </div>
                   <Button size="sm" className="shrink-0" onClick={() => openReviewModal(request)}>
@@ -709,8 +842,7 @@ const ClientOrganizations = () => {
                           <MapPin className="w-3 h-3 shrink-0" />
                           {(() => {
                             const street =
-                              selectedBusiness.street_address_1 ||
-                              selectedBusiness.address?.split(",")[0]?.trim();
+                              selectedBusiness.street_address_1 || selectedBusiness.address?.split(",")[0]?.trim();
                             const cityState = [selectedBusiness.city, selectedBusiness.state]
                               .filter(Boolean)
                               .join(", ");
