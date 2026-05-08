@@ -93,10 +93,12 @@ const Index = () => {
     return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
 
   const effectiveRole = user?.role || userRole || "team-member";
+
   <BestFriendAvatar
     onChatClick={() => console.log("Chat clicked")}
     onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
   />;
+
   return (
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
       <Routes>
