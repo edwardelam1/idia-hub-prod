@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Users, Building2, CreditCard, Coins, Activity, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,12 +6,6 @@ import { useAuth, SubscriptionTier } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { usePipelineActivity } from "@/hooks/usePipelineActivity";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
-
-// Explicitly define the expected count response to prevent deep generic inference loops
-interface SupabaseCountResponse {
-  count: number | null;
-  error: any;
-}
 
 const OrganizationAdminDashboard = () => {
   const { user, profile, subscriptionTier, piiData } = useAuth();
@@ -38,34 +32,29 @@ const OrganizationAdminDashboard = () => {
 
   useEffect(() => {
     const fetchOrgStats = async () => {
-      console.info("[BEGIN: OrgDashboard.MetricsReconciliation] Reconciling Live Metrics");
-      if (!user?.user_id) {
-        console.warn("[WARNING: OrgDashboard.MetricsReconciliation] No active user session. Aborting.");
-        return;
-      }
+      console.log("[OrgDashboard] >>> START: Reconciling Live Metrics");
+      if (!user?.user_id) return;
 
       try {
         // 1. Resolve Business ID from business_users
-        const { data: bizUser, error: bizError } = await supabase
+        const { data: bizUser } = await supabase
           .from("business_users")
           .select("business_id")
           .eq("user_id", user.user_id)
           .maybeSingle();
 
-        if (bizError) throw bizError;
         const businessId = bizUser?.business_id;
 
         if (businessId) {
           // 2. Count Total Institutional Users
-          const userCountRes: SupabaseCountResponse = await supabase
+          const { count: userCount } = await supabase
             .from("business_users")
             .select("*", { count: "exact", head: true })
             .eq("business_id", businessId);
 
           // 3. Count Team Members via the View
-          // FIX: explicitly typed response blocks TS2589 infinite recursive inference
-          const memberCountRes: SupabaseCountResponse = await supabase
-            .from("team_members")
+          const { count: memberCount } = await supabase
+            .from("team_members" as any)
             .select("*", { count: "exact", head: true })
             .eq("business_id", businessId);
 
@@ -73,28 +62,26 @@ const OrganizationAdminDashboard = () => {
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-          const { data: spendData, error: spendError } = await supabase
+          const { data: spendData } = await supabase
             .from("synapse_credit_ledger")
             .select("amount")
             .eq("user_id", user.user_id)
-            .eq("transaction_type", "synapse_purchase" as any)
+            .eq("transaction_type" as any, "synapse_purchase")
             .gte("created_at", thirtyDaysAgo.toISOString());
-
-          if (spendError) throw spendError;
 
           const totalSpend = spendData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
 
           setStats({
-            totalUsers: userCountRes.count || 0,
-            activeTeams: memberCountRes.count || 0,
+            totalUsers: userCount || 0,
+            activeTeams: memberCount || 0,
             monthlySpend: Math.floor(totalSpend),
             loading: false,
           });
         }
-      } catch (err: any) {
-        console.error(`[CRITICAL FAILURE: OrgDashboard.MetricsReconciliation] Reconciliation failed: ${err.message}`);
+      } catch (err) {
+        console.error("[OrgDashboard] !!! ERROR: Reconciliation failed", err);
       } finally {
-        console.info("[END: OrgDashboard.MetricsReconciliation] Metrics update cycle complete.");
+        console.log("[OrgDashboard] <<< END: Metrics Updated");
       }
     };
 
@@ -123,7 +110,7 @@ const OrganizationAdminDashboard = () => {
             {piiData?.source === "auth_metadata_stub" ? "Verified Enclave" : "Secure Session"}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 font-mono">Welcome</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 font-mono">IDIA_HUB_OPS</h1>
         <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">
           {subscriptionTier} TIER • {profile?.account_type?.replace("_", " ") || "SYSTEM"}
         </p>
