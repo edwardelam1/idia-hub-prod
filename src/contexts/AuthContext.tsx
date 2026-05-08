@@ -1,11 +1,12 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
+// --- TYPES & BORDERS ---
 export type AccountType = "individual" | "business";
 export type SubscriptionTier = "none" | "base" | "analyst" | "professional" | "enterprise";
 
-interface AuthUser {
+export interface AuthUser {
   user_id: string;
   role: string;
   account_status: string;
@@ -44,10 +45,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// --- HELPERS ---
 const buildUserFromSession = (session: Session, subscription: any, profileData: ProfileData | null): AuthUser => {
   const tier = subscription?.tier?.toLowerCase() ?? "";
   let role = "team-member";
+
+  // Enterprise logic grants Org Admin status
   if (tier === "enterprise") role = "organization-admin";
+  // God GUID / C-Suite bypass logic can be added here if needed
 
   return {
     user_id: session.user.id,
@@ -59,51 +64,52 @@ const buildUserFromSession = (session: Session, subscription: any, profileData: 
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [piiData, setPiiData] = useState<PiiData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>("none");
+  const [activePerspective, setActivePerspective] = useState<AccountType>("individual");
 
-  useEffect(() => {
-    console.log("[AuthGate] >>> START: Session Verification");
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        console.log("[AuthGate] --- SESSION: Valid session detected for ", session.user.id);
-        
-        // FETCH REAL IDENTITY DATA
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .single();
+  const switchPerspective = (type: AccountType) => {
+    console.log(`[PerspectiveGate] Switching to: ${type}`);
+    setActivePerspective(type);
+  };
 
-        if (error) {
-          console.error("[AuthGate] !!! FATAL: Profile fetch stalled", error.message);
-        } else {
-          console.log(`[AuthGate] --- IDENTITY: Role confirmed as [${data.account_type}]`);
-          setProfile(data);
-          setUser(session.user);
-        }
-      }
-      setLoading(false);
-      console.log("[AuthGate] <<< END: Identity Bridge Established");
-    });
+  // --- ANTI-PII BRIDGE ---
+  const fetchPiiData = useCallback(async (session: Session): Promise<PiiData> => {
+    console.log("[PiiBridge] >>> START: Extracting PII from Auth Metadata");
+    const { user: authUser } = session;
 
-    return () => subscription.unsubscribe();
+    const pii: PiiData = {
+      displayName: authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || "System Architect",
+      fullName: authUser.user_metadata?.full_name || null,
+      email: authUser.email || null,
+      avatarUrl: authUser.user_metadata?.avatar_url || null,
+      platformGuid: authUser.user_metadata?.platform_guid || null,
+      source: "auth_metadata_stub",
+    };
+
+    console.log("[PiiBridge] <<< END: PII Extraction Complete");
+    return pii;
   }, []);
 
-  // ... rest of context logic
-};
-
+  // --- MAIN INITIALIZATION ENGINE ---
   const fetchProfileAndSubscription = useCallback(
     async (session: Session) => {
+      console.log("[AuthGate] >>> START: Full Profile & Subscription Sync");
       try {
-        let { data: profileRow } = await supabase
+        let { data: profileRow, error: profileError } = await supabase
           .from("profiles")
           .select("avatar_url, account_type, platform_guid")
           .eq("user_id", session.user.id)
           .maybeSingle();
 
+        if (profileError) console.error("[AuthGate] Profile fetch error:", profileError);
+
+        // Handle race condition for new sign-ups
         if (!profileRow) {
+          console.log("[AuthGate] --- RETRY: Waiting for Profile provisioning...");
           await new Promise((resolve) => setTimeout(resolve, 1500));
           const { data: retryRow } = await supabase
             .from("profiles")
@@ -115,8 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // --- THE FIX: REDIRECT TO SOVEREIGN ONBOARDING ---
         if (!profileRow || !profileRow.platform_guid) {
-          console.log("No Sovereign Identity found, redirecting to IDIA Life...");
-          // Change thebigidia.com to life.thebigidia.com
+          console.log("[AuthGate] !!! FATAL: No Sovereign Identity (platform_guid) found. Redirecting to IDIA Life.");
           window.location.href = `https://life.thebigidia.com`;
           return;
         }
@@ -129,6 +134,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setProfile(prof);
         setActivePerspective((profileRow.account_type as AccountType) || "individual");
 
+        // Fetch Subscription
         const { data: sub } = await supabase
           .from("user_subscriptions")
           .select("*")
@@ -144,24 +150,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return t === "enterprise" ? "enterprise" : ((t as SubscriptionTier) ?? "base");
         };
 
-        setSubscriptionTier(deriveTier(sub));
+        const tier = deriveTier(sub);
+        setSubscriptionTier(tier);
         setUser(buildUserFromSession(session, sub, prof));
 
         const pii = await fetchPiiData(session);
         setPiiData(pii);
+
+        console.log(`[AuthGate] --- SUCCESS: Identity stabilized. Tier: ${tier}`);
       } catch (err) {
-        console.error("Auth init failed:", err);
+        console.error("[AuthGate] !!! ERROR: Auth initialization failed:", err);
       } finally {
         setIsLoading(false);
+        console.log("[AuthGate] <<< END: Profile Sync Sequence Complete");
       }
     },
     [fetchPiiData],
   );
 
   useEffect(() => {
+    console.log("[AuthGate] >>> START: Global Auth State Listener");
+
     const {
       data: { subscription: authSub },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AuthGate] --- EVENT: ${event}`);
       if (session) {
         fetchProfileAndSubscription(session).catch(console.error);
       } else {
@@ -170,9 +183,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setPiiData(null);
         setSubscriptionTier("none");
         setIsLoading(false);
+        console.log("[AuthGate] --- SESSION: No user detected.");
       }
     });
 
+    // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         fetchProfileAndSubscription(session).catch(console.error);
@@ -181,24 +196,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    return () => authSub.unsubscribe();
+    return () => {
+      console.log("[AuthGate] <<< END: Tearing down Auth Listener");
+      authSub.unsubscribe();
+    };
   }, [fetchProfileAndSubscription]);
 
   const login = useCallback(async (emailOrRole: string, password?: string) => {
+    console.log("[AuthGate] >>> START: Login Sequence");
     const { error } = await supabase.auth.signInWithPassword({
       email: emailOrRole,
       password: password!,
     });
-    if (error) throw error;
+    if (error) {
+      console.error("[AuthGate] !!! ERROR: Login failed", error.message);
+      throw error;
+    }
+    console.log("[AuthGate] <<< END: Login Successful");
   }, []);
 
   const logout = useCallback(async () => {
+    console.log("[AuthGate] >>> START: Logout Sequence");
     setUser(null);
     setProfile(null);
     setPiiData(null);
     setSubscriptionTier("none");
     await supabase.auth.signOut();
     localStorage.removeItem("idia_auth_token");
+    console.log("[AuthGate] <<< END: Logout Complete");
   }, []);
 
   return (
@@ -218,13 +243,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logout,
       }}
     >
-      {children}
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
+  if (!context) {
+    console.error("[AuthGate] !!! FATAL: useAuth must be used within an AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
   return context;
 };
