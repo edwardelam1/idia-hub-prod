@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Building2,
@@ -21,8 +22,8 @@ import {
   Landmark,
   GripVertical,
   type LucideIcon,
-} from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+} from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +33,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
+} from '@/components/ui/sidebar';
 
 interface NavItem {
   title: string;
@@ -45,87 +46,66 @@ interface AppSidebarProps {
 }
 
 // Dashboard is always pinned at the top and not reorderable.
-const PINNED_ITEM: NavItem = { title: "Dashboard", url: "/dashboard", icon: BarChart3 };
+const PINNED_ITEM: NavItem = { title: 'Dashboard', url: '/dashboard', icon: BarChart3 };
 
 const getRoleItems = (userRole: string): NavItem[] => {
-  console.info(`[BEGIN: AppSidebar.RoleValidation] Attempting to resolve layout for role: ${userRole ?? "UNDEFINED"}`);
-
-  // STRICT VALIDATION GATE: No contextual fallbacks permitted.
-  const validRoles = ["super-admin", "organization-admin", "team-lead", "team-member"];
-  if (!userRole || !validRoles.includes(userRole)) {
-    console.error(
-      `[FATAL STALL: AppSidebar.RoleValidation] Identity failure. Unrecognized role detected: ${userRole ?? "UNDEFINED"}`,
-    );
-    throw new Error(
-      `CRITICAL SYSTEM HALT: Unidentified role '${userRole}'. Contextual fallbacks are strictly disabled.`,
-    );
-  }
-
   const base: NavItem[] = [
-    { title: "Best Friend AI", url: "/best-friend", icon: Bot },
-    { title: "Data Marketplace", url: "/marketplace", icon: Database },
-    { title: "My Reports", url: "/my-reports", icon: Package },
-    { title: "Hub Enrollment", url: "/billing", icon: DollarSign },
-    { title: "Top Up Wallet", url: "/top-up", icon: Zap },
-    { title: "Earnings & Settlement", url: "/earnings", icon: Landmark },
-    { title: "Egress Logs", url: "/egress-logs", icon: ScrollText },
-    { title: "Auth Settings", url: "/auth-settings", icon: KeyRound },
-    { title: "Trading Interface", url: "/trading", icon: TrendingUp },
-    { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
+    { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
+    { title: 'Data Marketplace', url: '/marketplace', icon: Database },
+    { title: 'My Reports', url: '/my-reports', icon: Package },
+    { title: 'Hub Enrollment', url: '/billing', icon: DollarSign },
+    { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
+    { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
+    { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
+    { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
+    { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
+    { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
   ];
 
   switch (userRole) {
-    case "super-admin":
+    case 'super-admin':
       base.push(
-        { title: "System Health", url: "/system-health", icon: Activity },
-        { title: "Client Organizations", url: "/organizations", icon: Building2 },
-        { title: "AI Management", url: "/ai-management", icon: Zap },
-        { title: "Security", url: "/security", icon: ShieldCheck },
-        { title: "Pay App Builder", url: "/pay-blueprint", icon: Smartphone },
+        { title: 'System Health', url: '/system-health', icon: Activity },
+        { title: 'Client Organizations', url: '/organizations', icon: Building2 },
+        { title: 'AI Management', url: '/ai-management', icon: Zap },
+        { title: 'Security', url: '/security', icon: ShieldCheck },
+        { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
       );
       break;
-    case "organization-admin":
+    case 'organization-admin':
       base.push(
-        { title: "Team Management", url: "/teams", icon: Users },
-        { title: "Compliance", url: "/compliance", icon: ShieldCheck },
+        { title: 'Team Management', url: '/teams', icon: Users },
+        { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
       );
       break;
-    case "team-lead":
+    case 'team-lead':
       base.push(
-        { title: "My Team", url: "/my-team", icon: Users },
-        { title: "Saved Searches", url: "/saved-searches", icon: Search },
-        { title: "Analytics", url: "/analytics", icon: TrendingUp },
+        { title: 'My Team', url: '/my-team', icon: Users },
+        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
+        { title: 'Analytics', url: '/analytics', icon: TrendingUp },
       );
       break;
-    case "team-member":
+    case 'team-member':
       base.push(
-        { title: "My Lists", url: "/my-lists", icon: FileText },
-        { title: "Saved Searches", url: "/saved-searches", icon: Search },
+        { title: 'My Lists', url: '/my-lists', icon: FileText },
+        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
       );
       break;
   }
 
-  base.push({ title: "Settings", url: "/settings", icon: Settings });
-
-  console.info(`[END: AppSidebar.RoleValidation] Layout mapped successfully. ${base.length} nodes assigned.`);
+  base.push({ title: 'Settings', url: '/settings', icon: Settings });
   return base;
 };
 
 const storageKey = (role: string) => `sidebar-order:${role}`;
 
 const loadSavedOrder = (role: string, items: NavItem[]): NavItem[] => {
-  console.info(`[BEGIN: AppSidebar.StorageHydration] Checking local layout persistence for ${role}.`);
   try {
     const raw = localStorage.getItem(storageKey(role));
-    if (!raw) {
-      console.info("[END: AppSidebar.StorageHydration] No saved arrangement found. Yielding default order.");
-      return items;
-    }
-
+    if (!raw) return items;
     const savedUrls: string[] = JSON.parse(raw);
     const byUrl = new Map(items.map((i) => [i.url, i]));
     const ordered: NavItem[] = [];
-
     for (const url of savedUrls) {
       const item = byUrl.get(url);
       if (item) {
@@ -133,15 +113,10 @@ const loadSavedOrder = (role: string, items: NavItem[]): NavItem[] => {
         byUrl.delete(url);
       }
     }
-    // Append any new feature releases not present in the historical save state
+    // Append any new items not present in saved order
     for (const item of byUrl.values()) ordered.push(item);
-
-    console.info(`[END: AppSidebar.StorageHydration] Restored persistent layout order successfully.`);
     return ordered;
-  } catch (error: any) {
-    console.error(
-      `[WARNING: AppSidebar.StorageHydration] LocalStorage read/parse exception: ${error.message}. Yielding default layout.`,
-    );
+  } catch {
     return items;
   }
 };
@@ -149,7 +124,7 @@ const loadSavedOrder = (role: string, items: NavItem[]): NavItem[] => {
 const AppSidebar = ({ userRole }: AppSidebarProps) => {
   const { state } = useSidebar();
   const location = useLocation();
-  const isCollapsed = state === "collapsed";
+  const isCollapsed = state === 'collapsed';
   const isActive = (path: string) => location.pathname === path;
 
   const roleItems = useMemo(() => getRoleItems(userRole), [userRole]);
@@ -159,63 +134,48 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
 
   // Re-reconcile when role changes
   useEffect(() => {
-    console.info(`[BEGIN: AppSidebar.RoleReconciliation] Role prop mutated to: ${userRole}`);
     setItems(loadSavedOrder(userRole, roleItems));
-    console.info(`[END: AppSidebar.RoleReconciliation] State synced with new role parameters.`);
   }, [userRole, roleItems]);
 
   const persistOrder = (next: NavItem[]) => {
-    console.info("[BEGIN: AppSidebar.PersistOrder] Writing new layout arrangement to LocalStorage.");
     try {
       localStorage.setItem(storageKey(userRole), JSON.stringify(next.map((i) => i.url)));
-      console.info("[END: AppSidebar.PersistOrder] Write operation complete.");
-    } catch (error: any) {
-      console.error(`[ERROR: AppSidebar.PersistOrder] Storage write rejected: ${error.message}`);
+    } catch {
+      /* ignore */
     }
   };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    console.info(`[BEGIN: AppSidebar.DragNode] Engaging grab payload at index: ${index}`);
     setDragIndex(index);
-    e.dataTransfer.effectAllowed = "move";
-    // Required for Firefox to start the drag natively
-    e.dataTransfer.setData("text/plain", String(index));
+    e.dataTransfer.effectAllowed = 'move';
+    // Required for Firefox to start the drag
+    e.dataTransfer.setData('text/plain', String(index));
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     if (dragIndex === null) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (overIndex !== index) {
-      setOverIndex(index);
-    }
+    e.dataTransfer.dropEffect = 'move';
+    if (overIndex !== index) setOverIndex(index);
   };
 
   const handleDrop = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (dragIndex === null || dragIndex === index) {
-      console.info("[STATUS: AppSidebar.DropNode] Drag aborted or dropped in place.");
       setDragIndex(null);
       setOverIndex(null);
       return;
     }
-
-    console.info(`[BEGIN: AppSidebar.DropNode] Mutating layout array. Moving node ${dragIndex} to index ${index}.`);
     const next = [...items];
     const [moved] = next.splice(dragIndex, 1);
     next.splice(index, 0, moved);
     setItems(next);
-
     persistOrder(next);
     setDragIndex(null);
     setOverIndex(null);
-    console.info(`[END: AppSidebar.DropNode] Memory block reorganized successfully.`);
   };
 
   const handleDragEnd = () => {
-    if (dragIndex !== null) {
-      console.info("[END: AppSidebar.DragNode] Drag interaction terminated cleanly.");
-    }
     setDragIndex(null);
     setOverIndex(null);
   };
@@ -226,11 +186,19 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
         {/* Logo Section */}
         <div className="p-3 md:p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center space-x-2 md:space-x-3">
-            <img src="/images/hub-logo.png" alt="IDIA Hub" className="w-8 h-8 flex-shrink-0" />
+            <img
+              src="/images/hub-logo.png"
+              alt="IDIA Hub"
+              className="w-8 h-8 flex-shrink-0"
+            />
             {!isCollapsed && (
               <div className="min-w-0">
-                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">IDIA Hub</h2>
-                <p className="text-xs text-muted-foreground capitalize truncate">{userRole.replace("-", " ")}</p>
+                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">
+                  IDIA Hub
+                </h2>
+                <p className="text-xs text-muted-foreground capitalize truncate">
+                  {userRole.replace('-', ' ')}
+                </p>
               </div>
             )}
           </div>
@@ -247,13 +215,17 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                     asChild
                     className={`mx-2 rounded-md transition-colors ${
                       isActive(PINNED_ITEM.url)
-                        ? "bg-primary/10 text-primary border-r-2 border-primary"
-                        : "hover:bg-accent hover:text-accent-foreground"
+                        ? 'bg-primary/10 text-primary border-r-2 border-primary'
+                        : 'hover:bg-accent hover:text-accent-foreground'
                     }`}
                   >
                     <NavLink to={PINNED_ITEM.url} className="flex items-center px-2 py-2">
                       <PINNED_ITEM.icon className="h-4 w-4 flex-shrink-0" />
-                      {!isCollapsed && <span className="ml-3 text-sm font-medium truncate">{PINNED_ITEM.title}</span>}
+                      {!isCollapsed && (
+                        <span className="ml-3 text-sm font-medium truncate">
+                          {PINNED_ITEM.title}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -261,7 +233,8 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                 {/* Reorderable items */}
                 {items.map((item, index) => {
                   const isDragging = dragIndex === index;
-                  const isOver = overIndex === index && dragIndex !== null && dragIndex !== index;
+                  const isOver =
+                    overIndex === index && dragIndex !== null && dragIndex !== index;
                   const indicatorAbove = isOver && (dragIndex as number) > index;
                   const indicatorBelow = isOver && (dragIndex as number) < index;
                   return (
@@ -272,16 +245,16 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDrop={(e) => handleDrop(e, index)}
                       onDragEnd={handleDragEnd}
-                      className={`group/drag relative ${isDragging ? "opacity-50" : ""} ${
-                        indicatorAbove ? "border-t-2 border-primary" : ""
-                      } ${indicatorBelow ? "border-b-2 border-primary" : ""}`}
+                      className={`group/drag relative ${isDragging ? 'opacity-50' : ''} ${
+                        indicatorAbove ? 'border-t-2 border-primary' : ''
+                      } ${indicatorBelow ? 'border-b-2 border-primary' : ''}`}
                     >
                       <SidebarMenuButton
                         asChild
                         className={`mx-2 rounded-md transition-colors ${
                           isActive(item.url)
-                            ? "bg-primary/10 text-primary border-r-2 border-primary"
-                            : "hover:bg-accent hover:text-accent-foreground"
+                            ? 'bg-primary/10 text-primary border-r-2 border-primary'
+                            : 'hover:bg-accent hover:text-accent-foreground'
                         }`}
                       >
                         <NavLink to={item.url} className="flex items-center px-2 py-2">
@@ -292,7 +265,11 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                             />
                           )}
                           <item.icon className="h-4 w-4 flex-shrink-0" />
-                          {!isCollapsed && <span className="ml-3 text-sm font-medium truncate">{item.title}</span>}
+                          {!isCollapsed && (
+                            <span className="ml-3 text-sm font-medium truncate">
+                              {item.title}
+                            </span>
+                          )}
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
