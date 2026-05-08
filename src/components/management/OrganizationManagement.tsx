@@ -84,7 +84,7 @@ const ClientOrganizations = () => {
       }
 
       if (data) {
-        console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} organizations. Enriching data.`);
+        console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} organizations.`);
         const enrichedData = data.map((b) => ({
           ...b,
           t1p_status: b.subscription_tier === "Enterprise" ? "approved" : "denied",
@@ -113,10 +113,11 @@ const ClientOrganizations = () => {
       console.log("[ClientOrganizations] >>> START: fetchRequests()");
       try {
         console.log("[ClientOrganizations] --- STEP: Querying 'account_conversion_requests'");
+        // Using ilike to bypass Postgres case sensitivity on 'pending' vs 'Pending'
         const { data, error } = await supabase
           .from("account_conversion_requests" as any)
           .select("*")
-          .eq("status", "pending")
+          .ilike("status", "pending")
           .order("created_at", { ascending: false });
 
         if (error) {
@@ -125,16 +126,15 @@ const ClientOrganizations = () => {
         }
 
         if (data) {
-          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} pending requests.`);
+          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} pending requests.`, data);
           const formatted = data.map((req: any) => ({
             id: req.id,
             companyName: req.company_name,
             requestType: req.request_type,
             requestDate: new Date(req.created_at).toLocaleDateString(),
-            // STRIPPED PII: Solely relying on the UUID for identification
-            requestedBy: req.user_id || "PENDING-GUID-ASSIGNMENT",
-            requestedRole: req.contact_role,
+            // STRIPPED PII: Relying purely on UUID
             platformGuid: req.user_id || "PENDING-GUID-ASSIGNMENT",
+            requestedRole: req.contact_role,
             status: req.status,
           }));
           setPendingRequests(formatted);
@@ -194,13 +194,11 @@ const ClientOrganizations = () => {
       !formData.postalCode ||
       !formData.ownerUserId
     ) {
-      console.warn("[ClientOrganizations] !!! WARN: Validation failed, required fields missing.");
       toast({
         title: "Validation Error",
         description: "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
         variant: "destructive",
       });
-      console.log("[ClientOrganizations] <<< END: handleCreateBusiness() aborted");
       return;
     }
 
@@ -238,10 +236,9 @@ const ClientOrganizations = () => {
         .single();
 
       if (businessError) {
-        console.error("[ClientOrganizations] !!! ERROR Step 1: Failed to insert business.", businessError);
+        console.error("[ClientOrganizations] !!! ERROR Step 1:", businessError);
         throw businessError;
       }
-      console.log(`[ClientOrganizations] --- SUCCESS Step 1: Business provisioned with ID ${businessData.id}`);
 
       console.log("[ClientOrganizations] --- STEP 2: Inserting record into 'business_locations'");
       const { error: locationError } = await supabase.from("business_locations").insert([
@@ -254,10 +251,9 @@ const ClientOrganizations = () => {
       ]);
 
       if (locationError) {
-        console.error("[ClientOrganizations] !!! ERROR Step 2: Failed to insert business location.", locationError);
+        console.error("[ClientOrganizations] !!! ERROR Step 2:", locationError);
         throw locationError;
       }
-      console.log("[ClientOrganizations] --- SUCCESS Step 2: Business location recorded.");
 
       console.log("[ClientOrganizations] --- STEP 3: Tying business to user via 'business_users'");
       const { error: linkError } = await supabase.from("business_users").insert([
@@ -271,10 +267,9 @@ const ClientOrganizations = () => {
       ]);
 
       if (linkError) {
-        console.error("[ClientOrganizations] !!! ERROR Step 3: Failed to link owner user.", linkError);
+        console.error("[ClientOrganizations] !!! ERROR Step 3:", linkError);
         throw new Error(`Owner association failed: ${linkError.message}`);
       }
-      console.log(`[ClientOrganizations] --- SUCCESS Step 3: Owner ${formData.ownerUserId} tethered to business.`);
 
       console.log("[ClientOrganizations] --- STEP 4: Injecting optimistic state into UI");
       const newBusiness = {
@@ -347,7 +342,6 @@ const ClientOrganizations = () => {
         throw error;
       }
 
-      console.log("[ClientOrganizations] --- SUCCESS: Business record updated.");
       toast({ title: "Record Updated", description: "Enterprise profile modifications saved." });
       setIsEditingCard(false);
       await fetchBusinesses();
@@ -370,16 +364,11 @@ const ClientOrganizations = () => {
       const ok = window.confirm(
         `Cut off "${selectedBusiness.name}" from IDIA Pay? Their provisioning code will be deactivated immediately.`,
       );
-      if (!ok) {
-        console.log("[ClientOrganizations] <<< END: handleToggleProvisioning() cancelled by user");
-        return;
-      }
+      if (!ok) return;
     }
 
     try {
-      console.log(
-        `[ClientOrganizations] --- STEP: Updating provisioning status to ${next} for ID ${selectedBusiness.id}`,
-      );
+      console.log(`[ClientOrganizations] --- STEP: Updating provisioning status to ${next}`);
       const { error } = await supabase
         .from("businesses")
         .update({
@@ -394,7 +383,6 @@ const ClientOrganizations = () => {
         return;
       }
 
-      console.log("[ClientOrganizations] --- SUCCESS: Provisioning status toggled.");
       toast({
         title: next ? "Provisioning Restored" : "Provisioning Deactivated",
         description: next
@@ -426,8 +414,8 @@ const ClientOrganizations = () => {
     setTimeout(() => {
       setAiParsing(false);
 
-      // STRIPPED PII: Using UUID for email synthesis and responsibility assignment
-      const safeGuidSegment = request.platformGuid.split("-")[0];
+      // STRIPPED PII: Utilizing UUID exclusively
+      const safeGuidSegment = request.platformGuid?.split("-")[0] || "Unknown";
 
       setParsedData({
         legalName: request.companyName || "Unknown Entity",
@@ -435,7 +423,7 @@ const ClientOrganizations = () => {
         taxId: `XX-XXX${Math.floor(1000 + Math.random() * 9000)}`,
         contactEmail: `id_${safeGuidSegment}@idia-network.local`,
         contactPhone: "+1 (000) 000-0000",
-        responsibleParty: request.platformGuid, // Assigning UUID strictly
+        responsibleParty: request.platformGuid,
         responsibleRole: request.requestedRole || "Signatory",
         businessBlueprintType: BLUEPRINT_CATEGORIES[0]?.id ?? "uncategorized",
         guidValidated: true,
@@ -458,7 +446,7 @@ const ClientOrganizations = () => {
         .eq("id", selectedRequest.id);
 
       if (updateError) {
-        console.error("[ClientOrganizations] !!! ERROR Step 1: Failed to update request status.", updateError);
+        console.error("[ClientOrganizations] !!! ERROR Step 1:", updateError);
         throw updateError;
       }
 
@@ -482,7 +470,7 @@ const ClientOrganizations = () => {
           .single();
 
         if (businessError) {
-          console.error("[ClientOrganizations] !!! ERROR Step 2: Failed to auto-provision business.", businessError);
+          console.error("[ClientOrganizations] !!! ERROR Step 2:", businessError);
           throw businessError;
         }
 
@@ -499,7 +487,7 @@ const ClientOrganizations = () => {
         ]);
 
         if (locError) {
-          console.error("[ClientOrganizations] !!! ERROR Step 3: Failed to auto-provision location.", locError);
+          console.error("[ClientOrganizations] !!! ERROR Step 3:", locError);
           throw locError;
         }
 
@@ -699,16 +687,23 @@ const ClientOrganizations = () => {
         </Dialog>
       </div>
 
-      {/* PENDING APPLICATIONS */}
-      {pendingRequests.length > 0 && (
-        <Card className="border-blue-200 shadow-sm shrink-0">
-          <CardHeader className="bg-blue-50 border-b border-blue-100 py-2 px-4 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-900">
-              <ShieldCheck className="w-4 h-4" /> Pending Verifications
-            </CardTitle>
-            <Badge className="bg-blue-600">{pendingRequests.length} Pending</Badge>
-          </CardHeader>
-          <CardContent className="p-0 max-h-40 overflow-y-auto">
+      {/* PENDING APPLICATIONS - PERMANENTLY VISIBLE */}
+      <Card className="border-blue-200 shadow-sm shrink-0 mb-4">
+        <CardHeader className="bg-blue-50 border-b border-blue-100 py-2 px-4 flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-900">
+            <ShieldCheck className="w-4 h-4" /> Pending Verifications
+          </CardTitle>
+          <Badge className={pendingRequests.length > 0 ? "bg-blue-600" : "bg-slate-400"}>
+            {pendingRequests.length} Pending
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0 max-h-40 overflow-y-auto">
+          {pendingRequests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-sm text-slate-500">
+              <ShieldCheck className="w-8 h-8 opacity-20 mb-2 text-slate-400" />
+              <p>No account conversion requests are pending.</p>
+            </div>
+          ) : (
             <div className="divide-y divide-blue-100">
               {pendingRequests.map((request) => (
                 <div
@@ -718,7 +713,7 @@ const ClientOrganizations = () => {
                   <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                     <h4 className="font-medium text-sm text-gray-900 truncate">{request.companyName}</h4>
                     <span className="text-xs font-mono text-gray-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">
-                      GUID: {request.platformGuid.split("-")[0]}...
+                      GUID: {request.platformGuid?.split("-")[0] || "Unknown"}...
                     </span>
                   </div>
                   <Button size="sm" className="shrink-0" onClick={() => openReviewModal(request)}>
@@ -727,9 +722,9 @@ const ClientOrganizations = () => {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
