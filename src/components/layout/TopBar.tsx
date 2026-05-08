@@ -28,77 +28,72 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const navigate = useNavigate();
   const { user, piiData } = useAuth();
 
-  // Establish internal master authority for branding overrides
+  // Internal Master check (Global Override)
   const isInternalMaster = userRole === "super-admin" || userRole === "god_guid" || userRole === "csuite";
 
   const getUserName = () => {
-    console.log("[TopBar] >>> START: Determining User Display Name");
-    try {
-      // PII from in-memory bridge (Anti-PII compliance)
-      if (piiData?.displayName) return piiData.displayName;
+    console.log("[IdentityGate] >>> START: Resolving Identity Label");
 
-      // Platform Master Override
-      if (isInternalMaster) return "System Architect";
+    // 1. Check PII Bridge first (Anti-PII Primary)
+    if (piiData?.displayName) {
+      console.log("[IdentityGate] --- SUCCESS: Identity verified via PII Bridge.");
+      return piiData.displayName;
+    }
 
-      // Fallback: platform GUID prefix
-      if (user?.user_id && !user.user_id.startsWith("mock-")) {
-        return user.user_id.slice(0, 8).toUpperCase();
-      }
+    // 2. Master Authority Override
+    if (isInternalMaster) {
+      console.log("[IdentityGate] --- ELEVATION: System Architect status confirmed.");
+      return "System Architect";
+    }
 
-      // Contextual fallbacks
-      switch (userRole) {
-        case "organization-admin":
-          return "Org Admin";
-        case "team-lead":
-          return "Team Lead";
-        case "team-member":
-          return "Team Member";
-        default:
-          return "IDIA User";
-      }
-    } catch (err) {
-      console.error("[TopBar] !!! ERROR: Failed to resolve name", err);
-      return "User";
-    } finally {
-      console.log("[TopBar] <<< END: Display Name determined");
+    // 3. STRICT ROLE ENFORCEMENT
+    // No fallbacks. No generic "User" labels. Match or Die.
+    switch (userRole) {
+      case "organization-admin":
+        return "Org Admin";
+      case "team-lead":
+        return "Team Lead";
+      case "team-member":
+        return "Team Member";
+      case "enterprise":
+        return "Institutional Sovereign";
+      case "professional":
+        return "Professional Trader";
+      case "analyst":
+        return "Data Analyst";
+      case "individual":
+        return "Verified User";
+      default:
+        console.error(`[IdentityGate] !!! FATAL: Unidentified userRole [${userRole}]. Stalling detected.`);
+        throw new Error(`IDENTITY_RESOLUTION_FAILURE: Unidentified Role [${userRole}]. Access Denied.`);
     }
   };
 
   const getOrganization = () => {
-    console.log("[TopBar] >>> START: Resolving Organization Context");
-    try {
-      // Masters always represent the Platform
-      if (isInternalMaster) return "IDIA Data Inc.";
+    console.log("[IdentityGate] >>> START: Resolving Organization Border");
 
-      const email = piiData?.email || user?.email;
-      if (email) {
-        const domain = email.split("@")[1];
-        if (domain) {
-          return domain.split(".")[0].charAt(0).toUpperCase() + domain.split(".")[0].slice(1);
-        }
+    // Masters represent the Platform
+    if (isInternalMaster) return "IDIA Data Inc.";
+
+    // Logic: Extract organization from verified PII or Email
+    const email = piiData?.email || user?.email;
+    if (email) {
+      const domain = email.split("@")[1];
+      if (domain) {
+        console.log(`[IdentityGate] --- SUCCESS: Organization resolved via domain [${domain}].`);
+        return domain.split(".")[0].charAt(0).toUpperCase() + domain.split(".")[0].slice(1);
       }
-      return "Organization";
-    } catch (err) {
-      console.error("[TopBar] !!! ERROR: Organization resolution failed", err);
-      return "IDIA Platform";
-    } finally {
-      console.log("[TopBar] <<< END: Organization Context resolved");
     }
+
+    // No fallback to "Organization". If we can't resolve the entity, we fail.
+    console.error(`[IdentityGate] !!! FATAL: Failed to resolve Organization for userRole [${userRole}].`);
+    throw new Error(`ORGANIZATION_RESOLUTION_FAILURE: No entity bound to session.`);
   };
 
   const displayName = getUserName();
 
   return (
-    <header
-      className="
-      sticky top-0 z-40 
-      h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 
-      border-b border-border 
-      flex items-center justify-between 
-      px-4 md:px-6
-      flex-shrink-0
-    "
-    >
+    <header className="sticky top-0 z-40 h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex items-center justify-between px-4 md:px-6 flex-shrink-0">
       <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
         <SidebarTrigger className="flex-shrink-0" />
         <div className="min-w-0">
@@ -110,7 +105,6 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         <IdentityStatusPills />
 
-        {/* Purchase tools hidden for masters to avoid UI clutter */}
         {!isInternalMaster && (
           <div className="hidden sm:flex items-center space-x-2">
             <SynapsePurchaseModal
