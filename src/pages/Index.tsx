@@ -100,8 +100,8 @@ const Index = () => {
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
       <div className="fixed bottom-6 right-6 z-50">
         <BestFriendAvatar
-          onChatClick={() => console.log("Chat clicked")}
-          onVoiceToggle={(isActive) => console.log("Voice mode:", isActive)}
+          onChatClick={() => console.info("[HANDSHAKE: UI] Chat interface requested.")}
+          onVoiceToggle={(isActive) => console.info(`[HANDSHAKE: UI] Voice mode state: ${isActive}`)}
         />
       </div>
 
