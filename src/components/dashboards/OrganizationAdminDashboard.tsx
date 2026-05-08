@@ -77,7 +77,7 @@ const OrganizationAdminDashboard = () => {
             .from("synapse_credit_ledger")
             .select("amount")
             .eq("user_id", user.user_id)
-            .eq("transaction_type", "synapse_purchase")
+            .eq("transaction_type", "synapse_purchase" as any)
             .gte("created_at", thirtyDaysAgo.toISOString());
 
           if (spendError) throw spendError;
