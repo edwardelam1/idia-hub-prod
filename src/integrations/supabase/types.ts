@@ -7910,7 +7910,7 @@ export type Database = {
         Args: { amount_to_add: number; target_user_id: string };
         Returns: undefined;
       };
-      increment_idia_beta_balance: {
+      increment_idia_usdc: {
         Args: { increment_amount: number; x_user_id: string };
         Returns: undefined;
       };
