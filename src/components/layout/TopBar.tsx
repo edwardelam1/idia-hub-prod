@@ -1,26 +1,4 @@
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ChevronDown, Coins, LogOut, Settings } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import { useAuth } from "@/contexts/AuthContext";
-import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
-import IdentityStatusPills from "@/components/layout/IdentityStatusPills";
-import NotificationsCenter from "@/components/notifications/NotificationsCenter";
-
-interface TopBarProps {
-  userRole: string;
-  onLogout: () => void;
-}
+// ... [Imports remain the same]
 
 const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const { balanceData, isLoading } = useSynapseCredits();
@@ -28,18 +6,23 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const navigate = useNavigate();
   const { user, piiData } = useAuth();
 
+  // 1. Normalize role for internal checks
+  const isInternalMaster = userRole === "super-admin" || userRole === "god_guid" || userRole === "csuite";
+
   const getUserName = () => {
-    // PII from in-memory bridge (never from DB)
+    // PII from in-memory bridge (Anti-PII compliance)
     if (piiData?.displayName) return piiData.displayName;
-    if (piiData?.email) return piiData.email.split("@")[0];
+
+    // Internal Master branding override
+    if (isInternalMaster) return "System Architect";
+
     // Fallback: platform GUID prefix
     if (user?.user_id && !user.user_id.startsWith("mock-")) {
       return user.user_id.slice(0, 8).toUpperCase();
     }
-    // Mock mode fallback
+
+    // Contextual Fallbacks
     switch (userRole) {
-      case "super-admin":
-        return "Super Admin";
       case "organization-admin":
         return "Org Admin";
       case "team-lead":
@@ -47,12 +30,14 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       case "team-member":
         return "Team Member";
       default:
-        return "User";
+        return "IDIA User";
     }
   };
 
   const getOrganization = () => {
-    if (userRole === "super-admin") return "IDIA Platform";
+    // If you are internal, the header MUST reflect the Platform, not an email domain
+    if (isInternalMaster) return "IDIA Data Inc.";
+
     const email = piiData?.email || user?.email;
     if (email) {
       const domain = email.split("@")[1];
@@ -64,16 +49,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const displayName = getUserName();
 
   return (
-    <header
-      className="
-      sticky top-0 z-40 
-      h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 
-      border-b border-border 
-      flex items-center justify-between 
-      px-4 md:px-6
-      flex-shrink-0
-    "
-    >
+    <header className="sticky top-0 z-40 h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex items-center justify-between px-4 md:px-6 flex-shrink-0">
       <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
         <SidebarTrigger className="flex-shrink-0" />
         <div className="min-w-0">
@@ -84,7 +60,9 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
 
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         <IdentityStatusPills />
-        {userRole !== "super-admin" && (
+
+        {/* Internal Masters do not need the purchase modal; they use Platform Credits */}
+        {!isInternalMaster && (
           <div className="hidden sm:flex items-center space-x-2">
             <SynapsePurchaseModal
               trigger={
@@ -107,12 +85,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
             <Button variant="ghost" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9">
               <Avatar className="h-6 w-6 md:h-8 md:w-8">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs md:text-sm">
-                  {displayName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                    .slice(0, 2)}
+                  {displayName.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <ChevronDown className="h-3 w-3 md:h-4 md:w-4 hidden sm:block" />
@@ -122,7 +95,10 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
             <DropdownMenuLabel>
               <div>
                 <p className="font-medium text-sm">{displayName}</p>
-                <p className="text-xs text-muted-foreground capitalize">{userRole.replace("-", " ")}</p>
+                {/* Visual Role Normalization */}
+                <p className="text-xs text-muted-foreground capitalize">
+                  {userRole.replace("-", " ").replace("_", " ")}
+                </p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
