@@ -425,85 +425,62 @@ const ClientOrganizations = () => {
 };
 
   const handleProcessApplication = async () => {
-    console.log("[ClientOrganizations] >>> START: handleProcessApplication()");
-    if (!selectedRequest) return;
+  if (!selectedRequest || !parsedData) return;
+  setIsSubmitting(true);
 
-    try {
-      const baseStatus = t1pDecision === "denied" && idiaPayDecision === "denied" ? "rejected" : "approved";
-      console.log(`[ClientOrganizations] --- STEP 1: Updating account_conversion_requests status to ${baseStatus}`);
+  try {
+    const isApproved = t1pDecision === "approved" && idiaPayDecision === "approved";
+    const status = isApproved ? "approved" : "rejected";
 
-      const { error: updateError } = await supabase
-        .from("account_conversion_requests" as any)
-        .update({ status: baseStatus })
-        .eq("id", selectedRequest.id);
+    // 1. Update Request Status
+    const { error: updateError } = await supabase
+      .from("account_conversion_requests")
+      .update({ status })
+      .eq("id", selectedRequest.id);
 
-      if (updateError) {
-        console.error("[ClientOrganizations] !!! ERROR Step 1:", updateError);
-        throw updateError;
-      }
+    if (updateError) throw updateError;
 
-      if (baseStatus === "approved") {
-        console.log("[ClientOrganizations] --- STEP 2: Creating approved organization in 'businesses'");
-        const { data: businessData, error: businessError } = await supabase
-          .from("businesses")
-          .insert([
-            {
-              name: parsedData.legalName,
-              address: parsedData.physicalAddress,
-              tax_id: parsedData.taxId,
-              email: parsedData.contactEmail,
-              phone: parsedData.contactPhone,
-              business_type: parsedData.businessBlueprintType,
-              subscription_tier: "Enterprise",
-              data_coop_enabled: true,
-            } as any,
-          ])
-          .select()
-          .single();
+    if (isApproved) {
+      // 2. Provision Business Entity with full KYB data
+      const { data: businessData, error: businessError } = await supabase
+        .from("businesses")
+        .insert([{
+          name: parsedData.legalName,
+          tax_id: parsedData.taxId,
+          business_type: parsedData.vertical,
+          // Use specific columns from your recent SQL migrations
+          street_address_1: selectedRequest.address_street1,
+          street_address_2: selectedRequest.address_street2,
+          city: selectedRequest.address_city,
+          state: selectedRequest.address_state,
+          postal_code: selectedRequest.address_zip,
+          subscription_tier: "Enterprise",
+          data_coop_enabled: true,
+          logo_url: selectedRequest.logo_path
+        }] as any)
+        .select().single();
 
-        if (businessError) {
-          console.error("[ClientOrganizations] !!! ERROR Step 2:", businessError);
-          throw businessError;
-        }
+      if (businessError) throw businessError;
 
-        console.log("[ClientOrganizations] --- STEP 3: Inserting generated headquarters into 'business_locations'");
-        const { error: locError } = await supabase.from("business_locations").insert([
-          {
-            business_id: businessData.id,
-            name: "Primary Headquarters",
-            address: parsedData.physicalAddress,
-            contact_email: parsedData.contactEmail,
-            phone: parsedData.contactPhone,
-            is_active: true,
-          },
-        ]);
-
-        if (locError) {
-          console.error("[ClientOrganizations] !!! ERROR Step 3:", locError);
-          throw locError;
-        }
-
-        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
-        setReviewModalOpen(false);
-        await fetchBusinesses();
-
-        toast({
-          title: "Organization Approved",
-          description: `Provisioning code: ${(businessData as any)?.provisioning_code ?? "—"}. Open the Pay App Blueprint to vault its terminal schema.`,
-        });
-      } else {
-        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
-        setReviewModalOpen(false);
-        await fetchBusinesses();
-        toast({ title: "Application Rejected" });
-      }
-    } catch (err: any) {
-      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleProcessApplication:", err);
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      console.log("[ClientOrganizations] <<< END: handleProcessApplication()");
+      // 3. Link C-Suite/Org Admin (GUID-rooted)
+      await supabase.from("business_users").insert([{
+        business_id: businessData.id,
+        user_id: selectedRequest.user_id,
+        role: "owner",
+        is_active: true
+      }]);
     }
-  };
+
+    setReviewModalOpen(false);
+    await fetchBusinesses();
+    await fetchRequests();
+    toast({ title: isApproved ? "Organization Provisioned" : "Application Denied" });
+  } catch (err: any) {
+    toast({ title: "Compliance Error", description: err.message, variant: "destructive" });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const filteredBusinesses = businesses.filter(
     (org) =>
