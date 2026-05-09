@@ -105,8 +105,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
         <IdentityStatusPills />
 
-        {!isInternalMaster && (
-          <div className="hidden sm:flex items-center space-x-2">
+        <div className="hidden sm:flex items-center space-x-2">
             <SynapsePurchaseModal
               trigger={
                 <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
@@ -118,8 +117,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
                 </button>
               }
             />
-          </div>
-        )}
+        </div>
 
         <NotificationsCenter />
 
