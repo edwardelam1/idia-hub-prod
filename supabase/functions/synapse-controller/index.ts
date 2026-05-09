@@ -102,7 +102,7 @@ serve(async (req) => {
           amount: totalSynapseDeduction,
           entry_type: "USAGE",
           transaction_type: "FEE",
-          status: "SETTLED",
+          status: "settled",
           description: `Synapse Gas: ${intent_type} [Flat 1 CR]`,
           reference_id: referenceId,
         })
