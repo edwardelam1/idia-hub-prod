@@ -8190,6 +8190,10 @@ export type Database = {
           processed_count: number
         }[]
       }
+      provision_business_from_request: {
+        Args: { p_request_id: string; p_vertical_id: string }
+        Returns: undefined
+      }
       provision_employee_via_aca: {
         Args: {
           _business_id: string
