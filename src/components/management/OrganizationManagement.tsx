@@ -45,6 +45,8 @@ const ClientOrganizations = () => {
   const [parsedData, setParsedData] = useState<any>(null);
   const [t1pDecision, setT1pDecision] = useState<"pending" | "approved" | "denied">("pending");
   const [idiaPayDecision, setIdiaPayDecision] = useState<"pending" | "approved" | "denied">("pending");
+  const [denialCause, setDenialCause] = useState("");
+  const [denialRemediation, setDenialRemediation] = useState("");
 
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
@@ -429,13 +431,28 @@ const ClientOrganizations = () => {
   setIsSubmitting(true);
 
   try {
-    const isApproved = t1pDecision === "approved" && idiaPayDecision === "approved";
+    const isApproved = idiaPayDecision === "approved";
+    const isDenied = idiaPayDecision === "denied";
     const status = isApproved ? "approved" : "rejected";
 
+    if (isDenied && !denialCause.trim()) {
+      toast({ title: "Denial cause required", description: "Provide a reason so the applicant can remediate.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
     // 1. Update Request Status
+    const { data: { user } } = await supabase.auth.getUser();
+    const updatePayload: Record<string, unknown> = { status };
+    if (isDenied) {
+      updatePayload.denial_cause = denialCause.trim();
+      updatePayload.denial_remediation = denialRemediation.trim() || null;
+      updatePayload.denied_at = new Date().toISOString();
+      updatePayload.denied_by = user?.id ?? null;
+    }
     const { error: updateError } = await supabase
       .from("account_conversion_requests")
-      .update({ status })
+      .update(updatePayload as any)
       .eq("id", selectedRequest.id);
 
     if (updateError) throw updateError;
@@ -472,6 +489,8 @@ const ClientOrganizations = () => {
     }
 
     setReviewModalOpen(false);
+    setDenialCause("");
+    setDenialRemediation("");
     await fetchBusinesses();
     await fetchRequests();
     toast({ title: isApproved ? "Organization Provisioned" : "Application Denied" });
@@ -698,22 +717,22 @@ const ClientOrganizations = () => {
       {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden bg-slate-50">
-          <DialogHeader className="px-6 py-4 border-b bg-white">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <ShieldCheck className="w-5 h-5 text-indigo-600" />
+          <DialogHeader className="px-4 py-3 border-b bg-white">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
               KYB / AML Compliance Review: {selectedRequest?.companyName}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-col lg:flex-row h-[600px]">
+          <div className="flex flex-col lg:flex-row max-h-[70vh]">
             {/* LEFT: APPLICATION DATA */}
-            <ScrollArea className="flex-1 p-6 border-r bg-white">
-              <div className="space-y-6">
+            <ScrollArea className="flex-1 p-4 border-r bg-white max-h-[70vh]">
+              <div className="space-y-4">
                 <section>
-                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                  <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Entity Details
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                     <div>
                       <Label className="text-[10px] text-muted-foreground uppercase">Legal Name</Label>
                       <p className="text-sm font-medium">{parsedData?.legalName || "—"}</p>
@@ -728,7 +747,13 @@ const ClientOrganizations = () => {
                     </div>
                     <div>
                       <Label className="text-[10px] text-muted-foreground uppercase">Industry</Label>
-                      <p className="text-sm font-medium">{parsedData?.industry || "—"}</p>
+                      <p className="text-sm font-medium">
+                        {parsedData?.vertical ? getPayAppVerticalLabel(parsedData.vertical) : (parsedData?.industry || "—")}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase">Sub-Industry</Label>
+                      <p className="text-sm font-medium font-mono">{parsedData?.submodule || "—"}</p>
                     </div>
                     <div className="col-span-2">
                       <Label className="text-[10px] text-muted-foreground uppercase">
@@ -736,23 +761,17 @@ const ClientOrganizations = () => {
                       </Label>
                       <p className="text-sm font-medium">{parsedData?.physicalAddress || "—"}</p>
                     </div>
-                    {parsedData?.vertical && (
-                      <div className="col-span-2">
-                        <Label className="text-[10px] text-muted-foreground uppercase">Pay App Vertical</Label>
-                        <p className="text-sm font-medium">{getPayAppVerticalLabel(parsedData.vertical)}</p>
-                      </div>
-                    )}
                   </div>
                 </section>
 
                 <section>
-                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                  <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Responsible Party (Signatory)
                   </h3>
-                  <div className="p-3 border rounded-lg bg-slate-50 flex items-center justify-between">
+                  <div className="p-2 border rounded-lg bg-slate-50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="bg-white p-2 rounded border">
-                        <UserIcon className="w-4 h-4 text-slate-600" />
+                      <div className="bg-white p-1.5 rounded border">
+                        <UserIcon className="w-3.5 h-3.5 text-slate-600" />
                       </div>
                       <div>
                         <p className="text-xs font-mono text-slate-600">{selectedRequest?.platformGuid}</p>
@@ -768,10 +787,10 @@ const ClientOrganizations = () => {
                 </section>
 
                 <section>
-                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                  <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Submitted Documentation
                   </h3>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {parsedData?.documents && parsedData.documents.length > 0 ? (
                       parsedData.documents.map((doc: string, i: number) => (
                         <div
@@ -782,27 +801,58 @@ const ClientOrganizations = () => {
                             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span className="truncate">{doc.split("/").pop()}</span>
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-indigo-600 shrink-0"
-                            onClick={async () => {
-                              const { data, error } = await supabase.storage
-                                .from("business-kyb-docs")
-                                .createSignedUrl(doc, 60);
-                              if (error || !data?.signedUrl) {
-                                toast({
-                                  title: "Cannot open document",
-                                  description: error?.message || "Signed URL unavailable",
-                                  variant: "destructive",
-                                });
-                                return;
-                              }
-                              window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-                            }}
-                          >
-                            View File
-                          </Button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-indigo-600"
+                              onClick={async () => {
+                                const fileName = doc.split("/").pop() || "document";
+                                const { data, error } = await supabase.storage
+                                  .from("business-kyb-docs")
+                                  .download(doc);
+                                if (error || !data) {
+                                  toast({
+                                    title: "Download failed",
+                                    description: error?.message || "File unavailable",
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
+                                const url = URL.createObjectURL(data);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = fileName;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              Download
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-slate-600"
+                              onClick={async () => {
+                                const { data, error } = await supabase.storage
+                                  .from("business-kyb-docs")
+                                  .createSignedUrl(doc, 120);
+                                if (error || !data?.signedUrl) {
+                                  toast({
+                                    title: "Cannot open",
+                                    description: error?.message || "Signed URL unavailable",
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
+                                window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+                              }}
+                            >
+                              View
+                            </Button>
+                          </div>
                         </div>
                       ))
                     ) : (
@@ -814,53 +864,67 @@ const ClientOrganizations = () => {
             </ScrollArea>
 
             {/* RIGHT: COMPLIANCE DECISION PANEL */}
-            <div className="w-full lg:w-[320px] p-6 flex flex-col justify-between">
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold">T-1-P Policy Decision</Label>
-                  <p className="text-[10px] text-muted-foreground -mt-2">
-                    Additional Trust &amp; Privacy clearance (not base).
-                  </p>
-                  <Select value={t1pDecision} onValueChange={(v: any) => setT1pDecision(v)}>
-                    <SelectTrigger
-                      className={t1pDecision === "approved" ? "border-emerald-500 bg-emerald-50" : ""}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending Review</SelectItem>
-                      <SelectItem value="approved">Approve T-1-P</SelectItem>
-                      <SelectItem value="denied">Deny T-1-P</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="w-full lg:w-[320px] p-4 flex flex-col justify-between gap-4">
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">IDIA Pay Policy Decision</Label>
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  Additional financial-operations clearance.
+                </p>
+                <Select value={idiaPayDecision} onValueChange={(v: any) => setIdiaPayDecision(v)}>
+                  <SelectTrigger
+                    className={
+                      idiaPayDecision === "approved"
+                        ? "border-indigo-500 bg-indigo-50"
+                        : idiaPayDecision === "denied"
+                        ? "border-red-500 bg-red-50"
+                        : ""
+                    }
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending Review</SelectItem>
+                    <SelectItem value="approved">Approve Financial</SelectItem>
+                    <SelectItem value="denied">Deny Financial</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold">IDIA Pay Policy Decision</Label>
-                  <p className="text-[10px] text-muted-foreground -mt-2">
-                    Additional financial-operations clearance.
-                  </p>
-                  <Select value={idiaPayDecision} onValueChange={(v: any) => setIdiaPayDecision(v)}>
-                    <SelectTrigger
-                      className={idiaPayDecision === "approved" ? "border-indigo-500 bg-indigo-50" : ""}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending Review</SelectItem>
-                      <SelectItem value="approved">Approve Financial</SelectItem>
-                      <SelectItem value="denied">Deny Financial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {idiaPayDecision === "denied" && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <div>
+                      <Label className="text-[10px] uppercase text-red-700 font-semibold">
+                        Denial Cause <span className="text-red-500">*</span>
+                      </Label>
+                      <textarea
+                        value={denialCause}
+                        onChange={(e) => setDenialCause(e.target.value)}
+                        placeholder="Why is this application denied?"
+                        className="w-full mt-1 text-xs border border-red-200 rounded p-2 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-red-400"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase text-slate-600 font-semibold">
+                        Remediation Guidance
+                      </Label>
+                      <textarea
+                        value={denialRemediation}
+                        onChange={(e) => setDenialRemediation(e.target.value)}
+                        placeholder="What can the applicant fix and resubmit?"
+                        className="w-full mt-1 text-xs border border-slate-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-slate-400"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-6 border-t space-y-3">
+              <div className="pt-3 border-t space-y-2">
                 <Button
                   className="w-full bg-slate-900 hover:bg-black text-white"
                   onClick={handleProcessApplication}
                   disabled={
-                    isSubmitting || t1pDecision === "pending" || idiaPayDecision === "pending"
+                    isSubmitting ||
+                    idiaPayDecision === "pending" ||
+                    (idiaPayDecision === "denied" && !denialCause.trim())
                   }
                 >
                   {isSubmitting ? (
