@@ -177,10 +177,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
 
             <div className="mt-6 pt-4 border-t">
               <p className="text-sm text-gray-600 mb-4">Quick Access (Prototype):</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleQuickLogin("super-admin")}>
-                  Super Admin
-                </Button>
+              <div className="grid grid-cols-3 gap-2">
                 <Button variant="outline" size="sm" onClick={() => handleQuickLogin("organization-admin")}>
                   Org Admin
                 </Button>
