@@ -4710,18 +4710,21 @@ export type Database = {
           created_at: string | null
           hub_account_type: string | null
           hub_saas_tier: string | null
+          platform_role: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
           hub_account_type?: string | null
           hub_saas_tier?: string | null
+          platform_role?: string
           user_id: string
         }
         Update: {
           created_at?: string | null
           hub_account_type?: string | null
           hub_saas_tier?: string | null
+          platform_role?: string
           user_id?: string
         }
         Relationships: [
@@ -8145,6 +8148,7 @@ export type Database = {
       invoke_refiner_secure: { Args: { payload: Json }; Returns: undefined }
       is_business_manager: { Args: { _business_id: string }; Returns: boolean }
       is_business_member: { Args: { _business_id: string }; Returns: boolean }
+      is_csuite: { Args: { _user_id: string }; Returns: boolean }
       is_org_admin: { Args: { _business_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {

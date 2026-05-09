@@ -43,10 +43,12 @@ export const TeamManagement = () => {
       : {};
 
     await addMember({
+      platform_guid: memberData.platform_guid,
       name: memberData.name,
-      email: memberData.email,
+      email: memberData.email ?? null,
+      job_title: memberData.job_title ?? null,
       phone: memberData.phone,
-      role: memberData.role || "employee",
+      role: memberData.role || "team_member",
       hourly_rate: memberData.hourly_rate,
       permissions: templatePerms,
       permission_template_id: memberData.template_id || null,
@@ -54,7 +56,7 @@ export const TeamManagement = () => {
 
     setIsInviteDialogOpen(false);
     toast({
-      title: memberData.source === "existing_user" ? "User Added" : "Invitation Sent",
+      title: memberData.platform_guid ? "Identity Provisioned" : "Member Added",
       description: `${memberData.name} has been added to the team`,
     });
   };
@@ -122,9 +124,9 @@ export const TeamManagement = () => {
                 <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="org_admin">Org Admin</SelectItem>
+                  <SelectItem value="team_lead">Team Lead</SelectItem>
+                  <SelectItem value="team_member">Team Member</SelectItem>
                 </SelectContent>
               </Select>
             </div>

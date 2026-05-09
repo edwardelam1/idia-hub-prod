@@ -1,9 +1,12 @@
 export interface TeamMember {
   id: string;
   name: string;
-  email: string;
+  /** Display-only contact value fetched from Life PII bridge — never used as an identifier. */
+  email?: string | null;
+  /** Optional job title — preferred for UI display over `role`. */
+  job_title?: string | null;
   phone?: string;
-  role: 'owner' | 'manager' | 'employee';
+  role: 'org_admin' | 'team_lead' | 'team_member';
   status: 'active' | 'inactive' | 'pending';
   hourly_rate?: number;
   assigned_locations: string[];
@@ -73,38 +76,35 @@ const allFalse = Object.fromEntries(DEFAULT_PERMISSIONS.map(p => [p.key, false])
 export const DEFAULT_TEMPLATES: PermissionTemplate[] = [
   {
     id: 'tpl-1',
-    name: 'Store Manager',
+    name: 'Org Admin',
     description: 'Full access to all screens, functions, and data',
     permissions: { ...allTrue },
   },
   {
     id: 'tpl-2',
-    name: 'Cashier',
-    description: 'POS operations, time card, and basic sales functions',
+    name: 'Team Lead',
+    description: 'Operational lead — POS, schedules, basic reporting',
     permissions: {
       ...allFalse,
       screen_pos: true,
       screen_timecard: true,
+      screen_overview: true,
+      screen_team: true,
       fn_process_sale: true,
       fn_issue_refund: true,
       fn_apply_discount: true,
+      data_view_reports: true,
     },
   },
   {
     id: 'tpl-3',
-    name: 'Inventory Specialist',
-    description: 'Inventory management with reporting access',
+    name: 'Team Member',
+    description: 'Day-to-day operator — POS and time card only',
     permissions: {
       ...allFalse,
-      screen_overview: true,
       screen_pos: true,
-      screen_inventory: true,
       screen_timecard: true,
       fn_process_sale: true,
-      fn_manage_inventory: true,
-      fn_record_transaction: true,
-      fn_transfer_inventory: true,
-      data_view_reports: true,
     },
   },
 ];
