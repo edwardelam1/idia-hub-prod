@@ -110,41 +110,33 @@ const ClientOrganizations = () => {
     fetchBusinesses();
 
     const fetchRequests = async () => {
-      console.log("[ClientOrganizations] >>> START: fetchRequests()");
-      try {
-        console.log("[ClientOrganizations] --- STEP: Querying 'account_conversion_requests'");
-        // Using ilike to bypass Postgres case sensitivity on 'pending' vs 'Pending'
-        const { data, error } = await supabase
-          .from("account_conversion_requests" as any)
-          .select("*")
-          .ilike("status", "pending")
-          .order("created_at", { ascending: false });
+  console.log("[ClientOrganizations] >>> START: fetchRequests()");
+  try {
+    const { data, error } = await supabase
+      .from("account_conversion_requests")
+      .select("*")
+      .ilike("status", "pending")
+      .order("created_at", { ascending: false });
 
-        if (error) {
-          console.error("[ClientOrganizations] !!! ERROR: Failed to fetch pending requests:", error);
-          return;
-        }
+    if (error) {
+      console.error("[ClientOrganizations] !!! ERROR:", error);
+      return;
+    }
 
-        if (data) {
-          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} pending requests.`, data);
-          const formatted = data.map((req: any) => ({
-            id: req.id,
-            companyName: req.company_name,
-            requestType: req.request_type,
-            requestDate: new Date(req.created_at).toLocaleDateString(),
-            // STRIPPED PII: Relying purely on UUID
-            platformGuid: req.user_id || "PENDING-GUID-ASSIGNMENT",
-            requestedRole: req.contact_role,
-            status: req.status,
-          }));
-          setPendingRequests(formatted);
-        }
-      } catch (err) {
-        console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchRequests:", err);
-      } finally {
-        console.log("[ClientOrganizations] <<< END: fetchRequests()");
-      }
-    };
+    if (data) {
+      // Map entire row to preserve all federal compliance fields
+      const formatted = data.map((req: any) => ({
+        ...req, // Spread all fields (ein, entity_type, address_*, etc.)
+        companyName: req.company_name,
+        requestDate: new Date(req.created_at).toLocaleDateString(),
+        platformGuid: req.user_id,
+      }));
+      setPendingRequests(formatted);
+    }
+  } catch (err) {
+    console.error("[ClientOrganizations] !!! FATAL:", err);
+  }
+};
 
     const fetchEligibleUsers = async () => {
       console.log("[ClientOrganizations] >>> START: fetchEligibleUsers()");
@@ -402,7 +394,7 @@ const ClientOrganizations = () => {
     setIsEditingCard(false);
     setEditForm({ ...org });
   };
-
+  
   const openReviewModal = (request: any) => {
     setSelectedRequest(request);
     setT1pDecision("pending");
@@ -418,19 +410,19 @@ const ClientOrganizations = () => {
       const safeGuidSegment = request.platformGuid?.split("-")[0] || "Unknown";
 
       setParsedData({
-        legalName: request.companyName || "Unknown Entity",
-        physicalAddress: "Extracted from Legal Documentation",
-        taxId: `XX-XXX${Math.floor(1000 + Math.random() * 9000)}`,
-        contactEmail: `id_${safeGuidSegment}@idia-network.local`,
-        contactPhone: "+1 (000) 000-0000",
-        responsibleParty: request.platformGuid,
-        responsibleRole: request.requestedRole || "Signatory",
-        businessBlueprintType: BLUEPRINT_CATEGORIES[0]?.id ?? "uncategorized",
-        guidValidated: true,
-        confidence: 99.4,
-      });
-    }, 1200);
-  };
+    legalName: request.company_name,
+    entityType: request.entity_type,
+    taxId: request.ein,
+    industry: request.industry,
+    physicalAddress: `${request.address_street1}${request.address_street2 ? ', ' + request.address_street2 : ''}, ${request.address_city}, ${request.address_state} ${request.address_zip}`,
+    responsibleParty: request.user_id,
+    responsibleRole: request.contact_role,
+    documents: request.document_paths || [],
+    logo: request.logo_path,
+    vertical: request.vertical_id,
+    submodule: request.submodule_id
+  });
+};
 
   const handleProcessApplication = async () => {
     console.log("[ClientOrganizations] >>> START: handleProcessApplication()");
