@@ -45,6 +45,8 @@ const ClientOrganizations = () => {
   const [parsedData, setParsedData] = useState<any>(null);
   const [t1pDecision, setT1pDecision] = useState<"pending" | "approved" | "denied">("pending");
   const [idiaPayDecision, setIdiaPayDecision] = useState<"pending" | "approved" | "denied">("pending");
+  const [denialCause, setDenialCause] = useState("");
+  const [denialRemediation, setDenialRemediation] = useState("");
 
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
@@ -429,13 +431,28 @@ const ClientOrganizations = () => {
   setIsSubmitting(true);
 
   try {
-    const isApproved = t1pDecision === "approved" && idiaPayDecision === "approved";
+    const isApproved = idiaPayDecision === "approved";
+    const isDenied = idiaPayDecision === "denied";
     const status = isApproved ? "approved" : "rejected";
 
+    if (isDenied && !denialCause.trim()) {
+      toast({ title: "Denial cause required", description: "Provide a reason so the applicant can remediate.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+
     // 1. Update Request Status
+    const { data: { user } } = await supabase.auth.getUser();
+    const updatePayload: Record<string, unknown> = { status };
+    if (isDenied) {
+      updatePayload.denial_cause = denialCause.trim();
+      updatePayload.denial_remediation = denialRemediation.trim() || null;
+      updatePayload.denied_at = new Date().toISOString();
+      updatePayload.denied_by = user?.id ?? null;
+    }
     const { error: updateError } = await supabase
       .from("account_conversion_requests")
-      .update({ status })
+      .update(updatePayload as any)
       .eq("id", selectedRequest.id);
 
     if (updateError) throw updateError;
@@ -472,6 +489,8 @@ const ClientOrganizations = () => {
     }
 
     setReviewModalOpen(false);
+    setDenialCause("");
+    setDenialRemediation("");
     await fetchBusinesses();
     await fetchRequests();
     toast({ title: isApproved ? "Organization Provisioned" : "Application Denied" });
