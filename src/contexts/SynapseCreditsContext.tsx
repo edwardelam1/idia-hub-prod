@@ -103,7 +103,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
         .select("amount")
         .eq("user_id", activeId)
         .in("entry_type", ["deduction", "USAGE"])
-        .neq("status", "FAILED")
+        .neq("status", "failed")
         .gte("created_at", thirtyDaysAgo);
 
       const totalDeductions = (usageEntries || []).reduce((sum, d) => sum + Math.abs(Number(d.amount)), 0);

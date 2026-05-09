@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
         user_id,
         amount: -query_cost_credits,
         entry_type: "deduction",
-        status: "PENDING",
+        status: "pending",
         metadata: {
           query_type: query_type || "data_query",
           bundle_id: bundle_id || null,
@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
         user_id,
         amount: 0,
         entry_type: "SETTLEMENT",
-        status: "SETTLED",
+        status: "settled",
         reference_id: consumptionRow.id,
         metadata: {
           settled_consumption_id: consumptionRow.id,

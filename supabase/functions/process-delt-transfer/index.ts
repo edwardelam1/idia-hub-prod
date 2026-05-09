@@ -91,7 +91,7 @@ serve(async (req) => {
           user_id: userId,
           amount: egressFee,
           entry_type: "usage",
-          status: "SETTLED",
+          status: "settled",
           description: "Liability Shield Payload Egress Fee",
           reference_id: referenceId,
         })

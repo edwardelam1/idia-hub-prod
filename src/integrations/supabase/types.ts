@@ -8410,7 +8410,8 @@ export type Database = {
         | "pure_alpha"
         | "analyst"
         | "professional"
-      idia_transaction_status: "PENDING" | "SETTLED" | "FAILED" | "completed"
+        | "enterprise"
+      idia_transaction_status: "pending" | "settled" | "failed" | "completed"
       idia_transaction_type:
         | "data_sale"
         | "deposit"
@@ -8563,8 +8564,9 @@ export const Constants = {
         "pure_alpha",
         "analyst",
         "professional",
+        "enterprise",
       ],
-      idia_transaction_status: ["PENDING", "SETTLED", "FAILED", "completed"],
+      idia_transaction_status: ["pending", "settled", "failed", "completed"],
       idia_transaction_type: [
         "data_sale",
         "deposit",
