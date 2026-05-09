@@ -74,6 +74,7 @@ const Index = () => {
     }
     const role = user?.role || userRole;
     switch (role) {
+      case "csuite":
       case "super-admin":
         return <SuperAdminDashboard />;
       case "organization-admin":

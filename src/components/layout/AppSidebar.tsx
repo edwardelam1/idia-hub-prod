@@ -48,6 +48,19 @@ interface AppSidebarProps {
 // Dashboard is always pinned at the top and not reorderable.
 const PINNED_ITEM: NavItem = { title: 'Dashboard', url: '/dashboard', icon: BarChart3 };
 
+const ROLE_LABELS: Record<string, string> = {
+  csuite: 'C-Suite',
+  'super-admin': 'Super Admin',
+  'organization-admin': 'Organization Admin',
+  'team-lead': 'Team Lead',
+  'team-member': 'Team Member',
+  analyst: 'Analyst',
+  professional: 'Professional',
+};
+
+const formatRoleLabel = (role: string) =>
+  ROLE_LABELS[role] ?? role.replace(/[-_]/g, ' ');
+
 const getRoleItems = (userRole: string): NavItem[] => {
   const base: NavItem[] = [
     { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
@@ -63,6 +76,18 @@ const getRoleItems = (userRole: string): NavItem[] => {
   ];
 
   switch (userRole) {
+    case 'csuite':
+      // C-Suite has the union of Super Admin + Organization Admin surfaces.
+      base.push(
+        { title: 'System Health', url: '/system-health', icon: Activity },
+        { title: 'Client Organizations', url: '/organizations', icon: Building2 },
+        { title: 'AI Management', url: '/ai-management', icon: Zap },
+        { title: 'Security', url: '/security', icon: ShieldCheck },
+        { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
+        { title: 'Team Management', url: '/teams', icon: Users },
+        { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
+      );
+      break;
     case 'super-admin':
       base.push(
         { title: 'System Health', url: '/system-health', icon: Activity },
@@ -197,7 +222,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                   IDIA Hub
                 </h2>
                 <p className="text-xs text-muted-foreground capitalize truncate">
-                  {userRole.replace('-', ' ')}
+                  {formatRoleLabel(userRole)}
                 </p>
               </div>
             )}

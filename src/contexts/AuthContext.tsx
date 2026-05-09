@@ -52,13 +52,13 @@ const buildUserFromSession = (session: Session, subscription: any, profileData: 
 
   // Enterprise logic grants Org Admin status
   if (tier === "enterprise") role = "organization-admin";
-  // God GUID / C-Suite bypass logic can be added here if needed
+  // C-Suite (platform_users.platform_role) overrides tier-based role downstream.
 
   return {
     user_id: session.user.id,
     role,
     account_status: subscription ? "AUTHORIZED" : "PENDING",
-    account_type: (profileData?.account_type as AccountType) || "business",
+    account_type: (profileData?.account_type as AccountType) || "individual",
     email: session.user.email,
   };
 };
@@ -128,11 +128,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const prof: ProfileData = {
           avatar_url: profileRow.avatar_url,
-          account_type: profileRow.account_type || "business",
+          account_type: profileRow.account_type || "individual",
         };
 
         setProfile(prof);
-        setActivePerspective((profileRow.account_type as AccountType) || "individual");
+        // Only 'business' explicitly flips perspective; everything else (individual,
+        // god_guid, null) defaults to the individual surface.
+        setActivePerspective(profileRow.account_type === "business" ? "business" : "individual");
 
         // Fetch Subscription
         const { data: sub } = await supabase
@@ -152,7 +154,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         const tier = deriveTier(sub);
         setSubscriptionTier(tier);
-        setUser(buildUserFromSession(session, sub, prof));
+        const baseUser = buildUserFromSession(session, sub, prof);
+
+        // --- C-Suite override: platform_users.platform_role = 'csuite' wins over tier
+        let finalUser = baseUser;
+        try {
+          const { data: platformRow } = await supabase
+            .from("platform_users")
+            .select("platform_role")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+          if (platformRow?.platform_role === "csuite") {
+            finalUser = { ...baseUser, role: "csuite" };
+            console.log("[AuthGate] --- C-Suite operator detected: role=csuite");
+          } else if (platformRow?.platform_role) {
+            finalUser = { ...baseUser, role: platformRow.platform_role };
+          }
+        } catch (e) {
+          console.warn("[AuthGate] platform_users lookup skipped:", e);
+        }
+        setUser(finalUser);
 
         const pii = await fetchPiiData(session);
         setPiiData(pii);
@@ -234,7 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         piiData,
         isAuthenticated: !!user,
         isBusinessAccount: activePerspective === "business",
-        isAdminRole: user?.role === "organization-admin",
+        isAdminRole: user?.role === "organization-admin" || user?.role === "csuite",
         isLoading,
         subscriptionTier,
         activePerspective,
