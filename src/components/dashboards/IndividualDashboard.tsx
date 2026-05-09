@@ -7,14 +7,17 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import { useBillingData } from "@/hooks/useBillingData";
+import { useBillingData, PLAN_PRICING } from "@/hooks/useBillingData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
 import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
 import {
+  Activity,
   ShieldCheck,
   Database,
+  BrainCircuit,
+  Eye,
   Sparkles,
   BookOpen,
   FileKey,
@@ -98,7 +101,7 @@ const IndividualDashboard = () => {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-[9px] border-primary/20 text-primary py-0 h-5">
-            {creditsLoading ? "SYNCING..." : "STATE: SETTLED"}
+            {creditsLoading ? "SYNCING..." : "STATE: settled"}
           </Badge>
           <ShieldCheck className="h-4 w-4 text-primary opacity-30" />
         </div>
@@ -202,17 +205,6 @@ const IndividualDashboard = () => {
                 <FileKey className="h-3 w-3 opacity-20" />
               </div>
               <span className="text-lg font-mono font-bold">{personalStats.auditLogs}</span>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="usage" className="flex-1 mt-2 space-y-2 overflow-y-auto pr-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <Card className="border-foreground/5 bg-muted/5 p-2 min-h-[120px]">
-              <SynapseGasGauge />
-            </Card>
-            <Card className="border-foreground/5 bg-muted/5 p-2 min-h-[120px]">
-              <FBOReservoirGauge />
             </Card>
           </div>
         </TabsContent>

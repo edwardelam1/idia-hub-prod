@@ -46,8 +46,12 @@ serve(async (req) => {
     console.info(`[BEGIN: ROUTING_GATEKEEPER]`);
     const routing = body?.routing;
     if (routing !== "fiat" && routing !== "on-chain") {
-      console.error(`🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`);
-      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
+      console.error(
+        `🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`,
+      );
+      throw new Error(
+        `ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`,
+      );
     }
     console.info(`[END: ROUTING_GATEKEEPER] Compliance rail locked: ${routing}`);
 
@@ -130,18 +134,15 @@ serve(async (req) => {
 
     // [BEGIN: CASHIER_HANDOFF] Bridge validated intent to Circular Settlement.
     console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline (rail=${routing}).`);
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke(
-      "idia-circular-settlement",
-      {
-        body: {
-          total_fiat_amount: 0.75,
-          routing,
-          buyer_id: userId,
-          payment_reference: referenceId,
-          contributing_users: [{ user_id: userId }],
-        },
+    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
+      body: {
+        total_fiat_amount: 0.75,
+        routing,
+        buyer_id: userId,
+        payment_reference: referenceId,
+        contributing_users: [{ user_id: userId }],
       },
-    );
+    });
 
     if (cashierError) {
       console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
