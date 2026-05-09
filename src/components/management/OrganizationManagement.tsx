@@ -105,38 +105,37 @@ const ClientOrganizations = () => {
     }
   };
 
+  const fetchRequests = async () => {
+    console.log("[ClientOrganizations] >>> START: fetchRequests()");
+    try {
+      const { data, error } = await supabase
+        .from("account_conversion_requests")
+        .select("*")
+        .ilike("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR:", error);
+        return;
+      }
+
+      if (data) {
+        const formatted = data.map((req: any) => ({
+          ...req,
+          companyName: req.company_name,
+          requestDate: new Date(req.created_at).toLocaleDateString(),
+          platformGuid: req.user_id,
+        }));
+        setPendingRequests(formatted);
+      }
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL:", err);
+    }
+  };
+
   useEffect(() => {
     console.log("[ClientOrganizations] >>> START: useEffect Initialization");
     fetchBusinesses();
-
-    const fetchRequests = async () => {
-  console.log("[ClientOrganizations] >>> START: fetchRequests()");
-  try {
-    const { data, error } = await supabase
-      .from("account_conversion_requests")
-      .select("*")
-      .ilike("status", "pending")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("[ClientOrganizations] !!! ERROR:", error);
-      return;
-    }
-
-    if (data) {
-      // Map entire row to preserve all federal compliance fields
-      const formatted = data.map((req: any) => ({
-        ...req, // Spread all fields (ein, entity_type, address_*, etc.)
-        companyName: req.company_name,
-        requestDate: new Date(req.created_at).toLocaleDateString(),
-        platformGuid: req.user_id,
-      }));
-      setPendingRequests(formatted);
-    }
-  } catch (err) {
-    console.error("[ClientOrganizations] !!! FATAL:", err);
-  }
-};
 
     const fetchEligibleUsers = async () => {
       console.log("[ClientOrganizations] >>> START: fetchEligibleUsers()");
@@ -422,7 +421,8 @@ const ClientOrganizations = () => {
     vertical: request.vertical_id,
     submodule: request.submodule_id
   });
-};
+    }, 800);
+  };
 
   const handleProcessApplication = async () => {
   if (!selectedRequest || !parsedData) return;
