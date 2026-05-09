@@ -213,20 +213,25 @@ axios.get('${origin}/v1/features/market-data', config)
     const startTime = performance.now();
     try {
       console.info("[APIEndpoints][executeLiveCall][preflight_identity] BEGIN");
-      const userId = (user as any)?.id;
+      const u = user as any;
+      const userId = u?.user_id ?? u?.id;
+      const isCsuite =
+        typeof u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(u.role);
       if (!userId) {
         console.error("[APIEndpoints][executeLiveCall][preflight_identity] FATAL: no authenticated user_id");
         toast.error("Sign in required to execute live calls");
         return;
       }
-      console.info(`[APIEndpoints][executeLiveCall][preflight_identity] EXEC user_id=${userId}`);
+      console.info(
+        `[APIEndpoints][executeLiveCall][preflight_identity] EXEC user_id=${userId} role=${u?.role} csuite=${isCsuite}`,
+      );
       console.info("[APIEndpoints][executeLiveCall][preflight_identity] END");
 
       console.info("[APIEndpoints][executeLiveCall][preflight_credits] BEGIN");
       console.info(
-        `[APIEndpoints][executeLiveCall][preflight_credits] EXEC required=${endpoint.credits} available=${credits}`,
+        `[APIEndpoints][executeLiveCall][preflight_credits] EXEC required=${endpoint.credits} available=${credits} csuite_bypass=${isCsuite}`,
       );
-      if (credits < endpoint.credits) {
+      if (!isCsuite && credits < endpoint.credits) {
         console.error("[APIEndpoints][executeLiveCall][preflight_credits] HALT: insufficient credits");
         toast.error(`Insufficient credits — ${endpoint.credits} CR required, ${credits} available`);
         return;
@@ -234,14 +239,14 @@ axios.get('${origin}/v1/features/market-data', config)
       console.info("[APIEndpoints][executeLiveCall][preflight_credits] END");
 
       console.info("[APIEndpoints][executeLiveCall][preflight_tier] BEGIN");
-      if (!currentTier || TIER_MATRIX[endpoint.tier] > TIER_MATRIX[currentTier]) {
+      if (!isCsuite && (!currentTier || TIER_MATRIX[endpoint.tier] > TIER_MATRIX[currentTier])) {
         console.error(
           `[APIEndpoints][executeLiveCall][preflight_tier] HALT tier=${currentTier} required=${endpoint.tier}`,
         );
         toast.error(`${endpoint.tier} tier required for this endpoint`);
         return;
       }
-      console.info("[APIEndpoints][executeLiveCall][preflight_tier] END");
+      console.info(`[APIEndpoints][executeLiveCall][preflight_tier] END csuite_bypass=${isCsuite}`);
 
       console.info("[APIEndpoints][executeLiveCall][invoke_controller] BEGIN");
       const referenceId = `apiep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -345,9 +350,14 @@ axios.get('${origin}/v1/features/market-data', config)
     }
   };
 
-  const visibleEndpoints = currentTier
-    ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
-    : [];
+  const _u = user as any;
+  const _isCsuite =
+    typeof _u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(_u.role);
+  const visibleEndpoints = _isCsuite
+    ? endpoints
+    : currentTier
+      ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
+      : [];
 
   return (
     <div className="space-y-4">
