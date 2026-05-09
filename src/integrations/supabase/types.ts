@@ -24,6 +24,10 @@ export type Database = {
           company_name: string
           contact_role: string
           created_at: string | null
+          denial_cause: string | null
+          denial_remediation: string | null
+          denied_at: string | null
+          denied_by: string | null
           document_paths: string[]
           ein: string | null
           entity_type: string | null
@@ -46,6 +50,10 @@ export type Database = {
           company_name: string
           contact_role: string
           created_at?: string | null
+          denial_cause?: string | null
+          denial_remediation?: string | null
+          denied_at?: string | null
+          denied_by?: string | null
           document_paths?: string[]
           ein?: string | null
           entity_type?: string | null
@@ -68,6 +76,10 @@ export type Database = {
           company_name?: string
           contact_role?: string
           created_at?: string | null
+          denial_cause?: string | null
+          denial_remediation?: string | null
+          denied_at?: string | null
+          denied_by?: string | null
           document_paths?: string[]
           ein?: string | null
           entity_type?: string | null
