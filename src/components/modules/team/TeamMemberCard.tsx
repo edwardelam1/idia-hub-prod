@@ -1,8 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Mail, Phone, MapPin, Clock, DollarSign, Shield, UserCheck, UserX } from "lucide-react";
+import { Edit, Briefcase, Phone, MapPin, Clock, DollarSign, Shield, UserCheck, UserX, Fingerprint } from "lucide-react";
 import type { TeamMemberRow } from "@/hooks/use-team-data";
+import { roleLabel, normalizeRole } from "@/lib/role-hierarchy";
 
 interface TeamMemberCardProps {
   member: TeamMemberRow;
@@ -13,6 +14,9 @@ interface TeamMemberCardProps {
 export const TeamMemberCard = ({ member, onEdit, onToggleStatus }: TeamMemberCardProps) => {
   const permissions = (member.permissions || {}) as Record<string, boolean>;
   const permCount = Object.values(permissions).filter(Boolean).length;
+  const role = normalizeRole(member.platform_role ?? member.role);
+  const display = member.job_title?.trim() || roleLabel(role);
+  const guidShort = member.user_id ? member.user_id.slice(0, 8) : null;
 
   return (
     <Card className="h-fit">
@@ -21,8 +25,8 @@ export const TeamMemberCard = ({ member, onEdit, onToggleStatus }: TeamMemberCar
           <div className="flex-1 min-w-0">
             <CardTitle className="text-base sm:text-lg truncate">{member.name}</CardTitle>
             <CardDescription className="flex items-center mt-1 text-xs sm:text-sm">
-              <Mail className="w-3 h-3 mr-1 flex-shrink-0" />
-              <span className="truncate">{member.email}</span>
+              <Briefcase className="w-3 h-3 mr-1 flex-shrink-0" />
+              <span className="truncate">{display}</span>
             </CardDescription>
           </div>
           <div className="flex space-x-1 flex-shrink-0">
@@ -39,12 +43,17 @@ export const TeamMemberCard = ({ member, onEdit, onToggleStatus }: TeamMemberCar
           </div>
         </div>
         <div className="flex gap-2 mt-2">
-          <Badge variant={member.role === "owner" ? "default" : "secondary"} className="capitalize">{member.role}</Badge>
+          <Badge variant={role === "org_admin" ? "default" : "secondary"}>{roleLabel(role)}</Badge>
           <Badge variant={member.status === "active" ? "default" : member.status === "pending" ? "secondary" : "destructive"} className="capitalize">{member.status}</Badge>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
         <div className="space-y-3">
+          {guidShort && (
+            <div className="flex items-center text-xs text-muted-foreground font-mono">
+              <Fingerprint className="w-3 h-3 mr-2" />GUID: {guidShort}…
+            </div>
+          )}
           {member.phone && (
             <div className="flex items-center text-sm text-muted-foreground">
               <Phone className="w-3 h-3 mr-2" />{member.phone}
