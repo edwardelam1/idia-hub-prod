@@ -85,9 +85,9 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       }
     }
 
-    // No fallback to "Organization". If we can't resolve the entity, we fail.
-    console.error(`[IdentityGate] !!! FATAL: Failed to resolve Organization for userRole [${userRole}].`);
-    throw new Error(`ORGANIZATION_RESOLUTION_FAILURE: No entity bound to session.`);
+    // Soft fallback — avoid crashing the entire app shell when org cannot be resolved.
+    console.warn(`[IdentityGate] --- WARN: Organization unresolved for userRole [${userRole}]. Using fallback.`);
+    return "IDIA Hub";
   };
 
   const displayName = getUserName();
