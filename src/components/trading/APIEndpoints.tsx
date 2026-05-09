@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -5,128 +6,112 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileCode, Copy, Lock, Zap, Bot, Terminal } from "lucide-react";
 import { toast } from "sonner";
 
-export const APIEndpoints = () => {
-  const copyCode = (code: string, name: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success(`${name} copied to clipboard`);
-  };
-
-  const endpoints = [
-    {
-      method: "GET",
-      path: "/v1/features/market-data",
-      description: "Retrieve real-time market feature feeds for algorithmic trading",
-      tier: "Analyst",
-      latency: "< 100ms",
-      credits: 5,
-      auth: "OAuth 2.0 + API Key",
-    },
-    {
-      method: "GET",
-      path: "/v1/features/health-analytics",
-      description: "Access aggregated health data analytics for predictive modeling",
-      tier: "Professional",
-      latency: "< 100ms",
-      credits: 15,
-      auth: "OAuth 2.0 + API Key",
-    },
-    {
-      method: "GET",
-      path: "/v1/features/ecp-reports",
-      description: "Experiential Conversion Protocol reports with blockchain provenance",
-      tier: "Enterprise",
-      latency: "< 100ms",
-      credits: 50,
-      auth: "OAuth 2.0 + API Key",
-    },
-    {
-      method: "POST",
-      path: "/v1/queries/custom",
-      description: "Execute custom queries with differential privacy protection",
-      tier: "Enterprise",
-      latency: "< 100ms",
-      credits: 50,
-      auth: "OAuth 2.0 + API Key",
-    },
-  ];
-
-  const mcpConfigExample = `{
-  "mcpServers": {
-    "idia-vault": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@idia/mcp-server",
-        "--api-key",
-        "YOUR_API_KEY",
-        "--environment",
-        "production"
-      ]
-    }
-  }
-}`;
-
-  const curlExample = `curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json"`;
-
-  const pythonExample = `import requests
-
-headers = {
-    "Authorization": "Bearer YOUR_API_KEY",
-    "Content-Type": "application/json"
+interface Endpoint {
+  method: string;
+  path: string;
+  description: string;
+  tier: string;
+  latency: string;
+  credits: number;
+  auth: string;
 }
 
-response = requests.get(
-    "https://api.idiahub.com/v1/features/market-data",
-    headers=headers
-)
+interface MCPTool {
+  name: string;
+  description: string;
+}
 
-data = response.json()
-print(data)`;
+interface CodeExamples {
+  mcpConfig: string;
+  curl: string;
+  python: string;
+  nodejs: string;
+  response: string;
+}
 
-  const nodejsExample = `const axios = require('axios');
+interface APIPayload {
+  endpoints: Endpoint[];
+  mcpTools: MCPTool[];
+  codeExamples: CodeExamples;
+}
 
-const config = {
-  headers: {
-    'Authorization': 'Bearer YOUR_API_KEY',
-    'Content-Type': 'application/json'
-  }
-};
+export const APIEndpoints = () => {
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [mcpTools, setMcpTools] = useState<MCPTool[]>([]);
+  const [examples, setExamples] = useState<CodeExamples>({
+    mcpConfig: "",
+    curl: "",
+    python: "",
+    nodejs: "",
+    response: "",
+  });
 
-axios.get('https://api.idiahub.com/v1/features/market-data', config)
-  .then(response => {
-    console.log(response.data);
-  })
-  .catch(error => {
-    console.error('Error:', error);
-  });`;
+  useEffect(() => {
+    const fetchDynamicContent = async () => {
+      console.info("[APIEndpoints][fetchDynamicContent] BEGIN: Initiating component mount data fetch sequence.");
+      try {
+        console.info("[APIEndpoints][fetchDynamicContent] Attempting fetch to internal API route: /api/v1/documentation/endpoints");
+        const response = await fetch("/api/v1/documentation/endpoints");
+        console.info(`[APIEndpoints][fetchDynamicContent] Network response received. Status: ${response.status} ${response.statusText}`);
 
-  const responseExample = `{
-  "data": {
-    "feature_id": "market-data-2025-10-27",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "features": {
-      "payment_velocity": 0.847,
-      "transaction_volume": 125000,
-      "market_sentiment": "bullish"
+        if (!response.ok) {
+          console.error(`[APIEndpoints][fetchDynamicContent] HTTP Error encountered. Code: ${response.status}. Initiating throw.`);
+          throw new Error(`HTTP fetch failed with status: ${response.status}`);
+        }
+
+        console.info("[APIEndpoints][fetchDynamicContent] Parsing JSON payload from stream.");
+        const data: APIPayload = await response.json();
+        console.info("[APIEndpoints][fetchDynamicContent] JSON payload successfully parsed. Validating data structures.");
+
+        if (data.endpoints) {
+          console.info("[APIEndpoints][fetchDynamicContent] Mapping database endpoints to state.");
+          setEndpoints(data.endpoints);
+        } else {
+          console.warn("[APIEndpoints][fetchDynamicContent] Warning: 'endpoints' array missing from database payload.");
+        }
+
+        if (data.mcpTools) {
+          console.info("[APIEndpoints][fetchDynamicContent] Mapping MCP tools to state.");
+          setMcpTools(data.mcpTools);
+        } else {
+          console.warn("[APIEndpoints][fetchDynamicContent] Warning: 'mcpTools' array missing from database payload.");
+        }
+
+        if (data.codeExamples) {
+          console.info("[APIEndpoints][fetchDynamicContent] Mapping code examples to state.");
+          setExamples(data.codeExamples);
+        } else {
+          console.warn("[APIEndpoints][fetchDynamicContent] Warning: 'codeExamples' object missing from database payload.");
+        }
+
+        console.info("[APIEndpoints][fetchDynamicContent] State mutation complete. Component ready.");
+      } catch (error) {
+        console.error("[APIEndpoints][fetchDynamicContent] FATAL EXCEPTION: Caught error during data fetch sequence.", error);
+        toast.error("Failed to synchronize live API data from the database.");
+      } finally {
+        console.info("[APIEndpoints][fetchDynamicContent] END: Data fetch sequence terminated.");
+      }
+    };
+
+    fetchDynamicContent();
+  }, []);
+
+  const copyCode = (code: string, name: string) => {
+    console.info(`[APIEndpoints][copyCode] BEGIN: User initiated clipboard write for ${name}`);
+    try {
+      if (!code) {
+        console.warn(`[APIEndpoints][copyCode] Warning: Target payload for ${name} is empty.`);
+      }
+      navigator.clipboard.writeText(code);
+      toast.success(`${name} copied to clipboard`);
+      console.info(`[APIEndpoints][copyCode] Successfully wrote ${name} to clipboard.`);
+    } catch (error) {
+      console.error(`[APIEndpoints][copyCode] FAILED: Exception caught writing ${name} to clipboard.`, error);
+      toast.error(`Failed to copy ${name}`);
+    } finally {
+      console.info(`[APIEndpoints][copyCode] END: Clipboard write sequence terminated.`);
     }
-  },
-  "metadata": {
-    "latency_ms": 47,
-    "credits_consumed": 5,
-    "tier": "analyst"
-  },
-  "provenance": {
-    "digiramp_anchor_id": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d",
-    "blockchain": "ethereum",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "immutable": true
-  },
-  "headers": {
-    "X-IDIA-LIABILITY-TOKEN": "audit_8522e971_e064_4591"
-  }
-}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -137,8 +122,8 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             Agentic MCP Access (Model Context Protocol)
           </CardTitle>
           <CardDescription className="text-foreground/80">
-            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle DELT wrapping and Synapse
-            credit burns for autonomous agents.
+            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle secure protocol wrapping
+            and automated compute credit burns for autonomous agents.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -148,31 +133,30 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
                 <Terminal className="h-4 w-4" /> Available MCP Tools
               </h4>
               <ul className="text-sm space-y-2 text-muted-foreground">
-                <li>
-                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">query_market_features</code> - Pull
-                  real-time algo trading telemetry
-                </li>
-                <li>
-                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">execute_delt_transfer</code> -
-                  Autonomous consent artifact generation
-                </li>
-                <li>
-                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">verify_digiramp_anchor</code> - Check
-                  blockchain provenance
-                </li>
+                {mcpTools.length > 0 ? (
+                  mcpTools.map((tool, index) => (
+                    <li key={index}>
+                      <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">{tool.name}</code> -{" "}
+                      {tool.description}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-muted-foreground italic">Syncing real-time MCP tools...</li>
+                )}
               </ul>
             </div>
             <div className="space-y-2">
               <h4 className="text-sm font-semibold">Claude Desktop Configuration</h4>
               <div className="relative">
                 <pre className="bg-background border border-border p-3 rounded-lg overflow-x-auto text-xs text-muted-foreground">
-                  <code>{mcpConfigExample}</code>
+                  <code>{examples.mcpConfig || "Loading configuration..."}</code>
                 </pre>
                 <Button
                   variant="outline"
                   size="icon"
                   className="absolute top-2 right-2 h-6 w-6"
-                  onClick={() => copyCode(mcpConfigExample, "MCP Config")}
+                  onClick={() => copyCode(examples.mcpConfig, "MCP Config")}
+                  disabled={!examples.mcpConfig}
                 >
                   <Copy className="h-3 w-3" />
                 </Button>
@@ -192,54 +176,58 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {endpoints.map((endpoint, index) => (
-              <div key={index} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={
-                          endpoint.method === "GET"
-                            ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
-                            : "bg-green-500/10 text-green-500 border-green-500/20"
-                        }
-                      >
-                        {endpoint.method}
-                      </Badge>
-                      <code className="text-sm font-mono text-foreground">{endpoint.path}</code>
+            {endpoints.length > 0 ? (
+              endpoints.map((endpoint, index) => (
+                <div key={index} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            endpoint.method === "GET"
+                              ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                              : "bg-green-500/10 text-green-500 border-green-500/20"
+                          }
+                        >
+                          {endpoint.method}
+                        </Badge>
+                        <code className="text-sm font-mono text-foreground">{endpoint.path}</code>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{endpoint.description}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{endpoint.description}</p>
                   </div>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Lock className="h-3 w-3" />
-                    {endpoint.auth}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Lock className="h-3 w-3" />
+                      {endpoint.auth}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Zap className="h-3 w-3" />
+                      {endpoint.latency} latency
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {endpoint.credits} credits/call
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={
+                        endpoint.tier === "Enterprise"
+                          ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-xs"
+                          : endpoint.tier === "Professional"
+                            ? "bg-primary/10 text-primary border-primary/20 text-xs"
+                            : "bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs"
+                      }
+                    >
+                      {endpoint.tier} Tier
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Zap className="h-3 w-3" />
-                    {endpoint.latency} latency
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {endpoint.credits} credits/call
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={
-                      endpoint.tier === "Enterprise"
-                        ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-xs"
-                        : endpoint.tier === "Professional"
-                          ? "bg-primary/10 text-primary border-primary/20 text-xs"
-                          : "bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs"
-                    }
-                  >
-                    {endpoint.tier} Tier
-                  </Badge>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Synchronizing endpoint matrix...</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -260,13 +248,14 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             <TabsContent value="curl" className="space-y-2">
               <div className="relative">
                 <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                  <code>{curlExample}</code>
+                  <code>{examples.curl || "Loading..."}</code>
                 </pre>
                 <Button
                   variant="outline"
                   size="sm"
                   className="absolute top-2 right-2 gap-2"
-                  onClick={() => copyCode(curlExample, "cURL example")}
+                  onClick={() => copyCode(examples.curl, "cURL example")}
+                  disabled={!examples.curl}
                 >
                   <Copy className="h-4 w-4" /> Copy
                 </Button>
@@ -276,13 +265,14 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             <TabsContent value="python" className="space-y-2">
               <div className="relative">
                 <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                  <code>{pythonExample}</code>
+                  <code>{examples.python || "Loading..."}</code>
                 </pre>
                 <Button
                   variant="outline"
                   size="sm"
                   className="absolute top-2 right-2 gap-2"
-                  onClick={() => copyCode(pythonExample, "Python example")}
+                  onClick={() => copyCode(examples.python, "Python example")}
+                  disabled={!examples.python}
                 >
                   <Copy className="h-4 w-4" /> Copy
                 </Button>
@@ -292,13 +282,14 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             <TabsContent value="nodejs" className="space-y-2">
               <div className="relative">
                 <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                  <code>{nodejsExample}</code>
+                  <code>{examples.nodejs || "Loading..."}</code>
                 </pre>
                 <Button
                   variant="outline"
                   size="sm"
                   className="absolute top-2 right-2 gap-2"
-                  onClick={() => copyCode(nodejsExample, "Node.js example")}
+                  onClick={() => copyCode(examples.nodejs, "Node.js example")}
+                  disabled={!examples.nodejs}
                 >
                   <Copy className="h-4 w-4" /> Copy
                 </Button>
@@ -317,7 +308,7 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
         </CardHeader>
         <CardContent>
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm text-muted-foreground">
-            <code>{responseExample}</code>
+            <code>{examples.response || "Loading..."}</code>
           </pre>
         </CardContent>
       </Card>
