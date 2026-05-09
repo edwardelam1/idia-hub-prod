@@ -7,10 +7,49 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileCode, Copy, Lock, Zap, Bot, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { fetchApi } from "@/lib/api";
+
+// --- Type Definitions ---
+type Tier = "Analyst" | "Professional" | "Enterprise";
+interface Endpoint {
+  method: string;
+  path: string;
+  description: string;
+  tier: Tier;
+  latency: string;
+  credits: number;
+  auth: string;
+}
+
+const TIER_MATRIX: Record<Tier, number> = { Analyst: 1, Professional: 2, Enterprise: 3 };
+
+const normalizeTier = (raw: string | undefined | null): Tier | null => {
+  console.info(`[APIEndpoints][normalizeTier] BEGIN raw=${raw ?? "null"}`);
+  try {
+    const v = (raw ?? "").toLowerCase();
+    if (v === "enterprise") return "Enterprise";
+    if (v === "professional" || v === "prof") return "Professional";
+    if (v === "analyst") return "Analyst";
+    console.warn(`[APIEndpoints][normalizeTier] WARN unrecognized tier=${v}`);
+    return null;
+  } finally {
+    console.info(`[APIEndpoints][normalizeTier] END`);
+  }
+};
 
 export const APIEndpoints = () => {
-  // Initialize state with exact placeholders to ensure 0 visual disruption before DB load
-  const [endpoints, setEndpoints] = useState([
+  // --- Live context (real auth + credits, no mocks) ---
+  const { user, subscriptionTier } = useAuth();
+  const { balanceData, refreshBalance } = useSynapseCredits();
+
+  const currentTier: Tier | null = normalizeTier(subscriptionTier as unknown as string);
+  const credits = Number(balanceData?.available_credits ?? 0);
+
+  const [baseUrl, setBaseUrl] = useState<string>("https://api.idiahub.com");
+
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([
     {
       method: "GET",
       path: "/v1/features/market-data",
@@ -49,7 +88,7 @@ export const APIEndpoints = () => {
     },
   ]);
 
-  const [mcpConfigExample, setMcpConfigExample] = useState(`{
+  const [mcpConfigExample, setMcpConfigExample] = useState<string>(`{
   "mcpServers": {
     "idia-vault": {
       "command": "npx",
@@ -65,11 +104,11 @@ export const APIEndpoints = () => {
   }
 }`);
 
-  const [curlExample, setCurlExample] = useState(`curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
+  const [curlExample, setCurlExample] = useState<string>(`curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json"`);
 
-  const [pythonExample, setPythonExample] = useState(`import requests
+  const [pythonExample, setPythonExample] = useState<string>(`import requests
 
 headers = {
     "Authorization": "Bearer YOUR_API_KEY",
@@ -84,7 +123,7 @@ response = requests.get(
 data = response.json()
 print(data)`);
 
-  const [nodejsExample, setNodejsExample] = useState(`const axios = require('axios');
+  const [nodejsExample, setNodejsExample] = useState<string>(`const axios = require('axios');
 
 const config = {
   headers: {
@@ -101,80 +140,196 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
     console.error('Error:', error);
   });`);
 
-  const [responseExample, setResponseExample] = useState(`{
-  "data": {
-    "feature_id": "market-data-2025-10-27",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "features": {
-      "payment_velocity": 0.847,
-      "transaction_volume": 125000,
-      "market_sentiment": "bullish"
-    }
-  },
-  "metadata": {
-    "latency_ms": 47,
-    "credits_consumed": 5,
-    "tier": "analyst"
-  },
-  "provenance": {
-    "digiramp_anchor_id": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d",
-    "blockchain": "ethereum",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "immutable": true
-  },
-  "headers": {
-    "X-IDIA-LIABILITY-TOKEN": "audit_8522e971_e064_4591"
-  }
-}`);
+  const [responseExample, setResponseExample] = useState<string>(
+    `// Awaiting live execution...
+// Click an endpoint path below to execute a live request and generate a dynamic institutional payload.`,
+  );
 
+  // --- Granular hydration: rebuild copy-paste examples against current origin ---
   useEffect(() => {
-    const fetchLiveDocumentation = async () => {
-      console.log("[APIEndpoints][fetchLiveDocumentation] BEGIN: Initiating database fetch sequence.");
-      try {
-        console.log("[APIEndpoints][fetchLiveDocumentation] Attempting GET request to /api/v1/documentation");
-        // Update this route to match your actual database endpoint
-        const response = await fetch("/api/v1/documentation");
-
-        console.log(
-          `[APIEndpoints][fetchLiveDocumentation] Network response received. Status code: ${response.status}`,
-        );
-
-        if (!response.ok) {
-          console.error(
-            `[APIEndpoints][fetchLiveDocumentation] ERROR: HTTP status ${response.status} indicates failure. Throwing error to catch block.`,
-          );
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        console.log("[APIEndpoints][fetchLiveDocumentation] Response OK. Attempting to parse JSON payload.");
-        const data = await response.json();
-        console.log(
-          "[APIEndpoints][fetchLiveDocumentation] JSON payload parsed successfully. Updating component state.",
-        );
-
-        if (data.endpoints) setEndpoints(data.endpoints);
-        if (data.mcpConfigExample) setMcpConfigExample(data.mcpConfigExample);
-        if (data.curlExample) setCurlExample(data.curlExample);
-        if (data.pythonExample) setPythonExample(data.pythonExample);
-        if (data.nodejsExample) setNodejsExample(data.nodejsExample);
-        if (data.responseExample) setResponseExample(data.responseExample);
-
-        console.log("[APIEndpoints][fetchLiveDocumentation] All state updates dispatched successfully.");
-      } catch (error) {
-        console.error(
-          "[APIEndpoints][fetchLiveDocumentation] CATCH BLOCK TRIGGERED: An error occurred during the fetch sequence.",
-          error,
-        );
-        if (error instanceof Error) {
-          console.error(`[APIEndpoints][fetchLiveDocumentation] Error details: ${error.message}`);
-        }
-      } finally {
-        console.log("[APIEndpoints][fetchLiveDocumentation] END: Database fetch sequence completed.");
+    console.info("[APIEndpoints][Hydrate] BEGIN: dynamic origin + example template hydration");
+    try {
+      console.info("[APIEndpoints][Hydrate][resolve_origin] BEGIN");
+      if (typeof window === "undefined") {
+        console.warn("[APIEndpoints][Hydrate][resolve_origin] WARN no window object — SSR path");
+        return;
       }
-    };
+      const origin = window.location.origin;
+      console.info(`[APIEndpoints][Hydrate][resolve_origin] EXEC origin=${origin}`);
+      setBaseUrl(origin);
+      console.info("[APIEndpoints][Hydrate][resolve_origin] END");
 
-    fetchLiveDocumentation();
+      console.info("[APIEndpoints][Hydrate][template_examples] BEGIN");
+      setCurlExample(
+        `curl -X GET "${origin}/v1/features/market-data" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json"`,
+      );
+      setPythonExample(
+        `import requests
+
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+response = requests.get(
+    "${origin}/v1/features/market-data",
+    headers=headers
+)
+
+data = response.json()
+print(data)`,
+      );
+      setNodejsExample(
+        `const axios = require('axios');
+
+const config = {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  }
+};
+
+axios.get('${origin}/v1/features/market-data', config)
+  .then(response => {
+    console.log(response.data);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+  });`,
+      );
+      console.info("[APIEndpoints][Hydrate][template_examples] END");
+    } catch (error) {
+      console.error("[APIEndpoints][Hydrate] CATCH: hydration failed", error);
+    } finally {
+      console.info("[APIEndpoints][Hydrate] END");
+    }
   }, []);
+
+  // --- Live execution against synapse-controller (server-authoritative credit burn) ---
+  const executeLiveCall = async (endpoint: Endpoint) => {
+    console.info(`[APIEndpoints][executeLiveCall] BEGIN method=${endpoint.method} path=${endpoint.path}`);
+    const startTime = performance.now();
+    try {
+      console.info("[APIEndpoints][executeLiveCall][preflight_identity] BEGIN");
+      const userId = (user as any)?.id;
+      if (!userId) {
+        console.error("[APIEndpoints][executeLiveCall][preflight_identity] FATAL: no authenticated user_id");
+        toast.error("Sign in required to execute live calls");
+        return;
+      }
+      console.info(`[APIEndpoints][executeLiveCall][preflight_identity] EXEC user_id=${userId}`);
+      console.info("[APIEndpoints][executeLiveCall][preflight_identity] END");
+
+      console.info("[APIEndpoints][executeLiveCall][preflight_credits] BEGIN");
+      console.info(
+        `[APIEndpoints][executeLiveCall][preflight_credits] EXEC required=${endpoint.credits} available=${credits}`,
+      );
+      if (credits < endpoint.credits) {
+        console.error("[APIEndpoints][executeLiveCall][preflight_credits] HALT: insufficient credits");
+        toast.error(`Insufficient credits — ${endpoint.credits} CR required, ${credits} available`);
+        return;
+      }
+      console.info("[APIEndpoints][executeLiveCall][preflight_credits] END");
+
+      console.info("[APIEndpoints][executeLiveCall][preflight_tier] BEGIN");
+      if (!currentTier || TIER_MATRIX[endpoint.tier] > TIER_MATRIX[currentTier]) {
+        console.error(
+          `[APIEndpoints][executeLiveCall][preflight_tier] HALT tier=${currentTier} required=${endpoint.tier}`,
+        );
+        toast.error(`${endpoint.tier} tier required for this endpoint`);
+        return;
+      }
+      console.info("[APIEndpoints][executeLiveCall][preflight_tier] END");
+
+      console.info("[APIEndpoints][executeLiveCall][invoke_controller] BEGIN");
+      const referenceId = `apiep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const payload = {
+        user_id: userId,
+        client_id: referenceId,
+        aca_record_ids: [referenceId],
+        intent_type: `API_DOC_PROBE:${endpoint.method}:${endpoint.path}`,
+        query_complexity: 1.0,
+        country_of_origin: "US",
+        routing: "fiat" as const,
+      };
+      console.info(`[APIEndpoints][executeLiveCall][invoke_controller] EXEC payload=${JSON.stringify(payload)}`);
+
+      const result = await fetchApi<{
+        success?: boolean;
+        liability_token_hash?: string;
+        financials?: Record<string, unknown>;
+        audit?: Record<string, unknown>;
+        error?: string;
+      }>("/api/v1/synapse/controller", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      console.info("[APIEndpoints][executeLiveCall][invoke_controller] END");
+
+      console.info("[APIEndpoints][executeLiveCall][measure_latency] BEGIN");
+      const actualLatency = Math.round(performance.now() - startTime);
+      console.info(`[APIEndpoints][executeLiveCall][measure_latency] EXEC latency_ms=${actualLatency}`);
+      console.info("[APIEndpoints][executeLiveCall][measure_latency] END");
+
+      console.info("[APIEndpoints][executeLiveCall][update_endpoint_state] BEGIN");
+      setEndpoints((prev) =>
+        prev.map((ep) => (ep.path === endpoint.path ? { ...ep, latency: `${actualLatency}ms` } : ep)),
+      );
+      console.info("[APIEndpoints][executeLiveCall][update_endpoint_state] END");
+
+      console.info("[APIEndpoints][executeLiveCall][build_payload] BEGIN");
+      const institutional = {
+        status: result?.success ? 200 : 400,
+        url: `${baseUrl}${endpoint.path}`,
+        latency_ms: actualLatency,
+        credits_consumed: endpoint.credits,
+        data: result?.audit ?? {},
+        financials: result?.financials ?? {},
+        provenance: {
+          digiramp_anchor_id: result?.liability_token_hash
+            ? `0x${result.liability_token_hash}`
+            : "anchor_pending",
+          blockchain: "ethereum",
+          timestamp: new Date().toISOString(),
+          immutable: true,
+        },
+        headers: {
+          "X-IDIA-LIABILITY-TOKEN": result?.liability_token_hash ?? "pending",
+        },
+      };
+      setResponseExample(JSON.stringify(institutional, null, 2));
+      console.info("[APIEndpoints][executeLiveCall][build_payload] END");
+
+      console.info("[APIEndpoints][executeLiveCall][refresh_balance] BEGIN");
+      await refreshBalance();
+      console.info("[APIEndpoints][executeLiveCall][refresh_balance] END");
+
+      toast.success(`Endpoint executed (${actualLatency}ms · ${endpoint.credits} CR)`);
+    } catch (error: any) {
+      const actualLatency = Math.round(performance.now() - startTime);
+      console.error(
+        `[APIEndpoints][executeLiveCall] CATCH: execution failed at ${actualLatency}ms — ${error?.message ?? error}`,
+        error,
+      );
+      setResponseExample(
+        JSON.stringify(
+          {
+            error: "Execution Failed",
+            message: error instanceof Error ? error.message : "Unknown network error",
+            target: `${baseUrl}${endpoint.path}`,
+            latency_ms: actualLatency,
+          },
+          null,
+          2,
+        ),
+      );
+      toast.error(`Execution failed for ${endpoint.path}`);
+    } finally {
+      console.info(`[APIEndpoints][executeLiveCall] END path=${endpoint.path}`);
+    }
+  };
 
   const copyCode = (code: string, name: string) => {
     console.log(`[APIEndpoints][copyCode] BEGIN: User initiated clipboard write for ${name}.`);
@@ -190,8 +345,22 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
     }
   };
 
+  const visibleEndpoints = currentTier
+    ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
+    : [];
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Live Context:</span>
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+          Tier: {currentTier ?? "Unverified"}
+        </Badge>
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+          {credits.toLocaleString(undefined, { maximumFractionDigits: 2 })} CR
+        </Badge>
+      </div>
+
       <Card className="border-primary/50 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -250,11 +419,20 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             <FileCode className="h-5 w-5 text-primary" />
             REST API Consumption Matrix
           </CardTitle>
-          <CardDescription>Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption</CardDescription>
+          <CardDescription>
+            Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption. Click a path to execute a live
+            audited call.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {endpoints.map((endpoint, index) => (
+            {visibleEndpoints.length === 0 && (
+              <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-4">
+                No endpoints available at your current tier. Upgrade to Analyst, Professional, or Enterprise to unlock
+                live API access.
+              </div>
+            )}
+            {visibleEndpoints.map((endpoint, index) => (
               <div key={index} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
@@ -269,7 +447,13 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
                       >
                         {endpoint.method}
                       </Badge>
-                      <code className="text-sm font-mono text-foreground">{endpoint.path}</code>
+                      <button
+                        type="button"
+                        onClick={() => executeLiveCall(endpoint)}
+                        className="text-sm font-mono text-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+                      >
+                        {endpoint.path}
+                      </button>
                     </div>
                     <p className="text-sm text-muted-foreground">{endpoint.description}</p>
                   </div>
@@ -372,9 +556,10 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
 
       <Card>
         <CardHeader>
-          <CardTitle>Institutional Response Format</CardTitle>
+          <CardTitle>Institutional Response Format (Live Telemetry)</CardTitle>
           <CardDescription>
-            All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance
+            All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance. Updates
+            dynamically after each live endpoint execution.
           </CardDescription>
         </CardHeader>
         <CardContent>
