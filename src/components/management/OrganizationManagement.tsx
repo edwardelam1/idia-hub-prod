@@ -422,7 +422,8 @@ const ClientOrganizations = () => {
     vertical: request.vertical_id,
     submodule: request.submodule_id
   });
-};
+    }, 800);
+  };
 
   const handleProcessApplication = async () => {
   if (!selectedRequest || !parsedData) return;
