@@ -464,6 +464,37 @@ const ClientOrganizations = () => {
       if (updateError) throw updateError;
 
       if (isApproved) {
+        // 2a. Duplicate guard — same applicant or same Tax ID can't be provisioned twice
+        const { data: existingByOwner } = await supabase
+          .from("business_users")
+          .select("business_id")
+          .eq("user_id", selectedRequest.user_id)
+          .eq("is_active", true)
+          .limit(1);
+
+        let duplicateByTax: any[] | null = null;
+        if (parsedData.taxId) {
+          const { data } = await supabase
+            .from("businesses")
+            .select("id")
+            .eq("tax_id", parsedData.taxId)
+            .limit(1);
+          duplicateByTax = data;
+        }
+
+        if ((existingByOwner && existingByOwner.length > 0) || (duplicateByTax && duplicateByTax.length > 0)) {
+          toast({
+            title: "Already Provisioned",
+            description:
+              "This applicant or Tax ID is already linked to an existing organization. Request marked approved without creating a duplicate.",
+          });
+          setReviewModalOpen(false);
+          await fetchRequests();
+          await fetchBusinesses();
+          setIsSubmitting(false);
+          return;
+        }
+
         // 2. Provision Business Entity with full KYB data
         const { data: businessData, error: businessError } = await supabase
           .from("businesses")
@@ -497,6 +528,21 @@ const ClientOrganizations = () => {
             is_active: true,
           },
         ]);
+
+        // 4. AUTO-PROMOTE: flip applicant profile to business + Enterprise tier
+        //    so AuthContext resolves their role to organization-admin on next login.
+        await supabase
+          .from("profiles")
+          .update({ account_type: "business" } as any)
+          .eq("user_id", selectedRequest.user_id);
+
+        await supabase.from("user_subscriptions").insert([
+          {
+            user_id: selectedRequest.user_id,
+            tier: "enterprise",
+            status: "active",
+          },
+        ] as any);
       }
 
       setReviewModalOpen(false);
@@ -715,9 +761,33 @@ const ClientOrganizations = () => {
                       GUID: {request.platformGuid?.split("-")[0] || "Unknown"}...
                     </span>
                   </div>
-                  <Button size="sm" className="shrink-0" onClick={() => openReviewModal(request)}>
-                    Process Application
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button size="sm" onClick={() => openReviewModal(request)}>
+                      Process Application
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                      title="Dismiss / remove from pending"
+                      onClick={async () => {
+                        if (!window.confirm(`Remove "${request.companyName}" from pending? This cannot be undone.`))
+                          return;
+                        const { error } = await supabase
+                          .from("account_conversion_requests")
+                          .update({ status: "dismissed" } as any)
+                          .eq("id", request.id);
+                        if (error) {
+                          toast({ title: "Dismiss failed", description: error.message, variant: "destructive" });
+                          return;
+                        }
+                        toast({ title: "Removed from pending" });
+                        await fetchRequests();
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
