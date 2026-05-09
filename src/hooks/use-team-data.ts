@@ -214,16 +214,6 @@ export function useTeamData() {
     return true;
   };
 
-  const _legacyUpdateMember = async (id: string, data: Partial<TeamMemberRow>) => {
-    const { error } = await supabase.from("employees").update({
-      ...data,
-      updated_at: new Date().toISOString(),
-    } as any).eq("id", id);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return false; }
-    await fetchAll();
-    return true;
-  };
-
   const toggleMemberStatus = async (id: string) => {
     const member = members.find(m => m.id === id);
     if (!member) return;
