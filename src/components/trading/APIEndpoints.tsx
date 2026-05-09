@@ -350,9 +350,14 @@ axios.get('${origin}/v1/features/market-data', config)
     }
   };
 
-  const visibleEndpoints = currentTier
-    ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
-    : [];
+  const _u = user as any;
+  const _isCsuite =
+    typeof _u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(_u.role);
+  const visibleEndpoints = _isCsuite
+    ? endpoints
+    : currentTier
+      ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
+      : [];
 
   return (
     <div className="space-y-4">
