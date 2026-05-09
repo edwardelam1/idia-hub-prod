@@ -716,7 +716,7 @@ const ClientOrganizations = () => {
 
       {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden bg-slate-50">
+        <DialogContent className="sm:max-w-5xl p-0 overflow-hidden bg-slate-50">
           <DialogHeader className="px-4 py-3 border-b bg-white">
             <DialogTitle className="flex items-center gap-2 text-base">
               <ShieldCheck className="w-4 h-4 text-indigo-600" />
@@ -724,15 +724,14 @@ const ClientOrganizations = () => {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-col lg:flex-row max-h-[70vh]">
-            {/* LEFT: APPLICATION DATA */}
-            <ScrollArea className="flex-1 p-4 border-r bg-white max-h-[70vh]">
-              <div className="space-y-4">
-                <section>
+          <div className="flex flex-col lg:flex-row">
+            {/* LEFT: ENTITY DETAILS */}
+            <div className="flex-1 p-4 border-r bg-white">
+              <section>
                   <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Entity Details
                   </h3>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     <div>
                       <Label className="text-[10px] text-muted-foreground uppercase">Legal Name</Label>
                       <p className="text-sm font-medium">{parsedData?.legalName || "—"}</p>
@@ -762,31 +761,34 @@ const ClientOrganizations = () => {
                       <p className="text-sm font-medium">{parsedData?.physicalAddress || "—"}</p>
                     </div>
                   </div>
-                </section>
+              </section>
+            </div>
 
-                <section>
+            {/* RIGHT: SIGNATORY + DOCS + DECISION */}
+            <div className="w-full lg:w-[400px] p-4 flex flex-col gap-4 bg-slate-50">
+              <section>
                   <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Responsible Party (Signatory)
                   </h3>
-                  <div className="p-2 border rounded-lg bg-slate-50 flex items-center justify-between">
+                  <div className="p-2 border rounded-lg bg-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="bg-white p-1.5 rounded border">
+                      <div className="bg-slate-50 p-1.5 rounded border">
                         <UserIcon className="w-3.5 h-3.5 text-slate-600" />
                       </div>
                       <div>
-                        <p className="text-xs font-mono text-slate-600">{selectedRequest?.platformGuid}</p>
+                        <p className="text-[11px] font-mono text-slate-600 break-all">{selectedRequest?.platformGuid}</p>
                         <p className="text-[10px] text-muted-foreground italic">
                           {selectedRequest?.contact_role || "Authorized Signer"}
                         </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
                       Liveness Verified
                     </Badge>
                   </div>
-                </section>
+              </section>
 
-                <section>
+              <section>
                   <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
                     Submitted Documentation
                   </h3>
@@ -795,7 +797,7 @@ const ClientOrganizations = () => {
                       parsedData.documents.map((doc: string, i: number) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 transition-colors"
+                          className="flex items-center justify-between p-2 border rounded bg-white hover:bg-slate-100 transition-colors"
                         >
                           <span className="text-xs font-medium flex items-center gap-2 truncate">
                             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -859,13 +861,9 @@ const ClientOrganizations = () => {
                       <p className="text-xs text-muted-foreground italic">No documents submitted.</p>
                     )}
                   </div>
-                </section>
-              </div>
-            </ScrollArea>
+              </section>
 
-            {/* RIGHT: COMPLIANCE DECISION PANEL */}
-            <div className="w-full lg:w-[320px] p-4 flex flex-col justify-between gap-4">
-              <div className="space-y-3">
+              <div className="space-y-2 pt-3 border-t">
                 <Label className="text-sm font-semibold">IDIA Pay Policy Decision</Label>
                 <p className="text-[10px] text-muted-foreground -mt-1">
                   Additional financial-operations clearance.
@@ -899,7 +897,7 @@ const ClientOrganizations = () => {
                         value={denialCause}
                         onChange={(e) => setDenialCause(e.target.value)}
                         placeholder="Why is this application denied?"
-                        className="w-full mt-1 text-xs border border-red-200 rounded p-2 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-red-400"
+                        className="w-full mt-1 text-xs border border-red-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
                       />
                     </div>
                     <div>
@@ -910,14 +908,14 @@ const ClientOrganizations = () => {
                         value={denialRemediation}
                         onChange={(e) => setDenialRemediation(e.target.value)}
                         placeholder="What can the applicant fix and resubmit?"
-                        className="w-full mt-1 text-xs border border-slate-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-slate-400"
+                        className="w-full mt-1 text-xs border border-slate-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="pt-3 border-t space-y-2">
+              <div className="pt-3 border-t space-y-2 mt-auto">
                 <Button
                   className="w-full bg-slate-900 hover:bg-black text-white"
                   onClick={handleProcessApplication}
