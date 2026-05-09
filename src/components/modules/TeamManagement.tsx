@@ -43,10 +43,12 @@ export const TeamManagement = () => {
       : {};
 
     await addMember({
+      platform_guid: memberData.platform_guid,
       name: memberData.name,
-      email: memberData.email,
+      email: memberData.email ?? null,
+      job_title: memberData.job_title ?? null,
       phone: memberData.phone,
-      role: memberData.role || "employee",
+      role: memberData.role || "team_member",
       hourly_rate: memberData.hourly_rate,
       permissions: templatePerms,
       permission_template_id: memberData.template_id || null,
@@ -54,7 +56,7 @@ export const TeamManagement = () => {
 
     setIsInviteDialogOpen(false);
     toast({
-      title: memberData.source === "existing_user" ? "User Added" : "Invitation Sent",
+      title: memberData.platform_guid ? "Identity Provisioned" : "Member Added",
       description: `${memberData.name} has been added to the team`,
     });
   };
