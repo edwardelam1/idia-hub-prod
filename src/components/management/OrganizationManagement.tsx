@@ -761,9 +761,33 @@ const ClientOrganizations = () => {
                       GUID: {request.platformGuid?.split("-")[0] || "Unknown"}...
                     </span>
                   </div>
-                  <Button size="sm" className="shrink-0" onClick={() => openReviewModal(request)}>
-                    Process Application
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button size="sm" onClick={() => openReviewModal(request)}>
+                      Process Application
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                      title="Dismiss / remove from pending"
+                      onClick={async () => {
+                        if (!window.confirm(`Remove "${request.companyName}" from pending? This cannot be undone.`))
+                          return;
+                        const { error } = await supabase
+                          .from("account_conversion_requests")
+                          .update({ status: "dismissed" } as any)
+                          .eq("id", request.id);
+                        if (error) {
+                          toast({ title: "Dismiss failed", description: error.message, variant: "destructive" });
+                          return;
+                        }
+                        toast({ title: "Removed from pending" });
+                        await fetchRequests();
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
