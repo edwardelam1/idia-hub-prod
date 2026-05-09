@@ -697,16 +697,190 @@ const ClientOrganizations = () => {
 
       {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-        <DialogContent className="sm:max-w-2xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold">Verification Actions</DialogTitle>
+        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden bg-slate-50">
+          <DialogHeader className="px-6 py-4 border-b bg-white">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <ShieldCheck className="w-5 h-5 text-indigo-600" />
+              KYB / AML Compliance Review: {selectedRequest?.companyName}
+            </DialogTitle>
           </DialogHeader>
-          <div className="py-2 text-sm text-slate-600">
-            Please review documents and apply T-1-P and IDIA Pay policies.
+
+          <div className="flex flex-col lg:flex-row h-[600px]">
+            {/* LEFT: APPLICATION DATA */}
+            <ScrollArea className="flex-1 p-6 border-r bg-white">
+              <div className="space-y-6">
+                <section>
+                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                    Entity Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase">Legal Name</Label>
+                      <p className="text-sm font-medium">{parsedData?.legalName || "—"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase">Tax ID / EIN</Label>
+                      <p className="text-sm font-mono font-medium">{parsedData?.taxId || "—"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase">Entity Type</Label>
+                      <p className="text-sm font-medium">{parsedData?.entityType || "—"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase">Industry</Label>
+                      <p className="text-sm font-medium">{parsedData?.industry || "—"}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-[10px] text-muted-foreground uppercase">
+                        Verified Physical Address
+                      </Label>
+                      <p className="text-sm font-medium">{parsedData?.physicalAddress || "—"}</p>
+                    </div>
+                    {parsedData?.vertical && (
+                      <div className="col-span-2">
+                        <Label className="text-[10px] text-muted-foreground uppercase">Pay App Vertical</Label>
+                        <p className="text-sm font-medium">{getPayAppVerticalLabel(parsedData.vertical)}</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                    Responsible Party (Signatory)
+                  </h3>
+                  <div className="p-3 border rounded-lg bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white p-2 rounded border">
+                        <UserIcon className="w-4 h-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-mono text-slate-600">{selectedRequest?.platformGuid}</p>
+                        <p className="text-[10px] text-muted-foreground italic">
+                          {selectedRequest?.contact_role || "Authorized Signer"}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                      Liveness Verified
+                    </Badge>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-xs font-bold uppercase text-slate-400 mb-3 tracking-widest">
+                    Submitted Documentation
+                  </h3>
+                  <div className="space-y-2">
+                    {parsedData?.documents && parsedData.documents.length > 0 ? (
+                      parsedData.documents.map((doc: string, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="text-xs font-medium flex items-center gap-2 truncate">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{doc.split("/").pop()}</span>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-indigo-600 shrink-0"
+                            onClick={async () => {
+                              const { data, error } = await supabase.storage
+                                .from("business-kyb-docs")
+                                .createSignedUrl(doc, 60);
+                              if (error || !data?.signedUrl) {
+                                toast({
+                                  title: "Cannot open document",
+                                  description: error?.message || "Signed URL unavailable",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+                            }}
+                          >
+                            View File
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No documents submitted.</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </ScrollArea>
+
+            {/* RIGHT: COMPLIANCE DECISION PANEL */}
+            <div className="w-full lg:w-[320px] p-6 flex flex-col justify-between">
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">T-1-P Policy Decision</Label>
+                  <p className="text-[10px] text-muted-foreground -mt-2">
+                    Additional Trust &amp; Privacy clearance (not base).
+                  </p>
+                  <Select value={t1pDecision} onValueChange={(v: any) => setT1pDecision(v)}>
+                    <SelectTrigger
+                      className={t1pDecision === "approved" ? "border-emerald-500 bg-emerald-50" : ""}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending Review</SelectItem>
+                      <SelectItem value="approved">Approve T-1-P</SelectItem>
+                      <SelectItem value="denied">Deny T-1-P</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">IDIA Pay Policy Decision</Label>
+                  <p className="text-[10px] text-muted-foreground -mt-2">
+                    Additional financial-operations clearance.
+                  </p>
+                  <Select value={idiaPayDecision} onValueChange={(v: any) => setIdiaPayDecision(v)}>
+                    <SelectTrigger
+                      className={idiaPayDecision === "approved" ? "border-indigo-500 bg-indigo-50" : ""}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending Review</SelectItem>
+                      <SelectItem value="approved">Approve Financial</SelectItem>
+                      <SelectItem value="denied">Deny Financial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t space-y-3">
+                <Button
+                  className="w-full bg-slate-900 hover:bg-black text-white"
+                  onClick={handleProcessApplication}
+                  disabled={
+                    isSubmitting || t1pDecision === "pending" || idiaPayDecision === "pending"
+                  }
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> Committing…
+                    </>
+                  ) : (
+                    "Commit Compliance Decision"
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-xs text-slate-400"
+                  onClick={() => setReviewModalOpen(false)}
+                >
+                  Close Without Deciding
+                </Button>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleProcessApplication}>Approve Organization</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
