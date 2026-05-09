@@ -61,19 +61,12 @@ const formatRoleLabel = (role: string) => ROLE_LABELS[role] ?? role.replace(/[-_
 
 const getRoleItems = (userRole: string): NavItem[] => {
   const base: NavItem[] = [
+    { title: "Paid Tiers", url: "/billing", icon: DollarSign },
+    { title: "Top Up Wallet", url: "/top-up", icon: Zap },
     { title: "Best Friend AI", url: "/best-friend", icon: Bot },
     { title: "Data Marketplace", url: "/marketplace", icon: Database },
-    { title: "My Reports", url: "/my-reports", icon: Package },
-    { title: "Hub Enrollment", url: "/billing", icon: DollarSign },
-    { title: "Top Up Wallet", url: "/top-up", icon: Zap },
     { title: "Earnings & Settlement", url: "/earnings", icon: Landmark },
     { title: "Egress Logs", url: "/egress-logs", icon: ScrollText },
-    { title: "Auth Settings", url: "/auth-settings", icon: KeyRound },
-    { title: "Trading Interface", url: "/trading", icon: TrendingUp },
-    { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
-    { title: "Saved Searches", url: "/saved-searches", icon: Search },
-    { title: "Analytics", url: "/analytics", icon: TrendingUp },
-    { title: "My Lists", url: "/my-lists", icon: FileText },
   ];
 
   switch (userRole) {
@@ -81,13 +74,20 @@ const getRoleItems = (userRole: string): NavItem[] => {
       // C-Suite has the union of Super Admin + Organization Admin surfaces.
       base.push(
         { title: "System Health", url: "/system-health", icon: Activity },
-        { title: "Client Organizations", url: "/organizations", icon: Building2 },
+        { title: "Business Accounts", url: "/organizations", icon: Building2 },
         { title: "AI Management", url: "/ai-management", icon: Zap },
         { title: "Security", url: "/security", icon: ShieldCheck },
         { title: "Pay App Builder", url: "/pay-blueprint", icon: Smartphone },
         { title: "Team Management", url: "/teams", icon: Users },
         { title: "Compliance", url: "/compliance", icon: ShieldCheck },
+        { title: "My Reports", url: "/my-reports", icon: Package },
         { title: "My Team", url: "/my-team", icon: Users },
+        { title: "Auth Settings", url: "/auth-settings", icon: KeyRound },
+        { title: "Trading Interface", url: "/trading", icon: TrendingUp },
+        { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
+        { title: "Saved Searches", url: "/saved-searches", icon: Search },
+        { title: "Analytics", url: "/analytics", icon: TrendingUp },
+        { title: "My Lists", url: "/my-lists", icon: FileText },
       );
       break;
     case "super-admin":
