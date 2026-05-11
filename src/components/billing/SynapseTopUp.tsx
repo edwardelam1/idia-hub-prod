@@ -90,56 +90,41 @@ const SynapseTopUp = () => {
     setError(null);
 
     try {
-      // 1. AUTH CHECK
-      console.log("[SynapseTopUp][handlePurchase][AUTH] Verifying session...");
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData?.session) throw new Error("Authentication failed. Please log in again.");
-      const session = sessionData.session;
+      // 1. SESSION STABILIZATION
+      console.log("[SynapseTopUp][handlePurchase][AUTH] START: Acquiring session lock...");
+      const {
+        data: { session },
+        error: authError,
+      } = await supabase.auth.getSession();
+      if (authError || !session) throw new Error("AUTH_SESSION_UNSTABLE: Lock lost or session expired.");
+      console.log("[SynapseTopUp][handlePurchase][AUTH] END: Session secured.");
 
-      // 2. BIOMETRIC PRE-FLIGHT (WebAuthn Check)
-      console.log("[SynapseTopUp][handlePurchase][HARDWARE] Checking WebAuthn availability...");
-      if (!window.PublicKeyCredential) {
-        throw new Error("HARDWARE_UNSUPPORTED: This browser does not support biometric authentication.");
+      // 2. THE HARDWARE HANDSHAKE (MANDATORY)
+      // This MUST happen before any background fetchers can steal the lock.
+      console.log("[SynapseTopUp][handlePurchase][ACA] START: Triggering Bio-Sovereign hardware prompt.");
+
+      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
+
+      if (!aca || !aca.hardware_tag) {
+        console.error("[SynapseTopUp][handlePurchase][ACA] ERROR: Hardware tag null or undefined.");
+        throw new Error("HARDWARE_AUTH_FAILED: Biometric signature was not captured.");
       }
+      console.log(`[SynapseTopUp][handlePurchase][ACA] END: hardware_tag capture successful.`);
 
-      // 3. WALLET VALIDATION (on-chain rails only)
-      const isBlockchainRoute = paymentRail !== "fiat";
-      if (isBlockchainRoute && (!provisionedWallet || !provisionedWallet.startsWith("0x"))) {
-        throw new Error("VALIDATION_FAILED: No 0x address found on file. Update your profile first.");
-      }
-
-      // 4. PER-INTENT IDEMPOTENCY KEY
+      // 3. IDEMPOTENCY LOCK
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = crypto.randomUUID();
       }
       const idempotency_key = idempotencyKeyRef.current;
-      console.log(`[SynapseTopUp][handlePurchase] idempotency_key=${idempotency_key}`);
 
-      // 5. HARDWARE-BOUND ACA — Triggering native Biometrics
-      console.log("[SynapseTopUp][handlePurchase][ACA] START: Requesting hardware biometric signature.");
-
-      // Ensure captureHardwareTag is actually triggering navigator.credentials.create
-      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
-
-      if (!aca || !aca.hardware_tag) {
-        console.error("[SynapseTopUp][handlePurchase][ACA] FAILED: No hardware tag returned.");
-        throw new Error(
-          "HARDWARE_SIGNATURE_FAILED: The biometric prompt was dismissed or failed to generate a hardware tag.",
-        );
-      }
-
-      console.log(`[SynapseTopUp][handlePurchase][ACA] SUCCESS: hash=${aca.aca_hash.slice(0, 12)}...`);
-
-      // 6. DISPATCH TO ATOMIC ENGINE
+      // 4. ATOMIC DISPATCH
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
         usd_amount: usdAmount,
-        amount: displayCredits,
         payment_method: paymentRail,
         routing: paymentRail === "fiat" ? "fiat" : "on-chain",
-        user_wallet: isBlockchainRoute ? provisionedWallet : null,
-        recipient_address: isBlockchainRoute ? provisionedWallet : null,
+        user_wallet: paymentRail !== "fiat" ? provisionedWallet : null,
         idempotency_key,
         aca_metadata: {
           consent_id: idempotency_key,
@@ -147,28 +132,28 @@ const SynapseTopUp = () => {
           aca_hash: aca.aca_hash,
           intent: aca.intent,
           timestamp: aca.timestamp,
-          encryption_standard: aca.encryption_standard,
           source: aca.source,
           product_class: "SAAS_UTILITY_PURCHASE",
         },
       };
 
-      console.log(`[SynapseTopUp][handlePurchase][API_INVOKE] START: routing=${payload.routing}`);
-      const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", { body: payload });
+      console.log(`[SynapseTopUp][handlePurchase][API_INVOKE] START: Dispatching intent to Edge Function.`);
+      const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", {
+        body: payload,
+      });
 
       if (functionError) {
-        // Log the specific failed stage from the Edge Function
         console.error(`[SynapseTopUp][handlePurchase][API_INVOKE] ERROR: ${functionError.message}`);
         throw functionError;
       }
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: Atomic settlement confirmed.");
 
-      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END:", data);
-
-      // Finality achieved
+      // 5. POST-SETTLEMENT FINALITY
       idempotencyKeyRef.current = null;
       setStep("success");
       toast({ title: "Hydration Successful", description: `${formatCredits(displayCredits)} added.` });
 
+      // Only refresh balances AFTER the transaction has achieved finality
       await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
       setTimeout(() => setStep("select"), 4000);
     } catch (err: any) {
@@ -177,14 +162,11 @@ const SynapseTopUp = () => {
       setError(msg);
       setStep("select");
 
-      // Specific toast for Hardware/Biometric issues
-      if (/HARDWARE_|aca_metadata/i.test(msg)) {
-        toast({
-          title: "Hardware Handshake Required",
-          description: "Biometric authorization (FaceID/TouchID) is mandatory for this transaction.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Authorization Failed",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       console.log("[SynapseTopUp][handlePurchase] END.");
     }
