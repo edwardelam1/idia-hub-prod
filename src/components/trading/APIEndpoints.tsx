@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { fetchApi } from "@/lib/api";
+import { ensureUsdcApproval, RELAYER_ADDRESS } from "@/lib/usdc-approval";
+import { supabase } from "@/integrations/supabase/client";
 
 // --- Type Definitions ---
 type Tier = "Analyst" | "Professional" | "Enterprise";
@@ -250,27 +252,74 @@ axios.get('${origin}/v1/features/market-data', config)
 
       console.info("[APIEndpoints][executeLiveCall][invoke_controller] BEGIN");
       const referenceId = `apiep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      const payload = {
+
+      // Resolve buyer wallet (USDC source) from profile.
+      console.info("[APIEndpoints][executeLiveCall][resolve_wallet] BEGIN");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("id", userId)
+        .maybeSingle();
+      const buyerWallet: string | undefined = profile?.wallet_address ?? undefined;
+      const useOnChain = !!buyerWallet && buyerWallet.startsWith("0x");
+      console.info(
+        `[APIEndpoints][executeLiveCall][resolve_wallet] EXEC wallet=${buyerWallet ?? "<none>"} useOnChain=${useOnChain}`,
+      );
+      console.info("[APIEndpoints][executeLiveCall][resolve_wallet] END");
+
+      const payload: Record<string, unknown> = {
         user_id: userId,
         client_id: referenceId,
         aca_record_ids: [referenceId],
         intent_type: `API_DOC_PROBE:${endpoint.method}:${endpoint.path}`,
         query_complexity: 1.0,
         country_of_origin: "US",
-        routing: "fiat" as const,
+        routing: useOnChain ? "on-chain" : "fiat",
+        ...(useOnChain ? { buyer_wallet: buyerWallet } : {}),
       };
       console.info(`[APIEndpoints][executeLiveCall][invoke_controller] EXEC payload=${JSON.stringify(payload)}`);
 
-      const result = await fetchApi<{
+      let result = await fetchApi<{
         success?: boolean;
         liability_token_hash?: string;
         financials?: Record<string, unknown>;
         audit?: Record<string, unknown>;
         error?: string;
+        details?: { code?: string; spender?: string; required?: string };
+        spender?: string;
       }>("/api/v1/synapse/controller", {
         method: "POST",
         body: JSON.stringify(payload),
       });
+
+      // ====================================================================
+      // APPROVAL_REQUIRED handling: prompt buyer wallet to approve relayer,
+      // then retry the call once.
+      // ====================================================================
+      if (result?.error === "APPROVAL_REQUIRED" && useOnChain && buyerWallet) {
+        console.warn("[APIEndpoints][executeLiveCall][approval_flow] BEGIN — prompting wallet approval");
+        toast.message("One-time USDC approval required — sign in your wallet.");
+        const approval = await ensureUsdcApproval({ owner: buyerWallet });
+        if (!approval.ok) {
+          console.error(
+            `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${approval.reason}`,
+          );
+          toast.error(`USDC approval failed: ${approval.reason}`);
+          return;
+        }
+        console.info(
+          `[APIEndpoints][executeLiveCall][approval_flow] END approval_tx=${approval.hash} — retrying charge`,
+        );
+        toast.success("Approval confirmed. Retrying charge…");
+        result = await fetchApi("/api/v1/synapse/controller", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
       console.info("[APIEndpoints][executeLiveCall][invoke_controller] END");
 
       console.info("[APIEndpoints][executeLiveCall][measure_latency] BEGIN");
