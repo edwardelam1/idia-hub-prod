@@ -61,7 +61,7 @@ const formatRoleLabel = (role: string) => ROLE_LABELS[role] ?? role.replace(/[-_
 
 const getRoleItems = (userRole: string): NavItem[] => {
   const base: NavItem[] = [
-    { title: "Paid Tiers", url: "/billing", icon: DollarSign },
+    { title: "Subscriptions", url: "/billing", icon: DollarSign },
     { title: "Top Up Wallet", url: "/top-up", icon: Zap },
     { title: "Best Friend AI", url: "/best-friend", icon: Bot },
     { title: "Data Marketplace", url: "/marketplace", icon: Database },
