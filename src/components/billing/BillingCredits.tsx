@@ -1,32 +1,32 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, TrendingUp, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
-import { useBillingData } from '@/hooks/useBillingData';
-import { Skeleton } from '@/components/ui/skeleton';
-import AvailablePlansDialog from './AvailablePlansDialog';
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Download, TrendingUp, AlertTriangle, FileText, CheckCircle2 } from "lucide-react";
+import { useBillingData } from "@/hooks/useBillingData";
+import { Skeleton } from "@/components/ui/skeleton";
+import AvailablePlansDialog from "./AvailablePlansDialog";
 
 const BillingCredits = () => {
-  const {
-    currentUsage, subscriptionPlan, subscription, daysRemaining, invoices,
-    isLoading, downloadInvoice,
-  } = useBillingData();
+  const { currentUsage, subscriptionPlan, subscription, daysRemaining, invoices, isLoading, downloadInvoice } =
+    useBillingData();
 
   const [showPlans, setShowPlans] = useState(false);
 
   const usagePercentage = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
   const projectedUsage = new Date().getDate() > 0 ? Math.round(currentUsage.used * (30 / new Date().getDate())) : 0;
-  const currentTier = subscription?.tier?.toLowerCase() ?? 'base';
+  const currentTier = subscription?.tier?.toLowerCase() ?? "base";
 
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-10 w-64" />
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
         </div>
       </div>
     );
@@ -37,7 +37,7 @@ const BillingCredits = () => {
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-background border-b px-6 pt-6 pb-4 space-y-4">
         <div>
-          <h1 className="text-3xl font-bold">Hub Enrollment</h1>
+          <h1 className="text-3xl font-bold">Subscriptions</h1>
           <p className="text-muted-foreground">Manage your subscription, credits, and billing</p>
         </div>
 
@@ -53,7 +53,9 @@ const BillingCredits = () => {
         <TabsContent value="overview" className="space-y-4 mt-0">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Current Usage</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Current Usage</CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{currentUsage.used.toLocaleString()}</div>
                 <div className="text-sm text-muted-foreground">of {currentUsage.limit.toLocaleString()} credits</div>
@@ -61,26 +63,46 @@ const BillingCredits = () => {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Plan</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Plan</CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{subscriptionPlan.cost}</div>
                 <div className="text-sm text-muted-foreground">{subscriptionPlan.name} Plan</div>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Projected Usage</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Projected Usage</CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{projectedUsage.toLocaleString()}</div>
-                <div className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? 'text-destructive' : 'text-emerald-500'}`}>
-                  {projectedUsage > currentUsage.limit ? <><AlertTriangle className="h-4 w-4 mr-1" />Over limit</> : <><TrendingUp className="h-4 w-4 mr-1" />Within limit</>}
+                <div
+                  className={`text-sm flex items-center ${projectedUsage > currentUsage.limit ? "text-destructive" : "text-emerald-500"}`}
+                >
+                  {projectedUsage > currentUsage.limit ? (
+                    <>
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      Over limit
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-1" />
+                      Within limit
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Next Billing</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Next Billing</CardTitle>
+              </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : '—'}</div>
-                <div className="text-sm text-muted-foreground">{daysRemaining > 0 ? 'days remaining' : 'No active period'}</div>
+                <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : "—"}</div>
+                <div className="text-sm text-muted-foreground">
+                  {daysRemaining > 0 ? "days remaining" : "No active period"}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -103,16 +125,22 @@ const BillingCredits = () => {
                   {invoices.map((invoice: any) => (
                     <div key={invoice.id} className="flex items-center justify-between p-4 rounded-lg border">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center"><FileText className="h-5 w-5" /></div>
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <FileText className="h-5 w-5" />
+                        </div>
                         <div>
                           <div className="font-medium">Invoice #{invoice.invoice_number}</div>
-                          <div className="text-sm text-muted-foreground">{new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-4">
                         <div className="text-right">
                           <div className="font-medium">${Number(invoice.amount).toLocaleString()}</div>
-                          <Badge variant={invoice.status === 'paid' ? 'default' : 'destructive'}>{invoice.status}</Badge>
+                          <Badge variant={invoice.status === "paid" ? "default" : "destructive"}>
+                            {invoice.status}
+                          </Badge>
                         </div>
                         <Button size="sm" variant="outline" onClick={() => downloadInvoice(invoice.id)}>
                           <Download className="h-4 w-4 mr-2" /> Download
@@ -146,7 +174,8 @@ const BillingCredits = () => {
                       <div className="text-muted-foreground">{subscriptionPlan.description}</div>
                       <div className="text-xs text-muted-foreground mt-1">
                         Status: <Badge variant="outline">{subscription.status}</Badge>
-                        {subscription.expires_at && ` • Expires: ${new Date(subscription.expires_at).toLocaleDateString()}`}
+                        {subscription.expires_at &&
+                          ` • Expires: ${new Date(subscription.expires_at).toLocaleDateString()}`}
                       </div>
                     </div>
                     <div className="text-right">
@@ -158,7 +187,10 @@ const BillingCredits = () => {
                       <h4 className="font-medium">Features Included:</h4>
                       <ul className="space-y-1 text-sm text-muted-foreground">
                         {subscriptionPlan.features.map((f: string, i: number) => (
-                          <li key={i} className="flex items-center"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mr-2 shrink-0" />{f}</li>
+                          <li key={i} className="flex items-center">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mr-2 shrink-0" />
+                            {f}
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -174,7 +206,9 @@ const BillingCredits = () => {
                   </div>
                   <div className="flex space-x-2">
                     <Button onClick={() => setShowPlans(true)}>Upgrade Plan</Button>
-                    <Button variant="outline" onClick={() => setShowPlans(true)}>View All Plans</Button>
+                    <Button variant="outline" onClick={() => setShowPlans(true)}>
+                      View All Plans
+                    </Button>
                   </div>
                 </>
               )}
