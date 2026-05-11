@@ -25,7 +25,7 @@ export const usePipelineActivity = () => {
   const [activities, setActivities] = useState<PipelineActivity[]>([]);
   const [isActive, setIsActive] = useState(false);
   const [activityCount, setActivityCount] = useState(0);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addActivity = (newActivity: Omit<PipelineActivity, "timestamp">) => {
     console.log(`[Pipeline] New Activity Triggered: ${newActivity.type}`);
