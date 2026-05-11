@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
       user_id: user_id,
       amount: credit_amount,
-      transaction_type: "INTERNAL_DEPOSIT",
+      transaction_type: "internal_deposit",
       entry_type: "deposit",
       status: "completed",
       blockchain_tx_hash: txHash,
