@@ -24,10 +24,10 @@ interface WalletBalance {
 /**
  * useWalletBalance
  * @param isYielding - Mandatory flag to release the Auth Lock during biometrics.
- * This ensures the background thread Stand-Down for transaction finality.
+ * When true, halts all background auth/network calls to prevent 'lock:sb-auth-token' contention.
  */
 export const useWalletBalance = (isYielding: boolean = false) => {
-  console.log(`[useWalletBalance][Hook] START: Initializing. yielding_active=${isYielding}`);
+  console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
 
   const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
   const [loading, setLoading] = useState(true);
@@ -35,8 +35,9 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
   const fetchBalance = useCallback(async () => {
     // 🚨 YIELD GATE: Immediate abort to prioritize the Biometric Handshake
+    // Prevents the background thread from 'stealing' the auth lock during hardware auth.
     if (isYielding) {
-      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Aborting fetch to release session mutex.");
+      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Active. Aborting fetch to release session mutex.");
       if (abortControllerRef.current) abortControllerRef.current.abort();
       return;
     }
@@ -44,6 +45,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
     console.log("🚀 [useWalletBalance][fetchBalance] START: Initiating sync with on-chain truth.");
     setLoading(true);
 
+    // Cancel any previous hung requests to ensure the thread is clean
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
 
@@ -55,8 +57,13 @@ export const useWalletBalance = (isYielding: boolean = false) => {
         error: authError,
       } = await supabase.auth.getSession();
 
-      if (authError || !session) {
-        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: Session lock unavailable or user logged out.");
+      if (authError) {
+        console.error("[useWalletBalance][fetchBalance][Auth] FATAL: Session fetch failed.", authError.message);
+        throw authError;
+      }
+
+      if (!session?.user) {
+        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session. Defaulting balance to 0.");
         setBalance({ usdc_balance: 0 });
         return;
       }
