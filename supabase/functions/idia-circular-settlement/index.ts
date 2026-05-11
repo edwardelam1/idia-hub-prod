@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, parseUnits, publicActions } from "https://esm.sh/viem@2.9.20";
@@ -26,14 +26,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// PLUGGED: Added explicit type 'Request' to 'req'
 serve(async (req: Request) => {
   let currentStep = "INIT";
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    console.info(`[BEGIN: circular-settlement] Pulse detected.`);
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    console.info(`[BEGIN: circular-settlement] Pulse detected. Treasury Subsidization Model active.`);
+
+    // 🚨 AUTH FIX: Using the JWT-signed IDIA_SECRET_KEY to prevent 401s
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("IDIA_SECRET_KEY")!);
+
+    // 🚨 RATE LIMIT FIX: Pull dedicated RPC to avoid -32016 limits
+    currentStep = "FETCH_RPC_CONFIG";
+    let rpcUrl = "https://mainnet.base.org";
+    const { data: config } = await supabase
+      .from("system_configs")
+      .select("value")
+      .eq("key", "BASE_RPC_URL")
+      .maybeSingle();
+    if (config?.value) rpcUrl = config.value.trim();
 
     currentStep = "VALIDATING_INPUTS";
     console.info(`[BEGIN: ${currentStep}]`);
@@ -50,20 +61,16 @@ serve(async (req: Request) => {
 
     // ====================================================================
     // COMPLIANCE BLAST WALL: Like-for-Like routing gatekeeper.
-    // Strict equality only — no defaults, no coercion, no lowercasing.
     // ====================================================================
     currentStep = "ROUTING_GATEKEEPER";
     console.info(`[BEGIN: ${currentStep}]`);
     const routing = payoutData?.routing;
     if (routing !== "fiat" && routing !== "on-chain") {
-      console.error(`[FATAL STALL: ROUTING] Hard stop enforced. Explicit routing parameter missing or invalid.`);
-      throw new Error(
-        `ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`,
-      );
+      console.error(`[FATAL STALL: ROUTING] Hard stop enforced.`);
+      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain".`);
     }
     console.info(`[END: ${currentStep}] routing=${routing}`);
 
-    // Declared up-front so both routes can reference them in ledger inserts / response
     let ingestionHash: string = payment_reference || `FIAT-${crypto.randomUUID().slice(0, 8)}`;
     let account: any = null;
     let client: any = null;
@@ -71,34 +78,27 @@ serve(async (req: Request) => {
 
     if (routing === "on-chain") {
       currentStep = "CONFIGURING_BLOCKCHAIN";
-      console.info(`[BEGIN: ${currentStep}]`);
+      console.info(`[BEGIN: ${currentStep}] Securing Treasury wallet.`);
 
       const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
-      if (!rawKey) {
-        throw new Error(
-          "ENVIRONMENT_ERROR: RELAYER_PRIVATE_KEY secret is missing. Check your Supabase project settings.",
-        );
-      }
+      if (!rawKey) throw new Error("ENVIRONMENT_ERROR: RELAYER_PRIVATE_KEY secret is missing.");
 
-      // Compliance: Ensure 0x prefix and remove any accidental whitespace
       const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
 
       try {
         account = privateKeyToAccount(formattedKey as `0x${string}`);
       } catch (keyErr: any) {
-        throw new Error(
-          `RELAYER_PRIVATE_KEY format error: ${keyErr.message}. Ensure the key is exactly 64 hex characters.`,
-        );
+        throw new Error(`RELAYER_PRIVATE_KEY format error: ${keyErr.message}`);
       }
+
       client = createWalletClient({
         account,
         chain: base,
-        transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org"),
+        transport: http(rpcUrl),
       }).extend(publicActions);
       console.info(`[END: ${currentStep}] Blockchain client ready at address: ${account.address}`);
 
       currentStep = "FETCHING_MASTER_NONCE";
-      console.info(`[BEGIN: ${currentStep}]`);
       masterNonce = await client.getTransactionCount({
         address: account.address,
         blockTag: "pending",
@@ -106,8 +106,6 @@ serve(async (req: Request) => {
       console.info(`[END: ${currentStep}] Master Nonce secured: ${masterNonce}`);
 
       currentStep = "BROADCASTING_INGESTION";
-
-      // Calculate the Net System Cut (60% Corporate + 10% War Chest = 70%)
       const systemRetainedRevenue = total_fiat_amount * (REVENUE_SPLIT.CORPORATE + REVENUE_SPLIT.WAR_CHEST);
 
       console.info(`[BEGIN: ${currentStep}] Treasury -> Register ($${systemRetainedRevenue.toFixed(6)})`);
@@ -115,11 +113,11 @@ serve(async (req: Request) => {
         address: USDC_ADDRESS,
         abi: ERC20_ABI,
         functionName: "transfer",
-        // 🚨 NET ROUTING FIX: Only send the 70% cut to the Cash Register
         args: [SYSTEM_CASH_REGISTER, parseUnits(systemRetainedRevenue.toFixed(6), 6)],
         account,
         nonce: masterNonce++,
       });
+
       const ingestionReceipt = await client.waitForTransactionReceipt({ hash: ingestionHash });
       if (ingestionReceipt.status !== "success") throw new Error(`[FATAL] Ingestion Reverted on-chain.`);
       console.info(`[END: ${currentStep}] Ingestion Confirmed. Hash: ${ingestionHash}`);
@@ -127,7 +125,7 @@ serve(async (req: Request) => {
       console.info(`[NETWORK] Delaying 2.5s for sequencer to clear EIP-7702 delegated mempool...`);
       await new Promise((resolve) => setTimeout(resolve, 2500));
     } else {
-      console.info(`[STATUS] Fiat routing explicitly detected. Ledger updated. Bypassing on-chain execution.`);
+      console.info(`[STATUS] Fiat routing explicitly detected. Bypassing on-chain execution.`);
     }
 
     currentStep = "DISSEMINATING_YIELD_AND_SYNCING_DB";
@@ -136,7 +134,7 @@ serve(async (req: Request) => {
     const perContributorYield = totalRoyaltyPool / contributing_users.length;
     const contributorPayouts = [];
 
-    // 🚨 SERVER-SIDE FIX 1: Charge the Buyer!
+    // 🚨 SERVER-SIDE FIX 1: Strict Synapse Credit Charge
     console.info(`[BEGIN: DB_SYNC] Deducting Synapse Credits from Buyer: ${buyer_id}`);
     const { data: buyerWallet, error: buyerFetchError } = await supabase
       .from("wallets")
@@ -144,18 +142,23 @@ serve(async (req: Request) => {
       .eq("user_id", buyer_id)
       .single();
 
-    if (!buyerFetchError && buyerWallet) {
-      // Deduct the cost from their gas credits (preventing negative balances)
-      const newCreditBalance = Math.max(0, buyerWallet.synapse_gas_credits - total_fiat_amount);
-      await supabase.from("wallets").update({ synapse_gas_credits: newCreditBalance }).eq("user_id", buyer_id);
-      console.info(`[END: DB_SYNC] Buyer charged. New Credit Balance: ${newCreditBalance}`);
-    } else {
-      console.error(`[STALL: DB_SYNC] Could not fetch buyer wallet to charge credits.`, buyerFetchError);
+    if (buyerFetchError || !buyerWallet) {
+      throw new Error(`STALL: Could not fetch buyer wallet to charge credits.`);
     }
+
+    if (buyerWallet.synapse_gas_credits < total_fiat_amount) {
+      throw new Error(
+        `INSUFFICIENT_FUNDS: Buyer requires ${total_fiat_amount} credits, but only has ${buyerWallet.synapse_gas_credits}.`,
+      );
+    }
+
+    const newCreditBalance = buyerWallet.synapse_gas_credits - total_fiat_amount;
+    await supabase.from("wallets").update({ synapse_gas_credits: newCreditBalance }).eq("user_id", buyer_id);
+    console.info(`[END: DB_SYNC] Buyer charged. New Credit Balance: ${newCreditBalance}`);
 
     // 🚨 SERVER-SIDE FIX 2: Pay the Data Owners (On-Chain & Database)
     for (const contributor of contributing_users) {
-      console.info(`[BEGIN: Step 6A] Payout for user ${contributor.user_id}`);
+      console.info(`[BEGIN: Payout] Processing user ${contributor.user_id}`);
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -197,10 +200,6 @@ serve(async (req: Request) => {
         description: `Pro-rata yield for Ref: ${payment_reference} [${routing}]`,
       });
 
-      // ROUTING-AWARE DB SYNC
-      // - On-chain: USDC balance is read live from the Base contract (useWalletBalance).
-      //   No DB column to update — the on-chain transfer (yieldHash) is the source of truth.
-      // - Fiat: Credit the user's Life royalty silo (wallets.cash_balance + total_earned).
       if (routing === "fiat") {
         console.info(`[BEGIN: DB_SYNC] Crediting fiat royalty silo for ${contributor.user_id}`);
         const { data: contributorWallet } = await supabase
@@ -223,7 +222,7 @@ serve(async (req: Request) => {
       }
 
       contributorPayouts.push({ wallet: lifeWallet, hash: yieldHash });
-      console.info(`[END: Step 6A] Payout complete for ${contributor.user_id}. Hash: ${yieldHash}`);
+      console.info(`[END: Payout] Payout complete for ${contributor.user_id}. Hash: ${yieldHash}`);
     }
     console.info(`[END: ${currentStep}] Pro-rata yield fully dispersed and unified ledger synced.`);
 
