@@ -34,6 +34,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
+import { captureHardwareTag } from "@/lib/hardware-identifier"; // ADDED HARDWARE HANDSHAKE IMPORT
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const BASE_RATE = 0.75;
@@ -131,9 +132,7 @@ const SynapsePurchaseModal = ({
       );
       if (availableUSDC < usdAmount) {
         console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
-        throw new Error(
-          `Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`,
-        );
+        throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
       }
 
       // 2. GENERATE SETTLEMENT REFERENCE
@@ -159,6 +158,20 @@ const SynapsePurchaseModal = ({
         throw new Error("Authentication failed. Please re-login.");
       }
 
+      // ====================================================================
+      // 🚨 HARDWARE HANDSHAKE (MANDATORY): Capture the biometric/hardware ACA
+      // ====================================================================
+      console.log("[SynapsePurchaseModal][ACA] START: Triggering Bio-Sovereign hardware prompt.");
+      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
+
+      if (!aca || !aca.hardware_tag) {
+        console.error("[SynapsePurchaseModal][ACA] ERROR: Hardware tag null or undefined.");
+        throw new Error("HARDWARE_AUTH_FAILED: Biometric signature was not captured.");
+      }
+      console.log(`[SynapsePurchaseModal][ACA] END: hardware_tag capture successful.`);
+
+      const idempotencyKey = crypto.randomUUID();
+
       // 🚨 CRITICAL BYPASS: Sending "INTERNAL_CUSTODIAL_LEDGER" to pass the Edge Function bouncer
       const payload = {
         user_id: session.user.id,
@@ -167,7 +180,17 @@ const SynapsePurchaseModal = ({
         payment_reference: txReference,
         payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: "INTERNAL_CUSTODIAL_LEDGER", 
+        user_wallet: "INTERNAL_CUSTODIAL_LEDGER",
+        idempotency_key: idempotencyKey,
+        aca_metadata: {
+          consent_id: idempotencyKey,
+          hardware_tag: aca.hardware_tag,
+          aca_hash: aca.aca_hash,
+          intent: aca.intent,
+          timestamp: aca.timestamp,
+          source: aca.source,
+          product_class: "SAAS_UTILITY_PURCHASE",
+        },
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Payload:", JSON.stringify(payload, null, 2));
