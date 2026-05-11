@@ -90,30 +90,47 @@ const SynapseTopUp = () => {
     setError(null);
 
     try {
-      // 1. AUTH
+      // 1. AUTH CHECK
+      console.log("[SynapseTopUp][handlePurchase][AUTH] Verifying session...");
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData?.session) throw new Error("Authentication failed. Please log in again.");
       const session = sessionData.session;
 
-      // 2. WALLET VALIDATION (on-chain rails only)
-      const isBlockchainRoute = paymentRail !== "fiat";
-      if (isBlockchainRoute && (!provisionedWallet || !provisionedWallet.startsWith("0x"))) {
-        throw new Error("Provisioned wallet not found. Contact system administrator.");
+      // 2. BIOMETRIC PRE-FLIGHT (WebAuthn Check)
+      console.log("[SynapseTopUp][handlePurchase][HARDWARE] Checking WebAuthn availability...");
+      if (!window.PublicKeyCredential) {
+        throw new Error("HARDWARE_UNSUPPORTED: This browser does not support biometric authentication.");
       }
 
-      // 3. PER-INTENT IDEMPOTENCY KEY
+      // 3. WALLET VALIDATION (on-chain rails only)
+      const isBlockchainRoute = paymentRail !== "fiat";
+      if (isBlockchainRoute && (!provisionedWallet || !provisionedWallet.startsWith("0x"))) {
+        throw new Error("VALIDATION_FAILED: No 0x address found on file. Update your profile first.");
+      }
+
+      // 4. PER-INTENT IDEMPOTENCY KEY
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = crypto.randomUUID();
       }
       const idempotency_key = idempotencyKeyRef.current;
       console.log(`[SynapseTopUp][handlePurchase] idempotency_key=${idempotency_key}`);
 
-      // 4. HARDWARE-BOUND ACA — Atomic Failure Gate
-      console.log("[SynapseTopUp][handlePurchase][ACA] START: Capturing hardware-bound consent artifact.");
-      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
-      console.log(`[SynapseTopUp][handlePurchase][ACA] END: source=${aca.source} hash=${aca.aca_hash.slice(0, 12)}...`);
+      // 5. HARDWARE-BOUND ACA — Triggering native Biometrics
+      console.log("[SynapseTopUp][handlePurchase][ACA] START: Requesting hardware biometric signature.");
 
-      // 5. DISPATCH
+      // Ensure captureHardwareTag is actually triggering navigator.credentials.create
+      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
+
+      if (!aca || !aca.hardware_tag) {
+        console.error("[SynapseTopUp][handlePurchase][ACA] FAILED: No hardware tag returned.");
+        throw new Error(
+          "HARDWARE_SIGNATURE_FAILED: The biometric prompt was dismissed or failed to generate a hardware tag.",
+        );
+      }
+
+      console.log(`[SynapseTopUp][handlePurchase][ACA] SUCCESS: hash=${aca.aca_hash.slice(0, 12)}...`);
+
+      // 6. DISPATCH TO ATOMIC ENGINE
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
@@ -138,14 +155,20 @@ const SynapseTopUp = () => {
 
       console.log(`[SynapseTopUp][handlePurchase][API_INVOKE] START: routing=${payload.routing}`);
       const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", { body: payload });
-      if (functionError) throw functionError;
+
+      if (functionError) {
+        // Log the specific failed stage from the Edge Function
+        console.error(`[SynapseTopUp][handlePurchase][API_INVOKE] ERROR: ${functionError.message}`);
+        throw functionError;
+      }
+
       console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END:", data);
 
-      // Successful settlement — burn the idempotency key so the next click is a new intent.
+      // Finality achieved
       idempotencyKeyRef.current = null;
-
       setStep("success");
       toast({ title: "Hydration Successful", description: `${formatCredits(displayCredits)} added.` });
+
       await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
       setTimeout(() => setStep("select"), 4000);
     } catch (err: any) {
@@ -153,10 +176,12 @@ const SynapseTopUp = () => {
       const msg = err?.message || "Settlement failed.";
       setError(msg);
       setStep("select");
-      if (/HARDWARE_/i.test(msg)) {
+
+      // Specific toast for Hardware/Biometric issues
+      if (/HARDWARE_|aca_metadata/i.test(msg)) {
         toast({
           title: "Hardware Handshake Required",
-          description: "Approve the FaceID / TouchID / Windows Hello prompt to authorize this purchase.",
+          description: "Biometric authorization (FaceID/TouchID) is mandatory for this transaction.",
           variant: "destructive",
         });
       }
@@ -255,9 +280,7 @@ const SynapseTopUp = () => {
             <div className="flex flex-col items-center py-12 gap-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="font-semibold text-center">Enforcing Atomic Settlement...</p>
-              <p className="text-xs text-muted-foreground text-center">
-                Verifying hardware ACA + dual-rail truth.
-              </p>
+              <p className="text-xs text-muted-foreground text-center">Verifying hardware ACA + dual-rail truth.</p>
             </div>
           ) : step === "success" ? (
             <div className="flex flex-col items-center py-12 gap-4 text-center">
