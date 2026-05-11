@@ -89,10 +89,14 @@ async function captureViaWebAuthn(userId: string): Promise<{ tag: string; source
       crypto.getRandomValues(challenge);
       await navigator.credentials.get({
         publicKey: {
-          challenge,
+          challenge: challenge.buffer as ArrayBuffer,
           rpId: window.location.hostname,
           allowCredentials: [
-            { id: b64UrlToBuf(existingCredId), type: "public-key", transports: ["internal"] },
+            {
+              id: b64UrlToBuf(existingCredId).buffer as ArrayBuffer,
+              type: "public-key",
+              transports: ["internal"],
+            },
           ],
           userVerification: "required",
           timeout: 60000,
@@ -114,9 +118,9 @@ async function captureViaWebAuthn(userId: string): Promise<{ tag: string; source
 
   const credential = (await navigator.credentials.create({
     publicKey: {
-      challenge,
+      challenge: challenge.buffer as ArrayBuffer,
       rp: { name: "IDIA Data Hub", id: window.location.hostname },
-      user: { id: userIdBytes, name: userId, displayName: "Hub User" },
+      user: { id: userIdBytes.buffer as ArrayBuffer, name: userId, displayName: "Hub User" },
       pubKeyCredParams: [{ alg: -7, type: "public-key" }],
       authenticatorSelection: {
         authenticatorAttachment: "platform",
