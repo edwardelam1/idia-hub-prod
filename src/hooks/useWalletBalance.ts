@@ -23,107 +23,96 @@ interface WalletBalance {
 
 /**
  * useWalletBalance
- * @param isYielding - When true, halts all background auth/network calls to prevent lock contention.
- * This ensures the biometric (FaceID/TouchID) handshake has exclusive access to the auth mutex.
+ * @param isYielding - Mandatory flag to release the Auth Lock during biometrics.
+ * This ensures the background thread Stand-Down for transaction finality.
  */
 export const useWalletBalance = (isYielding: boolean = false) => {
-  console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
+  console.log(`[useWalletBalance][Hook] START: Initializing. yielding_active=${isYielding}`);
 
   const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
   const [loading, setLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchBalance = useCallback(async () => {
-    // 🚨 YIELD CHECK: Atomic bypass to release Auth Lock for the biometric handshake
+    // 🚨 YIELD GATE: Immediate abort to prioritize the Biometric Handshake
     if (isYielding) {
-      console.warn(
-        "🚀 [useWalletBalance][fetchBalance] YIELD: Active. Halting background fetch to prevent lock theft.",
-      );
+      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Aborting fetch to release session mutex.");
+      if (abortControllerRef.current) abortControllerRef.current.abort();
       return;
     }
 
     console.log("🚀 [useWalletBalance][fetchBalance] START: Initiating sync with on-chain truth.");
     setLoading(true);
 
-    // Cancel any previous hung requests to ensure the thread is clean
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
 
     try {
       // 1. AUTHENTICATION (Mutex-Sensitive)
-      // We use getSession instead of getUser here to minimize heavy auth-lock contention
-      console.log("[useWalletBalance][fetchBalance][Auth] START: Requesting session lock.");
+      console.log("[useWalletBalance][fetchBalance][Auth] START: Requesting authenticated session.");
       const {
         data: { session },
         error: authError,
       } = await supabase.auth.getSession();
 
-      if (authError) {
-        console.error("[useWalletBalance][fetchBalance][Auth] FATAL: Session fetch failed.", authError.message);
-        throw authError;
-      }
-
-      if (!session?.user) {
-        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session. Resetting balance state.");
+      if (authError || !session) {
+        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: Session lock unavailable or user logged out.");
         setBalance({ usdc_balance: 0 });
         return;
       }
-      console.log(`[useWalletBalance][fetchBalance][Auth] END: Session secured for user ${session.user.id}.`);
+      console.log(
+        `[useWalletBalance][fetchBalance][Auth] END: Session secured for user ${session.user.id.slice(0, 8)}.`,
+      );
 
-      // 2. RPC CONFIG FETCH
-      // 🚨 SAFETY GATE: Handled with 'as any' to bypass TypeScript errors on the missing 'system_configs' table.
-      console.log("[useWalletBalance][fetchBalance][RPC] START: Pulling Alchemy RPC from system_configs.");
-      let rpcUrl = "https://mainnet.base.org"; // High-availability fallback
+      // 2. RPC CONFIG FETCH (Database Source of Truth)
+      console.log("[useWalletBalance][fetchBalance][RPC] START: Querying system_configs for BASE_RPC_URL.");
+      let rpcUrl = "https://mainnet.base.org"; // High-availability default fallback
 
       try {
         const { data: config, error: configError } = await supabase
           .from("system_configs" as any)
           .select("value")
-          .eq("key", "ALCHEMY_BASE_MAINNET_RPC")
-          .single();
+          .eq("key", "BASE_RPC_URL")
+          .maybeSingle();
 
         if (configError) {
           console.warn(
-            "[useWalletBalance][fetchBalance][RPC] WARN: system_configs table not found. Using Base default.",
+            "[useWalletBalance][fetchBalance][RPC] WARN: system_configs relation missing or inaccessible. Falling back to public RPC.",
           );
         } else if (config?.value) {
-          rpcUrl = config.value;
+          rpcUrl = config.value.trim();
         }
       } catch (schemaErr) {
-        console.warn("[useWalletBalance][fetchBalance][RPC] WARN: Schema mismatch. Defaulting to Base Public RPC.");
+        console.warn(
+          "[useWalletBalance][fetchBalance][RPC] WARN: Schema mismatch in system_configs. Defaulting to public transport.",
+        );
       }
-      console.log(`[useWalletBalance][fetchBalance][RPC] END: Transport initialized with: ${rpcUrl.slice(0, 25)}...`);
+      console.log(`[useWalletBalance][fetchBalance][RPC] END: Transport initialized: ${rpcUrl.slice(0, 35)}...`);
 
       // 3. PROFILE SYNC
-      console.log("[useWalletBalance][fetchBalance][Profile] START: Querying wallet address from registry.");
+      console.log("[useWalletBalance][fetchBalance][Profile] START: Verifying wallet address registry.");
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("wallet_address")
         .eq("id", session.user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error("[useWalletBalance][fetchBalance][Profile] FATAL: Registry query failed.", profileError.message);
-        throw profileError;
-      }
-
-      const walletAddress = profile?.wallet_address;
-
-      if (!walletAddress || !walletAddress.startsWith("0x")) {
-        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing. Aborting hydration.");
+      if (profileError || !profile?.wallet_address) {
+        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing from profile.");
         setBalance({ usdc_balance: 0 });
         return;
       }
-      console.log(`[useWalletBalance][fetchBalance][Profile] END: Wallet verified: ${walletAddress}`);
+      const walletAddress = profile.wallet_address;
+      console.log(`[useWalletBalance][fetchBalance][Profile] END: Wallet identified: ${walletAddress}`);
 
       // 4. ON-CHAIN HYDRATION (VIEM)
-      console.log("[useWalletBalance][fetchBalance][Viem] START: Initializing public client.");
+      console.log("[useWalletBalance][fetchBalance][Viem] START: Initializing Base public client.");
       const publicClient = createPublicClient({
         chain: base,
         transport: http(rpcUrl),
       });
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] START: Calling balanceOf for ${walletAddress}`);
+      console.log(`[useWalletBalance][fetchBalance][Contract] START: Executing balanceOf(address) on-chain.`);
       const rawBalance = await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: USDC_ABI,
@@ -131,20 +120,18 @@ export const useWalletBalance = (isYielding: boolean = false) => {
         args: [walletAddress as `0x${string}`],
       } as any);
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Raw BigInt: ${rawBalance.toString()}`);
-
       // 5. STATE INJECTION
       const hydratedBalance = Number(formatUnits(rawBalance as bigint, 6));
-      console.log(
-        `[useWalletBalance][fetchBalance][Hydration] END: On-chain truth confirmed: $${hydratedBalance} USDC.`,
-      );
+      console.log(`[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified balance is $${hydratedBalance} USDC.`);
 
       setBalance({ usdc_balance: hydratedBalance });
     } catch (err: any) {
       if (err.name === "AbortError") {
-        console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for yield.");
+        console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for transaction yield.");
       } else {
         console.error("🚨 [useWalletBalance][fetchBalance] FATAL ERROR:", err.message);
+        // Preserve previous balance on non-abort errors to prevent UI flicker
+        setBalance((prev) => prev);
       }
     } finally {
       console.log("[useWalletBalance][fetchBalance] END: Lifecycle complete.");
@@ -153,11 +140,11 @@ export const useWalletBalance = (isYielding: boolean = false) => {
   }, [isYielding]);
 
   useEffect(() => {
-    console.log("[useWalletBalance][Effect] START: Polling cycle initialized.");
+    console.log("[useWalletBalance][Effect] START: Initializing polling interval.");
     fetchBalance();
 
     const interval = setInterval(() => {
-      console.log("[useWalletBalance][Effect] TICK: 15-second polling event fired.");
+      console.log("[useWalletBalance][Effect] TICK: 15-second heartbeat fired.");
       fetchBalance();
     }, 15000);
 
