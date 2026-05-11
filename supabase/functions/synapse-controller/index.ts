@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { chargeBuyerUsdc, RELAYER_ADDRESS } from "../_shared/charge-usdc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,22 +134,58 @@ serve(async (req) => {
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
     // [BEGIN: CASHIER_HANDOFF] Bridge validated intent to Circular Settlement.
-    console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline (rail=${routing}).`);
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
-      body: {
-        total_fiat_amount: 0.75,
-        routing,
-        buyer_id: userId,
-        payment_reference: referenceId,
-        contributing_users: [{ user_id: userId }],
-      },
-    });
+    let onchainTxHash: string | null = null;
+    if (routing === "on-chain") {
+      // ================================================================
+      // ON-CHAIN: pull USDC directly from buyer wallet via transferFrom.
+      // No edge-to-edge HTTP hop — shared module runs in-process.
+      // ================================================================
+      console.info(`[BEGIN: ONCHAIN_CHARGE] Pulling $0.75 USDC from buyer ${activeWallet}`);
+      const charge = await chargeBuyerUsdc({
+        buyer_wallet: activeWallet,
+        usd_amount: 0.75,
+      });
+      if (!charge.ok) {
+        console.error(`🚨 [FATAL STALL: ONCHAIN_CHARGE] code=${charge.code}`);
+        // Surface a structured 402-style payload so the UI can prompt approve()
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: charge.code,
+            details: charge,
+            spender: RELAYER_ADDRESS,
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      onchainTxHash = charge.hash;
+      console.info(`[END: ONCHAIN_CHARGE] hash=${charge.hash} block=${charge.block_number}`);
 
-    if (cashierError) {
-      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
-      throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
+      // Update ledger entry with on-chain proof
+      console.info(`[BEGIN: LEDGER_PROOF_LINK]`);
+      await adminClient
+        .from("synapse_credit_ledger")
+        .update({ blockchain_tx_hash: charge.hash, status: "settled" })
+        .eq("id", ledgerResult.data.id);
+      console.info(`[END: LEDGER_PROOF_LINK]`);
+    } else {
+      // FIAT: original Circular Settlement pipeline (60/30/10 split).
+      console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline (rail=fiat).`);
+      const { error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
+        body: {
+          total_fiat_amount: 0.75,
+          routing,
+          buyer_id: userId,
+          payment_reference: referenceId,
+          contributing_users: [{ user_id: userId }],
+        },
+      });
+      if (cashierError) {
+        console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
+        throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
+      }
+      console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split deployed via fiat.`);
     }
-    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split deployed via ${routing}.`);
 
     // [STAGE: FINAL_LINKING] Bind the egress log to the financial ledger entry
     await adminClient
@@ -165,6 +202,8 @@ serve(async (req) => {
           gas_consumed: FLAT_FEE_CR,
           total_cr_deducted: FLAT_FEE_CR,
           fiat_equivalent_value: 0.75,
+          onchain_tx_hash: onchainTxHash,
+          rail: routing,
         },
         audit: {
           records_processed: aca_record_ids.length,
