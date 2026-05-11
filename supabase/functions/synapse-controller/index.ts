@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
-import { chargeBuyerUsdc, RELAYER_ADDRESS } from "../_shared/charge-usdc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,23 +68,59 @@ serve(async (req) => {
       throw new Error(`Profile interrogation failed: ${profileError.message}`);
     }
 
-    const SYSTEM_FALLBACK_WALLET = "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
-    const activeWallet = profile?.wallet_address || SYSTEM_FALLBACK_WALLET;
+    const activeWallet = profile?.wallet_address;
 
-    if (activeWallet === SYSTEM_FALLBACK_WALLET) {
-      console.warn(
-        `⚠️ [WARNING: VALIDATING_INPUTS] User ${userId} lacks a registered wallet. Rerouting to System Fallback.`,
+    // Strict Compliance Gate: No system fallbacks allowed.
+    if (routing === "on-chain" && !activeWallet) {
+      console.error(
+        `🚨 [FATAL STALL: VALIDATING_INPUTS] Compliance Hard Stop: User ${userId} lacks a registered wallet for USDC routing. Fallbacks are strictly prohibited.`,
       );
-    } else {
-      console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
+      throw new Error("Strict Compliance Violation: Registered wallet required for on-chain USDC routing.");
     }
-    console.info(`[END: VALIDATING_INPUTS] Active wallet secured.`);
+
+    if (activeWallet) {
+      console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
+    } else {
+      console.info(`[STATUS: VALIDATING_INPUTS] No wallet verified. Proceeding strictly under FIAT rail.`);
+    }
+    console.info(`[END: VALIDATING_INPUTS] Input validation secured.`);
 
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
     // FLAT RATE: Every AI search that touches data costs exactly 1 CR ($0.75 fiat).
     // Record receipt is preserved for egress logging + downstream IDIA Life payout attribution,
     // but is decoupled from the fee itself.
+    // ====================================================================
+    // RESOLVE_DATA_OWNERS — Map consumed records to individuals for payout
+    // ====================================================================
+    console.info(
+      `[BEGIN: RESOLVE_DATA_OWNERS] Interrogating database to map ${aca_record_ids.length} consumed records to original data owners.`,
+    );
+    const { data: consumedRecords, error: consumedError } = await adminClient
+      .from("aca_records")
+      .select("user_id")
+      .in("id", aca_record_ids);
+
+    if (consumedError) {
+      console.error(
+        `🚨 [FATAL STALL: RESOLVE_DATA_OWNERS] Database query failed. Code: ${consumedError.code}, Message: ${consumedError.message}`,
+      );
+      throw new Error(`Data owner resolution failed: ${consumedError.message}`);
+    }
+
+    if (!consumedRecords || consumedRecords.length === 0) {
+      console.error(`🚨 [FATAL STALL: RESOLVE_DATA_OWNERS] Zero data owners resolved. Payout impossible.`);
+      throw new Error("Payout rejected: No data owners resolved from provided records.");
+    }
+
+    const uniqueContributors = Array.from(new Set(consumedRecords.map((r) => r.user_id)))
+      .filter(Boolean)
+      .map((id) => ({ user_id: id }));
+
+    console.info(
+      `[END: RESOLVE_DATA_OWNERS] Mapped records to ${uniqueContributors.length} unique individual(s) for payout.`,
+    );
+
     const FLAT_FEE_CR = 1;
     const totalSynapseDeduction = -FLAT_FEE_CR;
 
