@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
+  QrCode,
+  Copy,
+  Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,18 +20,8 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { toast } from "@/hooks/use-toast";
 import { formatCredits } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { ethers } from "ethers";
 
-// USDC Contract Constants for Allowance Handshake (Base Mainnet)
-const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const TREASURY_ADDRESS = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
-const USDC_ABI = ["function approve(address spender, uint256 amount) public returns (bool)"];
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
 
 interface PricingTier {
   crd: number;
@@ -47,159 +40,122 @@ const pricingTiers: PricingTier[] = [
 const BASE_RATE = 0.75;
 
 const SynapseTopUp = () => {
-  const { refreshBalance: refreshSynapseBalance } = useSynapseCredits();
+  // Extracting protocolState to verify internal usdc_balance
+  const { protocolState, refreshState: refreshSynapseBalance } = useSynapseCredits();
   const { refreshBalance: refreshWalletBalance } = useWalletBalance();
 
   const [selectedTier, setSelectedTier] = useState(5000);
-  const [step, setStep] = useState<"select" | "processing" | "success" | "need_allowance">("select");
+  const [step, setStep] = useState<"select" | "processing" | "success" | "awaiting_deposit">("select");
   const [error, setError] = useState<string | null>(null);
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
-  const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
+
+  // Three distinct rails
+  const [paymentRail, setPaymentRail] = useState<"internal_usdc" | "external_usdc" | "fiat">("internal_usdc");
 
   const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = alacarteUsd / BASE_RATE;
   const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
+
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
+
+  const currentUsdcBalance = protocolState?.usdc_balance ?? 0;
 
   const handleAlacarteInput = (val: string) => {
     const digits = val.replace(/\D/g, "");
     if (digits.length <= 4) setAlacarteAmount(digits);
   };
 
-  // 1. HANDSHAKE: Enable USDC Allowance
-  const handleEnableUSDC = async () => {
-    console.log("[SynapseTopUp][handleEnableUSDC] START: Requesting USDC Allowance execution.");
-    setStep("processing");
-    setError(null);
-    try {
-      console.log("[SynapseTopUp][handleEnableUSDC][PROVIDER] START: Checking window.ethereum instance.");
-      if (!window.ethereum) {
-        console.error("[SynapseTopUp][handleEnableUSDC][PROVIDER] FATAL: window.ethereum is undefined.");
-        throw new Error("MetaMask not found.");
-      }
-      console.log("[SynapseTopUp][handleEnableUSDC][PROVIDER] END: Ethereum instance located.");
-
-      console.log("[SynapseTopUp][handleEnableUSDC][SIGNER] START: Initializing provider and signer.");
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      console.log("[SynapseTopUp][handleEnableUSDC][SIGNER] END: Signer initialized.");
-
-      console.log("[SynapseTopUp][handleEnableUSDC][CONTRACT] START: Connecting to USDC contract and broadcasting tx.");
-      const contract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
-      const tx = await contract.approve(TREASURY_ADDRESS, ethers.MaxUint256);
-      
-      toast({ title: "Broadcasting Approval...", description: "Please wait for Base confirmation." });
-      
-      console.log(`[SynapseTopUp][handleEnableUSDC][CONTRACT] PENDING: Waiting for tx confirmation ${tx.hash}...`);
-      await tx.wait();
-      console.log("[SynapseTopUp][handleEnableUSDC][CONTRACT] END: Transaction confirmed on-chain.");
-
-      console.log("[SynapseTopUp][handleEnableUSDC] SUCCESS: Complete allowance granted.");
-      toast({ title: "USDC Enabled", description: "You can now settle on-chain." });
-      setStep("select");
-      handlePurchase();
-    } catch (err: any) {
-      console.error("[SynapseTopUp][handleEnableUSDC] FATAL: Allowance Failed. Details:", err.message);
-      setError("Approval failed. Permission is required to move USDC.");
-      setStep("need_allowance");
-    } finally {
-      console.log("[SynapseTopUp][handleEnableUSDC] END: USDC Allowance execution finished.");
-    }
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Address Copied", description: "Treasury address copied to clipboard." });
   };
 
-  // 2. SETTLEMENT (HYDRATED & HARDENED)
+  // MASTER SETTLEMENT SEQUENCE
   const handlePurchase = async () => {
-    console.log("🚀 [SynapseTopUp][handlePurchase] START: Initiating verified settlement sequence.");
+    console.log(`[SynapseTopUp][handlePurchase] START: Initiating settlement via ${paymentRail} rail.`);
+
+    if (paymentRail === "external_usdc") {
+      console.log("[SynapseTopUp][handlePurchase] INFO: Routing to manual external deposit screen.");
+      setStep("awaiting_deposit");
+      return;
+    }
+
     setStep("processing");
     setError(null);
 
     try {
-      // FIX: Hardened Auth Destructuring
       console.log("[SynapseTopUp][handlePurchase][AUTH] START: Fetching Supabase session.");
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError) {
-        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Supabase returned an auth error.", sessionError.message);
+        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Supabase auth error.", sessionError.message);
         throw new Error(`Authentication error: ${sessionError.message}`);
       }
       if (!sessionData || !sessionData.session) {
-        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Session data is null or completely missing.");
+        console.error("[SynapseTopUp][handlePurchase][AUTH] FATAL: Session data is null.");
         throw new Error("Auth session missing. Please log in again.");
       }
-      
       const session = sessionData.session;
       console.log(`[SynapseTopUp][handlePurchase][AUTH] END: Auth verified for user ${session.user.id}.`);
 
-      console.log("[SynapseTopUp][handlePurchase][PROVIDER] START: Requesting active Ethereum accounts.");
-      if (!window.ethereum) {
-        console.error("[SynapseTopUp][handlePurchase][PROVIDER] FATAL: MetaMask is missing from window.");
-        throw new Error("MetaMask is required for on-chain settlement.");
+      // Verify Internal Balance before dispatching payload
+      if (paymentRail === "internal_usdc") {
+        console.log(
+          `[SynapseTopUp][handlePurchase][VALIDATION] START: Verifying internal USDC. Required: ${usdAmount}, Available: ${currentUsdcBalance}`,
+        );
+        if (currentUsdcBalance < usdAmount) {
+          console.error("[SynapseTopUp][handlePurchase][VALIDATION] FATAL: Insufficient internal funds.");
+          throw new Error("Insufficient USDC balance in your IDIA Ledger.");
+        }
+        console.log("[SynapseTopUp][handlePurchase][VALIDATION] END: Internal balance is sufficient.");
       }
-      
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      const activeAddress = accounts[0];
-      console.log(`[SynapseTopUp][handlePurchase][PROVIDER] END: Accounts retrieved.`);
-
-      console.log("[SynapseTopUp][handlePurchase][VALIDATION] START: Checking address sovereignty.");
-      if (!activeAddress || typeof activeAddress !== 'string' || !activeAddress.startsWith('0x')) {
-        console.error(`[SynapseTopUp][handlePurchase][VALIDATION] FATAL: Invalid wallet address detected: ${activeAddress}`);
-        throw new Error("WALLET_ERROR: Please unlock MetaMask and ensure you are on the Base network.");
-      }
-      console.log(`[SynapseTopUp][handlePurchase][VALIDATION] END: Using verified wallet ${activeAddress}`);
 
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
         usd_amount: usdAmount,
-        user_wallet: activeAddress, 
-        payment_method: paymentRail,
-        // Belt-and-braces for Edge Function contract
-        recipient_address: activeAddress,
-        routing: paymentRail === "usdc" ? "on-chain" : "fiat",
         amount: displayCredits,
+        payment_method: paymentRail,
+        routing: paymentRail === "fiat" ? "fiat" : "on-chain",
+        // Critical: Bypass Edge Function Relayer broadcast
+        user_wallet: paymentRail === "internal_usdc" ? "INTERNAL_CUSTODIAL_LEDGER" : session.user.id,
+        recipient_address: paymentRail === "internal_usdc" ? "INTERNAL_CUSTODIAL_LEDGER" : session.user.id,
       };
 
-      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] START: Dispatching settlement payload to Edge Function.", JSON.stringify(payload));
+      console.log(
+        "[SynapseTopUp][handlePurchase][API_INVOKE] START: Dispatching settlement payload to top-up-credits.",
+        JSON.stringify(payload),
+      );
       const { data, error: functionError } = await supabase.functions.invoke("top-up-credits", {
         body: payload,
       });
 
       if (functionError) {
-        console.error("[SynapseTopUp][handlePurchase][API_INVOKE] FATAL: Edge function rejected request.", functionError);
+        console.error(
+          "[SynapseTopUp][handlePurchase][API_INVOKE] FATAL: Edge function rejected request.",
+          functionError,
+        );
         throw functionError;
       }
-      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: Edge Function returned successful response.", data);
-      
-      if (data?.error?.includes("ALLOWANCE")) {
-        console.warn("[SynapseTopUp][handlePurchase] HANDSHAKE REQUIRED: Allowance missing on-chain. Routing to approval flow.");
-        setStep("need_allowance");
-        return;
-      }
-
-      console.log("[SynapseTopUp][handlePurchase] SUCCESS: Settlement confirmed.");
+      console.log("[SynapseTopUp][handlePurchase][API_INVOKE] END: Edge Function success response:", data);
 
       setStep("success");
       toast({ title: "Hydration Successful", description: `${formatCredits(displayCredits)} added.` });
 
       console.log("[SynapseTopUp][handlePurchase][REFRESH] START: Syncing UI state across contexts.");
-      await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+      if (refreshSynapseBalance) await refreshSynapseBalance();
+      if (refreshWalletBalance) await refreshWalletBalance();
       console.log("[SynapseTopUp][handlePurchase][REFRESH] END: UI Contexts fully updated.");
 
       setTimeout(() => setStep("select"), 4000);
     } catch (err: any) {
       console.error("🚨 [SynapseTopUp][handlePurchase] FATAL EXCEPTION CAUGHT:", err.message);
-
-      if (err.message?.includes("ALLOWANCE")) {
-        setStep("need_allowance");
-      } else {
-        setError(err.message || "Settlement failed.");
-        setStep("select");
-      }
+      setError(err.message || "Settlement failed.");
+      setStep("select");
     } finally {
       console.log("[SynapseTopUp][handlePurchase] END: Logic execution fully complete.");
     }
@@ -213,7 +169,8 @@ const SynapseTopUp = () => {
           Fund Synapse Credits
         </h1>
         <p className="text-muted-foreground mt-2">
-          Real-time settlement on <strong>Base Mainnet</strong>. Move custodial USDC to Synapse instantly to fuel AI data operations.
+          Real-time settlement on <strong>Base Mainnet</strong>. Move custodial USDC to Synapse instantly to fuel AI
+          data operations.
         </p>
       </div>
 
@@ -294,44 +251,46 @@ const SynapseTopUp = () => {
             <div className="flex flex-col items-center py-12 gap-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="font-semibold text-center">Settling on Base...</p>
-              <p className="text-xs text-muted-foreground text-center">
-                Do not refresh. Verifying on-chain truth.
-              </p>
+              <p className="text-xs text-muted-foreground text-center">Do not refresh. Verifying on-chain truth.</p>
             </div>
           ) : step === "success" ? (
             <div className="flex flex-col items-center py-12 gap-4 text-center">
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="font-bold text-xl">Hydrated!</p>
             </div>
-          ) : step === "need_allowance" ? (
-            <div className="flex flex-col items-center py-8 gap-3 text-center">
-              <KeyRound className="w-12 h-12 text-primary" />
-              <p className="font-bold text-lg">Enable USDC</p>
-              <p className="text-xs text-muted-foreground">
-                The IDIA Treasury needs your permission to move USDC for this settlement.
+          ) : step === "awaiting_deposit" ? (
+            <div className="flex flex-col items-center py-6 gap-3 text-center">
+              <QrCode className="w-12 h-12 text-primary" />
+              <p className="font-bold text-lg">Send USDC to Treasury</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Send exactly <strong>${usdAmount.toFixed(2)} USDC</strong> on the Base Network to the IDIA Treasury
+                address below.
               </p>
-              {error && (
-                <div className="w-full p-3 bg-destructive/10 text-destructive text-xs rounded-lg flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-              <Button onClick={handleEnableUSDC} className="w-full mt-2">
-                Sign Approval
-              </Button>
-              <button
-                onClick={() => {
-                  setStep("select");
-                  setError(null);
-                }}
-                className="text-xs text-muted-foreground underline"
-              >
-                Cancel
+
+              <div className="w-full flex items-center justify-between bg-muted p-2 rounded border border-border">
+                <span className="text-[10px] font-mono text-muted-foreground truncate mr-2">{TREASURY_ADDRESS}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={() => copyToClipboard(TREASURY_ADDRESS)}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+
+              <div className="w-full p-3 bg-primary/10 text-primary text-xs rounded-lg mt-2">
+                Our webhook is listening. Your Synapse credits will hydrate automatically once the block confirms.
+              </div>
+
+              <button onClick={() => setStep("select")} className="text-xs text-muted-foreground underline mt-4">
+                Go Back
               </button>
             </div>
           ) : (
             <>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase mb-6">Transaction Summary</h2>
+
               <div className="flex justify-between text-sm mb-4">
                 <span className="text-muted-foreground">Credits to Add</span>
                 <span className="text-emerald-400">+{formatCredits(displayCredits)}</span>
@@ -340,7 +299,7 @@ const SynapseTopUp = () => {
                 <span className="font-medium">Total Due</span>
                 <div className="text-right">
                   <div className="text-2xl font-bold font-mono">${usdAmount.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">USDC (BASE)</div>
+                  <div className="text-[10px] text-muted-foreground">Avail: ${currentUsdcBalance.toFixed(2)}</div>
                 </div>
               </div>
 
@@ -351,23 +310,47 @@ const SynapseTopUp = () => {
                 </div>
               )}
 
-              <div className="flex rounded-lg border border-border overflow-hidden mb-6">
+              <div className="grid grid-cols-1 gap-2 mb-6">
                 <button
-                  onClick={() => setPaymentRail("usdc")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "usdc" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
+                  onClick={() => setPaymentRail("internal_usdc")}
+                  className={`flex items-center justify-start px-3 gap-3 text-xs py-3 rounded-md border ${paymentRail === "internal_usdc" ? "bg-primary/10 border-primary text-primary" : "bg-card border-border"}`}
                 >
-                  <CircleDollarSign className="h-4 w-4" /> USDC (Base)
+                  <Wallet className="h-4 w-4" />
+                  <div className="text-left">
+                    <div className="font-bold">IDIA Ledger</div>
+                    <div className="text-[9px] opacity-70">Deduct from internal balance</div>
+                  </div>
                 </button>
+
                 <button
-                  onClick={() => setPaymentRail("worldpay")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "worldpay" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
+                  onClick={() => setPaymentRail("external_usdc")}
+                  className={`flex items-center justify-start px-3 gap-3 text-xs py-3 rounded-md border ${paymentRail === "external_usdc" ? "bg-primary/10 border-primary text-primary" : "bg-card border-border"}`}
                 >
-                  <CreditCard className="h-4 w-4" /> Fiat Port
+                  <CircleDollarSign className="h-4 w-4" />
+                  <div className="text-left">
+                    <div className="font-bold">External Web3 Wallet</div>
+                    <div className="text-[9px] opacity-70">Send USDC via MetaMask/Coinbase</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setPaymentRail("fiat")}
+                  className={`flex items-center justify-start px-3 gap-3 text-xs py-3 rounded-md border ${paymentRail === "fiat" ? "bg-primary/10 border-primary text-primary" : "bg-card border-border"}`}
+                >
+                  <CreditCard className="h-4 w-4" />
+                  <div className="text-left">
+                    <div className="font-bold">Fiat Port</div>
+                    <div className="text-[9px] opacity-70">Settle via Worldpay</div>
+                  </div>
                 </button>
               </div>
 
-              <Button onClick={handlePurchase} disabled={!canProceed} className="w-full py-6 font-bold">
-                FORCE SETTLEMENT V2
+              <Button
+                onClick={handlePurchase}
+                disabled={!canProceed || (paymentRail === "internal_usdc" && currentUsdcBalance < usdAmount)}
+                className="w-full py-6 font-bold"
+              >
+                {paymentRail === "external_usdc" ? "SHOW TREASURY QR" : "FORCE SETTLEMENT V2"}
               </Button>
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
