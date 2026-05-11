@@ -1,12 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { createPublicClient, http, formatUnits } from "viem";
 import { base } from "viem/chains";
 
-// Base Mainnet USDC Contract
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-
-// Minimal ABI for read-only operations
 const USDC_ABI = [
   {
     name: "balanceOf",
@@ -21,112 +18,114 @@ interface WalletBalance {
   usdc_balance: number;
 }
 
-export const useWalletBalance = () => {
-  console.log("[useWalletBalance][Hook] START: Initializing hook.");
+/**
+ * useWalletBalance
+ * @param isYielding - When true, halts all background auth/network calls to prevent lock contention.
+ */
+export const useWalletBalance = (isYielding: boolean = false) => {
+  console.log(`[useWalletBalance][Hook] START: Hook mount. yielding_active=${isYielding}`);
 
   const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
   const [loading, setLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchBalance = useCallback(async () => {
-    console.log("🚀 [useWalletBalance][fetchBalance] START: Fetching absolute on-chain truth from Base.");
+    // 🚨 YIELD CHECK: Immediate exit to prevent Auth Lock theft during transactions
+    if (isYielding) {
+      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Aborting fetch to release Auth Lock for transaction.");
+      return;
+    }
+
+    console.log("🚀 [useWalletBalance][fetchBalance] START: Fetching absolute on-chain truth.");
     setLoading(true);
 
+    // Cancel any previous hung requests to ensure the thread is clean
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     try {
-      // 1. AUTHENTICATION
-      console.log("[useWalletBalance][fetchBalance][Auth] INFO: Requesting authenticated user from Supabase.");
+      // 1. RPC CONFIG FETCH (Alchemy Source of Truth)
+      console.log("[useWalletBalance][fetchBalance][RPC] INFO: Fetching Alchemy Mainnet RPC from system_configs...");
+      const { data: config } = await supabase
+        .from("system_configs")
+        .select("value")
+        .eq("key", "ALCHEMY_BASE_MAINNET_RPC")
+        .single();
+
+      const rpcUrl = config?.value || "https://mainnet.base.org";
+      console.log(`[useWalletBalance][fetchBalance][RPC] SUCCESS: Using transport: ${rpcUrl.slice(0, 20)}...`);
+
+      // 2. AUTHENTICATION (Mutex-Sensitive)
+      console.log("[useWalletBalance][fetchBalance][Auth] INFO: Requesting session.");
       const {
-        data: { user },
+        data: { session },
         error: authError,
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getSession();
 
-      if (authError) {
-        console.error("[useWalletBalance][fetchBalance][Auth] ERROR: Supabase auth fetch failed.", authError.message);
-        throw authError;
-      }
-
-      if (!user) {
-        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active user session found. Defaulting to 0.");
+      if (authError || !session) {
+        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: Session lock unavailable or user logged out.");
         setBalance({ usdc_balance: 0 });
         return;
       }
 
-      console.log(`[useWalletBalance][fetchBalance][Auth] INFO: User verified (${user.id}).`);
-
-      // 2. FETCH WALLET ADDRESS (Assuming stored in 'profiles')
-      console.log("[useWalletBalance][fetchBalance][Profile] INFO: Querying profile for wallet address...");
+      // 3. PROFILE SYNC
+      console.log("[useWalletBalance][fetchBalance][Profile] INFO: Querying wallet for user:", session.user.id);
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("wallet_address")
-        .eq("id", user.id)
+        .eq("id", session.user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error(
-          "[useWalletBalance][fetchBalance][Profile] ERROR: Failed to query profile.",
-          profileError.message,
-        );
-        throw profileError;
-      }
-
-      const walletAddress = profile?.wallet_address;
-
-      if (!walletAddress || !walletAddress.startsWith("0x")) {
-        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid wallet address missing. Defaulting to 0.");
+      if (profileError || !profile?.wallet_address) {
+        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: No wallet address on file.");
         setBalance({ usdc_balance: 0 });
         return;
       }
 
-      console.log(`[useWalletBalance][fetchBalance][Profile] SUCCESS: Wallet identified: ${walletAddress}`);
-
-      // 3. ON-CHAIN HYDRATION (VIEM)
-      console.log("[useWalletBalance][fetchBalance][Viem] INFO: Initializing Base public client.");
+      // 4. ON-CHAIN HYDRATION (VIEM)
       const publicClient = createPublicClient({
         chain: base,
-        transport: http("https://mainnet.base.org"),
+        transport: http(rpcUrl),
       });
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Executing balanceOf on USDC contract...`);
+      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Executing balanceOf on Base Mainnet.`);
       const rawBalance = await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: USDC_ABI,
         functionName: "balanceOf",
-        args: [walletAddress as `0x${string}`],
-      } as any); // 🚨 CAST TO ANY: Force TS to stop looking for authorizationList
+        args: [profile.wallet_address as `0x${string}`],
+      } as any);
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Raw BigInt retrieved: ${rawBalance.toString()}`);
-
-      // 4. FORMATTING & STATE INJECTION
-      // 🚨 CAST TO BIGINT: Tell TS that the contract return value is definitely a BigInt
       const hydratedBalance = Number(formatUnits(rawBalance as bigint, 6));
-      console.log(
-        `[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified on-chain truth is $${hydratedBalance} USDC.`,
-      );
+      console.log(`[useWalletBalance][fetchBalance][Hydration] SUCCESS: $${hydratedBalance} USDC confirmed.`);
 
       setBalance({ usdc_balance: hydratedBalance });
     } catch (err: any) {
-      console.error(
-        "🚨 [useWalletBalance][fetchBalance] FATAL ERROR: Exception caught during fetch routine.",
-        err.message,
-      );
-      setBalance({ usdc_balance: 0 });
+      if (err.name === "AbortError") {
+        console.log("[useWalletBalance][fetchBalance] ABORT: Fetch routine cancelled.");
+      } else {
+        console.error("🚨 [useWalletBalance][fetchBalance] FATAL ERROR:", err.message);
+      }
     } finally {
-      console.log("[useWalletBalance][fetchBalance] END: Fetch routine complete.");
+      console.log("[useWalletBalance][fetchBalance] END: Routine complete.");
       setLoading(false);
     }
-  }, []);
+  }, [isYielding]);
 
   useEffect(() => {
-    console.log("[useWalletBalance][Effect] START: Triggering initial fetch on mount.");
+    console.log("[useWalletBalance][Effect] START: Initializing polling.");
     fetchBalance();
 
-    // Auto-poll the blockchain every 15 seconds to keep the UI perfectly synced with reality
     const interval = setInterval(() => {
-      console.log("[useWalletBalance][Effect] INFO: 15-second polling tick fired.");
+      console.log("[useWalletBalance][Effect] TICK: Polling trigger.");
       fetchBalance();
     }, 15000);
 
-    console.log("[useWalletBalance][Effect] END: Mount trigger complete and interval set.");
-    return () => clearInterval(interval);
+    return () => {
+      console.log("[useWalletBalance][Effect] CLEANUP: Clearing interval and aborting requests.");
+      clearInterval(interval);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
   }, [fetchBalance]);
 
   return { balance, loading, refreshBalance: fetchBalance };
