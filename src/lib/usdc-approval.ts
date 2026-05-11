@@ -106,19 +106,20 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
       abi: ERC20_APPROVE_ABI,
       functionName: "allowance",
       args: [owner, RELAYER_ADDRESS],
-    })) as bigint;
+    } as any)) as bigint;
     if (current >= maxUint256 / 2n) {
       console.info(`[END: ensureUsdcApproval] allowance already infinite — no tx needed`);
       return { ok: true, hash: "ALREADY_APPROVED" };
     }
 
     console.info(`[ensureUsdcApproval] sending approve(RELAYER, MAX_UINT256)`);
-    const hash = await walletClient.writeContract({
+    const hash = (await walletClient.writeContract({
       address: USDC_ADDRESS,
       abi: ERC20_APPROVE_ABI,
       functionName: "approve",
       args: [RELAYER_ADDRESS, maxUint256],
-    });
+      chain: base,
+    } as any)) as `0x${string}`;
     console.info(`[ensureUsdcApproval] approval tx=${hash}, waiting for receipt`);
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") {
