@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { fetchApi } from "@/lib/api";
-import { ensureUsdcApproval, RELAYER_ADDRESS } from "@/lib/usdc-approval";
+import { ensureUsdcApproval } from "@/lib/usdc-approval";
 import { supabase } from "@/integrations/supabase/client";
 
 // --- Type Definitions ---
