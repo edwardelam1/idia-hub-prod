@@ -28,7 +28,7 @@ serve(async (req) => {
     const {
       user_id,
       client_id,
-      aca_record_ids = [],
+      user_aca_record_ids = [],
       intent_type = "RESEARCH",
       query_complexity = 1.0,
       country_of_origin = "US",
@@ -85,7 +85,7 @@ serve(async (req) => {
     }
     console.info(`[END: VALIDATING_INPUTS] Input validation secured.`);
 
-    if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
+    if (user_aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
     // FLAT RATE: Every AI search that touches data costs exactly 1 CR ($0.75 fiat).
     // Record receipt is preserved for egress logging + downstream IDIA Life payout attribution,
@@ -94,12 +94,12 @@ serve(async (req) => {
     // RESOLVE_DATA_OWNERS — Map consumed records to individuals for payout
     // ====================================================================
     console.info(
-      `[BEGIN: RESOLVE_DATA_OWNERS] Interrogating database to map ${aca_record_ids.length} consumed records to original data owners.`,
+      `[BEGIN: RESOLVE_DATA_OWNERS] Interrogating database to map ${user_aca_record_ids.length} consumed records to original data owners.`,
     );
     const { data: consumedRecords, error: consumedError } = await adminClient
-      .from("aca_records")
+      .from("user_aca_records")
       .select("user_id")
-      .in("id", aca_record_ids);
+      .in("id", user_aca_record_ids);
 
     if (consumedError) {
       console.error(
@@ -126,7 +126,7 @@ serve(async (req) => {
 
     // 2. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
-    const sortedIds = [...aca_record_ids].sort();
+    const sortedIds = [...user_aca_record_ids].sort();
     const batchChecksum = await sha256(sortedIds.join("|"));
     const liabilityTokenHash = await sha256(`${client_id}|${timestamp}|${batchChecksum}`);
     const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
@@ -156,7 +156,7 @@ serve(async (req) => {
           client_id,
           liability_token_hash: liabilityTokenHash,
           batch_checksum: batchChecksum,
-          aca_record_references: aca_record_ids,
+          user_aca_record_ids: user_aca_record_ids,
           country_of_origin,
           digiramp_anchor_id: digiRampAnchorId,
           egress_type: intent_type,
@@ -241,7 +241,7 @@ serve(async (req) => {
           rail: routing,
         },
         audit: {
-          records_processed: aca_record_ids.length,
+          records_processed: user_aca_record_ids.length,
           intent: intent_type,
         },
       }),
