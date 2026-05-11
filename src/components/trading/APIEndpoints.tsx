@@ -300,11 +300,12 @@ axios.get('${origin}/v1/features/market-data', config)
         console.warn("[APIEndpoints][executeLiveCall][approval_flow] BEGIN — prompting wallet approval");
         toast.message("One-time USDC approval required — sign in your wallet.");
         const approval = await ensureUsdcApproval({ owner: buyerWallet });
-        if (!approval.ok) {
+        if (approval.ok !== true) {
+          const reason = (approval as { reason?: string }).reason ?? "unknown";
           console.error(
-            `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${approval.reason}`,
+            `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${reason}`,
           );
-          toast.error(`USDC approval failed: ${approval.reason}`);
+          toast.error(`USDC approval failed: ${reason}`);
           return;
         }
         console.info(
