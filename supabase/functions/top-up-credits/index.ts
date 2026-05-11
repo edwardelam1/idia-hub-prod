@@ -53,6 +53,8 @@ Deno.serve(async (req: Request) => {
     ).toLowerCase();
 
     const payment_reference: string = body.payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
+    const idempotency_key: string | undefined = body.idempotency_key;
+    const aca_metadata: Record<string, unknown> | undefined = body.aca_metadata;
     console.log(
       `[END: ${stage}] user_id=${user_id} credit_amount=${credit_amount} usd_amount=${usd_amount} routing=${routing} wallet=${user_wallet ?? "<none>"}`,
     );
@@ -70,6 +72,15 @@ Deno.serve(async (req: Request) => {
         throw new Error(`VALIDATION_FAILED: Buyer wallet identifier is missing for on-chain routing.`);
       }
     }
+    // ATOMIC FAILURE GATE: hardware-witnessed ACA is mandatory — no Platform Credits without a hardware tag.
+    if (!aca_metadata || typeof aca_metadata !== "object" || !(aca_metadata as any).hardware_tag) {
+      throw new Error(
+        `VALIDATION_FAILED: aca_metadata.hardware_tag is required. Hardware handshake cannot be bypassed.`,
+      );
+    }
+    if (!idempotency_key || typeof idempotency_key !== "string") {
+      throw new Error(`VALIDATION_FAILED: idempotency_key is required for atomic settlement.`);
+    }
     console.log(`[END: ${stage}] OK`);
 
     stage = "INIT_ADMIN_CLIENT";
@@ -77,13 +88,42 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     console.log(`[END: ${stage}]`);
 
+    // IDEMPOTENCY CHECK: replay safely if this exact intent already settled.
+    stage = "IDEMPOTENCY_CHECK";
+    console.log(`[BEGIN: ${stage}] key=${idempotency_key}`);
+    {
+      const { data: existing, error: idemError } = await supabase
+        .from("synapse_credit_ledger")
+        .select("blockchain_tx_hash, amount, metadata")
+        .eq("user_id", user_id)
+        .filter("metadata->>idempotency_key", "eq", idempotency_key)
+        .limit(1)
+        .maybeSingle();
+      if (idemError) {
+        console.warn(`[WARNING: ${stage}] lookup failed: ${idemError.message}`);
+      } else if (existing) {
+        console.log(`[END: ${stage}] REPLAY hit. hash=${existing.blockchain_tx_hash}`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            replayed: true,
+            hash: existing.blockchain_tx_hash,
+            updated_balance: null,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      } else {
+        console.log(`[END: ${stage}] no prior settlement.`);
+      }
+    }
+
     let txHash: string = payment_reference;
 
     // 🚨 FIX: Only broadcast to the blockchain if it is NOT a custodial move
     if (routing === "on-chain" && user_wallet !== "INTERNAL_CUSTODIAL_LEDGER") {
       stage = "ONCHAIN_BROADCAST";
       console.log(`[BEGIN: ${stage}] Loading viem...`);
-      const { createWalletClient, http, parseUnits, isAddress, getAddress } =
+      const { createWalletClient, createPublicClient, http, parseUnits, isAddress, getAddress } =
         await import("https://esm.sh/viem@2.9.20");
       const { privateKeyToAccount } = await import("https://esm.sh/viem@2.9.20/accounts");
       const { base } = await import("https://esm.sh/viem@2.9.20/chains");
@@ -103,6 +143,10 @@ Deno.serve(async (req: Request) => {
         chain: base,
         transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org"),
       });
+      const publicClient = createPublicClient({
+        chain: base,
+        transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org"),
+      });
 
       console.log(`[${stage}] Broadcasting ${credit_amount} USDC -> ${safeAddress}`);
       txHash = await client.writeContract({
@@ -113,7 +157,16 @@ Deno.serve(async (req: Request) => {
         chain: base,
         account,
       });
-      console.log(`[END: ${stage}] hash=${txHash}`);
+      console.log(`[${stage}] Awaiting confirmation hash=${txHash}`);
+      // ATOMIC FAILURE GATE: confirm the chain accepted the tx before we mint credits.
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`,
+        timeout: 90_000,
+      });
+      if (receipt.status !== "success") {
+        throw new Error(`ONCHAIN_BROADCAST_FAILED: tx ${txHash} reverted on Base.`);
+      }
+      console.log(`[END: ${stage}] confirmed hash=${txHash} block=${receipt.blockNumber}`);
     } else {
       console.log(`[SKIP: ONCHAIN_BROADCAST] routing=${routing} wallet=${user_wallet}`);
     }
@@ -129,11 +182,14 @@ Deno.serve(async (req: Request) => {
       blockchain_tx_hash: txHash,
       metadata: {
         class: "Synapse_Purchase",
+        product_class: "SAAS_UTILITY_PURCHASE",
         fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
         usd_amount: usd_amount,
         payment_reference: payment_reference,
         routing: routing,
         user_wallet: user_wallet ?? null,
+        idempotency_key,
+        aca_metadata,
       },
     });
     if (ledgerError) {
