@@ -24,7 +24,7 @@ interface WalletBalance {
 /**
  * useWalletBalance
  * @param isYielding - Mandatory flag to release the Auth Lock during biometrics.
- * When true, halts all background auth/network calls to prevent 'lock:sb-auth-token' contention.
+ * When true, halts background auth/network calls to prevent 'lock:sb-auth-token' contention.
  */
 export const useWalletBalance = (isYielding: boolean = false) => {
   console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
@@ -34,10 +34,10 @@ export const useWalletBalance = (isYielding: boolean = false) => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchBalance = useCallback(async () => {
-    // 🚨 YIELD GATE: Immediate abort to prioritize the Biometric Handshake
-    // Prevents the background thread from 'stealing' the auth lock during hardware auth.
+    // 🚨 YIELD GATE: Immediate abort to prioritize the Biometric Handshake.
+    // Prevents background polling from stealing the auth mutex during a transaction.
     if (isYielding) {
-      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Active. Aborting fetch to release session mutex.");
+      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Active. Halting background fetch.");
       if (abortControllerRef.current) abortControllerRef.current.abort();
       return;
     }
@@ -45,13 +45,12 @@ export const useWalletBalance = (isYielding: boolean = false) => {
     console.log("🚀 [useWalletBalance][fetchBalance] START: Initiating sync with on-chain truth.");
     setLoading(true);
 
-    // Cancel any previous hung requests to ensure the thread is clean
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
 
     try {
       // 1. AUTHENTICATION (Mutex-Sensitive)
-      console.log("[useWalletBalance][fetchBalance][Auth] START: Requesting authenticated session.");
+      console.log("[useWalletBalance][fetchBalance][Auth] START: Requesting session lock.");
       const {
         data: { session },
         error: authError,
@@ -63,7 +62,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
       }
 
       if (!session?.user) {
-        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session. Defaulting balance to 0.");
+        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session.");
         setBalance({ usdc_balance: 0 });
         return;
       }
@@ -76,23 +75,22 @@ export const useWalletBalance = (isYielding: boolean = false) => {
       let rpcUrl = "https://mainnet.base.org"; // High-availability default fallback
 
       try {
-        const { data: config, error: configError } = await supabase
+        // 🚨 FIXED: Cast query to 'any' to bypass SelectQueryError for missing relation types.
+        const { data: config, error: configError } = await (supabase
           .from("system_configs" as any)
           .select("value")
           .eq("key", "BASE_RPC_URL")
-          .maybeSingle();
+          .maybeSingle() as any);
 
         if (configError) {
           console.warn(
-            "[useWalletBalance][fetchBalance][RPC] WARN: system_configs relation missing or inaccessible. Falling back to public RPC.",
+            "[useWalletBalance][fetchBalance][RPC] WARN: system_configs relation missing. Using Base public RPC.",
           );
         } else if (config?.value) {
           rpcUrl = config.value.trim();
         }
       } catch (schemaErr) {
-        console.warn(
-          "[useWalletBalance][fetchBalance][RPC] WARN: Schema mismatch in system_configs. Defaulting to public transport.",
-        );
+        console.warn("[useWalletBalance][fetchBalance][RPC] WARN: Schema mismatch. Defaulting to public transport.");
       }
       console.log(`[useWalletBalance][fetchBalance][RPC] END: Transport initialized: ${rpcUrl.slice(0, 35)}...`);
 
@@ -119,7 +117,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
         transport: http(rpcUrl),
       });
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] START: Executing balanceOf(address) on-chain.`);
+      console.log(`[useWalletBalance][fetchBalance][Contract] START: Calling balanceOf(address) on-chain.`);
       const rawBalance = await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: USDC_ABI,
@@ -137,7 +135,6 @@ export const useWalletBalance = (isYielding: boolean = false) => {
         console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for transaction yield.");
       } else {
         console.error("🚨 [useWalletBalance][fetchBalance] FATAL ERROR:", err.message);
-        // Preserve previous balance on non-abort errors to prevent UI flicker
         setBalance((prev) => prev);
       }
     } finally {
