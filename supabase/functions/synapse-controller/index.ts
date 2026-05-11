@@ -24,13 +24,18 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Parse payload immediately to get the user_id (Bypasses strict getUser auth for MVP)
+    // Parse payload immediately
     const body = await req.json();
+
+    // Aggressive extraction to ensure Best Friend AI receipts are captured as arrays
+    const rawIds = body.aca_record_ids || [];
+    const aca_record_ids = Array.isArray(rawIds) ? rawIds : [rawIds].filter(Boolean);
+
     const {
       user_id,
-      client_id,
-      user_aca_record_ids = [],
-      intent_type = "RESEARCH",
-      query_complexity = 1.0,
+      client_id = "BEST_FRIEND_AI_RECEIPT", // Fallback to ensure liability token hashing succeeds
+      intent_type = "MARKETPLACE RESEARCH",
+      routing,
       country_of_origin = "US",
     } = body;
 
