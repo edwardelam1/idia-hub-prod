@@ -1,5 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Network
+const BASE_SEPOLIA_RPC = "https://sepolia.base.org";
+const BASE_MAINNET_RPC = "https://mainnet.base.org";
+const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL") || BASE_SEPOLIA_RPC;
+
+// Protocol contracts (Base Sepolia — testnet)
+const IDIA_TOKEN_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
+const REGISTRY_ADDRESS = "0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7";
+const LIABILITY_RECEIPT_ADDRESS = "0x9e1CD33c2534dbeb0E82db7A0366A483fC9bD6DE";
+const GLOBAL_WAR_CHEST = "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708"; // Timelock as fallback
+const POOL_FACTORY_ADDRESS = "0x60EA2012dd55B6E828c1ec3085821dA9d6658630";
+
+// USDC on Base Sepolia
+const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+
+// System wallets
+const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
+const TREASURY_WALLET = "0xd816D83703764551A7F292dbC435669AA89631a7";
+
+// Escrow addresses (for token distribution after data purchase)
+const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
