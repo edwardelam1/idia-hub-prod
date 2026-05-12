@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
+import { base } from "https://esm.sh/viem@2.9.20/chains";
+import { createWalletClient, http, publicActions, keccak256, toHex } from "https://esm.sh/viem@2.9.20";
+
 // Network
 const BASE_SEPOLIA_RPC = "https://sepolia.base.org";
 const BASE_MAINNET_RPC = "https://mainnet.base.org";
@@ -22,6 +26,22 @@ const TREASURY_WALLET = "0xd816D83703764551A7F292dbC435669AA89631a7";
 // Escrow addresses (for token distribution after data purchase)
 const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
 
+const LIABILITY_RECEIPT_ABI = [
+  {
+    name: "mintReceipt",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "dataBuyer", type: "address" },
+      { name: "acaHashes", type: "bytes32[]" },
+      { name: "purchaseAmount", type: "uint256" },
+      { name: "synapseReceiptId", type: "bytes32" },
+      { name: "dataBundleRef", type: "string" },
+    ],
+    outputs: [{ name: "tokenId", type: "uint256" }],
+  },
+] as const;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -36,11 +56,15 @@ async function sha256(input: string): Promise<string> {
 }
 
 serve(async (req) => {
+  let currentStep = "INIT";
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    currentStep = "AUTHENTICATION";
+    console.info(`[BEGIN: ${currentStep}] Validating caller identity.`);
+
     // 1. Authenticate caller using getUser() — reliable across all Supabase versions
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -57,7 +81,7 @@ serve(async (req) => {
     });
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData?.user?.id) {
-      console.error("Auth verification failed:", userError?.message);
+      console.error(`[FATAL: ${currentStep}] Auth verification failed:`, userError?.message);
       throw new Error("Invalid authentication token — could not resolve user identity");
     }
     const userId = userData.user.id;
@@ -67,7 +91,10 @@ serve(async (req) => {
       throw new Error("Invalid user identity — zero UUID rejected");
     }
 
-    console.log(`DELT Transfer: Authenticated user ${userId.slice(0, 8)}...`);
+    console.info(`[END: ${currentStep}] DELT Transfer: Authenticated user ${userId.slice(0, 8)}...`);
+
+    currentStep = "PAYLOAD_PARSING";
+    console.info(`[BEGIN: ${currentStep}] Extracting parameters.`);
 
     // 2. Parse and validate body
     const body = await req.json();
@@ -77,7 +104,12 @@ serve(async (req) => {
       country_of_origin = "US",
       egress_type = "api_query",
       data_summary = null,
+      egress_fee = 1000000, // Safe default to prevent undefined breaking the ledger insert
+      reference_id = `DELT-${Date.now()}`, // Safe default
     } = body;
+
+    const egressFee = egress_fee;
+    const referenceId = reference_id;
 
     const normalizedClientId = typeof client_id === "string" ? client_id.trim() : "";
     const normalizedAcaRecordIds = Array.isArray(aca_record_ids)
@@ -90,6 +122,10 @@ serve(async (req) => {
     }
 
     const timestamp = new Date().toISOString();
+    console.info(`[END: ${currentStep}] Parsed successfully. IDs count: ${normalizedAcaRecordIds.length}`);
+
+    currentStep = "CRYPTOGRAPHIC_ANCHORS";
+    console.info(`[BEGIN: ${currentStep}] Generating cryptographic hashes.`);
 
     // 3. Generate batch_checksum = SHA-256 of sorted aca_record_ids
     const sortedIds = [...normalizedAcaRecordIds].sort();
@@ -100,6 +136,11 @@ serve(async (req) => {
 
     // 5. Generate DigiRAMP anchor (internal cryptographic anchor)
     const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
+
+    console.info(`[END: ${currentStep}] Token Hash generated: ${liabilityTokenHash.slice(0, 8)}...`);
+
+    currentStep = "LEDGER_AND_EGRESS_WRITES";
+    console.info(`[BEGIN: ${currentStep}] Parallel DB operations executing.`);
 
     // 6. Parallel write using service role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -137,22 +178,86 @@ serve(async (req) => {
     ]);
 
     if (ledgerResult.error) {
-      console.error("Ledger write failed:", ledgerResult.error);
+      console.error(`[FATAL: ${currentStep}] Ledger write failed:`, ledgerResult.error);
       throw new Error(`Ledger write failed: ${ledgerResult.error.message}`);
     }
 
     if (egressResult.error) {
-      console.error("Egress log write failed:", egressResult.error);
+      console.error(`[FATAL: ${currentStep}] Egress log write failed:`, egressResult.error);
       throw new Error(`Egress log write failed: ${egressResult.error.message}`);
     }
 
+    console.info(`[TRACE: ${currentStep}] Reconciling Ledger ID onto Egress Log...`);
     // Update egress log with ledger reference
     await adminClient
       .from("egress_logs")
       .update({ synapse_ledger_entry_id: ledgerResult.data.id })
       .eq("id", egressResult.data.id);
 
-    console.log(`DELT Transfer: Success — egress_log ${egressResult.data.id}, user ${userId.slice(0, 8)}...`);
+    console.info(`[END: ${currentStep}] Success — egress_log ${egressResult.data.id}, user ${userId.slice(0, 8)}...`);
+
+    // ====================================================================
+    // PHASE 4: LIABILITY RECEIPT MINTING
+    // ====================================================================
+    currentStep = "MINTING_LIABILITY_RECEIPT";
+    let blockchainReceiptHash = "N/A";
+
+    try {
+      console.info(`[BEGIN: ${currentStep}] Initiating on-chain verification for Buyer.`);
+      const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
+
+      if (!rawKey) {
+        console.warn(`[WARN: ${currentStep}] RELAYER_PRIVATE_KEY missing. Bypassing on-chain mint.`);
+      } else {
+        console.info(`[TRACE: ${currentStep}] Configuring blockchain network connections...`);
+        const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
+        const account = privateKeyToAccount(formattedKey as `0x${string}`);
+        const client = createWalletClient({
+          account,
+          chain: base,
+          transport: http(BASE_RPC_URL),
+        }).extend(publicActions);
+
+        console.info(`[TRACE: ${currentStep}] Querying target profile for buyer wallet...`);
+        const { data: profile } = await adminClient.from("profiles").select("wallet_address").eq("id", userId).single();
+        const dataBuyerAddress = profile?.wallet_address || SYSTEM_CASH_REGISTER;
+
+        // Ensure strict bytes32 formatting for the blockchain execution
+        const synapseReceiptIdBytes = `0x${liabilityTokenHash}` as `0x${string}`;
+        const mappedAcaHashes = normalizedAcaRecordIds.map((id: string) => keccak256(toHex(id)));
+        const dataBundleRefStr = `bundle-${batchChecksum.slice(0, 8)}`;
+
+        console.info(`[TRACE: ${currentStep}] Broadcasting contract write to base-sepolia...`);
+        const hash = await client.writeContract({
+          address: LIABILITY_RECEIPT_ADDRESS,
+          abi: LIABILITY_RECEIPT_ABI,
+          functionName: "mintReceipt",
+          args: [
+            dataBuyerAddress as `0x${string}`,
+            mappedAcaHashes as `0x${string}`[],
+            BigInt(egressFee),
+            synapseReceiptIdBytes,
+            dataBundleRefStr,
+          ],
+        });
+
+        console.info(`[TRACE: ${currentStep}] Awaiting sequencer inclusion for TX: ${hash}`);
+        const receiptTx = await client.waitForTransactionReceipt({ hash });
+
+        if (receiptTx.status !== "success") {
+          throw new Error(`Transaction reverted: ${hash}`);
+        }
+
+        blockchainReceiptHash = hash;
+        console.info(`[END: ${currentStep}] Liability receipt locked on-chain. TX: ${blockchainReceiptHash}`);
+      }
+    } catch (mintError: any) {
+      console.error(`[FATAL: ${currentStep}] Liability receipt execution failed: ${mintError.message}`);
+      // Continuing execution to return the Token payload to the client despite the contract failing
+    }
+
+    currentStep = "FINAL_RESPONSE";
+    console.info(`[BEGIN: ${currentStep}] Packaging token issuance payload.`);
 
     // 7. Return full liability token object
     return new Response(
@@ -162,6 +267,7 @@ serve(async (req) => {
         batch_checksum: batchChecksum,
         digiramp_anchor_id: digiRampAnchorId,
         egress_log_id: egressResult.data.id,
+        on_chain_liability_hash: blockchainReceiptHash, // Newly injected output
         aca_record_references: normalizedAcaRecordIds,
         country_of_origin,
         timestamp,
@@ -172,11 +278,17 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
-  } catch (error) {
-    console.error("Liability Shield Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error: any) {
+    console.error(`🚨 [FATAL STALL: ${currentStep}]:`, error.message);
+    return new Response(
+      JSON.stringify({
+        error: error.message,
+        failed_at: currentStep,
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
