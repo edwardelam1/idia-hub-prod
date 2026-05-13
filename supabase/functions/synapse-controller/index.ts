@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { chargeBuyerUsdc } from "../_shared/charge-usdc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,6 +76,32 @@ serve(async (req) => {
     const activeWallet = profile?.wallet_address;
 
     // Strict Compliance Gate: No system fallbacks allowed.
+    if (routing === "on-chain") {
+      console.info(`[BEGIN: ON-CHAIN_USDC_CHARGE] Attempting to charge buyer wallet: ${activeWallet}`);
+
+      // FLAT_FEE_CR (1 CR) translates to $0.75 treasury value
+      const chargeResult = await chargeBuyerUsdc({
+        buyer_wallet: activeWallet,
+        usd_amount: 0.75,
+      });
+
+      if (!chargeResult.ok) {
+        // Granular error logging for silent stalling prevention
+        console.error(`🚨 [FATAL STALL: ON-CHAIN_USDC_CHARGE] Code: ${chargeResult.code}`);
+
+        // Switch on error codes to provide the frontend actionable feedback
+        if (chargeResult.code === "APPROVAL_REQUIRED") {
+          throw new Error(`USDC_APPROVAL_REQUIRED: Allowance insufficient for ${chargeResult.spender}`);
+        }
+        if (chargeResult.code === "INSUFFICIENT_USDC") {
+          throw new Error(`USDC_INSUFFICIENT_FUNDS: Wallet balance is below 0.75 USDC`);
+        }
+
+        throw new Error(`ON_CHAIN_CHARGE_REJECTED: ${chargeResult.code}`);
+      }
+
+      console.info(`[END: ON-CHAIN_USDC_CHARGE] Transaction Success. Hash: ${chargeResult.hash}`);
+    }
     if (routing === "on-chain" && !activeWallet) {
       console.error(
         `🚨 [FATAL STALL: VALIDATING_INPUTS] Compliance Hard Stop: User ${userId} lacks a registered wallet for USDC routing. Fallbacks are strictly prohibited.`,
