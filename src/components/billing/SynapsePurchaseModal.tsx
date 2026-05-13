@@ -167,7 +167,8 @@ const SynapsePurchaseModal = ({
         const approval = await ensureUsdcApproval({ owner: resolvedWalletAddress });
         console.log("[SynapsePurchaseModal][APPROVAL_GATE] END:", approval);
         if (!approval.ok) {
-          throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
+          const reason = (approval as { ok: false; reason: string }).reason;
+          throw new Error(`APPROVAL_REQUIRED: ${reason}. Relayer cannot pull funds without allowance.`);
         }
       } else {
         console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
