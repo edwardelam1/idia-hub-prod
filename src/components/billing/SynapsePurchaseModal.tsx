@@ -32,8 +32,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
-import { ensureUsdcApproval } from "@/lib/usdc-approval";
-
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const BASE_RATE = 0.75;
 
@@ -161,14 +159,6 @@ const SynapsePurchaseModal = ({
         if (availableUSDC < usdAmount) {
           console.error("🚨 [FATAL STALL: LIQUIDITY] Insufficient on-chain USDC funds.");
           throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
-        }
-
-        console.log("[SynapsePurchaseModal][APPROVAL_GATE] BEGIN: ensureUsdcApproval");
-        const approval = await ensureUsdcApproval({ owner: resolvedWalletAddress });
-        console.log("[SynapsePurchaseModal][APPROVAL_GATE] END:", approval);
-        if (!approval.ok) {
-          const reason = (approval as { ok: false; reason: string }).reason;
-          throw new Error(`APPROVAL_REQUIRED: ${reason}. Relayer cannot pull funds without allowance.`);
         }
       } else {
         console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
