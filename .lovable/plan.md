@@ -1,44 +1,52 @@
-# Hospitality Density Expansion — Round 2
+## Goal
+Finish the dual-rail Synapse billing flow: ensure the modal performs the USDC approval gate via the existing relayer-based shared module, and confirm the edge function matches the spec.
 
-Append the user-supplied bites verbatim to `src/taxonomy/nanoBites/hospitality.ts`, organized into clearly-labeled sections.
+## Scope assessment
 
-## Files Touched
+Most of what you described is already in place:
+- `SynapsePurchaseModal.tsx` no longer imports `captureHardwareTag`, already pulls `availableUSDC` from `protocolState?.usdc_balance ?? 0`, already does the `profiles.wallet_address` fallback lookup, sends `resolvedWalletAddress` as `user_wallet`, and keeps `aca_metadata` free of `hardware_tag`.
+- `top-up-credits/index.ts` already imports and delegates to `chargeBuyerUsdc`, has no hardware_tag validation, and routes `fiat` straight to the `corporate_revenue` column.
 
-**Modified**: `src/taxonomy/nanoBites/hospitality.ts`
+The remaining functional gap is the **client-side approval gate**, which was explicitly removed in a prior pass and now needs to be reinstated per your instructions.
 
-## Bites To Append (37 total)
+## Changes
 
-### Theme Park (`tertiary.hospitality.theme_park`) — 17 bites
-Grouped into 6 sections:
-1. Guest Mgmt, Queues & Entitlements (4): biometric ticket sync, virtual boarding group, expedited queue yield mgmt, VIP tour routing
-2. Attraction Operations (3): THRC vs AHRC throughput, 101 downtime codes, block-zone E-Stop reset
-3. Entertainment & Show Control (3): character spatial rotation, performer equity heat-index cool-downs, parade GPS show control
-4. Mega-Park F&B (2): mobile order throttle, Red Ticket allergy chain-of-custody
-5. EVS & Logistics (3): Code V biohazard dispatch, restroom IoT turnover, fleet headway
-6. Security & Incident Command (2): lost-child lockdown, lightning weather evacuation
+### 1. `src/components/billing/SynapsePurchaseModal.tsx`
+- Add import: `import { ensureUsdcApproval } from "@/lib/usdc-approval";`
+- In `handlePurchase`, after the `availableUSDC < usdAmount` check (still inside the `paymentRail === "usdc"` branch), insert:
+  ```ts
+  console.log("[SynapsePurchaseModal][APPROVAL_GATE] BEGIN: ensureUsdcApproval");
+  const approval = await ensureUsdcApproval({ owner: resolvedWalletAddress });
+  console.log("[SynapsePurchaseModal][APPROVAL_GATE] END:", approval);
+  if (!approval.ok) {
+    throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
+  }
+  ```
+- Add a defense-in-depth wallet derivation line right above the profile fetch (used only as a logging/telemetry hint; the profile value remains the source of truth):
+  ```ts
+  const userWalletAddress =
+    walletBalance?.wallet_address ||
+    balanceData?.wallet_address ||
+    (user as any)?.wallet_address ||
+    (user as any)?.user_metadata?.wallet_address;
+  ```
+  (Requires pulling `user` from `useAuth()` and `walletBalance` from `useWalletBalance()` — both hooks are already used in the file; only the destructured fields need expanding.)
+- Keep all existing `[BEGIN]`/`[END]` console logs; add the two new ones above.
+- Worldpay path stays untouched — no on-chain calls in that branch.
 
-### Café & Bakery (`tertiary.hospitality.cafe_bakery`) — 5 bites
-Batch routing, modifier matrix POS, waste/spoilage log, coffee roast-date FIFO, frictionless loyalty.
+### 2. `supabase/functions/top-up-credits/index.ts`
+No code change required — already conforms:
+- No `aca_metadata.hardware_tag` validation present.
+- `chargeBuyerUsdc` imported from `../_shared/charge-usdc.ts` and invoked exactly per the spec snippet.
+- `fiat` routing skips the on-chain branch and updates `wallets.corporate_revenue`.
 
-### Catering & Banquets (`tertiary.hospitality.catering`) — 5 bites
-BEO generation, pack sheet sync, scaled prep lists, deposit schedule, event staffing matrix.
+I'll re-verify on implementation and only patch if drift is found.
 
-### Home Services / STR (`tertiary.hospitality.home_services`) — 5 bites
-Dynamic door codes, vendor dispatch, damage escrow pre-auth, property inspection w/ photo, owner statement w/ commission deduction.
+## Out of scope
+- No UI/style/layout changes to the modal.
+- No DB migrations.
+- No changes to `_shared/charge-usdc.ts` or `usdc-approval.ts`.
 
-## Notes & Tier Distribution
-
-- Two bites use `valueChainStage: 'production'` and several use `'sales'`, `'marketing'`, `'finance'` — these are **not** in the existing `ValueChainStage` union (`inbound_logistics | operations | outbound_logistics | marketing_sales | service | infrastructure | human_resources | technology | procurement`). I will normalize on insert:
-  - `'production'` → `'operations'`
-  - `'sales'` → `'marketing_sales'`
-  - `'marketing'` → `'marketing_sales'`
-  - `'finance'` → `'infrastructure'`
-- This preserves type safety without weakening the union. The `microElement` field is free-form string and passes through verbatim (e.g., `'pos'`, `'kitchen'`, `'crm'`, `'facilities'`).
-- All bites preserve user-supplied `id`, `task`, `cadence`, `automatable`, and `requiresTier`.
-- No mock/placeholder data; production-ready.
-
-## Quality Bar
-
-- Inserted as one append block, section-commented to mirror existing file style.
-- Bite count post-merge: existing (~38 from prior round) + 37 new = ~75 hospitality bites, plus the original fine_dining/diner/bar_nightlife seed bites.
-- No changes to taxonomy types, routing, or industry nodes — `theme_park`, `cafe_bakery`, `catering`, `home_services` industry nodes already exist in `hospitality.ts` industries file.
+## Verification
+- Read both files post-edit to confirm imports compile and the approval gate sits inside the `usdc` branch.
+- Confirm the build remains green (handled automatically by the harness).
