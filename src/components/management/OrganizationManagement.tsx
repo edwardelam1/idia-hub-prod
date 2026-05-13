@@ -253,7 +253,7 @@ const ClientOrganizations = () => {
         {
           business_id: businessData.id,
           user_id: formData.ownerUserId,
-          role: "owner",
+          role: "csuite",
           is_active: true,
           accepted_at: new Date().toISOString(),
         },
@@ -524,7 +524,7 @@ const ClientOrganizations = () => {
           {
             business_id: businessData.id,
             user_id: selectedRequest.user_id,
-            role: "owner",
+            role: "csuite",
             is_active: true,
           },
         ]);
