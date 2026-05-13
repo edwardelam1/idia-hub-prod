@@ -1,6 +1,7 @@
 {
   "imports": {
     "viem": "npm:viem@2.9.20",
-    "viem/": "npm:viem@2.9.20/"
+    "viem/": "npm:viem@2.9.20/",
+    "@shared/charge-usdc": "../_shared/charge-usdc.ts"
   }
 }
