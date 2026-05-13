@@ -93,7 +93,8 @@ const SynapseTopUp = () => {
         console.info("[SynapseTopUp][APPROVAL] Verifying relayer allowance...");
         const approval = await ensureUsdcApproval({ owner: provisionedWallet });
         if (!approval.ok) {
-          throw new Error(`APPROVAL_FAILED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
+          const reason = (approval as { ok: false; reason: string }).reason;
+          throw new Error(`APPROVAL_FAILED: ${reason}. Relayer cannot pull funds without allowance.`);
         }
       }
 
