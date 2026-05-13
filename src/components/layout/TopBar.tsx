@@ -97,7 +97,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
       <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
         <SidebarTrigger className="flex-shrink-0" />
         <div className="min-w-0">
-          <h1 className="text-sm md:text-lg font-semibold text-foreground truncate">Welcome back, {displayName}</h1>
+          <h1 className="text-sm md:text-lg font-semibold text-foreground truncate">Welcome Back, {displayName}</h1>
           <p className="text-xs md:text-sm text-muted-foreground truncate hidden sm:block">{getOrganization()}</p>
         </div>
       </div>
@@ -106,17 +106,17 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
         <IdentityStatusPills />
 
         <div className="hidden sm:flex items-center space-x-2">
-            <SynapsePurchaseModal
-              trigger={
-                <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
-                  <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
-                  <span className="text-xs md:text-sm font-medium text-primary">
-                    {isLoading ? "..." : Math.floor(synapseCredits)}
-                  </span>
-                  <span className="text-xs text-primary/70">Cr</span>
-                </button>
-              }
-            />
+          <SynapsePurchaseModal
+            trigger={
+              <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
+                <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
+                <span className="text-xs md:text-sm font-medium text-primary">
+                  {isLoading ? "..." : Math.floor(synapseCredits)}
+                </span>
+                <span className="text-xs text-primary/70">Cr</span>
+              </button>
+            }
+          />
         </div>
 
         <NotificationsCenter />
