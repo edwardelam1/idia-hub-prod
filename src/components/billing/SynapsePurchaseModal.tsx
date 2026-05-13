@@ -30,11 +30,12 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
-import { captureHardwareTag } from "@/lib/hardware-identifier"; // ADDED HARDWARE HANDSHAKE IMPORT
+import { ensureUsdcApproval } from "@/lib/usdc-approval";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const BASE_RATE = 0.75;
@@ -67,12 +68,14 @@ const SynapsePurchaseModal = ({
 }: SynapsePurchaseModalProps) => {
   console.log("[SynapsePurchaseModal][Component] START: Rendering component.");
 
+  const { user } = useAuth();
   const { balanceData, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
   const currentBalance = balanceData?.available_credits ?? 0;
 
   // Bring in the internal IDIA Life wallet balances (CUSTODIAL TRUTH)
   const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
   const availableUSDC = walletBalance?.usdc_balance ?? 0;
+  const userWalletAddress = (user as any)?.wallet_address;
 
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
@@ -120,7 +123,7 @@ const SynapsePurchaseModal = ({
   };
 
   const handlePurchase = async () => {
-    console.log("🚀 [SynapsePurchaseModal][handlePurchase] START: Initiating custodial settlement.");
+    console.log("🚀 [SynapsePurchaseModal][handlePurchase] START: Initiating settlement.");
     if (!canProceed) return;
 
     setStep("processing");
@@ -130,70 +133,57 @@ const SynapsePurchaseModal = ({
       console.log(
         `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
       );
-      if (availableUSDC < usdAmount) {
-        console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
+      if (paymentRail === "usdc" && availableUSDC < usdAmount) {
+        console.error("🚨 [FATAL STALL: LIQUIDITY] Insufficient on-chain USDC funds.");
         throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
       }
 
-      // 2. GENERATE SETTLEMENT REFERENCE
-      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
-
-      if (paymentRail === "usdc") {
-        console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
-        await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate ledger lock UX
-      } else {
-        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
-      }
-
-      // 3. AUTHENTICATION & DISPATCH
-      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
+      // 2. AUTHENTICATION & WALLET APPROVAL GATE
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
-        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Auth session missing.");
+        console.error("🚨 [FATAL STALL: AUTH] Auth session missing.");
         throw new Error("Authentication failed. Please re-login.");
       }
 
-      // ====================================================================
-      // 🚨 HARDWARE HANDSHAKE (MANDATORY): Capture the biometric/hardware ACA
-      // ====================================================================
-      console.log("[SynapsePurchaseModal][ACA] START: Triggering Bio-Sovereign hardware prompt.");
-      const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
-
-      if (!aca || !aca.hardware_tag) {
-        console.error("[SynapsePurchaseModal][ACA] ERROR: Hardware tag null or undefined.");
-        throw new Error("HARDWARE_AUTH_FAILED: Biometric signature was not captured.");
+      if (paymentRail === "usdc") {
+        console.log("[SynapsePurchaseModal][APPROVAL] START: Verifying USDC Relayer allowance...");
+        const approval = await ensureUsdcApproval({ owner: userWalletAddress });
+        if (!approval.ok) {
+          console.error(`🚨 [FATAL STALL: APPROVAL] ${approval.reason}`);
+          throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
+        }
+        console.log("[SynapsePurchaseModal][APPROVAL] END: Allowance verified.");
+      } else {
+        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
-      console.log(`[SynapsePurchaseModal][ACA] END: hardware_tag capture successful.`);
 
+      // 3. GENERATE SETTLEMENT REFERENCE
+      const txReference =
+        paymentRail === "usdc" ? `INT-${crypto.randomUUID().slice(0, 8)}` : `WP-${crypto.randomUUID().slice(0, 8)}`;
       const idempotencyKey = crypto.randomUUID();
 
-      // 🚨 CRITICAL BYPASS: Sending "INTERNAL_CUSTODIAL_LEDGER" to pass the Edge Function bouncer
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
         usd_amount: usdAmount,
         payment_reference: txReference,
-        payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
+        payment_method: paymentRail === "usdc" ? "usdc" : "worldpay",
+        routing: paymentRail === "usdc" ? "on-chain" : "fiat", // Strictly separated rails
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: "INTERNAL_CUSTODIAL_LEDGER",
+        user_wallet: paymentRail === "usdc" ? userWalletAddress : null, // Replaced static override
         idempotency_key: idempotencyKey,
         aca_metadata: {
           consent_id: idempotencyKey,
-          hardware_tag: aca.hardware_tag,
-          aca_hash: aca.aca_hash,
-          intent: aca.intent,
-          timestamp: aca.timestamp,
-          source: aca.source,
           product_class: "SAAS_UTILITY_PURCHASE",
         },
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Payload:", JSON.stringify(payload, null, 2));
+      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
 
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: payload,
@@ -203,7 +193,7 @@ const SynapsePurchaseModal = ({
       });
 
       if (topUpError) {
-        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Function rejected request.", topUpError);
+        console.error(`🚨 [FATAL STALL: LEDGER_DISPATCH] Function rejected request: ${topUpError.message}`);
         throw topUpError;
       }
 
