@@ -75,7 +75,13 @@ const SynapsePurchaseModal = ({
   // Bring in the internal IDIA Life wallet balances (CUSTODIAL TRUTH)
   const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
   const availableUSDC = walletBalance?.usdc_balance ?? 0;
-  const userWalletAddress = (user as any)?.wallet_address;
+
+  // 🚨 ROBUST WALLET EXTRACTION: Ensures the approval gate always has an owner address
+  const userWalletAddress =
+    walletBalance?.wallet_address ||
+    balanceData?.wallet_address ||
+    (user as any)?.wallet_address ||
+    (user as any)?.user_metadata?.wallet_address;
 
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
@@ -129,61 +135,72 @@ const SynapsePurchaseModal = ({
     setStep("processing");
 
     try {
-      // 1. LIQUIDITY VERIFICATION
-      console.log(
-        `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
-      );
-      if (paymentRail === "usdc" && availableUSDC < usdAmount) {
-        console.error("🚨 [FATAL STALL: LIQUIDITY] Insufficient on-chain USDC funds.");
-        throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
+      // 1. LIQUIDITY VERIFICATION & ON-CHAIN DELEGATION
+      if (paymentRail === "usdc") {
+        if (!userWalletAddress) {
+          throw new Error("No provisioned wallet address found. Please link your wallet.");
+        }
+
+        console.log(
+          `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
+        );
+        if (availableUSDC < usdAmount) {
+          console.error("🚨 [SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
+          throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
+        }
+
+        // 🚨 ON-CHAIN GATE: Ensure Relayer Allowance before dispatching Edge Function
+        console.log("[SynapsePurchaseModal][APPROVAL] Verifying vault allowance...");
+        const approval = await ensureUsdcApproval({ owner: userWalletAddress });
+        if (!approval.ok) {
+          throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
+        }
       }
 
-      // 2. AUTHENTICATION & WALLET APPROVAL GATE
+      // 2. GENERATE SETTLEMENT REFERENCE
+      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
+
+      if (paymentRail === "usdc") {
+        console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
+        await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate ledger lock UX
+      } else {
+        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
+      }
+
+      // 3. AUTHENTICATION
+      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
-        console.error("🚨 [FATAL STALL: AUTH] Auth session missing.");
+        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Auth session missing.");
         throw new Error("Authentication failed. Please re-login.");
       }
 
-      if (paymentRail === "usdc") {
-        console.log("[SynapsePurchaseModal][APPROVAL] START: Verifying USDC Relayer allowance...");
-        const approval = await ensureUsdcApproval({ owner: userWalletAddress });
-        if (!approval.ok) {
-          console.error(`🚨 [FATAL STALL: APPROVAL] ${approval.reason}`);
-          throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
-        }
-        console.log("[SynapsePurchaseModal][APPROVAL] END: Allowance verified.");
-      } else {
-        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      // 3. GENERATE SETTLEMENT REFERENCE
-      const txReference =
-        paymentRail === "usdc" ? `INT-${crypto.randomUUID().slice(0, 8)}` : `WP-${crypto.randomUUID().slice(0, 8)}`;
+      // 4. ATOMIC DISPATCH
       const idempotencyKey = crypto.randomUUID();
-
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
         usd_amount: usdAmount,
         payment_reference: txReference,
         payment_method: paymentRail === "usdc" ? "usdc" : "worldpay",
-        routing: paymentRail === "usdc" ? "on-chain" : "fiat", // Strictly separated rails
+        routing: paymentRail === "usdc" ? "on-chain" : "fiat", // Active trigger for the Synapse Controller
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: paymentRail === "usdc" ? userWalletAddress : null, // Replaced static override
+        user_wallet: paymentRail === "usdc" ? userWalletAddress : null, // 🚨 Pass actual user wallet
         idempotency_key: idempotencyKey,
         aca_metadata: {
           consent_id: idempotencyKey,
+          intent: "SYNAPSE_CREDIT_PURCHASE",
+          timestamp: new Date().toISOString(),
           product_class: "SAAS_UTILITY_PURCHASE",
         },
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
 
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: payload,
@@ -193,13 +210,13 @@ const SynapsePurchaseModal = ({
       });
 
       if (topUpError) {
-        console.error(`🚨 [FATAL STALL: LEDGER_DISPATCH] Function rejected request: ${topUpError.message}`);
+        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Function rejected request.", topUpError);
         throw topUpError;
       }
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] END: Settlement successful.");
 
-      // 4. SUCCESS HYDRATION
+      // 5. SUCCESS HYDRATION
       setStep("success");
       toast.success("Synapse Hydrated!", {
         description: `${formatCredits(displayCredits)} added to your operational ledger.`,
@@ -377,11 +394,11 @@ const SynapsePurchaseModal = ({
                 <div>
                   <p className="text-sm text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
                   <p className="font-bold text-foreground flex items-center gap-2">
-                    <CircleDollarSign className="h-4 w-4 text-primary" /> Internal IDIA Life Transfer
+                    <CircleDollarSign className="h-4 w-4 text-primary" /> Verified Wallet Transfer
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1">
-                  <ShieldCheck className="h-3 w-3" /> Verified Vault
+                  <ShieldCheck className="h-3 w-3" /> Secure Vault
                 </Badge>
               </div>
 
@@ -390,7 +407,7 @@ const SynapsePurchaseModal = ({
                   onClick={() => setPaymentRail("usdc")}
                   className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "usdc" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
                 >
-                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
+                  <CircleDollarSign className="h-4 w-4" /> On-Chain USDC
                 </button>
                 <button
                   onClick={() => setPaymentRail("worldpay")}
@@ -404,7 +421,8 @@ const SynapsePurchaseModal = ({
                 <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     By clicking confirm, you authorize the transfer of <strong>${usdAmount.toFixed(2)} USDC</strong>{" "}
-                    from your IDIA Life wallet to IDIA Data Inc. Credits will be available instantly.
+                    from your IDIA wallet to the Treasury. This requires a one-time blockchain approval if not already
+                    set.
                   </p>
                 </div>
               ) : (
@@ -434,7 +452,7 @@ const SynapsePurchaseModal = ({
           {step === "processing" && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="font-semibold text-center uppercase tracking-widest text-xs">Executing Internal Swap...</p>
+              <p className="font-semibold text-center uppercase tracking-widest text-xs">Executing Protocol...</p>
             </div>
           )}
 
