@@ -87,16 +87,6 @@ const SynapseTopUp = () => {
       } = await supabase.auth.getSession();
       if (authError || !session) throw new Error("AUTH_SESSION_UNSTABLE: Lock lost or session expired.");
 
-      // 🚨 2. USDC APPROVAL GATE (ON-CHAIN ONLY)
-      if (paymentRail === "internal_usdc") {
-        console.info("[SynapseTopUp][APPROVAL] Verifying relayer allowance...");
-        const approval = await ensureUsdcApproval({ owner: provisionedWallet });
-        if (!approval.ok) {
-          const reason = (approval as { ok: false; reason: string }).reason;
-          throw new Error(`APPROVAL_FAILED: ${reason}. Relayer cannot pull funds without allowance.`);
-        }
-      }
-
       // 3. THE HARDWARE HANDSHAKE (MANDATORY)
       console.log("[SynapseTopUp][ACA] START: Triggering Bio-Sovereign hardware prompt.");
       const aca = await captureHardwareTag(session.user.id, "SYNAPSE_CREDIT_PURCHASE");
