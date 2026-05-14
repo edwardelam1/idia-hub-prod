@@ -3,13 +3,14 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
 import { chargeBuyerUsdc } from "../_shared/charge-usdc.ts";
+import { isAddress } from "https://esm.sh/viem@2.9.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-console.log("[BOOT: top-up-credits] Synapse Hydration Engine v5 (No-ACA) online.");
+console.log("[BOOT: top-up-credits] Synapse Hydration Engine v7 (Relayer Delegated Pull) online.");
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -49,8 +50,8 @@ Deno.serve(async (req: Request) => {
       throw new Error(`VALIDATION_FAILED: credit_amount must be > 0. Received: ${body.credit_amount ?? body.amount}`);
     }
     if (routing === "on-chain") {
-      if (!user_wallet || typeof user_wallet !== "string") {
-        throw new Error(`VALIDATION_FAILED: Buyer wallet identifier is missing for on-chain routing.`);
+      if (!user_wallet || typeof user_wallet !== "string" || !isAddress(user_wallet)) {
+        throw new Error(`VALIDATION_FAILED: Valid buyer wallet identifier is missing for on-chain routing.`);
       }
     }
     if (!idempotency_key || typeof idempotency_key !== "string") {
@@ -92,9 +93,10 @@ Deno.serve(async (req: Request) => {
 
     let txHash: string = payment_reference;
 
-    if (routing === "on-chain" && user_wallet !== "INTERNAL_CUSTODIAL_LEDGER") {
+    // 🚨 RELAYER DELEGATED PULL: The Relayer pays gas and executes transferFrom based on existing allowance
+    if (routing === "on-chain") {
       stage = "SYNAPSE_BILLING_CHARGE";
-      console.log(`[BEGIN: ${stage}] Attempting to charge ${usd_amount} USDC to ${user_wallet}`);
+      console.log(`[BEGIN: ${stage}] Relayer attempting to pull ${usd_amount} USDC from ${user_wallet}`);
 
       const chargeResult = await chargeBuyerUsdc({
         buyer_wallet: user_wallet!,
@@ -102,12 +104,13 @@ Deno.serve(async (req: Request) => {
       });
 
       if (!chargeResult.ok) {
+        // If this throws APPROVAL_REQUIRED, the blockchain is confirming the Relayer lacks allowance for this specific wallet.
         console.error(`🚨 [FATAL STALL: ${stage}] ${chargeResult.code}: ${chargeResult.message}`);
         throw new Error(`USDC_CHARGE_REJECTED: ${chargeResult.code}`);
       }
 
       txHash = chargeResult.hash!;
-      console.log(`[END: ${stage}] Settlement verified. Hash=${txHash}`);
+      console.log(`[END: ${stage}] Settlement verified on Base. Hash=${txHash}`);
     } else {
       console.log(`[SKIP: ONCHAIN_CHARGE] routing=${routing} wallet=${user_wallet}`);
     }
