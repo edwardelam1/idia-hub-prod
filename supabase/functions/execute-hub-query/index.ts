@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
         user_id,
         amount: 0,
         entry_type: "SETTLEMENT",
-        status: "SETTLED",
+        status: "settled",
         reference_id: consumptionRow.id,
         metadata: {
           settled_consumption_id: consumptionRow.id,

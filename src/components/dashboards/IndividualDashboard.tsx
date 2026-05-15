@@ -101,7 +101,7 @@ const IndividualDashboard = () => {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-[9px] border-primary/20 text-primary py-0 h-5">
-            {creditsLoading ? "SYNCING..." : "STATE: SETTLED"}
+            {creditsLoading ? "SYNCING..." : "STATE: settled"}
           </Badge>
           <ShieldCheck className="h-4 w-4 text-primary opacity-30" />
         </div>

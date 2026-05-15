@@ -26,10 +26,4 @@ export const FOODBEV_BITES: NanoBite[] = [
   { id: 'fb.bk.3', industryId: 'secondary.foodbev.bakery_production', valueChainStage: 'operations', microElement: "Allergen", task: "Allergen-control log", cadence: 'daily', automatable: true, requiresTier: 'enterprise' },
   { id: 'fb.bk.4', industryId: 'secondary.foodbev.bakery_production', valueChainStage: 'outbound_logistics', microElement: "Wholesale", task: "Wholesale-route delivery", cadence: 'daily', automatable: true },
   { id: 'fb.bk.5', industryId: 'secondary.foodbev.bakery_production', valueChainStage: 'service', microElement: "Recall", task: "Lot-recall workflow", cadence: 'event', automatable: true, requiresTier: 'enterprise' },
-  // secondary.foodbev.food_truck
-  { id: 'fb.ft.1', industryId: 'secondary.foodbev.food_truck', valueChainStage: 'operations', microElement: "Service Loc", task: "Service-location schedule", cadence: 'daily', automatable: true },
-  { id: 'fb.ft.2', industryId: 'secondary.foodbev.food_truck', valueChainStage: 'operations', microElement: "Prep", task: "Daily prep list", cadence: 'daily', automatable: true },
-  { id: 'fb.ft.3', industryId: 'secondary.foodbev.food_truck', valueChainStage: 'marketing_sales', microElement: "Mobile POS", task: "Mobile-POS sale", cadence: 'daily', automatable: true },
-  { id: 'fb.ft.4', industryId: 'secondary.foodbev.food_truck', valueChainStage: 'infrastructure', microElement: "Health", task: "Health-permit log", cadence: 'weekly', automatable: true, requiresTier: 'pro' },
-  { id: 'fb.ft.5', industryId: 'secondary.foodbev.food_truck', valueChainStage: 'operations', microElement: "Restock", task: "Commissary restock", cadence: 'weekly', automatable: true },
 ];

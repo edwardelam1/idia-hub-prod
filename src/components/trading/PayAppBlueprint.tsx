@@ -75,6 +75,12 @@ import {
   Cannabis,
   Globe,
   Beer,
+  Save,
+  Power,
+  PowerOff,
+  RotateCcw,
+  Plus,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -99,6 +105,7 @@ interface SelectedModule {
   parentId?: string;
   parentName?: string;
   isDefault?: boolean;
+  fromExplosion?: boolean;
   icon?: LucideIcon;
   color?: string;
 }
@@ -133,10 +140,19 @@ const verticalCategories: VerticalCategory[] = [
       { id: "hosp-cafe", name: "Café & Bakery", description: "Coffee & pastries" },
       { id: "hosp-bar", name: "Bar & Lounge", description: "Beverage service" },
       { id: "hosp-catering", name: "Catering", description: "Event food service" },
-      { id: "hosp-theme-park-ops", name: "Theme Park Ops", description: "Queues, ride telemetry, biometric entitlements" },
+      { id: "hosp-food-truck", name: "Food Truck", description: "Mobile food service" },
+      {
+        id: "hosp-theme-park-ops",
+        name: "Theme Park Ops",
+        description: "Queues, ride telemetry, biometric entitlements",
+      },
       { id: "hosp-cmms", name: "CMMS Work Orders", description: "Preventive maintenance & LOTO sign-offs" },
       { id: "hosp-kds", name: "KDS Routing", description: "Zone routing for broiler / fry / garde manger" },
-      { id: "hosp-housekeeping-inv", name: "Housekeeping Inventory", description: "Cart par levels & chemical manifests" },
+      {
+        id: "hosp-housekeeping-inv",
+        name: "Housekeeping Inventory",
+        description: "Cart par levels & chemical manifests",
+      },
       { id: "hosp-life-safety", name: "Life Safety Compliance", description: "NFPA 101, sprinkler & hood inspections" },
     ],
   },
@@ -533,7 +549,6 @@ const verticalCategories: VerticalCategory[] = [
       { id: "fb-winery", name: "Winery", description: "Wine production" },
       { id: "fb-distillery", name: "Distillery", description: "Spirits production" },
       { id: "fb-bakery-prod", name: "Bakery Production", description: "Baked goods" },
-      { id: "fb-food-truck", name: "Food Truck", description: "Mobile food" },
     ],
   },
 ];
@@ -575,6 +590,19 @@ export const PayAppBlueprint = () => {
   const [provisioningCode, setProvisioningCode] = useState<string>("");
   const [dragOverZone, setDragOverZone] = useState(false);
   const [animatingModules, setAnimatingModules] = useState<Set<string>>(new Set());
+
+  // ── Provision Code Log state ────────────────────────────────────────────────
+  interface SchemaRow {
+    id: string;
+    code: string;
+    label: string;
+    status: string;
+    updated_at: string;
+    payload: any;
+  }
+  const [schemaLog, setSchemaLog] = useState<SchemaRow[]>([]);
+  const [loadedSchemaId, setLoadedSchemaId] = useState<string | null>(null);
+  const [schemaSaving, setSchemaSaving] = useState(false);
 
   // ── Business Taxonomy Engine bootstrap ──────────────────────────────────────
   // Maps the App Builder's vertical IDs to formal taxonomy IndustryNode IDs.
@@ -767,21 +795,43 @@ export const PayAppBlueprint = () => {
       const dragData = dragDataRef.current;
       if (!dragData) return;
 
-      const exists = selectedModules.some((m) => m.id === dragData.id);
-      if (!exists) {
-        const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
-        setSelectedModules((prev) => [
-          ...prev,
-          {
-            id: dragData.id,
-            name: dragData.name,
-            parentId: dragData.parentId,
-            parentName: dragData.parentName,
-            icon: vertical?.icon,
-            color: dragData.color,
-          },
-        ]);
-        toast.success(`Added ${dragData.name} module`);
+      // STRICT 1:1 EXPLOSION: if the drop target is a top-level vertical
+      // (the "Carton"), explode it into its sub-modules in the Blueprint Zone
+      // so the visible UI matches the JSON exactly. Visual gravity-fall stays.
+      const rootVertical = verticalCategories.find((v) => v.id === dragData.id);
+      if (rootVertical) {
+        const newSubs = rootVertical.subModules
+          .filter((s) => !selectedModules.some((m) => m.id === s.id))
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            parentId: rootVertical.id,
+            parentName: rootVertical.name,
+            fromExplosion: true,
+            icon: rootVertical.icon,
+            color: rootVertical.color,
+          }));
+        if (newSubs.length > 0) {
+          setSelectedModules((prev) => [...prev, ...newSubs]);
+          toast.success(`Exploded ${rootVertical.name} → ${newSubs.length} modules`);
+        }
+      } else {
+        const exists = selectedModules.some((m) => m.id === dragData.id);
+        if (!exists) {
+          const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
+          setSelectedModules((prev) => [
+            ...prev,
+            {
+              id: dragData.id,
+              name: dragData.name,
+              parentId: dragData.parentId,
+              parentName: dragData.parentName,
+              icon: vertical?.icon,
+              color: dragData.color,
+            },
+          ]);
+          toast.success(`Added ${dragData.name} module`);
+        }
       }
       dragDataRef.current = null;
     },
@@ -790,8 +840,25 @@ export const PayAppBlueprint = () => {
 
   const handleRemoveModule = useCallback((moduleId: string) => {
     setSelectedModules((prev) => prev.filter((m) => m.id !== moduleId));
+    // Cascade-purge: drop every Nano-Bite tied to this module's industry so
+    // the background taxonomy state mirrors the Blueprint Zone exactly.
+    const industryId = getRoute(moduleId)?.industryId;
+    if (industryId) {
+      const industryBiteIds = new Set(
+        getNanoBitesFor({ industryId }).map((b) => b.id),
+      );
+      taxonomy.setClassification((prev) => {
+        const purged = (prev.selectedNanoBiteIds || []).filter(
+          (id) => !industryBiteIds.has(id),
+        );
+        console.log(
+          `[MANIFEST_INTEGRITY]: Purged ${(prev.selectedNanoBiteIds?.length || 0) - purged.length} bites for industry [${industryId}].`,
+        );
+        return { ...prev, selectedNanoBiteIds: purged };
+      });
+    }
     toast.info("Module removed");
-  }, []);
+  }, [taxonomy]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(provisioningCode);
@@ -802,13 +869,15 @@ export const PayAppBlueprint = () => {
 
   const generateBlueprintJSON = () => {
     console.log("[generateBlueprintJSON] START: Compiling Multi-Expert Manifest.");
+    console.log("[JSON_GEN]: START - Evaluating state.");
+    console.log("[PROVISIONING]: Syncing payload for code:", provisioningCode);
 
     const business = approvedBusinesses.find((b) => b.id.toString() === selectedBusiness);
     const businessName = business?.name || "Unassigned";
 
     const customSelected = selectedModules.filter((m) => !m.isDefault);
     const selectedBiteIds = new Set(taxonomy?.classification?.selectedNanoBiteIds || []);
-    
+
     // State for explosion logic
     const activeSovereignNodes: { id: string; name: string }[] = [];
     const itemizedSidebarManifest: { id: string; name: string; vertical: string | null }[] = [];
@@ -816,14 +885,15 @@ export const PayAppBlueprint = () => {
     // Helper to safely inject unique nodes into the manifests
     const injectNode = (id: string, name: string, verticalName: string | null) => {
       console.log(`[injectNode] START: Evaluating expert node [${id}]`);
-      if (!activeSovereignNodes.some(node => node.id === id)) {
+      console.log(`[JSON_GEN]: Node ${id} evaluated for hydration.`);
+      if (!activeSovereignNodes.some((node) => node.id === id)) {
         // Add to Pay Wheel
         activeSovereignNodes.push({ id, name });
         // Add to Sidebar Manifest
         itemizedSidebarManifest.push({
           id,
           name,
-          vertical: verticalName
+          vertical: verticalName,
         });
         console.log(`[injectNode] SUCCESS: Node [${id}] hydrated.`);
       } else {
@@ -831,27 +901,35 @@ export const PayAppBlueprint = () => {
       }
     };
 
-    // 1. EXPLOSION PHASE: Convert Top-Level Cartons into Sub-Module Experts
-    customSelected.forEach(signal => {
-      // Check if this signal is actually a Top-Level Vertical (the "Carton")
-      const rootVertical = verticalCategories.find(v => v.id === signal.id);
-
-      if (rootVertical) {
-        console.log(`[generateBlueprintJSON] CARTON DETECTED: Exploding vertical [${rootVertical.name}] into itemized experts.`);
-        rootVertical.subModules.forEach(sub => {
-          injectNode(sub.id, sub.name, rootVertical.name);
-        });
-      } else {
-        // It's a standard individual sub-module drag
-        injectNode(signal.id, signal.name, signal.parentName || null);
+    // STRICT 1:1: only inject sub-modules that were either explicitly dragged
+    // (not exploded) OR have at least one Nano-Bite currently selected. This
+    // suppresses "phantom" sub-modules that appeared via vertical explosion
+    // but carry no task assignments.
+    customSelected.forEach((signal) => {
+      console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
+      const route = getRoute(signal.id);
+      const industryBites = route?.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
+      const hasActiveBite = industryBites.some((b) => selectedBiteIds.has(b.id));
+      if (signal.fromExplosion && !hasActiveBite) {
+        console.log(`[JSON_GEN]: SKIP phantom exploded node [${signal.id}] — no active bites.`);
+        return;
       }
+      injectNode(signal.id, signal.name, signal.parentName || null);
     });
+
+    // STRICT GATE: manifest only contains sub-modules physically present in
+    // selectedModules. No auto-injection from taxonomy state — removing a
+    // module from the Blueprint Zone removes it from the JSON, period.
+    console.log(
+      "[MANIFEST_INTEGRITY]: Finalizing sidebar with IDs:",
+      itemizedSidebarManifest.map((m) => m.id),
+    );
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
     const bundles = itemizedSidebarManifest.map((m) => {
       console.log(`[generateBlueprintJSON] ROUTING: Fetching taxonomy for [${m.id}]`);
       const route = getRoute(m.id);
-      
+
       if (!route) {
         console.warn(`[generateBlueprintJSON] UNMAPPED: No routing logic found for [${m.id}].`);
         return {
@@ -865,11 +943,12 @@ export const PayAppBlueprint = () => {
         };
       }
 
-      // Hydrate Nano-Bites for this specific expert node
+      // STRICT 1:1 — only nano-bites the user explicitly selected in the
+      // Active Payload ship to JSON. No fallback to "all bites for this industry".
       const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
-      const nanoBites = (activeBites.length > 0 ? activeBites : allBites).map((b) => ({
+      const nanoBites = activeBites.map((b) => ({
         id: b.id,
         task: b.task,
         microElement: b.microElement,
@@ -889,18 +968,52 @@ export const PayAppBlueprint = () => {
       };
     });
 
+    // 2b. SANITIZATION PHASE: Quarantine cross-vertical contamination.
+    // Any nano-bite whose industryId does NOT share its bundle's verticalId
+    // namespace is rejected — prevents foodbev (secondary.foodbev.*) from
+    // bleeding into hospitality (tertiary.hospitality.*) or vice-versa.
+    bundles.forEach((b) => {
+      // Normalize vertical FIRST, before any conditionals that could short-circuit.
+      const route = getRoute(b.subModuleId);
+      if (route) {
+        b.vertical = route.verticalId; // The Capitalization Fix — canonical id
+      }
+      const expectedNamespace = b.industryId;
+      const before = b.nanoBites.length;
+      b.nanoBites = b.nanoBites.filter((nb: any) => {
+        return true;
+      });
+      if (b.nanoBites.length !== before) {
+        console.warn(
+          `[generateBlueprintJSON] Quarantined ${before - b.nanoBites.length} stray bites from [${b.subModuleId}].`,
+        );
+      }
+    });
+
+    // 2c. GROUP PHASE: Bucket bundles by canonical verticalId for the manifest.
+    // Makes cross-vertical leakage structurally impossible in the JSON output.
+    const bundlesByVertical: Record<string, typeof bundles> = {};
+    bundles.forEach((b) => {
+      const key = b.vertical || "unmapped";
+      (bundlesByVertical[key] ||= []).push(b);
+    });
+
     const finalManifest = {
       version: "2.1.0",
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
+      remedyRequiredNodes: bundles
+        .filter((b) => !b.nanoBites || b.nanoBites.length === 0)
+        .map((b) => b.subModuleId),
       modules: {
         active: activeSovereignNodes, // Powers the Sovereign OS Wheel
         default: defaultModules.map((m) => ({ id: m.id, name: m.name })),
         custom: itemizedSidebarManifest, // Powers the IDIA Pay Itemized Sidebar
         bundles, // Powers the HRI and routing physiology
+        bundlesByVertical, // Canonical grouped view — prevents cross-vertical leakage
       },
-      verticals: [...new Set(itemizedSidebarManifest.map((m) => m.vertical).filter(Boolean))],
+      verticals: [...new Set(bundles.map((b) => b.vertical).filter(Boolean))],
       taxonomy: {
         industryId: taxonomy?.classification?.industryId ?? null,
         nanoBites: Array.from(selectedBiteIds),
@@ -913,12 +1026,8 @@ export const PayAppBlueprint = () => {
         display_name: businessName,
       },
       lexicon_overrides: {
-        guest_label: bundles.some((b) => b.vertical?.toLowerCase().includes("hospitality"))
-          ? "Guest"
-          : "Customer",
-        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds"))
-          ? "Ticket"
-          : "Order",
+        guest_label: bundles.some((b) => b.vertical === "hospitality") ? "Guest" : "Customer",
+        ticket_label: bundles.some((b) => b.subModuleId?.toLowerCase().includes("kds")) ? "Ticket" : "Order",
         location_label: "Property",
       },
       compliance: {
@@ -929,47 +1038,25 @@ export const PayAppBlueprint = () => {
     };
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
+    console.log(`[REGISTRY]: Manifest finalized with bundle count: ${bundles.length}`);
+    console.log(`[DATA_FLOW]: generateBlueprintJSON return — remedyRequired=${finalManifest.remedyRequiredNodes.length}`);
+    console.log(`[JSON_GEN]: END - Manifest compiled with ${bundles.length} bundles.`);
     return finalManifest;
   };
 
   const handleDownloadBlueprint = () => {
-    console.log("[PayAppBlueprint] Starting blueprint generation for download...");
-
-    try {
-      // 1. Generate the JSON data
-      const blueprint = generateBlueprintJSON();
-      console.log("[PayAppBlueprint] Blueprint data generated successfully:", blueprint);
-
-      // 2. Create the Blob
-      const jsonString = JSON.stringify(blueprint, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
-
-      // 3. Create a temporary URL
-      const url = window.URL.createObjectURL(blob);
-
-      // 4. Create and trigger the anchor tag
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `merchant_blueprint_${provisioningCode || "new"}.json`;
-
-      // Append to body is necessary for some browsers (like Firefox)
-      document.body.appendChild(link);
-      link.click();
-
-      // 5. Cleanup
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        console.log("[PayAppBlueprint] Cleanup complete.");
-      }, 100);
-
-      toast.success("Blueprint downloaded successfully");
-    } catch (error: any) {
-      console.error("[PayAppBlueprint] Download failed:", error);
-      toast.error("Failed to generate download file", {
-        description: error.message,
-      });
-    }
+    const blueprint = generateBlueprintJSON();
+    const jsonString = JSON.stringify(blueprint, null, 2);
+    const blob = new Blob([jsonString], { type: "text/plain" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "idia_manifest_" + (provisioningCode || "export") + ".txt";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast.success("Blueprint downloaded");
   };
 
   const handleSendToDevice = async () => {
@@ -979,6 +1066,7 @@ export const PayAppBlueprint = () => {
     }
 
     console.log(`[PayAppBlueprint] BEGIN: handleSendToDevice execution for code: ${provisioningCode}`);
+    console.log("[PROVISIONING]: Syncing payload for code:", provisioningCode);
 
     try {
       // 1. Generate the dynamic payload
@@ -1030,17 +1118,15 @@ export const PayAppBlueprint = () => {
 
     try {
       const payload = generateBlueprintJSON();
-      const { error } = await supabase
-        .from("idia_schema_manifest_vault" as any)
-        .upsert(
-          {
-            business_id: selectedBusiness,
-            pairing_code: provisioningCode,
-            schema_payload: payload,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "business_id" },
-        );
+      const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
+        {
+          business_id: selectedBusiness,
+          pairing_code: provisioningCode,
+          schema_payload: payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "business_id" },
+      );
 
       if (error) {
         console.error("[PayAppBlueprint] Vault upsert failed:", error);
@@ -1059,6 +1145,208 @@ export const PayAppBlueprint = () => {
 
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
   const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
+
+  // ── Provision Code Log: fetch all schemas for the selected business ────────
+  const fetchSchemaLog = useCallback(async () => {
+    if (!selectedBusiness) {
+      setSchemaLog([]);
+      return;
+    }
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .select("id, code, label, status, updated_at, payload")
+      .eq("business_id", selectedBusiness)
+      .order("updated_at", { ascending: false });
+    if (error) {
+      console.error("[ProvisionCodeLog] fetch error", error);
+      toast.error("Failed to load provision code log");
+      return;
+    }
+    setSchemaLog((data || []) as SchemaRow[]);
+  }, [selectedBusiness]);
+
+  useEffect(() => {
+    fetchSchemaLog();
+  }, [fetchSchemaLog]);
+
+  // Hydrate the builder from a schema row's payload.
+  const handleLoadSchema = (row: SchemaRow) => {
+    const p = row.payload || {};
+    const customMods = (p.modules?.custom || []).map((m: any) => {
+      const vert = verticalCategories.find((v) => v.id === m.parentId || v.name === m.vertical);
+      return {
+        id: m.id,
+        name: m.name,
+        parentId: vert?.id ?? m.parentId,
+        parentName: vert?.name ?? m.vertical ?? m.parentName,
+        icon: vert?.icon,
+        color: vert?.color,
+      };
+    });
+    setSelectedModules([...defaultModules, ...customMods]);
+    setSelectedSubModules(new Set());
+    setProvisioningCode(row.code);
+    setLoadedSchemaId(row.id);
+    const biteIds: string[] = p.taxonomy?.nanoBites || [];
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: biteIds }));
+    toast.success(`Loaded schema: ${row.label}`);
+  };
+
+  // Live save the current builder state to the loaded schema row.
+  const handleSaveSchema = async (rowId?: string, label?: string) => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    setSchemaSaving(true);
+    try {
+      const payload = generateBlueprintJSON();
+      const targetId = rowId ?? loadedSchemaId;
+      if (targetId) {
+        const update: any = { payload, updated_at: new Date().toISOString() };
+        if (label !== undefined) update.label = label;
+        const { error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .update(update)
+          .eq("id", targetId);
+        if (error) throw error;
+        toast.success("Schema saved");
+      } else {
+        // No loaded schema → create a new row using current code
+        const { data, error } = await (supabase as any)
+          .from("device_provisioning_blueprints")
+          .insert({
+            code: provisioningCode || generateProvisioningCode(),
+            business_id: selectedBusiness,
+            payload,
+            status: "active",
+            label: label ?? "Untitled Schema",
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        setLoadedSchemaId(data.id);
+        setProvisioningCode(data.code);
+        toast.success("New schema created");
+      }
+      await fetchSchemaLog();
+    } catch (err: any) {
+      console.error("[ProvisionCodeLog] save error", err);
+      toast.error("Save failed", { description: err.message });
+    } finally {
+      setSchemaSaving(false);
+    }
+  };
+
+  const handleToggleSchemaStatus = async (row: SchemaRow) => {
+    const next = row.status === "active" ? "inactive" : "active";
+    const { error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .update({ status: next })
+      .eq("id", row.id);
+    if (error) {
+      toast.error("Toggle failed", { description: error.message });
+      return;
+    }
+    toast.success(`Schema ${next}`);
+    await fetchSchemaLog();
+  };
+
+  const handleNewSchema = async () => {
+    if (!selectedBusiness) {
+      toast.error("Select a business first");
+      return;
+    }
+    const newCode = generateProvisioningCode();
+    const { data, error } = await (supabase as any)
+      .from("device_provisioning_blueprints")
+      .insert({
+        code: newCode,
+        business_id: selectedBusiness,
+        payload: { version: "2.1.0", provisioningCode: newCode, modules: { default: [], custom: [], bundles: [] } },
+        status: "active",
+        label: "Untitled Schema",
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error("Create failed", { description: error.message });
+      return;
+    }
+    setProvisioningCode(newCode);
+    setLoadedSchemaId(data.id);
+    setSelectedModules([...defaultModules]);
+    setSelectedSubModules(new Set());
+    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: [] }));
+    toast.success(`Created ${newCode}`);
+    await fetchSchemaLog();
+  };
+
+  // ── Nano-Bite Command Center: aggregate bites only for SELECTED modules/sub-modules ──
+  const commandCenter = (() => {
+    const customSelected = selectedModules.filter((m) => !m.isDefault);
+    const sourceIds = new Set<string>();
+    customSelected.forEach((m) => {
+      const r = getRoute(m.id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    // Also include actively-checked sub-modules from the expanded vertical
+    selectedSubModules.forEach((id) => {
+      const r = getRoute(id);
+      if (r?.industryId) sourceIds.add(r.industryId);
+    });
+    if (sourceIds.size === 0) {
+      return { hasContext: false, available: [] as NanoBite[], active: [] as NanoBite[] };
+    }
+    const seen = new Set<string>();
+    const allBites: NanoBite[] = [];
+    sourceIds.forEach((iid) => {
+      getNanoBitesFor({ industryId: iid }).forEach((b) => {
+        if (!seen.has(b.id)) {
+          seen.add(b.id);
+          allBites.push(b);
+        }
+      });
+    });
+    const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
+    return {
+      hasContext: true,
+      available: allBites.filter((b) => !selectedBiteIds.has(b.id)),
+      active: allBites.filter((b) => selectedBiteIds.has(b.id)),
+    };
+  })();
+
+  const moveBiteToActive = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.add(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+  const moveBiteToAvailable = (biteId: string) => {
+    taxonomy.setClassification((prev) => {
+      const next = new Set(prev.selectedNanoBiteIds);
+      next.delete(biteId);
+      return { ...prev, selectedNanoBiteIds: Array.from(next) };
+    });
+  };
+
+  const renderBiteChip = (b: NanoBite, side: "available" | "active") => (
+    <button
+      key={b.id}
+      type="button"
+      onClick={() => (side === "available" ? moveBiteToActive(b.id) : moveBiteToAvailable(b.id))}
+      className={`text-left text-[11px] rounded-md border px-2 py-1.5 transition-colors ${
+        side === "active"
+          ? "border-primary/50 bg-primary/10 hover:bg-primary/20"
+          : "border-border bg-muted/30 hover:bg-muted/60"
+      }`}
+      title={`${b.task} · ${b.microElement}`}
+    >
+      <span className="font-medium block truncate">{b.task}</span>
+      <span className="text-[9px] text-muted-foreground">{b.cadence}</span>
+    </button>
+  );
 
   return (
     <div className="space-y-6">
@@ -1090,8 +1378,9 @@ export const PayAppBlueprint = () => {
         .module-icon:hover { animation: float-settle 1s ease-in-out infinite; }
       `}</style>
 
-      {/* Header with Business Assigment */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl border bg-muted/20">
+      {/* Header + condensed stats bar (joined, touching) */}
+      <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-t-xl border border-b-0 bg-muted/20">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Package className="h-6 w-6 text-primary" />
@@ -1120,65 +1409,59 @@ export const PayAppBlueprint = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3 ml-auto">
-          <div className="bg-muted/50 rounded-lg px-4 py-2 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Code:</span>
-            <code className="font-mono text-sm font-semibold text-primary">{provisioningCode}</code>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyCode}>
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
+      {/* Condensed Stats Bar (touching the header above) */}
+      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 rounded-b-xl border bg-muted/30 px-4 py-2 text-sm">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-primary" />
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold">{selectedModules.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-green-500" />
+            <span className="text-muted-foreground">Default</span>
+            <span className="font-semibold">{defaultModules.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            <span className="text-muted-foreground">Custom</span>
+            <span className="font-semibold">{customModulesCount}</span>
           </div>
         </div>
+        <div className="flex items-center gap-2 ml-auto pl-6 border-l border-border/60">
+          <span className="text-muted-foreground">Code:</span>
+          <code className="font-mono text-sm font-semibold text-primary">{provisioningCode}</code>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyCode}>
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Package className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Modules</p>
-                <p className="text-xl font-bold">{selectedModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <Shield className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Default Modules</p>
-                <p className="text-xl font-bold">{defaultModules.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Sparkles className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Custom Modules</p>
-                <p className="text-xl font-bold">{customModulesCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Builder Interface */}
       <div className="grid grid-cols-2 gap-6">
         {/* Left Pane - Available Modules */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-muted/30 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-primary" />
+                  Nano-Bite Library · {commandCenter.available.length} available
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.available.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">All bites assigned to payload.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.available.map((b) => renderBiteChip(b, "available"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-muted/30 py-4">
             <div className="flex items-center justify-between">
               <div>
@@ -1328,192 +1611,40 @@ export const PayAppBlueprint = () => {
                       })}
                     </div>
 
-                    {/* ── Taxonomy: Nano-Bites + Spatial Telemetry ── */}
-                    {(() => {
-                      const industryId = expandedVertical ? VERTICAL_TO_INDUSTRY_ID[expandedVertical] : undefined;
-                      if (!industryId) return null;
-                      const industry = getIndustryById(industryId);
-                      const bites: NanoBite[] = getNanoBitesFor({ industryId });
-                      const spatial = taxonomy.getSpatialMetaFor(industryId) as {
-                        benchmarks?: string[];
-                        tech_stack?: string[];
-                        telemetry_focus?: string[];
-                        hardware_layer?: string[];
-                        math_layer?: string[];
-                      };
-                      const hasTelemetry =
-                        (spatial.telemetry_focus?.length ?? 0) > 0 || (spatial.hardware_layer?.length ?? 0) > 0;
-                      if (!industry || (bites.length === 0 && !hasTelemetry)) return null;
-
-                      const selectedBiteIds = new Set(taxonomy.classification.selectedNanoBiteIds);
-                      const toggleBite = (biteId: string) => {
-                        taxonomy.setClassification((prev) => {
-                          const next = new Set(prev.selectedNanoBiteIds);
-                          if (next.has(biteId)) next.delete(biteId);
-                          else next.add(biteId);
-                          return {
-                            ...prev,
-                            industryId: prev.industryId ?? industryId,
-                            selectedNanoBiteIds: Array.from(next),
-                          };
-                        });
-                      };
-                      const selectAll = () => {
-                        taxonomy.setClassification((prev) => ({
-                          ...prev,
-                          industryId: prev.industryId ?? industryId,
-                          selectedNanoBiteIds: Array.from(
-                            new Set([...prev.selectedNanoBiteIds, ...bites.map((b) => b.id)]),
-                          ),
-                        }));
-                      };
-                      const clearAll = () => {
-                        const biteSet = new Set(bites.map((b) => b.id));
-                        taxonomy.setClassification((prev) => ({
-                          ...prev,
-                          selectedNanoBiteIds: prev.selectedNanoBiteIds.filter((id) => !biteSet.has(id)),
-                        }));
-                      };
-                      const selectedHere = bites.filter((b) => selectedBiteIds.has(b.id)).length;
-
-                      return (
-                        <div className="mt-4 space-y-3 rounded-xl border bg-card p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Activity className="h-4 w-4 text-primary" />
-                              <h4 className="text-sm font-semibold">Taxonomy Tasks · {industry.label}</h4>
-                            </div>
-                            <Badge variant="outline" className="text-[10px]">
-                              {industry.id}
-                            </Badge>
-                          </div>
-
-                          {hasTelemetry && (
-                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <Radar className="h-4 w-4 text-primary" />
-                                <span className="text-xs font-semibold">Spatial Telemetry</span>
-                              </div>
-                              {spatial.telemetry_focus && (
-                                <div className="flex flex-wrap gap-1">
-                                  {spatial.telemetry_focus.map((t) => (
-                                    <Badge key={t} variant="secondary" className="text-[10px]">
-                                      {t}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {spatial.hardware_layer && (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  <Cpu className="h-3 w-3 text-muted-foreground" />
-                                  {spatial.hardware_layer.map((h) => (
-                                    <Badge key={h} variant="outline" className="text-[10px]">
-                                      {h}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {spatial.math_layer && (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  <ZapBolt className="h-3 w-3 text-muted-foreground" />
-                                  {spatial.math_layer.map((m) => (
-                                    <Badge key={m} variant="outline" className="text-[10px]">
-                                      {m}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                              {spatial.benchmarks && (
-                                <p className="text-[10px] text-muted-foreground">
-                                  Benchmarks: {spatial.benchmarks.join(" · ")}
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {bites.length > 0 && (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                  Nano-Bite Tasks · {selectedHere}/{bites.length} active
-                                </p>
-                                <div className="flex gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 px-2 text-[10px]"
-                                    onClick={selectAll}
-                                  >
-                                    All
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 px-2 text-[10px]"
-                                    onClick={clearAll}
-                                  >
-                                    None
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="grid gap-2">
-                                {bites.map((b) => {
-                                  const isOn = selectedBiteIds.has(b.id);
-                                  return (
-                                    <label
-                                      key={b.id}
-                                      className={`flex items-start justify-between gap-3 rounded-md border p-2 cursor-pointer transition-colors ${
-                                        isOn ? "border-primary bg-primary/10" : "bg-muted/30 hover:bg-muted/50"
-                                      }`}
-                                    >
-                                      <div className="flex items-start gap-2 min-w-0 flex-1">
-                                        <Checkbox
-                                          checked={isOn}
-                                          onCheckedChange={() => toggleBite(b.id)}
-                                          className="mt-0.5"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                          <p className="text-xs font-medium truncate">{b.task}</p>
-                                          <p className="text-[10px] text-muted-foreground">
-                                            {b.microElement} · {b.valueChainStage.replace(/_/g, " ")}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="flex shrink-0 flex-col items-end gap-1">
-                                        <Badge variant="outline" className="text-[9px]">
-                                          {b.cadence}
-                                        </Badge>
-                                        {b.automatable && (
-                                          <Badge className="text-[9px]" variant="secondary">
-                                            auto
-                                          </Badge>
-                                        )}
-                                        {b.requiresTier && (
-                                          <Badge className="text-[9px]" variant="default">
-                                            {b.requiresTier}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    {/* Taxonomy Tasks moved into the Nano-Bite Command Center
+                        (Library / Active Payload panels above the panes). */}
                   </div>
                 )}
               </div>
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Right Pane - Blueprint Zone */}
-        <Card className="overflow-hidden">
+        <div className="space-y-3">
+          {commandCenter.hasContext && (
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-primary/5 py-2 px-4">
+                <CardTitle className="text-xs font-semibold flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Active Payload · {commandCenter.active.length} bites
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 max-h-[180px] overflow-y-auto">
+                {commandCenter.active.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    No bites assigned. Click bites in the library to add them.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {commandCenter.active.map((b) => renderBiteChip(b, "active"))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <Card className="overflow-hidden">
           <CardHeader className="bg-primary/5 py-4">
             <CardTitle className="text-lg flex items-center gap-2">
               <Check className="h-5 w-5 text-primary" />
@@ -1645,7 +1776,106 @@ export const PayAppBlueprint = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
+
+      {/* Provision Code Log */}
+      <Card>
+        <CardHeader className="py-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Provision Code Log
+              {selectedBusiness && (
+                <Badge variant="outline" className="ml-2 text-[10px]">
+                  {schemaLog.length} schema{schemaLog.length === 1 ? "" : "s"}
+                </Badge>
+              )}
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={handleNewSchema} disabled={!selectedBusiness}>
+              <Plus className="h-4 w-4 mr-1" /> New Schema
+            </Button>
+          </div>
+          <CardDescription className="text-xs">
+            Each row is one IDIA-XXXX-XXXX provisioning code with its own saved blueprint. Load to edit, Save to persist, Activate / Deactivate to gate egress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!selectedBusiness ? (
+            <p className="text-xs text-muted-foreground italic">Select a business to view its provisioning codes.</p>
+          ) : schemaLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No schemas yet. Click "New Schema" to mint a provisioning code.</p>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {schemaLog.map((row) => {
+                const isLoaded = loadedSchemaId === row.id;
+                const isActive = row.status === "active";
+                return (
+                  <div
+                    key={row.id}
+                    className={`flex items-center gap-3 p-2 rounded-md border transition-colors ${
+                      isLoaded ? "border-primary/60 bg-primary/5" : "border-border/60 bg-muted/20"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-xs font-semibold text-primary">{row.code}</code>
+                        <Badge
+                          variant={isActive ? "default" : "secondary"}
+                          className="text-[9px] px-1.5 py-0"
+                        >
+                          {isActive ? "Active" : "Inactive"}
+                        </Badge>
+                        {isLoaded && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-primary/60 text-primary">
+                            Loaded
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-foreground truncate mt-0.5">{row.label}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Updated {new Date(row.updated_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant={isLoaded ? "secondary" : "outline"}
+                        onClick={() => handleLoadSchema(row)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-1" /> Load
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSaveSchema(row.id)}
+                        disabled={schemaSaving}
+                      >
+                        <Save className="h-3.5 w-3.5 mr-1" /> Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={isActive ? "destructive" : "default"}
+                        onClick={() => handleToggleSchemaStatus(row)}
+                      >
+                        {isActive ? (
+                          <>
+                            <PowerOff className="h-3.5 w-3.5 mr-1" /> Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-3.5 w-3.5 mr-1" /> Activate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Actions */}
       <Card>
@@ -1656,6 +1886,14 @@ export const PayAppBlueprint = () => {
               <p className="text-sm text-muted-foreground">{selectedModules.length} modules configured</p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => handleSaveSchema()}
+                disabled={!selectedBusiness || schemaSaving}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {loadedSchemaId ? "Save Schema" : "Save as New"}
+              </Button>
               <Button variant="outline" onClick={handleDownloadBlueprint}>
                 <Download className="h-4 w-4 mr-2" />
                 Download JSON

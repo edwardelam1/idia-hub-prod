@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      aca_consent_artifacts: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          hash: string
+          id: string
+          metadata: Json | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          hash: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          hash?: string
+          id?: string
+          metadata?: Json | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       account_conversion_requests: {
         Row: {
           address_city: string | null
@@ -24,6 +54,10 @@ export type Database = {
           company_name: string
           contact_role: string
           created_at: string | null
+          denial_cause: string | null
+          denial_remediation: string | null
+          denied_at: string | null
+          denied_by: string | null
           document_paths: string[]
           ein: string | null
           entity_type: string | null
@@ -46,6 +80,10 @@ export type Database = {
           company_name: string
           contact_role: string
           created_at?: string | null
+          denial_cause?: string | null
+          denial_remediation?: string | null
+          denied_at?: string | null
+          denied_by?: string | null
           document_paths?: string[]
           ein?: string | null
           entity_type?: string | null
@@ -68,6 +106,10 @@ export type Database = {
           company_name?: string
           contact_role?: string
           created_at?: string | null
+          denial_cause?: string | null
+          denial_remediation?: string | null
+          denied_at?: string | null
+          denied_by?: string | null
           document_paths?: string[]
           ein?: string | null
           entity_type?: string | null
@@ -770,6 +812,45 @@ export type Database = {
           },
         ]
       }
+      business_permits: {
+        Row: {
+          business_id: string
+          created_at: string
+          expiration_date: string
+          id: string
+          inspector_name: string | null
+          is_valid: boolean
+          location: string
+          permit_number: string
+          permit_type: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          expiration_date: string
+          id?: string
+          inspector_name?: string | null
+          is_valid?: boolean
+          location: string
+          permit_number: string
+          permit_type: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          expiration_date?: string
+          id?: string
+          inspector_name?: string | null
+          is_valid?: boolean
+          location?: string
+          permit_number?: string
+          permit_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       business_processing_queue: {
         Row: {
           business_id: string
@@ -1075,6 +1156,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      committee_applications: {
+        Row: {
+          aca_hash_key: string
+          aca_payload: Json
+          committee_id: string
+          created_at: string | null
+          id: string
+          statement_of_competence: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          aca_hash_key: string
+          aca_payload: Json
+          committee_id: string
+          created_at?: string | null
+          id?: string
+          statement_of_competence: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          aca_hash_key?: string
+          aca_payload?: Json
+          committee_id?: string
+          created_at?: string | null
+          id?: string
+          statement_of_competence?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       community_pool_ledger: {
         Row: {
@@ -1427,44 +1541,207 @@ export type Database = {
         }
         Relationships: []
       }
+      dao_hats: {
+        Row: {
+          created_at: string | null
+          eligibility_status: string | null
+          granted_at: string
+          hat_type: string
+          id: string
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          eligibility_status?: string | null
+          granted_at?: string
+          hat_type: string
+          id?: string
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          eligibility_status?: string | null
+          granted_at?: string
+          hat_type?: string
+          id?: string
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      dao_msa_metrics: {
+        Row: {
+          current_value: number | null
+          id: string
+          measured_at: string | null
+          sla_name: string
+          status: string | null
+          target_value: number | null
+        }
+        Insert: {
+          current_value?: number | null
+          id?: string
+          measured_at?: string | null
+          sla_name: string
+          status?: string | null
+          target_value?: number | null
+        }
+        Update: {
+          current_value?: number | null
+          id?: string
+          measured_at?: string | null
+          sla_name?: string
+          status?: string | null
+          target_value?: number | null
+        }
+        Relationships: []
+      }
+      dao_pending_actions: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          status: string | null
+          timelock_expires_at: string
+          title: string
+          veto_count: number | null
+          veto_threshold: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          status?: string | null
+          timelock_expires_at: string
+          title: string
+          veto_count?: number | null
+          veto_threshold?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          status?: string | null
+          timelock_expires_at?: string
+          title?: string
+          veto_count?: number | null
+          veto_threshold?: number | null
+        }
+        Relationships: []
+      }
       dao_proposals: {
         Row: {
           created_at: string | null
           description: string | null
           end_date: string | null
           id: string
+          lifecycle_phase: string | null
           proposer_id: string | null
           quorum_threshold: number | null
           status: string | null
           title: string
           vote_type: string | null
+          voting_modality: string | null
         }
         Insert: {
           created_at?: string | null
           description?: string | null
           end_date?: string | null
           id?: string
+          lifecycle_phase?: string | null
           proposer_id?: string | null
           quorum_threshold?: number | null
           status?: string | null
           title: string
           vote_type?: string | null
+          voting_modality?: string | null
         }
         Update: {
           created_at?: string | null
           description?: string | null
           end_date?: string | null
           id?: string
+          lifecycle_phase?: string | null
           proposer_id?: string | null
           quorum_threshold?: number | null
           status?: string | null
           title?: string
           vote_type?: string | null
+          voting_modality?: string | null
         }
         Relationships: []
       }
+      dao_treasury_flows: {
+        Row: {
+          amount_usd: number
+          asset: string
+          counterparty_label: string | null
+          direction: string
+          id: string
+          recorded_at: string | null
+        }
+        Insert: {
+          amount_usd: number
+          asset: string
+          counterparty_label?: string | null
+          direction: string
+          id?: string
+          recorded_at?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          asset?: string
+          counterparty_label?: string | null
+          direction?: string
+          id?: string
+          recorded_at?: string | null
+        }
+        Relationships: []
+      }
+      dao_vetoes: {
+        Row: {
+          aca_hash_key: string
+          aca_payload: Json
+          action_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          aca_hash_key: string
+          aca_payload: Json
+          action_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          aca_hash_key?: string
+          aca_payload?: Json
+          action_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dao_vetoes_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: false
+            referencedRelation: "dao_pending_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dao_votes: {
         Row: {
+          aca_hash_key: string | null
+          aca_payload: Json | null
           created_at: string | null
           credits_spent: number
           id: string
@@ -1473,6 +1750,8 @@ export type Database = {
           vote_weight: number
         }
         Insert: {
+          aca_hash_key?: string | null
+          aca_payload?: Json | null
           created_at?: string | null
           credits_spent: number
           id?: string
@@ -1481,6 +1760,8 @@ export type Database = {
           vote_weight: number
         }
         Update: {
+          aca_hash_key?: string | null
+          aca_payload?: Json | null
           created_at?: string | null
           credits_spent?: number
           id?: string
@@ -1810,6 +2091,7 @@ export type Database = {
           code: string
           created_at: string
           id: string
+          label: string
           payload: Json
           status: string
           updated_at: string
@@ -1819,6 +2101,7 @@ export type Database = {
           code: string
           created_at?: string
           id?: string
+          label?: string
           payload: Json
           status?: string
           updated_at?: string
@@ -1828,6 +2111,7 @@ export type Database = {
           code?: string
           created_at?: string
           id?: string
+          label?: string
           payload?: Json
           status?: string
           updated_at?: string
@@ -2253,6 +2537,7 @@ export type Database = {
           hourly_rate: number | null
           id: string
           is_ephemeral: boolean
+          job_title: string | null
           last_login: string | null
           name: string
           notes: string | null
@@ -2286,6 +2571,7 @@ export type Database = {
           hourly_rate?: number | null
           id?: string
           is_ephemeral?: boolean
+          job_title?: string | null
           last_login?: string | null
           name: string
           notes?: string | null
@@ -2319,6 +2605,7 @@ export type Database = {
           hourly_rate?: number | null
           id?: string
           is_ephemeral?: boolean
+          job_title?: string | null
           last_login?: string | null
           name?: string
           notes?: string | null
@@ -3062,33 +3349,42 @@ export type Database = {
         }
         Relationships: []
       }
-      idia_life_accounts: {
+      hub_notifications: {
         Row: {
-          created_at: string | null
+          body: string | null
+          category: string
+          created_at: string
           id: string
-          last_deposit_at: string | null
-          liquid_balance: number | null
-          pseudo_user_id: string
-          total_earned: number | null
-          updated_at: string | null
+          link: string | null
+          metadata: Json
+          read_at: string | null
+          severity: string
+          title: string
+          user_id: string
         }
         Insert: {
-          created_at?: string | null
+          body?: string | null
+          category?: string
+          created_at?: string
           id?: string
-          last_deposit_at?: string | null
-          liquid_balance?: number | null
-          pseudo_user_id: string
-          total_earned?: number | null
-          updated_at?: string | null
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          severity?: string
+          title: string
+          user_id: string
         }
         Update: {
-          created_at?: string | null
+          body?: string | null
+          category?: string
+          created_at?: string
           id?: string
-          last_deposit_at?: string | null
-          liquid_balance?: number | null
-          pseudo_user_id?: string
-          total_earned?: number | null
-          updated_at?: string | null
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          severity?: string
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -3426,6 +3722,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      inventory_variances: {
+        Row: {
+          actual_yield: number
+          batch_id: string
+          business_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          inventory_item_id: string | null
+          item_name: string
+          location_id: string | null
+          resolved_at: string | null
+          status: string
+          theoretical_yield: number
+          tolerance_threshold: number
+          unit: string
+          unit_cost: number
+          value_lost: number | null
+          variance_amount: number | null
+        }
+        Insert: {
+          actual_yield: number
+          batch_id: string
+          business_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          item_name: string
+          location_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          theoretical_yield: number
+          tolerance_threshold?: number
+          unit?: string
+          unit_cost?: number
+          value_lost?: number | null
+          variance_amount?: number | null
+        }
+        Update: {
+          actual_yield?: number
+          batch_id?: string
+          business_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          inventory_item_id?: string | null
+          item_name?: string
+          location_id?: string | null
+          resolved_at?: string | null
+          status?: string
+          theoretical_yield?: number
+          tolerance_threshold?: number
+          unit?: string
+          unit_cost?: number
+          value_lost?: number | null
+          variance_amount?: number | null
+        }
+        Relationships: []
       }
       invoice_line_items: {
         Row: {
@@ -4169,6 +4525,54 @@ export type Database = {
           },
         ]
       }
+      merchant_terminals: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          last_seen_at: string | null
+          location_id: string | null
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          location_id?: string | null
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          location_id?: string | null
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_terminals_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "merchant_terminals_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "business_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nfc_transactions: {
         Row: {
           blockchain_hash: string | null
@@ -4218,6 +4622,45 @@ export type Database = {
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "pos_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_capabilities: {
+        Row: {
+          capability_key: string
+          granted_at: string | null
+          guid: string | null
+          id: string
+          org_id: string | null
+        }
+        Insert: {
+          capability_key: string
+          granted_at?: string | null
+          guid?: string | null
+          id?: string
+          org_id?: string | null
+        }
+        Update: {
+          capability_key?: string
+          granted_at?: string | null
+          guid?: string | null
+          id?: string
+          org_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_capabilities_guid_fkey"
+            columns: ["guid"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_capabilities_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -4504,9 +4947,42 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_users: {
+        Row: {
+          created_at: string | null
+          hub_account_type: string | null
+          hub_saas_tier: string | null
+          platform_role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          hub_account_type?: string | null
+          hub_saas_tier?: string | null
+          platform_role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          hub_account_type?: string | null
+          hub_saas_tier?: string | null
+          platform_role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       pos_transactions: {
         Row: {
           ar_experience_id: string | null
+          business_id: string | null
           cashier_id: string | null
           created_at: string | null
           customer_id: string | null
@@ -4514,6 +4990,7 @@ export type Database = {
           id: string
           idia_usd_amount: number | null
           initiated_via_ar: boolean | null
+          items: Json | null
           location_id: string
           loyalty_points_earned: number | null
           nfc_payload: Json | null
@@ -4531,6 +5008,7 @@ export type Database = {
         }
         Insert: {
           ar_experience_id?: string | null
+          business_id?: string | null
           cashier_id?: string | null
           created_at?: string | null
           customer_id?: string | null
@@ -4538,6 +5016,7 @@ export type Database = {
           id?: string
           idia_usd_amount?: number | null
           initiated_via_ar?: boolean | null
+          items?: Json | null
           location_id: string
           loyalty_points_earned?: number | null
           nfc_payload?: Json | null
@@ -4555,6 +5034,7 @@ export type Database = {
         }
         Update: {
           ar_experience_id?: string | null
+          business_id?: string | null
           cashier_id?: string | null
           created_at?: string | null
           customer_id?: string | null
@@ -4562,6 +5042,7 @@ export type Database = {
           id?: string
           idia_usd_amount?: number | null
           initiated_via_ar?: boolean | null
+          items?: Json | null
           location_id?: string
           loyalty_points_earned?: number | null
           nfc_payload?: Json | null
@@ -4705,8 +5186,10 @@ export type Database = {
       profiles: {
         Row: {
           account_type: string | null
+          active_saas_tiers:
+            | Database["public"]["Enums"]["idia_saas_tier"][]
+            | null
           activity_preferences: string[] | null
-          age: number | null
           ai_assistant_name: string | null
           available_credit_line: number | null
           avatar_url: string | null
@@ -4721,6 +5204,7 @@ export type Database = {
           id: string
           interests: string[] | null
           is_501c3_verified: boolean | null
+          is_minor: boolean | null
           is_seed_backed_up: boolean | null
           is_sovereign: boolean | null
           kyc_status: string | null
@@ -4743,8 +5227,10 @@ export type Database = {
         }
         Insert: {
           account_type?: string | null
+          active_saas_tiers?:
+            | Database["public"]["Enums"]["idia_saas_tier"][]
+            | null
           activity_preferences?: string[] | null
-          age?: number | null
           ai_assistant_name?: string | null
           available_credit_line?: number | null
           avatar_url?: string | null
@@ -4759,6 +5245,7 @@ export type Database = {
           id?: string
           interests?: string[] | null
           is_501c3_verified?: boolean | null
+          is_minor?: boolean | null
           is_seed_backed_up?: boolean | null
           is_sovereign?: boolean | null
           kyc_status?: string | null
@@ -4781,8 +5268,10 @@ export type Database = {
         }
         Update: {
           account_type?: string | null
+          active_saas_tiers?:
+            | Database["public"]["Enums"]["idia_saas_tier"][]
+            | null
           activity_preferences?: string[] | null
-          age?: number | null
           ai_assistant_name?: string | null
           available_credit_line?: number | null
           avatar_url?: string | null
@@ -4797,6 +5286,7 @@ export type Database = {
           id?: string
           interests?: string[] | null
           is_501c3_verified?: boolean | null
+          is_minor?: boolean | null
           is_seed_backed_up?: boolean | null
           is_sovereign?: boolean | null
           kyc_status?: string | null
@@ -5029,6 +5519,8 @@ export type Database = {
           created_by: string | null
           expected_delivery_date: string | null
           id: string
+          invoice_amount: number | null
+          invoice_status: string | null
           location_id: string
           notes: string | null
           order_date: string
@@ -5046,6 +5538,8 @@ export type Database = {
           created_by?: string | null
           expected_delivery_date?: string | null
           id?: string
+          invoice_amount?: number | null
+          invoice_status?: string | null
           location_id: string
           notes?: string | null
           order_date?: string
@@ -5063,6 +5557,8 @@ export type Database = {
           created_by?: string | null
           expected_delivery_date?: string | null
           id?: string
+          invoice_amount?: number | null
+          invoice_status?: string | null
           location_id?: string
           notes?: string | null
           order_date?: string
@@ -6162,11 +6658,10 @@ export type Database = {
       synapse_credit_ledger: {
         Row: {
           amount: number
-          amount_idia_beta: number | null
           amount_idia_usd: number | null
+          amount_usdc: number | null
           balance_after: number | null
           balance_fiat_usd: number | null
-          balance_idia_beta: number | null
           balance_previous: number | null
           balance_usdc_stable: number | null
           blockchain_tx_hash: string | null
@@ -6194,11 +6689,10 @@ export type Database = {
         }
         Insert: {
           amount: number
-          amount_idia_beta?: number | null
           amount_idia_usd?: number | null
+          amount_usdc?: number | null
           balance_after?: number | null
           balance_fiat_usd?: number | null
-          balance_idia_beta?: number | null
           balance_previous?: number | null
           balance_usdc_stable?: number | null
           blockchain_tx_hash?: string | null
@@ -6226,11 +6720,10 @@ export type Database = {
         }
         Update: {
           amount?: number
-          amount_idia_beta?: number | null
           amount_idia_usd?: number | null
+          amount_usdc?: number | null
           balance_after?: number | null
           balance_fiat_usd?: number | null
-          balance_idia_beta?: number | null
           balance_previous?: number | null
           balance_usdc_stable?: number | null
           blockchain_tx_hash?: string | null
@@ -6285,6 +6778,33 @@ export type Database = {
           sync_results?: Json | null
           sync_type?: string
           total_connections?: number
+        }
+        Relationships: []
+      }
+      system_configs: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: string
         }
         Relationships: []
       }
@@ -6744,6 +7264,75 @@ export type Database = {
         }
         Relationships: []
       }
+      usdc_payments: {
+        Row: {
+          aca_hash: string | null
+          amount_raw: string
+          amount_usdc: number
+          block_number: number | null
+          chain_id: number
+          created_at: string | null
+          error_message: string | null
+          id: string
+          merchant_id: string | null
+          merchant_name: string | null
+          network: string
+          nonce_used: string | null
+          recipient_address: string
+          reference: string | null
+          relayed_by: string | null
+          sender_address: string
+          settled_at: string | null
+          status: string
+          tx_hash: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          aca_hash?: string | null
+          amount_raw: string
+          amount_usdc: number
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_name?: string | null
+          network?: string
+          nonce_used?: string | null
+          recipient_address: string
+          reference?: string | null
+          relayed_by?: string | null
+          sender_address: string
+          settled_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          aca_hash?: string | null
+          amount_raw?: string
+          amount_usdc?: number
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          merchant_id?: string | null
+          merchant_name?: string | null
+          network?: string
+          nonce_used?: string | null
+          recipient_address?: string
+          reference?: string | null
+          relayed_by?: string | null
+          sender_address?: string
+          settled_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_aca_records: {
         Row: {
           aca_hash_key: string
@@ -6978,11 +7567,25 @@ export type Database = {
           colorblind_mode: boolean | null
           created_at: string | null
           data_sharing_consent: boolean | null
+          email_reports: boolean | null
           font_size: string | null
           high_contrast: boolean | null
           id: string
+          in_app_alerts: boolean | null
+          in_app_sounds: boolean | null
           marketing_emails: boolean | null
+          privacy_bluetooth: boolean | null
+          privacy_camera: boolean | null
+          privacy_health: boolean | null
+          privacy_microphone: boolean | null
+          privacy_motion: boolean | null
+          privacy_nfc: boolean | null
+          push_activity: boolean | null
+          push_insights: boolean | null
           push_notifications: boolean | null
+          quiet_hours_enabled: boolean | null
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
           theme_preference: string | null
           updated_at: string | null
           user_id: string
@@ -6991,11 +7594,25 @@ export type Database = {
           colorblind_mode?: boolean | null
           created_at?: string | null
           data_sharing_consent?: boolean | null
+          email_reports?: boolean | null
           font_size?: string | null
           high_contrast?: boolean | null
           id?: string
+          in_app_alerts?: boolean | null
+          in_app_sounds?: boolean | null
           marketing_emails?: boolean | null
+          privacy_bluetooth?: boolean | null
+          privacy_camera?: boolean | null
+          privacy_health?: boolean | null
+          privacy_microphone?: boolean | null
+          privacy_motion?: boolean | null
+          privacy_nfc?: boolean | null
+          push_activity?: boolean | null
+          push_insights?: boolean | null
           push_notifications?: boolean | null
+          quiet_hours_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
           theme_preference?: string | null
           updated_at?: string | null
           user_id: string
@@ -7004,11 +7621,25 @@ export type Database = {
           colorblind_mode?: boolean | null
           created_at?: string | null
           data_sharing_consent?: boolean | null
+          email_reports?: boolean | null
           font_size?: string | null
           high_contrast?: boolean | null
           id?: string
+          in_app_alerts?: boolean | null
+          in_app_sounds?: boolean | null
           marketing_emails?: boolean | null
+          privacy_bluetooth?: boolean | null
+          privacy_camera?: boolean | null
+          privacy_health?: boolean | null
+          privacy_microphone?: boolean | null
+          privacy_motion?: boolean | null
+          privacy_nfc?: boolean | null
+          push_activity?: boolean | null
+          push_insights?: boolean | null
           push_notifications?: boolean | null
+          quiet_hours_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
           theme_preference?: string | null
           updated_at?: string | null
           user_id?: string
@@ -7114,6 +7745,47 @@ export type Database = {
         }
         Relationships: []
       }
+      variance_corrections: {
+        Row: {
+          business_id: string
+          corrective_action: string
+          id: string
+          manager_auth_pin_hash: string
+          reconciled_at: string
+          reconciled_by: string | null
+          root_cause: string
+          variance_id: string
+        }
+        Insert: {
+          business_id: string
+          corrective_action: string
+          id?: string
+          manager_auth_pin_hash: string
+          reconciled_at?: string
+          reconciled_by?: string | null
+          root_cause: string
+          variance_id: string
+        }
+        Update: {
+          business_id?: string
+          corrective_action?: string
+          id?: string
+          manager_auth_pin_hash?: string
+          reconciled_at?: string
+          reconciled_by?: string | null
+          root_cause?: string
+          variance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variance_corrections_variance_id_fkey"
+            columns: ["variance_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_variances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallets: {
         Row: {
           cash_balance: number | null
@@ -7127,6 +7799,7 @@ export type Database = {
           life_cash_balance: number | null
           platform_guid: string | null
           stablecoin_balance: number | null
+          synapse_gas_credits: number | null
           total_earned: number | null
           updated_at: string | null
           usdc_balance: number | null
@@ -7147,6 +7820,7 @@ export type Database = {
           life_cash_balance?: number | null
           platform_guid?: string | null
           stablecoin_balance?: number | null
+          synapse_gas_credits?: number | null
           total_earned?: number | null
           updated_at?: string | null
           usdc_balance?: number | null
@@ -7167,6 +7841,7 @@ export type Database = {
           life_cash_balance?: number | null
           platform_guid?: string | null
           stablecoin_balance?: number | null
+          synapse_gas_credits?: number | null
           total_earned?: number | null
           updated_at?: string | null
           usdc_balance?: number | null
@@ -7342,6 +8017,33 @@ export type Database = {
         }
         Relationships: []
       }
+      gl_journal_entries: {
+        Row: {
+          account: string | null
+          amount: number | null
+          business_id: string | null
+          created_at: string | null
+          id: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          account?: string | null
+          amount?: never
+          business_id?: never
+          created_at?: string | null
+          id?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          account?: string | null
+          amount?: never
+          business_id?: never
+          created_at?: string | null
+          id?: string | null
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       global_reality_manifest: {
         Row: {
           actual_row_count: number | null
@@ -7366,6 +8068,195 @@ export type Database = {
         Row: {
           data_category: string | null
           total_records: number | null
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          aca_secured: boolean | null
+          address: string | null
+          assigned_locations: string[] | null
+          business_id: string | null
+          city: string | null
+          created_at: string | null
+          direct_deposit_enabled: boolean | null
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          hire_date: string | null
+          hourly_rate: number | null
+          id: string | null
+          is_ephemeral: boolean | null
+          last_login: string | null
+          name: string | null
+          notes: string | null
+          overtime_rate: number | null
+          pay_frequency: string | null
+          permission_template_id: string | null
+          permissions: Json | null
+          phone: string | null
+          platform_role: string | null
+          role: string | null
+          salary_type: string | null
+          state: string | null
+          status: string | null
+          tax_filing_status: string | null
+          updated_at: string | null
+          user_id: string | null
+          zip: string | null
+        }
+        Insert: {
+          aca_secured?: boolean | null
+          address?: string | null
+          assigned_locations?: string[] | null
+          business_id?: string | null
+          city?: string | null
+          created_at?: string | null
+          direct_deposit_enabled?: boolean | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          hire_date?: string | null
+          hourly_rate?: number | null
+          id?: string | null
+          is_ephemeral?: boolean | null
+          last_login?: string | null
+          name?: string | null
+          notes?: string | null
+          overtime_rate?: number | null
+          pay_frequency?: string | null
+          permission_template_id?: string | null
+          permissions?: Json | null
+          phone?: string | null
+          platform_role?: string | null
+          role?: string | null
+          salary_type?: string | null
+          state?: string | null
+          status?: string | null
+          tax_filing_status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          zip?: string | null
+        }
+        Update: {
+          aca_secured?: boolean | null
+          address?: string | null
+          assigned_locations?: string[] | null
+          business_id?: string | null
+          city?: string | null
+          created_at?: string | null
+          direct_deposit_enabled?: boolean | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          hire_date?: string | null
+          hourly_rate?: number | null
+          id?: string | null
+          is_ephemeral?: boolean | null
+          last_login?: string | null
+          name?: string | null
+          notes?: string | null
+          overtime_rate?: number | null
+          pay_frequency?: string | null
+          permission_template_id?: string | null
+          permissions?: Json | null
+          phone?: string | null
+          platform_role?: string | null
+          role?: string | null
+          salary_type?: string | null
+          state?: string | null
+          status?: string | null
+          tax_filing_status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          zip?: string | null
+        }
+        Relationships: []
+      }
+      team_schedules: {
+        Row: {
+          break_minutes: number | null
+          business_id: string | null
+          created_at: string | null
+          end_time: string | null
+          id: string | null
+          location: string | null
+          notes: string | null
+          schedule_date: string | null
+          start_time: string | null
+          status: string | null
+          team_member_id: string | null
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id?: string | null
+          created_at?: string | null
+          end_time?: string | null
+          id?: string | null
+          location?: string | null
+          notes?: string | null
+          schedule_date?: string | null
+          start_time?: string | null
+          status?: string | null
+          team_member_id?: string | null
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string | null
+          created_at?: string | null
+          end_time?: string | null
+          id?: string | null
+          location?: string | null
+          notes?: string | null
+          schedule_date?: string | null
+          start_time?: string | null
+          status?: string | null
+          team_member_id?: string | null
+        }
+        Relationships: []
+      }
+      time_entries: {
+        Row: {
+          break_minutes: number | null
+          business_id: string | null
+          clock_in: string | null
+          clock_out: string | null
+          created_at: string | null
+          id: string | null
+          location: string | null
+          notes: string | null
+          overtime_hours: number | null
+          status: string | null
+          team_member_id: string | null
+          total_hours: number | null
+        }
+        Insert: {
+          break_minutes?: number | null
+          business_id?: string | null
+          clock_in?: string | null
+          clock_out?: string | null
+          created_at?: string | null
+          id?: string | null
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string | null
+          team_member_id?: string | null
+          total_hours?: number | null
+        }
+        Update: {
+          break_minutes?: number | null
+          business_id?: string | null
+          clock_in?: string | null
+          clock_out?: string | null
+          created_at?: string | null
+          id?: string | null
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string | null
+          team_member_id?: string | null
+          total_hours?: number | null
         }
         Relationships: []
       }
@@ -7487,7 +8378,15 @@ export type Database = {
         Args: { p_pseudo_id: string }
         Returns: string
       }
+      grant_hat: {
+        Args: { _hat_type: string; _target_user: string }
+        Returns: string
+      }
       has_business_access: { Args: { p_business_id: string }; Returns: boolean }
+      has_hat: {
+        Args: { _hat_type: string; _user_id: string }
+        Returns: boolean
+      }
       increment_community_pool: {
         Args: { p_fiat_amount: number; p_pool_type: string }
         Returns: undefined
@@ -7527,6 +8426,9 @@ export type Database = {
         Returns: Json
       }
       invoke_refiner_secure: { Args: { payload: Json }; Returns: undefined }
+      is_business_manager: { Args: { _business_id: string }; Returns: boolean }
+      is_business_member: { Args: { _business_id: string }; Returns: boolean }
+      is_csuite: { Args: { _user_id: string }; Returns: boolean }
       is_org_admin: { Args: { _business_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {
@@ -7556,6 +8458,10 @@ export type Database = {
           processed_count: number
         }[]
       }
+      provision_business_from_request: {
+        Args: { p_request_id: string; p_vertical_id: string }
+        Returns: undefined
+      }
       provision_employee_via_aca: {
         Args: {
           _business_id: string
@@ -7577,6 +8483,7 @@ export type Database = {
           hourly_rate: number | null
           id: string
           is_ephemeral: boolean
+          job_title: string | null
           last_login: string | null
           name: string
           notes: string | null
@@ -7619,6 +8526,7 @@ export type Database = {
           hourly_rate: number | null
           id: string
           is_ephemeral: boolean
+          job_title: string | null
           last_login: string | null
           name: string
           notes: string | null
@@ -7661,6 +8569,7 @@ export type Database = {
           hourly_rate: number | null
           id: string
           is_ephemeral: boolean
+          job_title: string | null
           last_login: string | null
           name: string
           notes: string | null
@@ -7688,11 +8597,11 @@ export type Database = {
       }
       set_usdc_balance: {
         Args: {
-          p_block_number?: number
+          p_block_number: number
           p_micro_balance: number
           p_user_id: string
         }
-        Returns: number
+        Returns: undefined
       }
       settle_sovereign_transaction: {
         Args: {
@@ -7723,6 +8632,15 @@ export type Database = {
             }
             Returns: Json
           }
+      submit_variance_correction: {
+        Args: {
+          _corrective_action: string
+          _manager_pin: string
+          _root_cause: string
+          _variance_id: string
+        }
+        Returns: string
+      }
       trigger_daily_apple_health_sync: {
         Args: never
         Returns: {
@@ -7751,19 +8669,33 @@ export type Database = {
       }
     }
     Enums: {
-      idia_transaction_status: "PENDING" | "SETTLED" | "FAILED" | "completed"
+      idia_account_type: "individual" | "business" | "enterprise"
+      idia_pay_role: "org_admin" | "team_lead" | "team_member"
+      idia_saas_tier:
+        | "free"
+        | "pro"
+        | "pro_plus"
+        | "pure_alpha"
+        | "analyst"
+        | "professional"
+        | "enterprise"
+      idia_transaction_status: "pending" | "settled" | "failed" | "completed"
       idia_transaction_type:
-        | "DATA_SALE"
-        | "DEPOSIT"
-        | "WITHDRAWAL"
-        | "FEE"
-        | "REWARD"
+        | "data_sale"
+        | "deposit"
+        | "withdrawal"
+        | "fee"
+        | "reward"
         | "settlement"
         | "fbo_dissemination"
-        | "FREE_COMPUTE"
-        | "INTERNAL_DEPOSIT"
+        | "free_compute"
+        | "internal_deposit"
+        | "data_sale_payout"
+        | "ecosystem_war_chest"
+        | "hub_protocol_fee"
+        | "synapse_purchase"
       sync_status: "pending" | "processing" | "completed" | "failed"
-      user_role: "owner" | "manager" | "employee" | "warehouse_associate"
+      user_role: "leadership" | "manager" | "employee" | "csuite"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -7891,20 +8823,35 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      idia_transaction_status: ["PENDING", "SETTLED", "FAILED", "completed"],
+      idia_account_type: ["individual", "business", "enterprise"],
+      idia_pay_role: ["org_admin", "team_lead", "team_member"],
+      idia_saas_tier: [
+        "free",
+        "pro",
+        "pro_plus",
+        "pure_alpha",
+        "analyst",
+        "professional",
+        "enterprise",
+      ],
+      idia_transaction_status: ["pending", "settled", "failed", "completed"],
       idia_transaction_type: [
-        "DATA_SALE",
-        "DEPOSIT",
-        "WITHDRAWAL",
-        "FEE",
-        "REWARD",
+        "data_sale",
+        "deposit",
+        "withdrawal",
+        "fee",
+        "reward",
         "settlement",
         "fbo_dissemination",
-        "FREE_COMPUTE",
-        "INTERNAL_DEPOSIT",
+        "free_compute",
+        "internal_deposit",
+        "data_sale_payout",
+        "ecosystem_war_chest",
+        "hub_protocol_fee",
+        "synapse_purchase",
       ],
       sync_status: ["pending", "processing", "completed", "failed"],
-      user_role: ["owner", "manager", "employee", "warehouse_associate"],
+      user_role: ["leadership", "manager", "employee", "csuite"],
     },
   },
 } as const

@@ -10,10 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  PAY_APP_VERTICAL_OPTIONS,
-  getPayAppVerticalLabel,
-} from "@/taxonomy/payAppVerticals";
+import { PAY_APP_VERTICAL_OPTIONS, getPayAppVerticalLabel } from "@/taxonomy/payAppVerticals";
 import {
   Building2,
   Search,
@@ -34,10 +31,6 @@ import {
   User as UserIcon,
 } from "lucide-react";
 
-// Blueprint Category dropdown is sourced from the Pay App Vertical Catalog —
-// the same list the Pay App Builder uses to hydrate merchant_blueprint.json.
-// We persist the vertical `id` (e.g. "hospitality") into businesses.business_type
-// so the Builder can preselect the correct module bundle automatically.
 const BLUEPRINT_CATEGORIES = PAY_APP_VERTICAL_OPTIONS;
 
 const ClientOrganizations = () => {
@@ -52,6 +45,8 @@ const ClientOrganizations = () => {
   const [parsedData, setParsedData] = useState<any>(null);
   const [t1pDecision, setT1pDecision] = useState<"pending" | "approved" | "denied">("pending");
   const [idiaPayDecision, setIdiaPayDecision] = useState<"pending" | "approved" | "denied">("pending");
+  const [denialCause, setDenialCause] = useState("");
+  const [denialRemediation, setDenialRemediation] = useState("");
 
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
@@ -77,68 +72,112 @@ const ClientOrganizations = () => {
   const { toast } = useToast();
 
   const fetchBusinesses = async () => {
+    console.log("[ClientOrganizations] >>> START: fetchBusinesses()");
     setIsLoadingOrgs(true);
-    const { data, error } = await supabase.from("businesses").select("*").order("created_at", { ascending: false });
 
-    if (data && !error) {
-      const enrichedData = data.map((b) => ({
-        ...b,
-        t1p_status: b.subscription_tier === "Enterprise" ? "approved" : "denied",
-        idia_pay_status: b.subscription_tier === "Enterprise" ? "approved" : "pending",
-      }));
-      setBusinesses(enrichedData);
+    try {
+      console.log("[ClientOrganizations] --- STEP: Querying 'businesses' table ordered by created_at");
+      const { data, error } = await supabase.from("businesses").select("*").order("created_at", { ascending: false });
 
-      if (selectedBusiness) {
-        const updatedSelected = enrichedData.find((b) => b.id === selectedBusiness.id);
-        if (updatedSelected && !isEditingCard) setSelectedBusiness(updatedSelected);
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Supabase SELECT failed:", error);
+        toast({ title: "Registry Fetch Failed", description: error.message, variant: "destructive" });
+        return;
       }
+
+      if (data) {
+        console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} organizations.`);
+        const enrichedData = data.map((b) => ({
+          ...b,
+          t1p_status: b.subscription_tier === "Enterprise" ? "approved" : "denied",
+          idia_pay_status: b.subscription_tier === "Enterprise" ? "approved" : "pending",
+        }));
+        setBusinesses(enrichedData);
+
+        if (selectedBusiness) {
+          const updatedSelected = enrichedData.find((b) => b.id === selectedBusiness.id);
+          if (updatedSelected && !isEditingCard) setSelectedBusiness(updatedSelected);
+        }
+      }
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchBusinesses:", err);
+    } finally {
+      setIsLoadingOrgs(false);
+      console.log("[ClientOrganizations] <<< END: fetchBusinesses()");
     }
-    setIsLoadingOrgs(false);
   };
 
-  useEffect(() => {
-    fetchBusinesses();
-    const fetchRequests = async () => {
+  const fetchRequests = async () => {
+    console.log("[ClientOrganizations] >>> START: fetchRequests()");
+    try {
       const { data, error } = await supabase
-        .from("account_conversion_requests" as any)
+        .from("account_conversion_requests")
         .select("*")
-        .eq("status", "pending")
+        .ilike("status", "pending")
         .order("created_at", { ascending: false });
-      if (data && !error) {
+
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR:", error);
+        return;
+      }
+
+      if (data) {
         const formatted = data.map((req: any) => ({
-          id: req.id,
+          ...req,
           companyName: req.company_name,
-          requestType: req.request_type,
           requestDate: new Date(req.created_at).toLocaleDateString(),
-          requestedBy: req.contact_name,
-          requestedRole: req.contact_role,
-          platformGuid: req.user_id || "PENDING-GUID-ASSIGNMENT",
-          status: req.status,
+          platformGuid: req.user_id,
         }));
         setPendingRequests(formatted);
       }
-    };
-    fetchRequests();
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL:", err);
+    }
+  };
+
+  useEffect(() => {
+    console.log("[ClientOrganizations] >>> START: useEffect Initialization");
+    fetchBusinesses();
+
     const fetchEligibleUsers = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("user_id, account_type, occupation, location")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (data) {
-        setEligibleUsers(
-          data.map((p: any) => ({
-            user_id: p.user_id,
-            account_type: p.account_type,
-            display: `${p.user_id.slice(0, 8)} · ${p.occupation || p.location || p.account_type || "user"}`,
-          })),
-        );
+      console.log("[ClientOrganizations] >>> START: fetchEligibleUsers()");
+      try {
+        console.log("[ClientOrganizations] --- STEP: Querying 'profiles'");
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("user_id, account_type, occupation, location")
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("[ClientOrganizations] !!! ERROR: Failed to fetch eligible users:", error);
+          return;
+        }
+
+        if (data) {
+          console.log(`[ClientOrganizations] --- SUCCESS: Retrieved ${data.length} eligible users.`);
+          setEligibleUsers(
+            data.map((p: any) => ({
+              user_id: p.user_id,
+              account_type: p.account_type,
+              display: `${p.user_id.slice(0, 8)} · ${p.account_type || "user"}`,
+            })),
+          );
+        }
+      } catch (err) {
+        console.error("[ClientOrganizations] !!! FATAL EXCEPTION in fetchEligibleUsers:", err);
+      } finally {
+        console.log("[ClientOrganizations] <<< END: fetchEligibleUsers()");
       }
     };
+
+    fetchRequests();
     fetchEligibleUsers();
+    console.log("[ClientOrganizations] <<< END: useEffect Initialization Triggered");
   }, [toast]);
 
   const handleCreateBusiness = async () => {
+    console.log("[ClientOrganizations] >>> START: handleCreateBusiness()");
     if (
       !formData.legalName ||
       !formData.businessType ||
@@ -150,13 +189,12 @@ const ClientOrganizations = () => {
     ) {
       toast({
         title: "Validation Error",
-        description:
-          "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
+        description: "Name, Category, Owner, and full Address (Street, City, State, ZIP) are required.",
         variant: "destructive",
       });
       return;
     }
-    // Compose a single-line address for legacy `address` column / display fallbacks.
+
     const composedAddress = [
       formData.streetAddress1,
       formData.streetAddress2,
@@ -164,8 +202,11 @@ const ClientOrganizations = () => {
     ]
       .filter(Boolean)
       .join(", ");
+
     setIsSubmitting(true);
+
     try {
+      console.log("[ClientOrganizations] --- STEP 1: Inserting record into 'businesses'");
       const { data: businessData, error: businessError } = await supabase
         .from("businesses")
         .insert([
@@ -186,9 +227,14 @@ const ClientOrganizations = () => {
         ] as any)
         .select()
         .single();
-      if (businessError) throw businessError;
 
-      await supabase.from("business_locations").insert([
+      if (businessError) {
+        console.error("[ClientOrganizations] !!! ERROR Step 1:", businessError);
+        throw businessError;
+      }
+
+      console.log("[ClientOrganizations] --- STEP 2: Inserting record into 'business_locations'");
+      const { error: locationError } = await supabase.from("business_locations").insert([
         {
           business_id: businessData.id,
           name: "Primary Headquarters",
@@ -197,20 +243,34 @@ const ClientOrganizations = () => {
         },
       ]);
 
-      // CRITICAL: Tether business to at least one user via the business_users junction.
+      if (locationError) {
+        console.error("[ClientOrganizations] !!! ERROR Step 2:", locationError);
+        throw locationError;
+      }
+
+      console.log("[ClientOrganizations] --- STEP 3: Tying business to user via 'business_users'");
       const { error: linkError } = await supabase.from("business_users").insert([
         {
           business_id: businessData.id,
           user_id: formData.ownerUserId,
-          role: "owner",
+          role: "csuite",
           is_active: true,
           accepted_at: new Date().toISOString(),
         },
       ]);
+
       if (linkError) {
-        console.error("[OrgMgmt] Failed to link owner user:", linkError);
+        console.error("[ClientOrganizations] !!! ERROR Step 3:", linkError);
         throw new Error(`Owner association failed: ${linkError.message}`);
       }
+
+      console.log("[ClientOrganizations] --- STEP 4: Injecting optimistic state into UI");
+      const newBusiness = {
+        ...businessData,
+        t1p_status: "approved",
+        idia_pay_status: "pending",
+      };
+      setBusinesses((prev) => [newBusiness, ...prev]);
 
       toast({ title: "Organization Added", description: `${formData.legalName} provisioned successfully.` });
       setShowNewOrgModal(false);
@@ -224,17 +284,23 @@ const ClientOrganizations = () => {
         postalCode: "",
         ownerUserId: "",
       });
-      fetchBusinesses();
+
+      console.log("[ClientOrganizations] --- STEP 5: Triggering background sync fetchBusinesses()");
+      await fetchBusinesses();
     } catch (error: any) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleCreateBusiness:", error);
       toast({ title: "Provisioning Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+      console.log("[ClientOrganizations] <<< END: handleCreateBusiness()");
     }
   };
 
   const handleUpdateBusiness = async () => {
+    console.log("[ClientOrganizations] >>> START: handleUpdateBusiness()");
     if (!editForm.name) return;
     setIsSubmitting(true);
+
     try {
       const composedAddress = [
         editForm.street_address_1,
@@ -243,6 +309,8 @@ const ClientOrganizations = () => {
       ]
         .filter((p) => p && p.trim() && p.trim() !== ",")
         .join(", ");
+
+      console.log(`[ClientOrganizations] --- STEP: Updating business ID ${selectedBusiness.id}`);
       const { error } = await supabase
         .from("businesses")
         .update({
@@ -261,46 +329,65 @@ const ClientOrganizations = () => {
           data_coop_enabled: editForm.data_coop_enabled,
         } as any)
         .eq("id", selectedBusiness.id);
-      if (error) throw error;
+
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Failed to update business record.", error);
+        throw error;
+      }
 
       toast({ title: "Record Updated", description: "Enterprise profile modifications saved." });
       setIsEditingCard(false);
-      fetchBusinesses();
+      await fetchBusinesses();
     } catch (error: any) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleUpdateBusiness:", error);
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+      console.log("[ClientOrganizations] <<< END: handleUpdateBusiness()");
     }
   };
 
   const handleToggleProvisioning = async () => {
+    console.log("[ClientOrganizations] >>> START: handleToggleProvisioning()");
     if (!selectedBusiness) return;
     const isActive = selectedBusiness.provisioning_active !== false;
     const next = !isActive;
+
     if (!next) {
       const ok = window.confirm(
         `Cut off "${selectedBusiness.name}" from IDIA Pay? Their provisioning code will be deactivated immediately.`,
       );
       if (!ok) return;
     }
-    const { error } = await supabase
-      .from("businesses")
-      .update({
-        provisioning_active: next,
-        deactivated_at: next ? null : new Date().toISOString(),
-      } as any)
-      .eq("id", selectedBusiness.id);
-    if (error) {
-      toast({ title: "Action Failed", description: error.message, variant: "destructive" });
-      return;
+
+    try {
+      console.log(`[ClientOrganizations] --- STEP: Updating provisioning status to ${next}`);
+      const { error } = await supabase
+        .from("businesses")
+        .update({
+          provisioning_active: next,
+          deactivated_at: next ? null : new Date().toISOString(),
+        } as any)
+        .eq("id", selectedBusiness.id);
+
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: Failed to toggle provisioning status.", error);
+        toast({ title: "Action Failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      toast({
+        title: next ? "Provisioning Restored" : "Provisioning Deactivated",
+        description: next
+          ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
+          : `${selectedBusiness.name} can no longer access IDIA Pay.`,
+      });
+      await fetchBusinesses();
+    } catch (err) {
+      console.error("[ClientOrganizations] !!! FATAL EXCEPTION in handleToggleProvisioning:", err);
+    } finally {
+      console.log("[ClientOrganizations] <<< END: handleToggleProvisioning()");
     }
-    toast({
-      title: next ? "Provisioning Restored" : "Provisioning Deactivated",
-      description: next
-        ? `${selectedBusiness.name} has been re-enabled for IDIA Pay.`
-        : `${selectedBusiness.name} can no longer access IDIA Pay.`,
-    });
-    fetchBusinesses();
   };
 
   const handleSelectBusiness = (org: any) => {
@@ -316,77 +403,158 @@ const ClientOrganizations = () => {
     setReviewModalOpen(true);
     setAiParsing(true);
     setParsedData(null);
+
     setTimeout(() => {
       setAiParsing(false);
+
+      // STRIPPED PII: Utilizing UUID exclusively
+      const safeGuidSegment = request.platformGuid?.split("-")[0] || "Unknown";
+
       setParsedData({
-        legalName: request.companyName,
-        physicalAddress: "Extracted from Legal Documentation",
-        taxId: `XX-XXX${Math.floor(1000 + Math.random() * 9000)}`,
-        contactEmail: `${request.requestedBy.split(" ")[0].toLowerCase()}@company.com`,
-        contactPhone: "+1 (555) 000-0000",
-        responsibleParty: request.requestedBy,
-        responsibleRole: request.requestedRole || "Signatory",
-        businessBlueprintType: BLUEPRINT_CATEGORIES[0]?.id ?? "uncategorized",
-        guidValidated: true,
-        confidence: 99.4,
+        legalName: request.company_name,
+        entityType: request.entity_type,
+        taxId: request.ein,
+        industry: request.industry,
+        physicalAddress: `${request.address_street1}${request.address_street2 ? ", " + request.address_street2 : ""}, ${request.address_city}, ${request.address_state} ${request.address_zip}`,
+        responsibleParty: request.user_id,
+        responsibleRole: request.contact_role,
+        documents: request.document_paths || [],
+        logo: request.logo_path,
+        vertical: request.vertical_id,
+        submodule: request.submodule_id,
       });
-    }, 1200);
+    }, 800);
   };
 
   const handleProcessApplication = async () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest || !parsedData) return;
+    setIsSubmitting(true);
+
     try {
-      const baseStatus = t1pDecision === "denied" && idiaPayDecision === "denied" ? "rejected" : "approved";
-      await supabase
-        .from("account_conversion_requests" as any)
-        .update({ status: baseStatus })
+      const isApproved = idiaPayDecision === "approved";
+      const isDenied = idiaPayDecision === "denied";
+      const status = isApproved ? "approved" : "rejected";
+
+      if (isDenied && !denialCause.trim()) {
+        toast({
+          title: "Denial cause required",
+          description: "Provide a reason so the applicant can remediate.",
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 1. Update Request Status
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const updatePayload: Record<string, unknown> = { status };
+      if (isDenied) {
+        updatePayload.denial_cause = denialCause.trim();
+        updatePayload.denial_remediation = denialRemediation.trim() || null;
+        updatePayload.denied_at = new Date().toISOString();
+        updatePayload.denied_by = user?.id ?? null;
+      }
+      const { error: updateError } = await supabase
+        .from("account_conversion_requests")
+        .update(updatePayload as any)
         .eq("id", selectedRequest.id);
 
-      if (baseStatus === "approved") {
+      if (updateError) throw updateError;
+
+      if (isApproved) {
+        // 2a. Duplicate guard — same applicant or same Tax ID can't be provisioned twice
+        const { data: existingByOwner } = await supabase
+          .from("business_users")
+          .select("business_id")
+          .eq("user_id", selectedRequest.user_id)
+          .eq("is_active", true)
+          .limit(1);
+
+        let duplicateByTax: any[] | null = null;
+        if (parsedData.taxId) {
+          const { data } = await supabase
+            .from("businesses")
+            .select("id")
+            .eq("tax_id", parsedData.taxId)
+            .limit(1);
+          duplicateByTax = data;
+        }
+
+        if ((existingByOwner && existingByOwner.length > 0) || (duplicateByTax && duplicateByTax.length > 0)) {
+          toast({
+            title: "Already Provisioned",
+            description:
+              "This applicant or Tax ID is already linked to an existing organization. Request marked approved without creating a duplicate.",
+          });
+          setReviewModalOpen(false);
+          await fetchRequests();
+          await fetchBusinesses();
+          setIsSubmitting(false);
+          return;
+        }
+
+        // 2. Provision Business Entity with full KYB data
         const { data: businessData, error: businessError } = await supabase
           .from("businesses")
           .insert([
             {
               name: parsedData.legalName,
-              address: parsedData.physicalAddress,
               tax_id: parsedData.taxId,
-              email: parsedData.contactEmail,
-              phone: parsedData.contactPhone,
-              business_type: parsedData.businessBlueprintType,
+              business_type: parsedData.vertical,
+              // Use specific columns from your recent SQL migrations
+              street_address_1: selectedRequest.address_street1,
+              street_address_2: selectedRequest.address_street2,
+              city: selectedRequest.address_city,
+              state: selectedRequest.address_state,
+              postal_code: selectedRequest.address_zip,
               subscription_tier: "Enterprise",
               data_coop_enabled: true,
-            } as any,
-          ])
+              logo_url: selectedRequest.logo_path,
+            },
+          ] as any)
           .select()
           .single();
+
         if (businessError) throw businessError;
 
-        await supabase.from("business_locations").insert([
+        // 3. Link C-Suite/Org Admin (GUID-rooted)
+        await supabase.from("business_users").insert([
           {
             business_id: businessData.id,
-            name: "Primary Headquarters",
-            address: parsedData.physicalAddress,
-            contact_email: parsedData.contactEmail,
-            phone: parsedData.contactPhone,
+            user_id: selectedRequest.user_id,
+            role: "csuite",
             is_active: true,
           },
         ]);
 
-        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
-        setReviewModalOpen(false);
-        fetchBusinesses();
-        toast({
-          title: "Organization Approved",
-          description: `Provisioning code: ${(businessData as any)?.provisioning_code ?? "—"}. Open the Pay App Blueprint to vault its terminal schema.`,
-        });
-      } else {
-        setPendingRequests((prev) => prev.filter((r) => r.id !== selectedRequest.id));
-        setReviewModalOpen(false);
-        fetchBusinesses();
-        toast({ title: "Application Rejected" });
+        // 4. AUTO-PROMOTE: flip applicant profile to business + Enterprise tier
+        //    so AuthContext resolves their role to organization-admin on next login.
+        await supabase
+          .from("profiles")
+          .update({ account_type: "business" } as any)
+          .eq("user_id", selectedRequest.user_id);
+
+        await supabase.from("user_subscriptions").insert([
+          {
+            user_id: selectedRequest.user_id,
+            tier: "enterprise",
+            status: "active",
+          },
+        ] as any);
       }
+
+      setReviewModalOpen(false);
+      setDenialCause("");
+      setDenialRemediation("");
+      await fetchBusinesses();
+      await fetchRequests();
+      toast({ title: isApproved ? "Organization Provisioned" : "Application Denied" });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Compliance Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -481,9 +649,7 @@ const ClientOrganizations = () => {
                   </Label>
                   <Input
                     value={formData.state}
-                    onChange={(e) =>
-                      setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })
-                    }
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase().slice(0, 2) })}
                     className="text-sm uppercase"
                     placeholder="CA"
                     maxLength={2}
@@ -566,16 +732,23 @@ const ClientOrganizations = () => {
         </Dialog>
       </div>
 
-      {/* PENDING APPLICATIONS */}
-      {pendingRequests.length > 0 && (
-        <Card className="border-blue-200 shadow-sm shrink-0">
-          <CardHeader className="bg-blue-50 border-b border-blue-100 py-2 px-4 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-900">
-              <ShieldCheck className="w-4 h-4" /> Pending Verifications
-            </CardTitle>
-            <Badge className="bg-blue-600">{pendingRequests.length} Pending</Badge>
-          </CardHeader>
-          <CardContent className="p-0 max-h-40 overflow-y-auto">
+      {/* PENDING APPLICATIONS - PERMANENTLY VISIBLE */}
+      <Card className="border-blue-200 shadow-sm shrink-0 mb-4">
+        <CardHeader className="bg-blue-50 border-b border-blue-100 py-2 px-4 flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-900">
+            <ShieldCheck className="w-4 h-4" /> Pending Verifications
+          </CardTitle>
+          <Badge className={pendingRequests.length > 0 ? "bg-blue-600" : "bg-slate-400"}>
+            {pendingRequests.length} Pending
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0 max-h-40 overflow-y-auto">
+          {pendingRequests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-sm text-slate-500">
+              <ShieldCheck className="w-8 h-8 opacity-20 mb-2 text-slate-400" />
+              <p>No account conversion requests are pending.</p>
+            </div>
+          ) : (
             <div className="divide-y divide-blue-100">
               {pendingRequests.map((request) => (
                 <div
@@ -584,32 +757,263 @@ const ClientOrganizations = () => {
                 >
                   <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                     <h4 className="font-medium text-sm text-gray-900 truncate">{request.companyName}</h4>
-                    <span className="text-xs text-gray-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                      Req: {request.requestedBy}
+                    <span className="text-xs font-mono text-gray-500 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">
+                      GUID: {request.platformGuid?.split("-")[0] || "Unknown"}...
                     </span>
                   </div>
-                  <Button size="sm" className="shrink-0" onClick={() => openReviewModal(request)}>
-                    Process Application
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button size="sm" onClick={() => openReviewModal(request)}>
+                      Process Application
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                      title="Dismiss / remove from pending"
+                      onClick={async () => {
+                        if (!window.confirm(`Remove "${request.companyName}" from pending? This cannot be undone.`))
+                          return;
+                        const { error } = await supabase
+                          .from("account_conversion_requests")
+                          .update({ status: "dismissed" } as any)
+                          .eq("id", request.id);
+                        if (error) {
+                          toast({ title: "Dismiss failed", description: error.message, variant: "destructive" });
+                          return;
+                        }
+                        toast({ title: "Removed from pending" });
+                        await fetchRequests();
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       {/* VERIFICATION MODAL */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-        <DialogContent className="sm:max-w-2xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold">Verification Actions</DialogTitle>
+        <DialogContent className="sm:max-w-5xl p-0 overflow-hidden bg-slate-50">
+          <DialogHeader className="px-4 py-3 border-b bg-white">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              KYB / AML Compliance Review: {selectedRequest?.companyName}
+            </DialogTitle>
           </DialogHeader>
-          <div className="py-2 text-sm text-slate-600">
-            Please review documents and apply T-1-P and IDIA Pay policies.
+
+          <div className="flex flex-col lg:flex-row">
+            {/* LEFT: ENTITY DETAILS */}
+            <div className="flex-1 p-4 border-r bg-white">
+              <section>
+                <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">Entity Details</h3>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase">Legal Name</Label>
+                    <p className="text-sm font-medium">{parsedData?.legalName || "—"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase">Tax ID / EIN</Label>
+                    <p className="text-sm font-mono font-medium">{parsedData?.taxId || "—"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase">Entity Type</Label>
+                    <p className="text-sm font-medium">{parsedData?.entityType || "—"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase">Industry</Label>
+                    <p className="text-sm font-medium">
+                      {parsedData?.vertical ? getPayAppVerticalLabel(parsedData.vertical) : parsedData?.industry || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase">Sub-Industry</Label>
+                    <p className="text-sm font-medium font-mono">{parsedData?.submodule || "—"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-[10px] text-muted-foreground uppercase">Verified Physical Address</Label>
+                    <p className="text-sm font-medium">{parsedData?.physicalAddress || "—"}</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* RIGHT: SIGNATORY + DOCS + DECISION */}
+            <div className="w-full lg:w-[400px] p-4 flex flex-col gap-4 bg-slate-50">
+              <section>
+                <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
+                  Responsible Party (Signatory)
+                </h3>
+                <div className="p-2 border rounded-lg bg-white flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-slate-50 p-1.5 rounded border">
+                      <UserIcon className="w-3.5 h-3.5 text-slate-600" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-mono text-slate-600 break-all">{selectedRequest?.platformGuid}</p>
+                      <p className="text-[10px] text-muted-foreground italic">
+                        {selectedRequest?.contact_role || "Authorized Signer"}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
+                    Liveness Verified
+                  </Badge>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-widest">
+                  Submitted Documentation
+                </h3>
+                <div className="space-y-1.5">
+                  {parsedData?.documents && parsedData.documents.length > 0 ? (
+                    parsedData.documents.map((doc: string, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-2 border rounded bg-white hover:bg-slate-100 transition-colors"
+                      >
+                        <span className="text-xs font-medium flex items-center gap-2 truncate">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">{doc.split("/").pop()}</span>
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-indigo-600"
+                            onClick={async () => {
+                              const fileName = doc.split("/").pop() || "document";
+                              const { data, error } = await supabase.storage.from("business-kyb-docs").download(doc);
+                              if (error || !data) {
+                                toast({
+                                  title: "Download failed",
+                                  description: error?.message || "File unavailable",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              const url = URL.createObjectURL(data);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = fileName;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            }}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-slate-600"
+                            onClick={async () => {
+                              const { data, error } = await supabase.storage
+                                .from("business-kyb-docs")
+                                .createSignedUrl(doc, 120);
+                              if (error || !data?.signedUrl) {
+                                toast({
+                                  title: "Cannot open",
+                                  description: error?.message || "Signed URL unavailable",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No documents submitted.</p>
+                  )}
+                </div>
+              </section>
+
+              <div className="space-y-2 pt-3 border-t">
+                <Label className="text-sm font-semibold">IDIA Pay Policy Decision</Label>
+                <p className="text-[10px] text-muted-foreground -mt-1">Additional financial-operations clearance.</p>
+                <Select value={idiaPayDecision} onValueChange={(v: any) => setIdiaPayDecision(v)}>
+                  <SelectTrigger
+                    className={
+                      idiaPayDecision === "approved"
+                        ? "border-indigo-500 bg-indigo-50"
+                        : idiaPayDecision === "denied"
+                          ? "border-red-500 bg-red-50"
+                          : ""
+                    }
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending Review</SelectItem>
+                    <SelectItem value="approved">Approve</SelectItem>
+                    <SelectItem value="denied">Deny</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {idiaPayDecision === "denied" && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <div>
+                      <Label className="text-[10px] uppercase text-red-700 font-semibold">
+                        Denial Cause <span className="text-red-500">*</span>
+                      </Label>
+                      <textarea
+                        value={denialCause}
+                        onChange={(e) => setDenialCause(e.target.value)}
+                        placeholder="Why is this application denied?"
+                        className="w-full mt-1 text-xs border border-red-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase text-slate-600 font-semibold">Remediation Guidance</Label>
+                      <textarea
+                        value={denialRemediation}
+                        onChange={(e) => setDenialRemediation(e.target.value)}
+                        placeholder="What can the applicant fix and resubmit?"
+                        className="w-full mt-1 text-xs border border-slate-200 rounded p-2 min-h-[50px] focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t space-y-2 mt-auto">
+                <Button
+                  className="w-full bg-slate-900 hover:bg-black text-white"
+                  onClick={handleProcessApplication}
+                  disabled={
+                    isSubmitting ||
+                    idiaPayDecision === "pending" ||
+                    (idiaPayDecision === "denied" && !denialCause.trim())
+                  }
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> Committing…
+                    </>
+                  ) : (
+                    "Commit Compliance Decision"
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-xs text-slate-400"
+                  onClick={() => setReviewModalOpen(false)}
+                >
+                  Close Without Deciding
+                </Button>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleProcessApplication}>Approve Organization</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -709,8 +1113,7 @@ const ClientOrganizations = () => {
                           <MapPin className="w-3 h-3 shrink-0" />
                           {(() => {
                             const street =
-                              selectedBusiness.street_address_1 ||
-                              selectedBusiness.address?.split(",")[0]?.trim();
+                              selectedBusiness.street_address_1 || selectedBusiness.address?.split(",")[0]?.trim();
                             const cityState = [selectedBusiness.city, selectedBusiness.state]
                               .filter(Boolean)
                               .join(", ");

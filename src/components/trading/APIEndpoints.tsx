@@ -1,17 +1,57 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileCode, Copy, Lock, Zap, Bot, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { fetchApi } from "@/lib/api";
+import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { supabase } from "@/integrations/supabase/client";
+
+// --- Type Definitions ---
+type Tier = "Analyst" | "Professional" | "Enterprise";
+interface Endpoint {
+  method: string;
+  path: string;
+  description: string;
+  tier: Tier;
+  latency: string;
+  credits: number;
+  auth: string;
+}
+
+const TIER_MATRIX: Record<Tier, number> = { Analyst: 1, Professional: 2, Enterprise: 3 };
+
+const normalizeTier = (raw: string | undefined | null): Tier | null => {
+  console.info(`[APIEndpoints][normalizeTier] BEGIN raw=${raw ?? "null"}`);
+  try {
+    const v = (raw ?? "").toLowerCase();
+    if (v === "enterprise") return "Enterprise";
+    if (v === "professional" || v === "prof") return "Professional";
+    if (v === "analyst") return "Analyst";
+    console.warn(`[APIEndpoints][normalizeTier] WARN unrecognized tier=${v}`);
+    return null;
+  } finally {
+    console.info(`[APIEndpoints][normalizeTier] END`);
+  }
+};
 
 export const APIEndpoints = () => {
-  const copyCode = (code: string, name: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success(`${name} copied to clipboard`);
-  };
+  // --- Live context (real auth + credits, no mocks) ---
+  const { user, subscriptionTier } = useAuth();
+  const { balanceData, refreshBalance } = useSynapseCredits();
 
-  const endpoints = [
+  const currentTier: Tier | null = normalizeTier(subscriptionTier as unknown as string);
+  const credits = Number(balanceData?.available_credits ?? 0);
+
+  const [baseUrl, setBaseUrl] = useState<string>("https://api.idiahub.com");
+
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([
     {
       method: "GET",
       path: "/v1/features/market-data",
@@ -48,9 +88,9 @@ export const APIEndpoints = () => {
       credits: 50,
       auth: "OAuth 2.0 + API Key",
     },
-  ];
+  ]);
 
-  const mcpConfigExample = `{
+  const [mcpConfigExample, setMcpConfigExample] = useState<string>(`{
   "mcpServers": {
     "idia-vault": {
       "command": "npx",
@@ -64,13 +104,13 @@ export const APIEndpoints = () => {
       ]
     }
   }
-}`;
+}`);
 
-  const curlExample = `curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
+  const [curlExample, setCurlExample] = useState<string>(`curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json"`;
+  -H "Content-Type: application/json"`);
 
-  const pythonExample = `import requests
+  const [pythonExample, setPythonExample] = useState<string>(`import requests
 
 headers = {
     "Authorization": "Bearer YOUR_API_KEY",
@@ -83,9 +123,9 @@ response = requests.get(
 )
 
 data = response.json()
-print(data)`;
+print(data)`);
 
-  const nodejsExample = `const axios = require('axios');
+  const [nodejsExample, setNodejsExample] = useState<string>(`const axios = require('axios');
 
 const config = {
   headers: {
@@ -100,36 +140,287 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
   })
   .catch(error => {
     console.error('Error:', error);
-  });`;
+  });`);
 
-  const responseExample = `{
-  "data": {
-    "feature_id": "market-data-2025-10-27",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "features": {
-      "payment_velocity": 0.847,
-      "transaction_volume": 125000,
-      "market_sentiment": "bullish"
-    }
-  },
-  "metadata": {
-    "latency_ms": 47,
-    "credits_consumed": 5,
-    "tier": "analyst"
-  },
-  "provenance": {
-    "digiramp_anchor_id": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d",
-    "blockchain": "ethereum",
-    "timestamp": "2025-10-27T15:30:45Z",
-    "immutable": true
-  },
-  "headers": {
-    "X-IDIA-LIABILITY-TOKEN": "audit_8522e971_e064_4591"
+  const [responseExample, setResponseExample] = useState<string>(
+    `// Awaiting live execution...
+// Click an endpoint path below to execute a live request and generate a dynamic institutional payload.`,
+  );
+
+  // --- Granular hydration: rebuild copy-paste examples against current origin ---
+  useEffect(() => {
+    console.info("[APIEndpoints][Hydrate] BEGIN: dynamic origin + example template hydration");
+    try {
+      console.info("[APIEndpoints][Hydrate][resolve_origin] BEGIN");
+      if (typeof window === "undefined") {
+        console.warn("[APIEndpoints][Hydrate][resolve_origin] WARN no window object — SSR path");
+        return;
+      }
+      const origin = window.location.origin;
+      console.info(`[APIEndpoints][Hydrate][resolve_origin] EXEC origin=${origin}`);
+      setBaseUrl(origin);
+      console.info("[APIEndpoints][Hydrate][resolve_origin] END");
+
+      console.info("[APIEndpoints][Hydrate][template_examples] BEGIN");
+      setCurlExample(
+        `curl -X GET "${origin}/v1/features/market-data" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json"`,
+      );
+      setPythonExample(
+        `import requests
+
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json"
+}
+
+response = requests.get(
+    "${origin}/v1/features/market-data",
+    headers=headers
+)
+
+data = response.json()
+print(data)`,
+      );
+      setNodejsExample(
+        `const axios = require('axios');
+
+const config = {
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
   }
-}`;
+};
+
+axios.get('${origin}/v1/features/market-data', config)
+  .then(response => {
+    console.log(response.data);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+  });`,
+      );
+      console.info("[APIEndpoints][Hydrate][template_examples] END");
+    } catch (error) {
+      console.error("[APIEndpoints][Hydrate] CATCH: hydration failed", error);
+    } finally {
+      console.info("[APIEndpoints][Hydrate] END");
+    }
+  }, []);
+
+  // --- Live execution against synapse-controller (server-authoritative credit burn) ---
+  const executeLiveCall = async (endpoint: Endpoint) => {
+    console.info(`[APIEndpoints][executeLiveCall] BEGIN method=${endpoint.method} path=${endpoint.path}`);
+    const startTime = performance.now();
+    try {
+      console.info("[APIEndpoints][executeLiveCall][preflight_identity] BEGIN");
+      const u = user as any;
+      const userId = u?.user_id ?? u?.id;
+      const isCsuite =
+        typeof u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(u.role);
+      if (!userId) {
+        console.error("[APIEndpoints][executeLiveCall][preflight_identity] FATAL: no authenticated user_id");
+        toast.error("Sign in required to execute live calls");
+        return;
+      }
+      console.info(
+        `[APIEndpoints][executeLiveCall][preflight_identity] EXEC user_id=${userId} role=${u?.role} csuite=${isCsuite}`,
+      );
+      console.info("[APIEndpoints][executeLiveCall][preflight_identity] END");
+
+      console.info("[APIEndpoints][executeLiveCall][preflight_credits] BEGIN");
+      console.info(
+        `[APIEndpoints][executeLiveCall][preflight_credits] EXEC required=${endpoint.credits} available=${credits} csuite_bypass=${isCsuite}`,
+      );
+      if (!isCsuite && credits < endpoint.credits) {
+        console.error("[APIEndpoints][executeLiveCall][preflight_credits] HALT: insufficient credits");
+        toast.error(`Insufficient credits — ${endpoint.credits} CR required, ${credits} available`);
+        return;
+      }
+      console.info("[APIEndpoints][executeLiveCall][preflight_credits] END");
+
+      console.info("[APIEndpoints][executeLiveCall][preflight_tier] BEGIN");
+      if (!isCsuite && (!currentTier || TIER_MATRIX[endpoint.tier] > TIER_MATRIX[currentTier])) {
+        console.error(
+          `[APIEndpoints][executeLiveCall][preflight_tier] HALT tier=${currentTier} required=${endpoint.tier}`,
+        );
+        toast.error(`${endpoint.tier} tier required for this endpoint`);
+        return;
+      }
+      console.info(`[APIEndpoints][executeLiveCall][preflight_tier] END csuite_bypass=${isCsuite}`);
+
+      console.info("[APIEndpoints][executeLiveCall][invoke_controller] BEGIN");
+      const referenceId = `apiep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+      // Resolve buyer wallet (USDC source) from profile.
+      console.info("[APIEndpoints][executeLiveCall][resolve_wallet] BEGIN");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("id", userId)
+        .maybeSingle();
+      const buyerWallet: string | undefined = profile?.wallet_address ?? undefined;
+      const useOnChain = !!buyerWallet && buyerWallet.startsWith("0x");
+      console.info(
+        `[APIEndpoints][executeLiveCall][resolve_wallet] EXEC wallet=${buyerWallet ?? "<none>"} useOnChain=${useOnChain}`,
+      );
+      console.info("[APIEndpoints][executeLiveCall][resolve_wallet] END");
+
+      const payload: Record<string, unknown> = {
+        user_id: userId,
+        client_id: referenceId,
+        aca_record_ids: [referenceId],
+        intent_type: `API_DOC_PROBE:${endpoint.method}:${endpoint.path}`,
+        query_complexity: 1.0,
+        country_of_origin: "US",
+        routing: useOnChain ? "on-chain" : "fiat",
+        ...(useOnChain ? { buyer_wallet: buyerWallet } : {}),
+      };
+      console.info(`[APIEndpoints][executeLiveCall][invoke_controller] EXEC payload=${JSON.stringify(payload)}`);
+
+      let result = await fetchApi<{
+        success?: boolean;
+        liability_token_hash?: string;
+        financials?: Record<string, unknown>;
+        audit?: Record<string, unknown>;
+        error?: string;
+        details?: { code?: string; spender?: string; required?: string };
+        spender?: string;
+      }>("/api/v1/synapse/controller", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      // ====================================================================
+      // APPROVAL_REQUIRED handling: prompt buyer wallet to approve relayer,
+      // then retry the call once.
+      // ====================================================================
+      if (result?.error === "APPROVAL_REQUIRED" && useOnChain && buyerWallet) {
+        console.warn("[APIEndpoints][executeLiveCall][approval_flow] BEGIN — prompting wallet approval");
+        toast.message("One-time USDC approval required — sign in your wallet.");
+        const approval = await ensureUsdcApproval({ owner: buyerWallet });
+        if (approval.ok !== true) {
+          const reason = (approval as { reason?: string }).reason ?? "unknown";
+          console.error(
+            `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${reason}`,
+          );
+          toast.error(`USDC approval failed: ${reason}`);
+          return;
+        }
+        console.info(
+          `[APIEndpoints][executeLiveCall][approval_flow] END approval_tx=${approval.hash} — retrying charge`,
+        );
+        toast.success("Approval confirmed. Retrying charge…");
+        result = await fetchApi("/api/v1/synapse/controller", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+      console.info("[APIEndpoints][executeLiveCall][invoke_controller] END");
+
+      console.info("[APIEndpoints][executeLiveCall][measure_latency] BEGIN");
+      const actualLatency = Math.round(performance.now() - startTime);
+      console.info(`[APIEndpoints][executeLiveCall][measure_latency] EXEC latency_ms=${actualLatency}`);
+      console.info("[APIEndpoints][executeLiveCall][measure_latency] END");
+
+      console.info("[APIEndpoints][executeLiveCall][update_endpoint_state] BEGIN");
+      setEndpoints((prev) =>
+        prev.map((ep) => (ep.path === endpoint.path ? { ...ep, latency: `${actualLatency}ms` } : ep)),
+      );
+      console.info("[APIEndpoints][executeLiveCall][update_endpoint_state] END");
+
+      console.info("[APIEndpoints][executeLiveCall][build_payload] BEGIN");
+      const institutional = {
+        status: result?.success ? 200 : 400,
+        url: `${baseUrl}${endpoint.path}`,
+        latency_ms: actualLatency,
+        credits_consumed: endpoint.credits,
+        data: result?.audit ?? {},
+        financials: result?.financials ?? {},
+        provenance: {
+          digiramp_anchor_id: result?.liability_token_hash
+            ? `0x${result.liability_token_hash}`
+            : "anchor_pending",
+          blockchain: "ethereum",
+          timestamp: new Date().toISOString(),
+          immutable: true,
+        },
+        headers: {
+          "X-IDIA-LIABILITY-TOKEN": result?.liability_token_hash ?? "pending",
+        },
+      };
+      setResponseExample(JSON.stringify(institutional, null, 2));
+      console.info("[APIEndpoints][executeLiveCall][build_payload] END");
+
+      console.info("[APIEndpoints][executeLiveCall][refresh_balance] BEGIN");
+      await refreshBalance();
+      console.info("[APIEndpoints][executeLiveCall][refresh_balance] END");
+
+      toast.success(`Endpoint executed (${actualLatency}ms · ${endpoint.credits} CR)`);
+    } catch (error: any) {
+      const actualLatency = Math.round(performance.now() - startTime);
+      console.error(
+        `[APIEndpoints][executeLiveCall] CATCH: execution failed at ${actualLatency}ms — ${error?.message ?? error}`,
+        error,
+      );
+      setResponseExample(
+        JSON.stringify(
+          {
+            error: "Execution Failed",
+            message: error instanceof Error ? error.message : "Unknown network error",
+            target: `${baseUrl}${endpoint.path}`,
+            latency_ms: actualLatency,
+          },
+          null,
+          2,
+        ),
+      );
+      toast.error(`Execution failed for ${endpoint.path}`);
+    } finally {
+      console.info(`[APIEndpoints][executeLiveCall] END path=${endpoint.path}`);
+    }
+  };
+
+  const copyCode = (code: string, name: string) => {
+    console.log(`[APIEndpoints][copyCode] BEGIN: User initiated clipboard write for ${name}.`);
+    try {
+      navigator.clipboard.writeText(code);
+      toast.success(`${name} copied to clipboard`);
+      console.log(`[APIEndpoints][copyCode] Success: ${name} copied to clipboard.`);
+    } catch (error) {
+      console.error(`[APIEndpoints][copyCode] ERROR: Failed to write ${name} to clipboard.`, error);
+      toast.error(`Failed to copy ${name}`);
+    } finally {
+      console.log(`[APIEndpoints][copyCode] END: Clipboard operation completed.`);
+    }
+  };
+
+  const _u = user as any;
+  const _isCsuite =
+    typeof _u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(_u.role);
+  const visibleEndpoints = _isCsuite
+    ? endpoints
+    : currentTier
+      ? endpoints.filter((ep) => TIER_MATRIX[ep.tier] <= TIER_MATRIX[currentTier])
+      : [];
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Live Context:</span>
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+          Tier: {currentTier ?? "Unverified"}
+        </Badge>
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+          {credits.toLocaleString(undefined, { maximumFractionDigits: 2 })} CR
+        </Badge>
+      </div>
+
       <Card className="border-primary/50 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -137,8 +428,8 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             Agentic MCP Access (Model Context Protocol)
           </CardTitle>
           <CardDescription className="text-foreground/80">
-            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle DELT wrapping and Synapse
-            credit burns for autonomous agents.
+            Connect AI assistants directly to the IDIA Data Vault. Tools automatically handle secure wrapping and
+            automated credit burns for autonomous agents.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -153,7 +444,7 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
                   real-time algo trading telemetry
                 </li>
                 <li>
-                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">execute_delt_transfer</code> -
+                  <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">execute_secure_transfer</code> -
                   Autonomous consent artifact generation
                 </li>
                 <li>
@@ -163,7 +454,7 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
               </ul>
             </div>
             <div className="space-y-2">
-              <h4 className="text-sm font-semibold">Claude Desktop Configuration</h4>
+              <h4 className="text-sm font-semibold">Desktop Configuration</h4>
               <div className="relative">
                 <pre className="bg-background border border-border p-3 rounded-lg overflow-x-auto text-xs text-muted-foreground">
                   <code>{mcpConfigExample}</code>
@@ -188,11 +479,20 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
             <FileCode className="h-5 w-5 text-primary" />
             REST API Consumption Matrix
           </CardTitle>
-          <CardDescription>Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption</CardDescription>
+          <CardDescription>
+            Institutional endpoints with DigiRAMP Anchoring and TLS 1.3+ encryption. Click a path to execute a live
+            audited call.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {endpoints.map((endpoint, index) => (
+            {visibleEndpoints.length === 0 && (
+              <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-4">
+                No endpoints available at your current tier. Upgrade to Analyst, Professional, or Enterprise to unlock
+                live API access.
+              </div>
+            )}
+            {visibleEndpoints.map((endpoint, index) => (
               <div key={index} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
@@ -207,7 +507,13 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
                       >
                         {endpoint.method}
                       </Badge>
-                      <code className="text-sm font-mono text-foreground">{endpoint.path}</code>
+                      <button
+                        type="button"
+                        onClick={() => executeLiveCall(endpoint)}
+                        className="text-sm font-mono text-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+                      >
+                        {endpoint.path}
+                      </button>
                     </div>
                     <p className="text-sm text-muted-foreground">{endpoint.description}</p>
                   </div>
@@ -310,9 +616,10 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
 
       <Card>
         <CardHeader>
-          <CardTitle>Institutional Response Format</CardTitle>
+          <CardTitle>Institutional Response Format (Live Telemetry)</CardTitle>
           <CardDescription>
-            All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance
+            All responses include DigiRAMP Anchoring ID and X-IDIA-LIABILITY-TOKEN for blockchain provenance. Updates
+            dynamically after each live endpoint execution.
           </CardDescription>
         </CardHeader>
         <CardContent>

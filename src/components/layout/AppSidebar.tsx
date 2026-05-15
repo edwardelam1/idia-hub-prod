@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -22,8 +21,8 @@ import {
   Landmark,
   GripVertical,
   type LucideIcon,
-} from 'lucide-react';
-import { NavLink, useLocation } from 'react-router-dom';
+} from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -33,7 +32,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from '@/components/ui/sidebar';
+} from "@/components/ui/sidebar";
 
 interface NavItem {
   title: string;
@@ -46,54 +45,83 @@ interface AppSidebarProps {
 }
 
 // Dashboard is always pinned at the top and not reorderable.
-const PINNED_ITEM: NavItem = { title: 'Dashboard', url: '/dashboard', icon: BarChart3 };
+const PINNED_ITEM: NavItem = { title: "Dashboard", url: "/dashboard", icon: BarChart3 };
+
+const ROLE_LABELS: Record<string, string> = {
+  csuite: "C-Suite",
+  "super-admin": "Super Admin",
+  "organization-admin": "Organization Admin",
+  "team-lead": "Team Lead",
+  "team-member": "Team Member",
+  analyst: "Analyst",
+  professional: "Professional",
+};
+
+const formatRoleLabel = (role: string) => ROLE_LABELS[role] ?? role.replace(/[-_]/g, " ");
 
 const getRoleItems = (userRole: string): NavItem[] => {
   const base: NavItem[] = [
-    { title: 'Best Friend AI', url: '/best-friend', icon: Bot },
-    { title: 'Data Marketplace', url: '/marketplace', icon: Database },
-    { title: 'My Reports', url: '/my-reports', icon: Package },
-    { title: 'Hub Enrollment', url: '/billing', icon: DollarSign },
-    { title: 'Top Up Wallet', url: '/top-up', icon: Zap },
-    { title: 'Earnings & Settlement', url: '/earnings', icon: Landmark },
-    { title: 'Egress Logs', url: '/egress-logs', icon: ScrollText },
-    { title: 'Auth Settings', url: '/auth-settings', icon: KeyRound },
-    { title: 'Trading Interface', url: '/trading', icon: TrendingUp },
-    { title: 'Liquidity Pools', url: '/liquidity', icon: Coins },
+    { title: "Subscriptions", url: "/billing", icon: DollarSign },
+    { title: "Top Up Wallet", url: "/top-up", icon: Zap },
+    { title: "Best Friend AI", url: "/best-friend", icon: Bot },
+    { title: "Data Marketplace", url: "/marketplace", icon: Database },
+    { title: "Earnings & Settlement", url: "/earnings", icon: Landmark },
+    { title: "Egress Logs", url: "/egress-logs", icon: ScrollText },
   ];
 
   switch (userRole) {
-    case 'super-admin':
+    case "csuite":
+      // C-Suite has the union of Super Admin + Organization Admin surfaces.
       base.push(
-        { title: 'System Health', url: '/system-health', icon: Activity },
-        { title: 'Client Organizations', url: '/organizations', icon: Building2 },
-        { title: 'AI Management', url: '/ai-management', icon: Zap },
-        { title: 'Security', url: '/security', icon: ShieldCheck },
-        { title: 'Pay App Builder', url: '/pay-blueprint', icon: Smartphone },
+        { title: "System Health", url: "/system-health", icon: Activity },
+        { title: "Business Accounts", url: "/organizations", icon: Building2 },
+        { title: "AI Management", url: "/ai-management", icon: Zap },
+        { title: "Security", url: "/security", icon: ShieldCheck },
+        { title: "Pay App Builder", url: "/pay-blueprint", icon: Smartphone },
+        { title: "Team Management", url: "/teams", icon: Users },
+        { title: "Compliance", url: "/compliance", icon: ShieldCheck },
+        { title: "My Reports", url: "/my-reports", icon: Package },
+        { title: "My Team", url: "/my-team", icon: Users },
+        { title: "Auth Settings", url: "/auth-settings", icon: KeyRound },
+        { title: "Trading Interface", url: "/trading", icon: TrendingUp },
+        { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
+        { title: "Saved Searches", url: "/saved-searches", icon: Search },
+        { title: "Analytics", url: "/analytics", icon: TrendingUp },
+        { title: "My Lists", url: "/my-lists", icon: FileText },
       );
       break;
-    case 'organization-admin':
+    case "super-admin":
       base.push(
-        { title: 'Team Management', url: '/teams', icon: Users },
-        { title: 'Compliance', url: '/compliance', icon: ShieldCheck },
+        { title: "System Health", url: "/system-health", icon: Activity },
+        { title: "Client Organizations", url: "/organizations", icon: Building2 },
+        { title: "AI Management", url: "/ai-management", icon: Zap },
+        { title: "Security", url: "/security", icon: ShieldCheck },
+        { title: "Pay App Builder", url: "/pay-blueprint", icon: Smartphone },
+        { title: "My Team", url: "/my-team", icon: Users },
+        { title: "Saved Searches", url: "/saved-searches", icon: Search },
+        { title: "Analytics", url: "/analytics", icon: TrendingUp },
+        { title: "My Lists", url: "/my-lists", icon: FileText },
       );
       break;
-    case 'team-lead':
+    case "organization-admin":
       base.push(
-        { title: 'My Team', url: '/my-team', icon: Users },
-        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
-        { title: 'Analytics', url: '/analytics', icon: TrendingUp },
+        { title: "Team Management", url: "/teams", icon: Users },
+        { title: "Compliance", url: "/compliance", icon: ShieldCheck },
+        { title: "My Team", url: "/my-team", icon: Users },
+        { title: "Saved Searches", url: "/saved-searches", icon: Search },
+        { title: "Analytics", url: "/analytics", icon: TrendingUp },
+        { title: "My Lists", url: "/my-lists", icon: FileText },
       );
       break;
-    case 'team-member':
-      base.push(
-        { title: 'My Lists', url: '/my-lists', icon: FileText },
-        { title: 'Saved Searches', url: '/saved-searches', icon: Search },
-      );
+    case "team-lead":
+      base.push({ title: "My Team", url: "/my-team", icon: Users });
+      break;
+    case "team-member":
+      base.push({ title: "My Team", url: "/my-team", icon: Users });
       break;
   }
 
-  base.push({ title: 'Settings', url: '/settings', icon: Settings });
+  base.push({ title: "Settings", url: "/settings", icon: Settings });
   return base;
 };
 
@@ -124,7 +152,7 @@ const loadSavedOrder = (role: string, items: NavItem[]): NavItem[] => {
 const AppSidebar = ({ userRole }: AppSidebarProps) => {
   const { state } = useSidebar();
   const location = useLocation();
-  const isCollapsed = state === 'collapsed';
+  const isCollapsed = state === "collapsed";
   const isActive = (path: string) => location.pathname === path;
 
   const roleItems = useMemo(() => getRoleItems(userRole), [userRole]);
@@ -147,15 +175,15 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDragIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = "move";
     // Required for Firefox to start the drag
-    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.setData("text/plain", String(index));
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     if (dragIndex === null) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = "move";
     if (overIndex !== index) setOverIndex(index);
   };
 
@@ -186,19 +214,11 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
         {/* Logo Section */}
         <div className="p-3 md:p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center space-x-2 md:space-x-3">
-            <img
-              src="/images/hub-logo.png"
-              alt="IDIA Hub"
-              className="w-8 h-8 flex-shrink-0"
-            />
+            <img src="/images/hub-logo.png" alt="IDIA Hub" className="w-8 h-8 flex-shrink-0" />
             {!isCollapsed && (
               <div className="min-w-0">
-                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">
-                  IDIA Hub
-                </h2>
-                <p className="text-xs text-muted-foreground capitalize truncate">
-                  {userRole.replace('-', ' ')}
-                </p>
+                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">IDIA Hub</h2>
+                <p className="text-xs text-muted-foreground capitalize truncate">{formatRoleLabel(userRole)}</p>
               </div>
             )}
           </div>
@@ -215,17 +235,13 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                     asChild
                     className={`mx-2 rounded-md transition-colors ${
                       isActive(PINNED_ITEM.url)
-                        ? 'bg-primary/10 text-primary border-r-2 border-primary'
-                        : 'hover:bg-accent hover:text-accent-foreground'
+                        ? "bg-primary/10 text-primary border-r-2 border-primary"
+                        : "hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     <NavLink to={PINNED_ITEM.url} className="flex items-center px-2 py-2">
                       <PINNED_ITEM.icon className="h-4 w-4 flex-shrink-0" />
-                      {!isCollapsed && (
-                        <span className="ml-3 text-sm font-medium truncate">
-                          {PINNED_ITEM.title}
-                        </span>
-                      )}
+                      {!isCollapsed && <span className="ml-3 text-sm font-medium truncate">{PINNED_ITEM.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -233,8 +249,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                 {/* Reorderable items */}
                 {items.map((item, index) => {
                   const isDragging = dragIndex === index;
-                  const isOver =
-                    overIndex === index && dragIndex !== null && dragIndex !== index;
+                  const isOver = overIndex === index && dragIndex !== null && dragIndex !== index;
                   const indicatorAbove = isOver && (dragIndex as number) > index;
                   const indicatorBelow = isOver && (dragIndex as number) < index;
                   return (
@@ -245,16 +260,16 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                       onDragOver={(e) => handleDragOver(e, index)}
                       onDrop={(e) => handleDrop(e, index)}
                       onDragEnd={handleDragEnd}
-                      className={`group/drag relative ${isDragging ? 'opacity-50' : ''} ${
-                        indicatorAbove ? 'border-t-2 border-primary' : ''
-                      } ${indicatorBelow ? 'border-b-2 border-primary' : ''}`}
+                      className={`group/drag relative ${isDragging ? "opacity-50" : ""} ${
+                        indicatorAbove ? "border-t-2 border-primary" : ""
+                      } ${indicatorBelow ? "border-b-2 border-primary" : ""}`}
                     >
                       <SidebarMenuButton
                         asChild
                         className={`mx-2 rounded-md transition-colors ${
                           isActive(item.url)
-                            ? 'bg-primary/10 text-primary border-r-2 border-primary'
-                            : 'hover:bg-accent hover:text-accent-foreground'
+                            ? "bg-primary/10 text-primary border-r-2 border-primary"
+                            : "hover:bg-accent hover:text-accent-foreground"
                         }`}
                       >
                         <NavLink to={item.url} className="flex items-center px-2 py-2">
@@ -265,11 +280,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
                             />
                           )}
                           <item.icon className="h-4 w-4 flex-shrink-0" />
-                          {!isCollapsed && (
-                            <span className="ml-3 text-sm font-medium truncate">
-                              {item.title}
-                            </span>
-                          )}
+                          {!isCollapsed && <span className="ml-3 text-sm font-medium truncate">{item.title}</span>}
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

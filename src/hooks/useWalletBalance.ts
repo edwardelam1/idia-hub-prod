@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { createPublicClient, http, formatUnits } from "viem";
 import { base } from "viem/chains";
@@ -21,112 +21,142 @@ interface WalletBalance {
   usdc_balance: number;
 }
 
-export const useWalletBalance = () => {
-  console.log("[useWalletBalance][Hook] START: Initializing hook.");
+/**
+ * useWalletBalance
+ * @param isYielding - Mandatory flag to release the Auth Lock during biometrics.
+ * When true, halts background auth/network calls to prevent 'lock:sb-auth-token' contention.
+ */
+export const useWalletBalance = (isYielding: boolean = false) => {
+  console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
 
   const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
   const [loading, setLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchBalance = useCallback(async () => {
-    console.log("🚀 [useWalletBalance][fetchBalance] START: Fetching absolute on-chain truth from Base.");
+    // 🚨 YIELD GATE: Immediate abort to prioritize the Biometric Handshake.
+    // Prevents background polling from stealing the auth mutex during a transaction.
+    if (isYielding) {
+      console.warn("🚀 [useWalletBalance][fetchBalance] YIELD: Active. Halting background fetch.");
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      return;
+    }
+
+    console.log("🚀 [useWalletBalance][fetchBalance] START: Initiating sync with on-chain truth.");
     setLoading(true);
 
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     try {
-      // 1. AUTHENTICATION
-      console.log("[useWalletBalance][fetchBalance][Auth] INFO: Requesting authenticated user from Supabase.");
+      // 1. AUTHENTICATION (Mutex-Sensitive)
+      console.log("[useWalletBalance][fetchBalance][Auth] START: Requesting session lock.");
       const {
-        data: { user },
+        data: { session },
         error: authError,
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getSession();
 
       if (authError) {
-        console.error("[useWalletBalance][fetchBalance][Auth] ERROR: Supabase auth fetch failed.", authError.message);
+        console.error("[useWalletBalance][fetchBalance][Auth] FATAL: Session fetch failed.", authError.message);
         throw authError;
       }
 
-      if (!user) {
-        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active user session found. Defaulting to 0.");
+      if (!session?.user) {
+        console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session.");
         setBalance({ usdc_balance: 0 });
         return;
       }
+      console.log(
+        `[useWalletBalance][fetchBalance][Auth] END: Session secured for user ${session.user.id.slice(0, 8)}.`,
+      );
 
-      console.log(`[useWalletBalance][fetchBalance][Auth] INFO: User verified (${user.id}).`);
+      // 2. RPC CONFIG FETCH (Database Source of Truth)
+      console.log("[useWalletBalance][fetchBalance][RPC] START: Querying system_configs for BASE_RPC_URL.");
+      let rpcUrl = "https://mainnet.base.org"; // High-availability default fallback
 
-      // 2. FETCH WALLET ADDRESS (Assuming stored in 'profiles')
-      console.log("[useWalletBalance][fetchBalance][Profile] INFO: Querying profile for wallet address...");
+      try {
+        // 🚨 FIXED: Cast query to 'any' to bypass SelectQueryError for missing relation types.
+        const { data: config, error: configError } = await (supabase
+          .from("system_configs" as any)
+          .select("value")
+          .eq("key", "BASE_RPC_URL")
+          .maybeSingle() as any);
+
+        if (configError) {
+          console.warn(
+            "[useWalletBalance][fetchBalance][RPC] WARN: system_configs relation missing. Using Base public RPC.",
+          );
+        } else if (config?.value) {
+          rpcUrl = config.value.trim();
+        }
+      } catch (schemaErr) {
+        console.warn("[useWalletBalance][fetchBalance][RPC] WARN: Schema mismatch. Defaulting to public transport.");
+      }
+      console.log(`[useWalletBalance][fetchBalance][RPC] END: Transport initialized: ${rpcUrl.slice(0, 35)}...`);
+
+      // 3. PROFILE SYNC
+      console.log("[useWalletBalance][fetchBalance][Profile] START: Verifying wallet address registry.");
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("wallet_address")
-        .eq("id", user.id)
+        .eq("id", session.user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error(
-          "[useWalletBalance][fetchBalance][Profile] ERROR: Failed to query profile.",
-          profileError.message,
-        );
-        throw profileError;
-      }
-
-      const walletAddress = profile?.wallet_address;
-
-      if (!walletAddress || !walletAddress.startsWith("0x")) {
-        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid wallet address missing. Defaulting to 0.");
+      if (profileError || !profile?.wallet_address) {
+        console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing from profile.");
         setBalance({ usdc_balance: 0 });
         return;
       }
+      const walletAddress = profile.wallet_address;
+      console.log(`[useWalletBalance][fetchBalance][Profile] END: Wallet identified: ${walletAddress}`);
 
-      console.log(`[useWalletBalance][fetchBalance][Profile] SUCCESS: Wallet identified: ${walletAddress}`);
-
-      // 3. ON-CHAIN HYDRATION (VIEM)
-      console.log("[useWalletBalance][fetchBalance][Viem] INFO: Initializing Base public client.");
+      // 4. ON-CHAIN HYDRATION (VIEM)
+      console.log("[useWalletBalance][fetchBalance][Viem] START: Initializing Base public client.");
       const publicClient = createPublicClient({
         chain: base,
-        transport: http("https://mainnet.base.org"),
+        transport: http(rpcUrl),
       });
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Executing balanceOf on USDC contract...`);
+      console.log(`[useWalletBalance][fetchBalance][Contract] START: Calling balanceOf(address) on-chain.`);
       const rawBalance = await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: USDC_ABI,
         functionName: "balanceOf",
         args: [walletAddress as `0x${string}`],
-      } as any); // 🚨 CAST TO ANY: Force TS to stop looking for authorizationList
+      } as any);
 
-      console.log(`[useWalletBalance][fetchBalance][Contract] INFO: Raw BigInt retrieved: ${rawBalance.toString()}`);
-
-      // 4. FORMATTING & STATE INJECTION
-      // 🚨 CAST TO BIGINT: Tell TS that the contract return value is definitely a BigInt
+      // 5. STATE INJECTION
       const hydratedBalance = Number(formatUnits(rawBalance as bigint, 6));
-      console.log(
-        `[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified on-chain truth is $${hydratedBalance} USDC.`,
-      );
+      console.log(`[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified balance is $${hydratedBalance} USDC.`);
 
       setBalance({ usdc_balance: hydratedBalance });
     } catch (err: any) {
-      console.error(
-        "🚨 [useWalletBalance][fetchBalance] FATAL ERROR: Exception caught during fetch routine.",
-        err.message,
-      );
-      setBalance({ usdc_balance: 0 });
+      if (err.name === "AbortError") {
+        console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for transaction yield.");
+      } else {
+        console.error("🚨 [useWalletBalance][fetchBalance] FATAL ERROR:", err.message);
+        setBalance((prev) => prev);
+      }
     } finally {
-      console.log("[useWalletBalance][fetchBalance] END: Fetch routine complete.");
+      console.log("[useWalletBalance][fetchBalance] END: Lifecycle complete.");
       setLoading(false);
     }
-  }, []);
+  }, [isYielding]);
 
   useEffect(() => {
-    console.log("[useWalletBalance][Effect] START: Triggering initial fetch on mount.");
+    console.log("[useWalletBalance][Effect] START: Initializing polling interval.");
     fetchBalance();
 
-    // Auto-poll the blockchain every 15 seconds to keep the UI perfectly synced with reality
     const interval = setInterval(() => {
-      console.log("[useWalletBalance][Effect] INFO: 15-second polling tick fired.");
+      console.log("[useWalletBalance][Effect] TICK: 15-second heartbeat fired.");
       fetchBalance();
     }, 15000);
 
-    console.log("[useWalletBalance][Effect] END: Mount trigger complete and interval set.");
-    return () => clearInterval(interval);
+    return () => {
+      console.log("[useWalletBalance][Effect] CLEANUP: Clearing interval and aborting pending requests.");
+      clearInterval(interval);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
   }, [fetchBalance]);
 
   return { balance, loading, refreshBalance: fetchBalance };

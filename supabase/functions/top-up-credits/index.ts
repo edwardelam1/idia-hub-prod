@@ -1,27 +1,16 @@
 // supabase/functions/top-up-credits/index.ts
 // Hardened payload contract: aligned with Hub and Life application financial structures.
 
-const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-
-const ERC20_ABI = [
-  {
-    name: "transfer",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "value", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
+import { chargeBuyerUsdc } from "../_shared/charge-usdc.ts";
+import { isAddress } from "https://esm.sh/viem@2.9.20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-console.log("[BOOT: top-up-credits] Hydration Engine v4 online.");
+console.log("[BOOT: top-up-credits] Synapse Hydration Engine v7 (Relayer Delegated Pull) online.");
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -29,30 +18,25 @@ Deno.serve(async (req: Request) => {
 
   let stage = "INIT";
   try {
-    stage = "IMPORT_SDK";
-    console.log(`[BEGIN: ${stage}]`);
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.42.7");
-    console.log(`[END: ${stage}]`);
-
     stage = "PARSE_PAYLOAD";
     console.log(`[BEGIN: ${stage}]`);
     const body = await req.json().catch((e) => {
       throw new Error(`PAYLOAD_PARSE_FAILED: ${e?.message}`);
     });
 
-    // Accept BOTH naming schemes (frontend sends user_wallet+payment_method+credit_amount)
     const user_id: string | undefined = body.user_id;
     const credit_amount = Number(body.credit_amount ?? body.amount ?? 0);
     const usd_amount = Number(body.usd_amount ?? credit_amount * 0.75 ?? 0);
     const user_wallet: string | undefined = body.user_wallet ?? body.recipient_address;
     const payment_method: string = (body.payment_method ?? "usdc").toLowerCase();
 
-    // 🚨 FIX: Recognize 'internal_usdc' as an on-chain asset to prevent the 'fiat' fallback
     const routing: string = (
       body.routing ?? (["usdc", "internal_usdc"].includes(payment_method) ? "on-chain" : "fiat")
     ).toLowerCase();
 
     const payment_reference: string = body.payment_reference || `PAY-${crypto.randomUUID().slice(0, 8)}`;
+    const idempotency_key: string | undefined = body.idempotency_key;
+
     console.log(
       `[END: ${stage}] user_id=${user_id} credit_amount=${credit_amount} usd_amount=${usd_amount} routing=${routing} wallet=${user_wallet ?? "<none>"}`,
     );
@@ -66,9 +50,12 @@ Deno.serve(async (req: Request) => {
       throw new Error(`VALIDATION_FAILED: credit_amount must be > 0. Received: ${body.credit_amount ?? body.amount}`);
     }
     if (routing === "on-chain") {
-      if (!user_wallet || typeof user_wallet !== "string") {
-        throw new Error(`VALIDATION_FAILED: Buyer wallet identifier is missing for on-chain routing.`);
+      if (!user_wallet || typeof user_wallet !== "string" || !isAddress(user_wallet)) {
+        throw new Error(`VALIDATION_FAILED: Valid buyer wallet identifier is missing for on-chain routing.`);
       }
+    }
+    if (!idempotency_key || typeof idempotency_key !== "string") {
+      throw new Error(`VALIDATION_FAILED: idempotency_key is required for atomic settlement.`);
     }
     console.log(`[END: ${stage}] OK`);
 
@@ -77,45 +64,55 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     console.log(`[END: ${stage}]`);
 
+    stage = "IDEMPOTENCY_CHECK";
+    console.log(`[BEGIN: ${stage}] key=${idempotency_key}`);
+    const { data: existing, error: idemError } = await supabase
+      .from("synapse_credit_ledger")
+      .select("blockchain_tx_hash, amount, metadata")
+      .eq("user_id", user_id)
+      .filter("metadata->>idempotency_key", "eq", idempotency_key)
+      .limit(1)
+      .maybeSingle();
+
+    if (idemError) {
+      console.warn(`[WARNING: ${stage}] lookup failed: ${idemError.message}`);
+    } else if (existing) {
+      console.log(`[END: ${stage}] REPLAY hit. hash=${existing.blockchain_tx_hash}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          replayed: true,
+          hash: existing.blockchain_tx_hash,
+          updated_balance: null,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    } else {
+      console.log(`[END: ${stage}] no prior settlement.`);
+    }
+
     let txHash: string = payment_reference;
 
-    // 🚨 FIX: Only broadcast to the blockchain if it is NOT a custodial move
-    if (routing === "on-chain" && user_wallet !== "INTERNAL_CUSTODIAL_LEDGER") {
-      stage = "ONCHAIN_BROADCAST";
-      console.log(`[BEGIN: ${stage}] Loading viem...`);
-      const { createWalletClient, http, parseUnits, isAddress, getAddress } =
-        await import("https://esm.sh/viem@2.9.20");
-      const { privateKeyToAccount } = await import("https://esm.sh/viem@2.9.20/accounts");
-      const { base } = await import("https://esm.sh/viem@2.9.20/chains");
+    // 🚨 RELAYER DELEGATED PULL: The Relayer pays gas and executes transferFrom based on existing allowance
+    if (routing === "on-chain") {
+      stage = "SYNAPSE_BILLING_CHARGE";
+      console.log(`[BEGIN: ${stage}] Relayer attempting to pull ${usd_amount} USDC from ${user_wallet}`);
 
-      if (!isAddress(user_wallet!)) {
-        throw new Error(`VALIDATION_FAILED: user_wallet failed checksum. Received: ${user_wallet}`);
+      const chargeResult = await chargeBuyerUsdc({
+        buyer_wallet: user_wallet!,
+        usd_amount: usd_amount,
+      });
+
+      if (!chargeResult.ok) {
+        // If this throws APPROVAL_REQUIRED, the blockchain is confirming the Relayer lacks allowance for this specific wallet.
+        console.error(`🚨 [FATAL STALL: ${stage}] ${chargeResult.code}: ${chargeResult.message}`);
+        throw new Error(`USDC_CHARGE_REJECTED: ${chargeResult.code}`);
       }
-      const safeAddress = getAddress(user_wallet!);
 
-      let rawPk = Deno.env.get("RELAYER_PRIVATE_KEY") || "";
-      if (!rawPk) throw new Error("CONFIG_MISSING: RELAYER_PRIVATE_KEY env var is not set.");
-      if (!rawPk.startsWith("0x")) rawPk = "0x" + rawPk;
-
-      const account = privateKeyToAccount(rawPk as `0x${string}`);
-      const client = createWalletClient({
-        account,
-        chain: base,
-        transport: http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org"),
-      });
-
-      console.log(`[${stage}] Broadcasting ${credit_amount} USDC -> ${safeAddress}`);
-      txHash = await client.writeContract({
-        address: USDC_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [safeAddress, parseUnits(credit_amount.toString(), 6)],
-        chain: base,
-        account,
-      });
-      console.log(`[END: ${stage}] hash=${txHash}`);
+      txHash = chargeResult.hash!;
+      console.log(`[END: ${stage}] Settlement verified on Base. Hash=${txHash}`);
     } else {
-      console.log(`[SKIP: ONCHAIN_BROADCAST] routing=${routing} wallet=${user_wallet}`);
+      console.log(`[SKIP: ONCHAIN_CHARGE] routing=${routing} wallet=${user_wallet}`);
     }
 
     stage = "LEDGER_INSERT";
@@ -123,31 +120,45 @@ Deno.serve(async (req: Request) => {
     const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
       user_id: user_id,
       amount: credit_amount,
-      transaction_type: "INTERNAL_DEPOSIT",
+      transaction_type: "internal_deposit",
       entry_type: "deposit",
       status: "completed",
       blockchain_tx_hash: txHash,
       metadata: {
         class: "Synapse_Purchase",
+        product_class: "SAAS_UTILITY_PURCHASE",
         fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
         usd_amount: usd_amount,
         payment_reference: payment_reference,
         routing: routing,
         user_wallet: user_wallet ?? null,
+        idempotency_key,
       },
     });
+
     if (ledgerError) {
       throw new Error(`LEDGER_INSERT_FAILED: ${ledgerError.message}`);
     }
     console.log(`[END: ${stage}]`);
 
+    stage = "COMPLIANCE_RAIL_LOCK";
+    console.log(`[BEGIN: ${stage}] rail=${routing}`);
+    if (routing === "fiat" || routing === "on-chain") {
+      const { error: railError } = await supabase
+        .from("profiles")
+        .update({ compliance_rail: routing })
+        .eq("user_id", user_id);
+      if (railError) {
+        console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
+      } else {
+        console.log(`[END: ${stage}] Compliance rail locked: ${routing}`);
+      }
+    } else {
+      console.warn(`[SKIP: ${stage}] Non-canonical routing="${routing}". Skipping rail persistence.`);
+    }
+
     stage = "WALLET_HYDRATE";
     console.log(`[BEGIN: ${stage}]`);
-
-    // ROUTING-AWARE WALLET HYDRATION
-    // - On-chain: USDC balance is read live from the Base contract (useWalletBalance).
-    //   No wallets DB column to update; the synapse_credit_ledger insert above is the audit record.
-    // - Fiat: Credit corporate_revenue (Hub operating capital).
     let newBalance: number | null = null;
     if (routing === "fiat") {
       const targetColumn = "corporate_revenue";
@@ -156,6 +167,7 @@ Deno.serve(async (req: Request) => {
         .select(targetColumn)
         .eq("user_id", user_id)
         .single();
+
       if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
 
       const currentBalance = Number(wallet?.[targetColumn as keyof typeof wallet]) || 0;
@@ -172,24 +184,7 @@ Deno.serve(async (req: Request) => {
       if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
       console.log(`[END: ${stage}] fiat column=${targetColumn} newTotal=${newBalance}`);
     } else {
-      console.log(`[SKIP: ${stage}] On-chain routing — USDC truth lives on Base, no DB column write.`);
-    }
-
-    // [STAGE: COMPLIANCE_RAIL_LOCK] Persist this user's settlement rail on profiles.
-    stage = "COMPLIANCE_RAIL_LOCK";
-    console.log(`[BEGIN: ${stage}] rail=${routing}`);
-    if (routing === "fiat" || routing === "on-chain") {
-      const { error: railError } = await supabase
-        .from("profiles")
-        .update({ compliance_rail: routing })
-        .eq("user_id", user_id);
-      if (railError) {
-        console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
-      } else {
-        console.log(`[END: ${stage}] Compliance rail locked: ${routing}`);
-      }
-    } else {
-      console.warn(`[SKIP: ${stage}] Non-canonical routing="${routing}". Skipping rail persistence.`);
+      console.log(`[SKIP: ${stage}] On-chain routing — USDC truth lives on Base.`);
     }
 
     console.log(`[END: INVOKE] success hash=${txHash}`);

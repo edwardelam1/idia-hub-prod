@@ -112,9 +112,19 @@ export const EditMemberDialog = ({ open, onOpenChange, member, templates, busine
                   <Input value={form.name || ""} onChange={e => updateField("name", e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={form.email || ""} onChange={e => updateField("email", e.target.value)} />
+                  <Label>Job Title</Label>
+                  <Input
+                    value={form.job_title || ""}
+                    onChange={e => updateField("job_title", e.target.value)}
+                    placeholder="e.g. Head of Operations"
+                  />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">
+                  Email (read-only — fetched from Life PII bridge)
+                </Label>
+                <Input type="email" value={form.email || ""} disabled />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -230,12 +240,18 @@ export const EditMemberDialog = ({ open, onOpenChange, member, templates, busine
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Role</Label>
-                  <Select value={form.role || "employee"} onValueChange={v => updateField("role", v)}>
+                  <Select
+                    value={form.platform_role || form.role || "team_member"}
+                    onValueChange={v => {
+                      updateField("role", v);
+                      updateField("platform_role", v);
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="employee">Employee</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="org_admin">Org Admin</SelectItem>
+                      <SelectItem value="team_lead">Team Lead</SelectItem>
+                      <SelectItem value="team_member">Team Member</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

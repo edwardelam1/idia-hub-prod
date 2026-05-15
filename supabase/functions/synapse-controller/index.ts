@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { chargeBuyerUsdc } from "../_shared/charge-usdc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,14 +24,18 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Parse payload immediately to get the user_id (Bypasses strict getUser auth for MVP)
+    // Parse payload immediately
     const body = await req.json();
+
+    // Aggressive extraction to ensure Best Friend AI receipts are captured as arrays
+    const rawIds = body.aca_record_ids || [];
+    const aca_record_ids = Array.isArray(rawIds) ? rawIds : [rawIds].filter(Boolean);
+
     const {
       user_id,
-      client_id,
-      aca_record_ids = [],
-      intent_type = "RESEARCH",
-      query_complexity = 1.0,
+      client_id = "BEST_FRIEND_AI_RECEIPT", // Fallback to ensure liability token hashing succeeds
+      intent_type = "MARKETPLACE RESEARCH",
+      routing,
       country_of_origin = "US",
     } = body;
 
@@ -44,10 +49,14 @@ serve(async (req) => {
     // Strict equality only. No defaults. No coercion.
     // ====================================================================
     console.info(`[BEGIN: ROUTING_GATEKEEPER]`);
-    const routing = body?.routing;
+
     if (routing !== "fiat" && routing !== "on-chain") {
-      console.error(`🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`);
-      throw new Error(`ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`);
+      console.error(
+        `🚨 [FATAL STALL: ROUTING_GATEKEEPER] Missing/invalid routing. Received: ${routing ?? "undefined"}`,
+      );
+      throw new Error(
+        `ROUTING_HARD_STOP: 'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`,
+      );
     }
     console.info(`[END: ROUTING_GATEKEEPER] Compliance rail locked: ${routing}`);
 
@@ -64,25 +73,116 @@ serve(async (req) => {
       throw new Error(`Profile interrogation failed: ${profileError.message}`);
     }
 
-    const SYSTEM_FALLBACK_WALLET = "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
-    const activeWallet = profile?.wallet_address || SYSTEM_FALLBACK_WALLET;
+    const activeWallet = profile?.wallet_address;
 
-    if (activeWallet === SYSTEM_FALLBACK_WALLET) {
-      console.warn(
-        `⚠️ [WARNING: VALIDATING_INPUTS] User ${userId} lacks a registered wallet. Rerouting to System Fallback.`,
-      );
-    } else {
-      console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
+    // Strict Compliance Gate: No system fallbacks allowed.
+    if (routing === "on-chain") {
+      console.info(`[BEGIN: ON-CHAIN_USDC_CHARGE] Attempting to charge buyer wallet: ${activeWallet}`);
+
+      // FLAT_FEE_CR (1 CR) translates to $0.75 treasury value
+      const chargeResult = await chargeBuyerUsdc({
+        buyer_wallet: activeWallet,
+        usd_amount: 0.75,
+      });
+
+      if (!chargeResult.ok) {
+        // Granular error logging for silent stalling prevention
+        console.error(`🚨 [FATAL STALL: ON-CHAIN_USDC_CHARGE] Code: ${chargeResult.code}`);
+
+        // Switch on error codes to provide the frontend actionable feedback
+        if (chargeResult.code === "APPROVAL_REQUIRED") {
+          throw new Error(`USDC_APPROVAL_REQUIRED: Allowance insufficient for ${chargeResult.spender}`);
+        }
+        if (chargeResult.code === "INSUFFICIENT_USDC") {
+          throw new Error(`USDC_INSUFFICIENT_FUNDS: Wallet balance is below 0.75 USDC`);
+        }
+
+        throw new Error(`ON_CHAIN_CHARGE_REJECTED: ${chargeResult.code}`);
+      }
+
+      console.info(`[END: ON-CHAIN_USDC_CHARGE] Transaction Success. Hash: ${chargeResult.hash}`);
     }
-    console.info(`[END: VALIDATING_INPUTS] Active wallet secured.`);
+    if (routing === "on-chain" && !activeWallet) {
+      console.error(
+        `🚨 [FATAL STALL: VALIDATING_INPUTS] Compliance Hard Stop: User ${userId} lacks a registered wallet for USDC routing. Fallbacks are strictly prohibited.`,
+      );
+      throw new Error("Strict Compliance Violation: Registered wallet required for on-chain USDC routing.");
+    }
 
-    if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
+    if (activeWallet) {
+      console.info(`[STATUS: VALIDATING_INPUTS] User wallet verified: ${activeWallet}`);
+    } else {
+      console.info(`[STATUS: VALIDATING_INPUTS] No wallet verified. Proceeding strictly under FIAT rail.`);
+    }
+    console.info(`[END: VALIDATING_INPUTS] Input validation secured.`);
 
-    // FLAT RATE: Every AI search that touches data costs exactly 1 CR ($0.75 fiat).
-    // Record receipt is preserved for egress logging + downstream IDIA Life payout attribution,
-    // but is decoupled from the fee itself.
+    if (!aca_record_ids || aca_record_ids.length === 0) {
+      console.error(`🚨 [FATAL STALL: INPUT_GATE] No auditable lineage provided by Best Friend AI.`);
+      throw new Error("No auditable lineage provided");
+    }
+
     const FLAT_FEE_CR = 1;
     const totalSynapseDeduction = -FLAT_FEE_CR;
+
+    // ====================================================================
+    // RESOLVE_DATA_OWNERS — Map consumed records to individuals for payout
+    // ====================================================================
+    console.info(
+      `[BEGIN: RESOLVE_DATA_OWNERS] Reading receipt to map ${aca_record_ids.length} records to data owners.`,
+    );
+
+    // Best Friend AI sends a mix of `aca_hash_key` and `id`.
+    // We must separate them to prevent Postgres UUID syntax crashes.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = aca_record_ids.filter((id: string) => uuidRegex.test(id));
+    const stringHashes = aca_record_ids.filter((id: string) => !uuidRegex.test(id));
+
+    let consumedRecords: any[] = [];
+
+    // 1. Resolve by UUID
+    if (validUuids.length > 0) {
+      const { data: uuidData, error: uuidError } = await adminClient
+        .from("user_aca_records") // Targeting ground truth table
+        .select("platform_guid") // Targeting ground truth column
+        .in("id", validUuids);
+
+      if (uuidError) {
+        console.error(`🚨 [FATAL STALL: RESOLVE_DATA_OWNERS] UUID lookup failed: ${uuidError.message}`);
+        throw new Error(`Data owner UUID resolution failed: ${uuidError.message}`);
+      }
+      if (uuidData) consumedRecords.push(...uuidData);
+    }
+
+    // 2. Resolve by ACA Hash Key (Staged Data from Best Friend AI)
+    if (stringHashes.length > 0) {
+      const { data: hashData, error: hashError } = await adminClient
+        .from("user_aca_records") // Targeting ground truth table
+        .select("platform_guid") // Targeting ground truth column
+        .in("aca_hash_key", stringHashes);
+
+      if (hashError) {
+        console.error(`🚨 [FATAL STALL: RESOLVE_DATA_OWNERS] Hash lookup failed: ${hashError.message}`);
+        throw new Error(`Data owner Hash resolution failed: ${hashError.message}`);
+      }
+      if (hashData) consumedRecords.push(...hashData);
+    }
+
+    if (!consumedRecords || consumedRecords.length === 0) {
+      console.error(
+        `🚨 [FATAL STALL: RESOLVE_DATA_OWNERS] Zero data owners resolved from the Best Friend AI receipt. Payout impossible.`,
+      );
+      throw new Error("Payout rejected: No data owners resolved from provided ACA records.");
+    }
+
+    // Deduplicate to prevent overlapping payout anomalies for the same individual.
+    // We map platform_guid to user_id to satisfy the downstream Circular Settlement pipeline.
+    const uniqueContributors = Array.from(new Set(consumedRecords.map((r) => r.platform_guid)))
+      .filter(Boolean)
+      .map((id) => ({ user_id: id }));
+
+    console.info(
+      `[END: RESOLVE_DATA_OWNERS] Successfully read receipt and mapped to ${uniqueContributors.length} unique individual(s).`,
+    );
 
     // 2. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
@@ -101,8 +201,8 @@ serve(async (req) => {
           user_id: userId,
           amount: totalSynapseDeduction,
           entry_type: "USAGE",
-          transaction_type: "FEE",
-          status: "SETTLED",
+          transaction_type: "fee",
+          status: "settled",
           description: `Synapse Gas: ${intent_type} [Flat 1 CR]`,
           reference_id: referenceId,
         })
@@ -124,30 +224,39 @@ serve(async (req) => {
         .select("id")
         .single(),
     ]);
+
     // [STAGE: RESULT_VERIFICATION] Verify DB integrity before settling.
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
-    // [BEGIN: CASHIER_HANDOFF] Bridge validated intent to Circular Settlement.
-    console.info(`[BEGIN: CASHIER_HANDOFF] Igniting Circular Settlement Pipeline (rail=${routing}).`);
-    const { data: cashierData, error: cashierError } = await adminClient.functions.invoke(
-      "idia-circular-settlement",
-      {
-        body: {
-          total_fiat_amount: 0.75,
-          routing,
-          buyer_id: userId,
-          payment_reference: referenceId,
-          contributing_users: [{ user_id: userId }],
-        },
-      },
+    // [BEGIN: CASHIER_PAYOUT_HANDOFF] Bridge validated intent to Circular Settlement.
+    // The buyer has already paid via the 1 CR Synapse Ledger deduction above.
+    // This step strictly handles distributing the payout to the data owners from the treasury.
+
+    console.info(
+      `[BEGIN: CASHIER_PAYOUT_HANDOFF] Igniting Circular Settlement to distribute payout via ${routing.toUpperCase()} rail.`,
     );
 
+    const { error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
+      body: {
+        total_fiat_amount: 0.75, // Treasury equivalent value of the 1 CR gas fee
+        routing: routing, // "on-chain" (USDC) or "fiat" payout to data owners
+        buyer_id: userId,
+        payment_reference: referenceId,
+        contributing_users: uniqueContributors, // Map the payout to original data owners
+      },
+    });
+
     if (cashierError) {
-      console.error(`🚨 [FATAL STALL: CASHIER_HANDOFF] Cashier rejected pulse: ${cashierError.message}`);
-      throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
+      console.error(
+        `🚨 [FATAL STALL: CASHIER_PAYOUT_HANDOFF] Cashier rejected ${routing} payout pulse: ${cashierError.message}`,
+      );
+      throw new Error(`Circular Settlement Payout Failed: ${cashierError.message}`);
     }
-    console.info(`[END: CASHIER_HANDOFF] 60/30/10 Split deployed via ${routing}.`);
+
+    console.info(
+      `[END: CASHIER_PAYOUT_HANDOFF] Payout instructions successfully routed to ${uniqueContributors.length} individual(s) via ${routing}.`,
+    );
 
     // [STAGE: FINAL_LINKING] Bind the egress log to the financial ledger entry
     await adminClient
@@ -164,6 +273,7 @@ serve(async (req) => {
           gas_consumed: FLAT_FEE_CR,
           total_cr_deducted: FLAT_FEE_CR,
           fiat_equivalent_value: 0.75,
+          rail: routing, // Explicitly return the rail
         },
         audit: {
           records_processed: aca_record_ids.length,
