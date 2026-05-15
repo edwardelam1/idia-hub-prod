@@ -1,14 +1,14 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { BarChart3, Activity, Database, TrendingUp } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { BarChart3, Activity, Database, TrendingUp } from "lucide-react";
 
 export const SettingsInsights = () => {
   const insights = [
-    { label: 'Data Contributions', value: 142, unit: 'events', icon: Database, change: '+12 this week' },
-    { label: 'Personal Health Score', value: 78, unit: '/100', icon: Activity, change: '+3 from last month' },
-    { label: 'Marketplace Queries', value: 7, unit: 'of 50 max', icon: BarChart3, change: 'A La Carte quota' },
-    { label: 'Rewards Earned', value: 24.50, unit: 'USDC', icon: TrendingUp, change: 'Lifetime' },
+    { label: "Data Contributions", value: 142, unit: "events", icon: Database, change: "+12 this week" },
+    { label: "Personal Health Score", value: 78, unit: "/100", icon: Activity, change: "+3 from last month" },
+    { label: "Marketplace Queries", value: 7, unit: "of 50 max", icon: BarChart3, change: "A La Carte quota" },
+    { label: "Rewards Earned", value: 24.5, unit: "USDC", icon: TrendingUp, change: "Lifetime" },
   ];
 
   return (
@@ -20,7 +20,8 @@ export const SettingsInsights = () => {
             My Personal Insights
           </CardTitle>
           <CardDescription>
-            A summary of your individual data contributions and rewards. Individual accounts access the marketplace via A La Carte queries.
+            A summary of your individual data contributions and rewards. Individual accounts access the marketplace via
+            A La Carte queries.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -34,10 +35,14 @@ export const SettingsInsights = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-muted-foreground">{item.label}</p>
                     <p className="text-xl font-bold text-foreground">
-                      {typeof item.value === 'number' && item.label.includes('Earned') ? `$${item.value.toFixed(2)}` : item.value}
+                      {typeof item.value === "number" && item.label.includes("Earned")
+                        ? `$${item.value.toFixed(2)}`
+                        : item.value}
                       <span className="text-xs font-normal text-muted-foreground ml-1">{item.unit}</span>
                     </p>
-                    <Badge variant="secondary" className="text-xs mt-1">{item.change}</Badge>
+                    <Badge variant="secondary" className="text-xs mt-1">
+                      {item.change}
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -50,7 +55,7 @@ export const SettingsInsights = () => {
               <span className="font-medium text-foreground">7 / 50</span>
             </div>
             <Progress value={14} className="h-2" />
-            <p className="text-xs text-muted-foreground">$10.00 USD per query · Max 50 records per query</p>
+            <p className="text-xs text-muted-foreground">$10.00 USD per query</p>
           </div>
         </CardContent>
       </Card>
