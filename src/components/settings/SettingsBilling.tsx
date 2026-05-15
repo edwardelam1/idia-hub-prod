@@ -36,25 +36,6 @@ const IndividualBilling = () => {
             </AlertDescription>
           </Alert>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Queries Used (Lifetime)</p>
-                <p className="text-2xl font-bold text-foreground">7</p>
-                <p className="text-xs text-muted-foreground mt-1">$70.00 total spend</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Per-Query Cost</p>
-                <p className="text-2xl font-bold text-foreground">$10.00</p>
-                <p className="text-xs text-muted-foreground mt-1">USD</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">Upgrade to Business Entity</p>
