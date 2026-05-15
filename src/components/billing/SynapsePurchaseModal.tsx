@@ -138,38 +138,40 @@ const SynapsePurchaseModal = ({
           `[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [START] Requesting dynamic fiat checkout for $${usdAmount}...`,
         );
 
-        const { data, error } = await supabase.functions.invoke("create-wix-payment", {
-          body: {
-            fiatAmount: usdAmount,
-            supabaseUserId: session.user.id,
-            creditsMinted: displayCredits,
+        const WIX_DOMAIN = "https://www.thebigidia.com";
+        const returnUrl = encodeURIComponent(`${window.location.origin}/billing?success=true`);
+
+        const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: usdAmount,
+            credits: displayCredits,
+            userId: session.user.id,
+            planId: "alacarte",
             type: "alacarte",
-            idempotency_key: idempotencyKey, // Added for settlement safety
-          },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
+            idempotency_key: idempotencyKey,
+          }),
         });
 
-        if (error) {
-          // Log the specific error details to catch silent stalling
-          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function details:", {
-            message: error.message,
-            name: error.name,
-            status: error.status,
-          });
+        if (!wixResponse.ok) {
+          console.error(
+            `[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] HTTP ${wixResponse.status}`,
+          );
           throw new Error("Wix checkout initialization failed.");
         }
 
-        if (data?.checkoutUrl) {
-          console.log(
-            "[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [SUCCESS] Redirecting to Wix Checkout URL.",
-          );
-          window.location.href = data.checkoutUrl;
-          return;
-        } else {
-          throw new Error("Gateway routing error. Checkout URL missing.");
+        const wixData = await wixResponse.json();
+        if (!wixData?.paymentId) {
+          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] Missing paymentId.");
+          throw new Error("Gateway routing error. paymentId missing.");
         }
+
+        console.log(
+          "[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [SUCCESS] Redirecting to Wix checkout page.",
+        );
+        window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+        return;
       }
 
       // ==========================================
