@@ -131,7 +131,7 @@ const SynapsePurchaseModal = ({
       if (paymentRail === "wix") {
         console.log("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] Packing parameters into query string...");
 
-        const baseUrl = "https://www.thebigidia.com/settler";
+        const baseUrl = "https://www.thebigidia.com/idia-checkout";
         const queryParams = new URLSearchParams({
           uid: String(session.user.id),
           amt: Number(usdAmount).toFixed(2),
