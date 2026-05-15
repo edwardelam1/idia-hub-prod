@@ -128,7 +128,7 @@ const SynapsePurchaseModal = ({
       }
 
       // ==========================================
-      // RAIL 1: WIX FIAT PORT (DIRECT HANDOFF)
+      // WIX FIAT CHECKOUT FLOW
       // ==========================================
       if (paymentRail === "wix") {
         const idempotencyKey = crypto.randomUUID();
@@ -138,7 +138,7 @@ const SynapsePurchaseModal = ({
 
         const WIX_DOMAIN = "https://www.thebigidia.com";
 
-        // Payload keys aligned exactly to Wix Gateway requirements
+        // Payload keys updated for Wix Gateway handoff
         const payload = {
           uid: session.user.id,
           amt: usdAmount,
@@ -153,8 +153,7 @@ const SynapsePurchaseModal = ({
         });
 
         if (!wixResponse.ok) {
-          const errorDetail = await wixResponse.text();
-          console.error(`[SynapsePurchaseModal][WIX_HANDOFF] [FAILED] HTTP ${wixResponse.status}:`, errorDetail);
+          console.error(`[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] HTTP ${wixResponse.status}`);
           throw new Error("Wix checkout initialization failed.");
         }
 
@@ -169,45 +168,44 @@ const SynapsePurchaseModal = ({
       }
 
       // ==========================================
-      // RAIL 2: INTERNAL USDC CUSTODIAL PORT (DIRECT LEDGER)
+      // INTERNAL USDC CUSTODIAL FLOW
       // ==========================================
       console.log(
-        `[SynapsePurchaseModal][USDC_RAIL] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
+        `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
       );
 
       if (availableUSDC < usdAmount) {
-        console.error("[SynapsePurchaseModal][USDC_RAIL] ERROR: Insufficient on-chain USDC funds.");
+        console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
         throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
-      }
-
-      const userVerifiedWallet = walletBalance?.wallet_address;
-      if (!userVerifiedWallet) {
-        console.error("[SynapsePurchaseModal][USDC_RAIL] ERROR: No verified wallet address found.");
-        throw new Error("On-chain settlement requires a verified wallet address.");
       }
 
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
       console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // Direct Database Transaction (Removing Edge Function middleware)
-      const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
+      const payload = {
         user_id: session.user.id,
-        amount: displayCredits,
-        transaction_type: "internal_deposit",
-        entry_type: "deposit",
-        status: "completed",
-        blockchain_tx_hash: txReference,
-        metadata: {
-          usd_amount: usdAmount,
-          payment_reference: txReference,
-          user_wallet: userVerifiedWallet,
-          routing: "on-chain",
-        },
+        credit_amount: displayCredits,
+        usd_amount: usdAmount,
+        payment_reference: txReference,
+        payment_method: "internal_usdc",
+        target_synapse_wallet: IDIA_SYNAPSE_WALLET,
+        user_wallet: walletBalance?.wallet_address || "user_wallet",
+      };
+
+      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Dispatching payload.");
+
+      const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
+        body: payload,
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      if (ledgerError) {
-        console.error("[SynapsePurchaseModal][USDC_RAIL] [FAILED] Ledger rejection:", ledgerError.message);
-        throw ledgerError;
+      if (topUpError) {
+        console.error(
+          "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected on-chain request.",
+          topUpError,
+        );
+        throw topUpError;
       }
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] END: Settlement successful.");
@@ -252,7 +250,7 @@ const SynapsePurchaseModal = ({
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Fiat Port"}`
+              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Credit/Debit"}`
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -398,7 +396,7 @@ const SynapsePurchaseModal = ({
                   onClick={() => setPaymentRail("wix")}
                   className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "wix" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
                 >
-                  <CreditCard className="h-4 w-4" /> Fiat Port
+                  <CreditCard className="h-4 w-4" /> Credit/Debit
                 </button>
               </div>
 
@@ -426,7 +424,7 @@ const SynapsePurchaseModal = ({
                 <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
                   {paymentRail === "usdc" ? (
                     <>
-                      <CircleDollarSign className="w-4 h-4" /> Confirm & Spend USDC
+                      <CircleDollarSign className="h-4 w-4" /> Confirm & Spend USDC
                     </>
                   ) : (
                     <>Proceed to Wix</>
