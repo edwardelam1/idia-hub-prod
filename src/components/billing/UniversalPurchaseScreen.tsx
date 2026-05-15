@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard } from "lucide-react";
+import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard, ShoppingCart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBillingData } from "@/hooks/useBillingData";
@@ -20,91 +20,68 @@ const UniversalPurchaseScreen = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedPlan = searchParams.get("plan") || "analyst";
+  // Detect if user is returning from a successful Wix checkout redirect
+  const isSuccessReturn = searchParams.get("success") === "true";
+  
   const { user } = useAuth();
   const { paymentMethods } = useBillingData();
 
   const [selectedPlan, setSelectedPlan] = useState(preselectedPlan);
   const [selectedPM, setSelectedPM] = useState("");
-  const [step, setStep] = useState<"review" | "processing" | "success">("review");
+  const [step, setStep] = useState<"review" | "processing" | "success">(isSuccessReturn ? "success" : "review");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const plan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
 
-  // Worldpay SDK Port: handles tokenized response from hosted fields
-  const handleWorldpayResponse = async (token: string) => {
-    setIsProcessing(true);
-    try {
-      // 1. Send token to secure vaulting edge function
-      // 2. Initialize subscription
-      toast.success("Payment Method Secured");
-      setStep("success");
-    } catch (err) {
-      toast.error("Worldpay integration failed");
-    } finally {
-      setIsProcessing(false);
+  useEffect(() => {
+    if (isSuccessReturn) {
+      console.log("[UniversalPurchaseScreen][Lifecycle] [START] Detected success parameter from Wix redirect.");
+      toast.success("Payment successfully processed via Wix.");
     }
-  };
+  }, [isSuccessReturn]);
 
   const handlePurchase = async () => {
-    if (!selectedPM) {
-      toast.error("Please select a payment method or complete Worldpay authorization");
-      return;
-    }
-
+    console.log("[UniversalPurchaseScreen][handlePurchase] [START] Initiating checkout protocol.");
     setStep("processing");
     const userId = user?.user_id;
 
-    try {
-      // Create a unified payment reference for provenance tracking
-      const paymentReference = `SUB-${Date.now()}`;
+    if (!userId) {
+      console.error("[UniversalPurchaseScreen][handlePurchase] [AUTH_CHECK] [FAILED] User ID missing.");
+      toast.error("Authentication error. Please log in again.");
+      setStep("review");
+      return;
+    }
 
-      // ====================================================================
-      // FIX: Explicitly call the settlement API with strict routing
-      // ====================================================================
-      const { error: settlementError } = await supabase.functions.invoke("idia-circular-settlement", {
+    try {
+      console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [START] Requesting secure checkout session for ${plan.name} ($${plan.price}).`);
+      
+      // Call Edge Function that wraps the Wix wix-pay-backend SDK logic
+      const { data, error } = await supabase.functions.invoke("create-wix-payment", {
         body: {
-          total_fiat_amount: plan.price,
-          contributing_users: [{ user_id: userId, amount: plan.price }],
-          payment_reference: paymentReference,
-          payment_method: "fiat", // Define the method explicitly
-          routing: "fiat", // Provide the strict routing flag
-        },
+          fiatAmount: plan.price,
+          platform_guid: userId,
+          planId: plan.id,
+          creditsMinted: plan.credits,
+          type: "subscription"
+        }
       });
 
-      if (settlementError) {
-        console.error("Settlement engine rejection:", settlementError);
-        throw new Error("Financial settlement rejected by gateway.");
+      if (error) {
+        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function rejected checkout creation:", error);
+        throw new Error("Payment gateway initialization failed.");
       }
 
-      const expiresAt = new Date();
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-
-      const { error: subError } = await supabase.from("user_subscriptions").insert({
-        user_id: userId,
-        tier: plan.name,
-        status: "active",
-        started_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-      } as any);
-      if (subError) throw subError;
-
-      await supabase.from("user_invoices").insert({
-        user_id: userId,
-        invoice_number: `INV-${Date.now()}`,
-        amount: plan.price,
-        status: "paid",
-        period: `${new Date().getFullYear()} Annual`,
-      } as any);
-
-      // We rely on the `idia-circular-settlement` edge function to properly
-      // increment credits in `synapse_credit_ledger` to maintain single-source truth.
-      // We removed the direct `synapse_credit_ledger` insert here to prevent
-      // double-crediting or bypassing the compliance gateway.
-
-      setStep("success");
-      toast.success(`${plan.name} plan activated!`);
+      if (data?.checkoutUrl) {
+        console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [SUCCESS] Received URL. Redirecting client to Wix Checkout.");
+        // Redirect completely to Wix. The success URL configured in Wix should point back here with ?success=true
+        window.location.href = data.checkoutUrl;
+      } else {
+        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Payload missing checkoutUrl.");
+        throw new Error("Invalid response from payment gateway.");
+      }
     } catch (err: any) {
-      toast.error(err.message || "Purchase failed");
+      console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
+      toast.error(err.message || "Purchase initialization failed");
       setStep("review");
     }
   };
@@ -113,8 +90,8 @@ const UniversalPurchaseScreen = () => {
     return (
       <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
-        <p className="text-foreground font-semibold">Processing your subscription...</p>
-        <p className="text-muted-foreground text-sm">Verifying payment and provisioning access</p>
+        <p className="text-foreground font-semibold">Connecting to Secure Gateway...</p>
+        <p className="text-muted-foreground text-sm">Preparing your dynamic Wix checkout session.</p>
       </div>
     );
   }
@@ -125,7 +102,7 @@ const UniversalPurchaseScreen = () => {
         <CheckCircle2 className="w-16 h-16 text-emerald-500" />
         <p className="text-foreground font-bold text-lg">{plan.name} Plan Activated!</p>
         <p className="text-muted-foreground text-sm text-center">
-          {plan.credits.toLocaleString()} CRD have been added to your ledger. Your subscription is now active.
+          {plan.credits.toLocaleString()} CRD have been automatically minted by the settlement engine. Your subscription is now active.
         </p>
         <Button onClick={() => navigate("/billing")} className="mt-4">
           Go to Billing
@@ -142,10 +119,9 @@ const UniversalPurchaseScreen = () => {
 
       <div>
         <h1 className="text-2xl font-bold text-foreground">Complete Your Purchase</h1>
-        <p className="text-muted-foreground text-sm mt-1">Select your plan and complete payment</p>
+        <p className="text-muted-foreground text-sm mt-1">Select your plan and proceed to secure checkout</p>
       </div>
 
-      {/* Plan Selection */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">Selected Plan</CardTitle>
@@ -171,7 +147,6 @@ const UniversalPurchaseScreen = () => {
         </CardContent>
       </Card>
 
-      {/* Payment — Worldpay SDK Port */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
@@ -179,43 +154,21 @@ const UniversalPurchaseScreen = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {paymentMethods.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-foreground mb-2">Saved Payment Methods</p>
-              <Select value={selectedPM} onValueChange={setSelectedPM}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a saved method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentMethods.map((pm: any) => (
-                    <SelectItem key={pm.id} value={pm.id}>
-                      {pm.display_label} •••• {pm.identifier}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Worldpay Hosted Fields Mount Point — no CC data touches our DOM */}
-          <div
-            id="worldpay-sdk-container"
-            className="min-h-[150px] border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/50"
-          >
-            <div className="text-center p-4">
-              <CreditCard className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-xs text-muted-foreground">Worldpay Secure SDK Port Initializing...</p>
-            </div>
+          <div className="min-h-[120px] border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center bg-muted/30 p-6 text-center">
+            <ShoppingCart className="mx-auto h-8 w-8 text-primary mb-3" />
+            <p className="text-sm font-medium text-foreground">Checkout via Wix Processing</p>
+            <p className="text-xs text-muted-foreground mt-2 max-w-md">
+              You will be redirected to our unified, secure Wix checkout portal to complete your transaction. Fiat processing is separated strictly from on-chain logic.
+            </p>
           </div>
 
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center">
             <ShieldCheck className="h-3 w-3" />
-            <span>Encryption provided by Worldpay (PCI-DSS Level 1)</span>
+            <span>Encryption & Settlement provided by Wix (PCI-DSS Level 1)</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Summary */}
       <Card className="bg-primary/5 border-primary/20">
         <CardContent className="p-6">
           <div className="flex justify-between items-center">
@@ -233,13 +186,8 @@ const UniversalPurchaseScreen = () => {
 
       <Button className="w-full gap-2" size="lg" onClick={handlePurchase} disabled={isProcessing}>
         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-        {isProcessing ? "Processing..." : "Authorize & Enroll"}
+        {isProcessing ? "Connecting to Wix..." : "Proceed to Wix Checkout"}
       </Button>
-
-      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <ShieldCheck className="w-4 h-4" />
-        <span>Payment secured by Worldpay</span>
-      </div>
     </div>
   );
 };

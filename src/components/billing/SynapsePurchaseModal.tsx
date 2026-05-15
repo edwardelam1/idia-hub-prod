@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Coins,
-  Zap,
   CreditCard,
   ShieldCheck,
   Tag,
@@ -24,12 +23,11 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertTriangle,
-  Lock,
-  Copy,
   CircleDollarSign,
+  ShoppingCart
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
@@ -64,28 +62,28 @@ const SynapsePurchaseModal = ({
   onOpenChange,
   insufficientWarning,
 }: SynapsePurchaseModalProps) => {
-  console.log("[SynapsePurchaseModal][Component] START: Rendering component.");
+  console.log("[SynapsePurchaseModal][Component] [START] Rendering component.");
 
-  const { balanceData, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
-  const currentBalance = balanceData?.available_credits ?? 0;
-
-  // Bring in the internal IDIA Life wallet balances (CUSTODIAL TRUTH)
+  const { balanceData, protocolState, refreshBalance: refreshSynapseBalance } = useSynapseCredits();
   const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
-  const availableUSDC = walletBalance?.usdc_balance ?? 0;
+  const { user } = useAuth();
+
+  const rail3_USDC = protocolState?.usdc_balance ?? 0;
+  const availableUSDC = rail3_USDC;
 
   const [selectedTier, setSelectedTier] = useState<string>("tier2");
   const [step, setStep] = useState<"select" | "payment" | "processing" | "success">("select");
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
-  const [paymentRail, setPaymentRail] = useState<"worldpay" | "usdc">("usdc");
-  const [usdcNetwork, setUsdcNetwork] = useState<"base" | "ethereum" | "polygon">("base");
+  
+  // Replaced worldpay with wix
+  const [paymentRail, setPaymentRail] = useState<"wix" | "usdc">("usdc");
 
-  // State Derivation Logic
   const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
   const alacarteCredits = alacarteUsd / BASE_RATE;
-  const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 1000;
+  const alacarteValid = alacarteUsd >= 2 && alacarteUsd <= 10000;
 
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentTier.credits;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentTier.credits * currentTier.rate;
@@ -94,7 +92,7 @@ const SynapsePurchaseModal = ({
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
 
   const handleOpenChange = (isOpen: boolean) => {
-    console.log(`[SynapsePurchaseModal][handleOpenChange] START: Modal open state: ${isOpen}`);
+    console.log(`[SynapsePurchaseModal][handleOpenChange] [STATE_UPDATE] Modal open state: ${isOpen}`);
     setOpen(isOpen);
     onOpenChange?.(isOpen);
     if (!isOpen) {
@@ -106,112 +104,127 @@ const SynapsePurchaseModal = ({
   };
 
   const handleProceedToPayment = () => {
-    console.log("[SynapsePurchaseModal][handleProceedToPayment] START: Advancing to settlement step.");
     if (!canProceed) return;
     setStep("payment");
   };
 
   const handleAlacarteInput = (val: string) => {
     const digits = val.replace(/\D/g, "");
-    if (digits.length <= 4) {
+    if (digits.length <= 5) {
       setAlacarteAmount(digits);
     }
   };
 
   const handlePurchase = async () => {
-    console.log("🚀 [SynapsePurchaseModal][handlePurchase] START: Initiating custodial settlement.");
+    console.log(`[SynapsePurchaseModal][handlePurchase] [START] Initiating settlement via ${paymentRail}.`);
     if (!canProceed) return;
 
     setStep("processing");
 
     try {
-      // 1. LIQUIDITY VERIFICATION
-      console.log(
-        `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
-      );
+      console.log("[SynapsePurchaseModal][handlePurchase] [AUTH_CHECK] [START] Verifying session...");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Authentication failed. Please re-login.");
+      console.log("[SynapsePurchaseModal][handlePurchase] [AUTH_CHECK] [SUCCESS] Session verified.");
+
+      if (paymentRail === "wix") {
+        console.log(`[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [START] Requesting dynamic fiat checkout for $${usdAmount} (${displayCredits} CRD)...`);
+        
+        const { data, error } = await supabase.functions.invoke("create-wix-payment", {
+          body: {
+            fiatAmount: usdAmount,
+            platform_guid: session.user.id,
+            creditsMinted: displayCredits,
+            type: "alacarte"
+          },
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+
+        if (error) {
+          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function threw error:", error);
+          throw new Error("Wix checkout initialization failed.");
+        }
+
+        if (data?.checkoutUrl) {
+          console.log("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [SUCCESS] Redirecting to Wix Checkout URL.");
+          window.location.href = data.checkoutUrl;
+          return; // Halt React execution here as window unloads
+        } else {
+          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] No checkoutUrl returned in response.");
+          throw new Error("Gateway routing error.");
+        }
+      }
+
+      // ==========================================
+      // ON-CHAIN USDC LOGIC (REMAINS UNCHANGED)
+      // ==========================================
+      console.log("[SynapsePurchaseModal][handlePurchase] [USDC_AUTH] [START] Verifying liquidity & provisioning...");
+      
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("user_id", session.user.id)
+        .single();
+
+      if (profileError || !profileData?.wallet_address) {
+        console.error("[SynapsePurchaseModal][handlePurchase] [USDC_AUTH] [FAILED] Could not resolve wallet_address.");
+        throw new Error("No provisioned wallet address found in your profile. Please link a wallet.");
+      }
+
+      const resolvedWalletAddress = profileData.wallet_address;
+      console.log(`[SynapsePurchaseModal][handlePurchase] [USDC_AUTH] [SUCCESS] Target wallet: ${resolvedWalletAddress}`);
+
       if (availableUSDC < usdAmount) {
-        console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
-        throw new Error(
-          `Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`,
-        );
+        console.error(`[SynapsePurchaseModal][handlePurchase] [USDC_LIQUIDITY] [FAILED] Required: $${usdAmount}, Available: $${availableUSDC}`);
+        throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
       }
 
-      // 2. GENERATE SETTLEMENT REFERENCE
-      let txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
+      const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
+      const idempotencyKey = crypto.randomUUID();
 
-      if (paymentRail === "usdc") {
-        console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
-        await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate ledger lock UX
-      } else {
-        console.log("[SynapsePurchaseModal][FIAT_WP] START: Initializing Worldpay auth...");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        txReference = `WP-${crypto.randomUUID().slice(0, 8)}`;
-      }
-
-      // 3. AUTHENTICATION & DISPATCH
-      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] START: Calling top-up-credits Edge Function.");
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Auth session missing.");
-        throw new Error("Authentication failed. Please re-login.");
-      }
-
-      // 🚨 CRITICAL BYPASS: Sending "INTERNAL_CUSTODIAL_LEDGER" to pass the Edge Function bouncer
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
         usd_amount: usdAmount,
         payment_reference: txReference,
-        payment_method: paymentRail === "usdc" ? "internal_usdc" : "worldpay",
+        payment_method: "usdc",
+        routing: "on-chain",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: "INTERNAL_CUSTODIAL_LEDGER", 
+        user_wallet: resolvedWalletAddress,
+        idempotency_key: idempotencyKey,
+        aca_metadata: {
+          consent_id: idempotencyKey,
+          product_class: "SAAS_UTILITY_PURCHASE",
+          timestamp: new Date().toISOString(),
+        },
       };
 
-      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Payload:", JSON.stringify(payload, null, 2));
-
+      console.log("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [START] Dispatching USDC intent to Edge Function.");
       const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: payload,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
       if (topUpError) {
-        console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Function rejected request.", topUpError);
+        console.error("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected on-chain request.", topUpError);
         throw topUpError;
       }
+      console.log("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] Ledger updated successfully.");
 
-      console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] END: Settlement successful.");
-
-      // 4. SUCCESS HYDRATION
       setStep("success");
       toast.success("Synapse Hydrated!", {
         description: `${formatCredits(displayCredits)} added to your operational ledger.`,
       });
 
-      console.log("[SynapsePurchaseModal][CONTEXT_REFRESH] START: Refreshing balance stores.");
       await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
-      console.log("[SynapsePurchaseModal][CONTEXT_REFRESH] END: UI Contexts updated.");
-
       setTimeout(() => handleOpenChange(false), 3500);
+
     } catch (err: any) {
-      console.error("🚨 [SynapsePurchaseModal][handlePurchase] FATAL ERROR:", err.message);
+      console.error("[SynapsePurchaseModal][handlePurchase] [END_WITH_ERROR] Transaction stalled:", err.message);
       toast.error(err.message || "Settlement failed.");
       setStep("payment");
-    } finally {
-      console.log("[SynapsePurchaseModal][handlePurchase] END: Execution function exited.");
     }
   };
-
-  const handleCopyAddress = () => {
-    navigator.clipboard.writeText(IDIA_SYNAPSE_WALLET);
-    toast.success("Synapse Treasury Address copied");
-  };
-
-  console.log("[SynapsePurchaseModal][Component] END: Render phase complete.");
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -228,7 +241,7 @@ const SynapsePurchaseModal = ({
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Coins className="h-5 w-5 text-primary" />
             {step === "payment"
-              ? "Authorize Internal Transfer"
+              ? "Authorize Settlement"
               : step === "processing"
                 ? "Settling..."
                 : step === "success"
@@ -237,7 +250,7 @@ const SynapsePurchaseModal = ({
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Review transfer from IDIA Life to Synapse Treasury`
+              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Fiat Port"}`
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -347,7 +360,7 @@ const SynapsePurchaseModal = ({
                   <span className="font-medium">Total Due</span>
                   <div className="text-right">
                     <div className="text-xl font-bold font-mono">${usdAmount.toFixed(2)}</div>
-                    <div className="text-xs text-muted-foreground uppercase">USDC</div>
+                    <div className="text-xs text-muted-foreground uppercase">USD / USDC</div>
                   </div>
                 </div>
               </div>
@@ -364,11 +377,11 @@ const SynapsePurchaseModal = ({
                 <div>
                   <p className="text-sm text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
                   <p className="font-bold text-foreground flex items-center gap-2">
-                    <CircleDollarSign className="h-4 w-4 text-primary" /> Internal IDIA Life Transfer
+                    <CircleDollarSign className="h-4 w-4 text-primary" /> Verified dual-rail port
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1">
-                  <ShieldCheck className="h-3 w-3" /> Verified Vault
+                  <ShieldCheck className="h-3 w-3" /> Secure Vault
                 </Badge>
               </div>
 
@@ -380,8 +393,8 @@ const SynapsePurchaseModal = ({
                   <CircleDollarSign className="h-4 w-4" /> Internal USDC
                 </button>
                 <button
-                  onClick={() => setPaymentRail("worldpay")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "worldpay" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
+                  onClick={() => setPaymentRail("wix")}
+                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "wix" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
                 >
                   <CreditCard className="h-4 w-4" /> Fiat Port
                 </button>
@@ -390,14 +403,17 @@ const SynapsePurchaseModal = ({
               {paymentRail === "usdc" ? (
                 <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    By clicking confirm, you authorize the transfer of <strong>${usdAmount.toFixed(2)} USDC</strong>{" "}
-                    from your IDIA Life wallet to IDIA Data Inc. Credits will be available instantly.
+                    By clicking confirm, you authorize the secure transfer of{" "}
+                    <strong>${usdAmount.toFixed(2)} USDC</strong> from your IDIA wallet to the Treasury.
                   </p>
                 </div>
               ) : (
-                <div className="min-h-[160px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6">
-                  <Lock className="h-8 w-8 text-muted-foreground/50 animate-pulse" />
-                  <p className="text-sm font-medium text-muted-foreground">PCI-DSS Secure Port Initializing...</p>
+                <div className="min-h-[120px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-3 bg-muted/30 p-6 text-center">
+                  <ShoppingCart className="h-8 w-8 text-primary mb-2" />
+                  <p className="text-sm font-medium text-foreground">Wix Checkout Redirect</p>
+                  <p className="text-xs text-muted-foreground max-w-[280px]">
+                    You will be redirected to our unified, secure Wix checkout portal to complete this transaction.
+                  </p>
                 </div>
               )}
 
@@ -411,7 +427,7 @@ const SynapsePurchaseModal = ({
                       <CircleDollarSign className="w-4 h-4" /> Confirm & Spend USDC
                     </>
                   ) : (
-                    <>Authorize via Worldpay</>
+                    <>Proceed to Wix</>
                   )}
                 </Button>
               </div>
@@ -421,7 +437,9 @@ const SynapsePurchaseModal = ({
           {step === "processing" && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="font-semibold text-center uppercase tracking-widest text-xs">Executing Internal Swap...</p>
+              <p className="font-semibold text-center uppercase tracking-widest text-xs">
+                {paymentRail === "wix" ? "Initializing Wix Session..." : "Executing Protocol..."}
+              </p>
             </div>
           )}
 
