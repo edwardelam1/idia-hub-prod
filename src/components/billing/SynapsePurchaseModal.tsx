@@ -256,7 +256,7 @@ const SynapsePurchaseModal = ({
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Fiat Port"}`
+              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Credit/Debit"}`
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -402,7 +402,7 @@ const SynapsePurchaseModal = ({
                   onClick={() => setPaymentRail("wix")}
                   className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "wix" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
                 >
-                  <CreditCard className="h-4 w-4" /> Fiat Port
+                  <CreditCard className="h-4 w-4" /> Credit/Debit
                 </button>
               </div>
 

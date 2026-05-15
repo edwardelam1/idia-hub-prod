@@ -142,10 +142,10 @@ const SynapseTopUp = () => {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Zap className="w-6 h-6 text-primary" />
-          Fund Synapse Credits
+          Purchase Synapse Credits
         </h1>
         <p className="text-muted-foreground mt-2">
-          Dual-Rail Settlement Protocol. Secure <strong>On-Chain USDC</strong> or <strong>Fiat</strong> hydration to
+          Dual-Rail Settlement Protocol. Secure <strong>On-Chain USDC</strong> or <strong>Credit/Debit</strong> funds to
           fuel AI operations.
         </p>
       </div>
@@ -230,14 +230,14 @@ const SynapseTopUp = () => {
             <div className="flex flex-col items-center py-12 gap-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="font-semibold text-center">Enforcing Atomic Settlement...</p>
-              <p className="text-xs text-muted-foreground text-center">Verifying hardware ACA + dual-rail truth.</p>
+              <p className="text-xs text-muted-foreground text-center">Verifying consent + dual-rail truth.</p>
             </div>
           ) : step === "success" ? (
             <div className="flex flex-col items-center py-12 gap-4 text-center">
               <CheckCircle2 className="w-16 h-16 text-emerald-500" />
               <p className="font-bold text-xl">Hydrated!</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                SaaS Utility Purchase · Hardware Witnessed
+                Utility Purchase · Hardware Witnessed
               </p>
             </div>
           ) : step === "awaiting_deposit" ? (
@@ -306,7 +306,7 @@ const SynapseTopUp = () => {
                 >
                   <CreditCard className="h-4 w-4" />
                   <div className="text-left">
-                    <div className="font-bold">Fiat Port</div>
+                    <div className="font-bold">Credit/Debit</div>
                     <div className="text-[9px] opacity-70">Settle via Worldpay</div>
                   </div>
                 </button>
@@ -318,7 +318,7 @@ const SynapseTopUp = () => {
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
                 <ShieldCheck className="w-3 h-3" />
-                <span>Verified Dual-Rail · Hardware-Bound ACA</span>
+                <span>Verified Dual-Rail</span>
               </div>
             </>
           )}
