@@ -53,32 +53,36 @@ const UniversalPurchaseScreen = () => {
     }
 
     try {
-      console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [START] Requesting secure checkout session for ${plan.name} ($${plan.price}).`);
-      
-      // Call Edge Function that wraps the Wix wix-pay-backend SDK logic
-      const { data, error } = await supabase.functions.invoke("create-wix-payment", {
-        body: {
-          fiatAmount: plan.price,
-          platform_guid: userId,
+      console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId directly for ${plan.name} ($${plan.price}).`);
+
+      const WIX_DOMAIN = "https://www.thebigidia.com";
+      const returnUrl = encodeURIComponent(`${window.location.origin}/billing?success=true`);
+
+      const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: plan.price,
+          credits: plan.credits,
+          userId,
           planId: plan.id,
-          creditsMinted: plan.credits,
-          type: "subscription"
-        }
+          type: "subscription",
+        }),
       });
 
-      if (error) {
-        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function rejected checkout creation:", error);
-        throw new Error("Payment gateway initialization failed.");
+      if (!wixResponse.ok) {
+        console.error(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
+        throw new Error(`Wix checkout failed: ${wixResponse.status}`);
       }
 
-      if (data?.checkoutUrl) {
-        console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [SUCCESS] Received URL. Redirecting client to Wix Checkout.");
-        // Redirect completely to Wix. The success URL configured in Wix should point back here with ?success=true
-        window.location.href = data.checkoutUrl;
-      } else {
-        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Payload missing checkoutUrl.");
-        throw new Error("Invalid response from payment gateway.");
+      const wixData = await wixResponse.json();
+      if (!wixData?.paymentId) {
+        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [FAILED] Payload missing paymentId.");
+        throw new Error("Failed to get payment ID from Wix");
       }
+
+      console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [SUCCESS] Received paymentId. Redirecting to Wix checkout page.");
+      window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
     } catch (err: any) {
       console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
       toast.error(err.message || "Purchase initialization failed");

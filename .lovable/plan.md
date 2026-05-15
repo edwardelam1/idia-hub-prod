@@ -1,52 +1,56 @@
 ## Goal
-Finish the dual-rail Synapse billing flow: ensure the modal performs the USDC approval gate via the existing relayer-based shared module, and confirm the edge function matches the spec.
 
-## Scope assessment
-
-Most of what you described is already in place:
-- `SynapsePurchaseModal.tsx` no longer imports `captureHardwareTag`, already pulls `availableUSDC` from `protocolState?.usdc_balance ?? 0`, already does the `profiles.wallet_address` fallback lookup, sends `resolvedWalletAddress` as `user_wallet`, and keeps `aca_metadata` free of `hardware_tag`.
-- `top-up-credits/index.ts` already imports and delegates to `chargeBuyerUsdc`, has no hardware_tag validation, and routes `fiat` straight to the `corporate_revenue` column.
-
-The remaining functional gap is the **client-side approval gate**, which was explicitly removed in a prior pass and now needs to be reinstated per your instructions.
+Refactor `UniversalPurchaseScreen.handlePurchase` to talk directly to the Wix `/_functions/checkout` HTTP endpoint and redirect the user to the Wix-hosted checkout page. The `create-wix-payment` Supabase Edge Function (currently throwing `Wix API rejection: Not Found / Internal Server Error`) is removed from the React circuit.
 
 ## Changes
 
-### 1. `src/components/billing/SynapsePurchaseModal.tsx`
-- Add import: `import { ensureUsdcApproval } from "@/lib/usdc-approval";`
-- In `handlePurchase`, after the `availableUSDC < usdAmount` check (still inside the `paymentRail === "usdc"` branch), insert:
-  ```ts
-  console.log("[SynapsePurchaseModal][APPROVAL_GATE] BEGIN: ensureUsdcApproval");
-  const approval = await ensureUsdcApproval({ owner: resolvedWalletAddress });
-  console.log("[SynapsePurchaseModal][APPROVAL_GATE] END:", approval);
-  if (!approval.ok) {
-    throw new Error(`APPROVAL_REQUIRED: ${approval.reason}. Relayer cannot pull funds without allowance.`);
-  }
-  ```
-- Add a defense-in-depth wallet derivation line right above the profile fetch (used only as a logging/telemetry hint; the profile value remains the source of truth):
-  ```ts
-  const userWalletAddress =
-    walletBalance?.wallet_address ||
-    balanceData?.wallet_address ||
-    (user as any)?.wallet_address ||
-    (user as any)?.user_metadata?.wallet_address;
-  ```
-  (Requires pulling `user` from `useAuth()` and `walletBalance` from `useWalletBalance()` — both hooks are already used in the file; only the destructured fields need expanding.)
-- Keep all existing `[BEGIN]`/`[END]` console logs; add the two new ones above.
-- Worldpay path stays untouched — no on-chain calls in that branch.
+### `src/components/billing/UniversalPurchaseScreen.tsx`
 
-### 2. `supabase/functions/top-up-credits/index.ts`
-No code change required — already conforms:
-- No `aca_metadata.hardware_tag` validation present.
-- `chargeBuyerUsdc` imported from `../_shared/charge-usdc.ts` and invoked exactly per the spec snippet.
-- `fiat` routing skips the on-chain branch and updates `wallets.corporate_revenue`.
+Replace the `supabase.functions.invoke("create-wix-payment", …)` block in `handlePurchase` with a direct `fetch` to Wix:
 
-I'll re-verify on implementation and only patch if drift is found.
+```ts
+const WIX_DOMAIN = "https://www.thebigidia.com";
+const returnUrl = encodeURIComponent(`${window.location.origin}/billing?success=true`);
 
-## Out of scope
-- No UI/style/layout changes to the modal.
-- No DB migrations.
-- No changes to `_shared/charge-usdc.ts` or `usdc-approval.ts`.
+const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    amount: plan.price,
+    credits: plan.credits,
+    userId,
+    planId: plan.id,
+    type: "subscription",
+  }),
+});
 
-## Verification
-- Read both files post-edit to confirm imports compile and the approval gate sits inside the `usdc` branch.
-- Confirm the build remains green (handled automatically by the harness).
+if (!wixResponse.ok) throw new Error(`Wix checkout failed: ${wixResponse.status}`);
+const wixData = await wixResponse.json();
+if (!wixData.paymentId) throw new Error("Failed to get payment ID from Wix");
+
+window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+```
+
+Keep all other logic intact:
+- `step` state machine (`review` → `processing` → `success`)
+- `isSuccessReturn` detection of `?success=true` (still triggered when Wix redirects back to `/billing?success=true`; no behavior change here since the success screen is gated by route + query — note the success-state UI lives on `/purchase`, but the user-confirmed redirect target is `/billing`, so settlement confirmation is now handled by the Billing page's existing flow)
+- Error handling with `toast.error` and `setStep("review")`
+- All existing `[START]`/`[SUCCESS]`/`[FAILED]` console log markers, retargeted from `WIX_HANDOFF` (Edge Function) to `WIX_DIRECT`
+
+### Untouched
+
+- `supabase/functions/create-wix-payment/*` — left in place but no longer invoked from this screen. Not deleted in case other surfaces reference it.
+- All other billing components, payload shapes, UI, and styling.
+
+## Prerequisites (Wix side, outside this codebase)
+
+The Wix site at `https://www.thebigidia.com` must:
+
+1. Expose `POST /_functions/checkout` returning `{ paymentId: string }`.
+2. Send CORS headers permitting the Lovable preview origin and `https://hub.thebigidia.com`:
+   - `Access-Control-Allow-Origin: *` (or explicit origins)
+   - `Access-Control-Allow-Methods: POST, OPTIONS`
+   - `Access-Control-Allow-Headers: Content-Type`
+3. Honor `returnUrl` on `/idia-checkout` and redirect back to `${origin}/billing?success=true` after a completed payment.
+
+If CORS is not configured on the Wix endpoint, the browser will block the request. That is a Wix-side configuration task, not a code change here.
