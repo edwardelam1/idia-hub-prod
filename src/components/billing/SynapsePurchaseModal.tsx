@@ -190,7 +190,7 @@ const SynapsePurchaseModal = ({
         payment_reference: txReference,
         payment_method: "internal_usdc",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: walletBalance?.wallet_address || "user_wallet",
+        user_wallet: protocolState?.wallet_address || "user_wallet",
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Dispatching payload.");
