@@ -188,7 +188,6 @@ const SynapsePurchaseModal = ({
       console.log("[SynapsePurchaseModal][INTERNAL_LOCK] START: Securing custodial funds for swap...");
       await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate ledger lock UX
 
-      // 🚨 CRITICAL BYPASS: Sending "INTERNAL_CUSTODIAL_LEDGER" to pass the Edge Function bouncer
       const payload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
@@ -196,7 +195,7 @@ const SynapsePurchaseModal = ({
         payment_reference: txReference,
         payment_method: "internal_usdc",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: "INTERNAL_CUSTODIAL_LEDGER",
+        user_wallet: "user_wallet",
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Dispatching payload.");
