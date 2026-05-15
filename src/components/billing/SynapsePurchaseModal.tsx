@@ -24,7 +24,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   CircleDollarSign,
-  ShoppingCart
+  ShoppingCart,
 } from "lucide-react";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -120,7 +120,9 @@ const SynapsePurchaseModal = ({
 
     try {
       console.log("[SynapsePurchaseModal][handlePurchase] [AUTH_CHECK] Verifying session...");
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
         console.error("[SynapsePurchaseModal][LEDGER_DISPATCH] ERROR: Auth session missing.");
@@ -131,27 +133,40 @@ const SynapsePurchaseModal = ({
       // WIX FIAT CHECKOUT FLOW
       // ==========================================
       if (paymentRail === "wix") {
-        console.log(`[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [START] Requesting dynamic fiat checkout for $${usdAmount}...`);
-        
+        const idempotencyKey = crypto.randomUUID(); // Ensure unique request tracking
+        console.log(
+          `[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [START] Requesting dynamic fiat checkout for $${usdAmount}...`,
+        );
+
         const { data, error } = await supabase.functions.invoke("create-wix-payment", {
           body: {
             fiatAmount: usdAmount,
             supabaseUserId: session.user.id,
             creditsMinted: displayCredits,
-            type: "alacarte"
+            type: "alacarte",
+            idempotency_key: idempotencyKey, // Added for settlement safety
           },
-          headers: { Authorization: `Bearer ${session.access_token}` }
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
         });
 
         if (error) {
-          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function threw error:", error);
+          // Log the specific error details to catch silent stalling
+          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function details:", {
+            message: error.message,
+            name: error.name,
+            status: error.status,
+          });
           throw new Error("Wix checkout initialization failed.");
         }
 
         if (data?.checkoutUrl) {
-          console.log("[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [SUCCESS] Redirecting to Wix Checkout URL.");
+          console.log(
+            "[SynapsePurchaseModal][handlePurchase] [WIX_HANDOFF] [SUCCESS] Redirecting to Wix Checkout URL.",
+          );
           window.location.href = data.checkoutUrl;
-          return; // Halt React execution here as window unloads
+          return;
         } else {
           throw new Error("Gateway routing error. Checkout URL missing.");
         }
@@ -160,8 +175,10 @@ const SynapsePurchaseModal = ({
       // ==========================================
       // INTERNAL USDC CUSTODIAL FLOW
       // ==========================================
-      console.log(`[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`);
-      
+      console.log(
+        `[SynapsePurchaseModal] INFO: Checking on-chain USDC liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
+      );
+
       if (availableUSDC < usdAmount) {
         console.error("[SynapsePurchaseModal] ERROR: Insufficient on-chain USDC funds.");
         throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
@@ -179,7 +196,7 @@ const SynapsePurchaseModal = ({
         payment_reference: txReference,
         payment_method: "internal_usdc",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: "INTERNAL_CUSTODIAL_LEDGER", 
+        user_wallet: "INTERNAL_CUSTODIAL_LEDGER",
       };
 
       console.log("[SynapsePurchaseModal][LEDGER_DISPATCH] Dispatching payload.");
@@ -190,7 +207,10 @@ const SynapsePurchaseModal = ({
       });
 
       if (topUpError) {
-        console.error("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected on-chain request.", topUpError);
+        console.error(
+          "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected on-chain request.",
+          topUpError,
+        );
         throw topUpError;
       }
 
@@ -203,7 +223,6 @@ const SynapsePurchaseModal = ({
 
       await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
       setTimeout(() => handleOpenChange(false), 3500);
-
     } catch (err: any) {
       console.error("[SynapsePurchaseModal][handlePurchase] [END_WITH_ERROR] Transaction stalled:", err.message);
       toast.error(err.message || "Settlement failed.");
