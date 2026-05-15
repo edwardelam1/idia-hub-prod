@@ -31,9 +31,8 @@ const BillingCredits = () => {
     invoices,
     isLoading,
     downloadInvoice,
-    // Assuming useBillingData is updated to provide detailed ledger rows
-    ledgerTransactions = [],
   } = useBillingData();
+  const ledgerTransactions: any[] = [];
 
   const [showPlans, setShowPlans] = useState(false);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
