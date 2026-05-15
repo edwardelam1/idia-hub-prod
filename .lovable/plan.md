@@ -1,56 +1,31 @@
-## Goal
+# Settings cleanup + live team integration
 
-Refactor `UniversalPurchaseScreen.handlePurchase` to talk directly to the Wix `/_functions/checkout` HTTP endpoint and redirect the user to the Wix-hosted checkout page. The `create-wix-payment` Supabase Edge Function (currently throwing `Wix API rejection: Not Found / Internal Server Error`) is removed from the React circuit.
+## 1. `src/pages/SettingsPage.tsx`
+- Remove the `insights` `TabsTrigger` and `TabsContent` blocks.
+- Drop unused imports: `SettingsInsights`, `BarChart3`.
+- Rename tab label `Business Profile & Team` → `Business Profile & Team` (keep) but it now shares the same live roster as the sidebar **Team Management** page.
 
-## Changes
+## 2. `src/components/settings/SettingsBusinessProfile.tsx` (full rewrite)
+Eliminate ALL mock data. Replace with live Supabase-backed implementation:
 
-### `src/components/billing/UniversalPurchaseScreen.tsx`
+**Business Profile card (live):**
+- Resolve active business via `getBusinessId()` (same helper used by `TeamManagement`).
+- Load `businesses` row: `name`, `tax_id`, `billing_wallet_address` (fallback to `address` field if column missing — verify schema first).
+- Editable inputs save via `supabase.from('businesses').update(...).eq('id', businessId)`.
+- Show loading / empty states; no hard-coded "Acme Corporation".
 
-Replace the `supabase.functions.invoke("create-wix-payment", …)` block in `handlePurchase` with a direct `fetch` to Wix:
+**Team Members section (live, shared source):**
+- Render the existing live component `<TeamManagement />` from `@/components/teams/TeamManagement` directly below the Business Profile card.
+- This guarantees the Settings tab and the sidebar `/teams` route show the **same** roster (same `employees` table, same realtime channel, same provisioning + revoke flows).
+- Delete the local `MOCK_TEAM` array, the inline `<Table>`, and the mock invite `Dialog` — `TeamManagement` already provides ACA/NFC provisioning, ephemeral profiles, and revoke.
 
-```ts
-const WIX_DOMAIN = "https://www.thebigidia.com";
-const returnUrl = encodeURIComponent(`${window.location.origin}/billing?success=true`);
+## 3. Optional cleanup
+- If `SettingsInsights.tsx` is no longer referenced anywhere else, leave the file in place (safer for the 12h cutover) but stop importing it. We can delete in a follow-up.
 
-const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    amount: plan.price,
-    credits: plan.credits,
-    userId,
-    planId: plan.id,
-    type: "subscription",
-  }),
-});
+## Technical notes
+- `TeamManagement` heading says "Enterprise Team Management" with a large `h1`. When embedded inside the Settings tab we'll wrap it in a section with reduced top padding so it fits inside the tab card layout, but won't fork the component (single source of truth).
+- Schema check before edit: confirm `businesses` columns `tax_id`, plus a wallet column. If wallet column doesn't exist, that field will be hidden rather than faked.
+- No changes to `/teams` route or `AppSidebar`.
 
-if (!wixResponse.ok) throw new Error(`Wix checkout failed: ${wixResponse.status}`);
-const wixData = await wixResponse.json();
-if (!wixData.paymentId) throw new Error("Failed to get payment ID from Wix");
-
-window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
-```
-
-Keep all other logic intact:
-- `step` state machine (`review` → `processing` → `success`)
-- `isSuccessReturn` detection of `?success=true` (still triggered when Wix redirects back to `/billing?success=true`; no behavior change here since the success screen is gated by route + query — note the success-state UI lives on `/purchase`, but the user-confirmed redirect target is `/billing`, so settlement confirmation is now handled by the Billing page's existing flow)
-- Error handling with `toast.error` and `setStep("review")`
-- All existing `[START]`/`[SUCCESS]`/`[FAILED]` console log markers, retargeted from `WIX_HANDOFF` (Edge Function) to `WIX_DIRECT`
-
-### Untouched
-
-- `supabase/functions/create-wix-payment/*` — left in place but no longer invoked from this screen. Not deleted in case other surfaces reference it.
-- All other billing components, payload shapes, UI, and styling.
-
-## Prerequisites (Wix side, outside this codebase)
-
-The Wix site at `https://www.thebigidia.com` must:
-
-1. Expose `POST /_functions/checkout` returning `{ paymentId: string }`.
-2. Send CORS headers permitting the Lovable preview origin and `https://hub.thebigidia.com`:
-   - `Access-Control-Allow-Origin: *` (or explicit origins)
-   - `Access-Control-Allow-Methods: POST, OPTIONS`
-   - `Access-Control-Allow-Headers: Content-Type`
-3. Honor `returnUrl` on `/idia-checkout` and redirect back to `${origin}/billing?success=true` after a completed payment.
-
-If CORS is not configured on the Wix endpoint, the browser will block the request. That is a Wix-side configuration task, not a code change here.
+## Out of scope
+- Renaming the sidebar entry, role/permission changes, or schema migrations.
