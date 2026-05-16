@@ -91,7 +91,6 @@ const UniversalPurchaseScreen = () => {
       console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId directly for ${plan.name} ($${plan.price}).`);
 
       const WIX_DOMAIN = "https://www.thebigidia.com";
-      const returnUrl = encodeURIComponent(`${window.location.origin}/billing?success=true`);
 
       const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
         method: "POST",
@@ -117,6 +116,9 @@ const UniversalPurchaseScreen = () => {
       }
 
       console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [SUCCESS] Received paymentId. Redirecting to Wix checkout page.");
+      const returnUrl = encodeURIComponent(
+        `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
+      );
       window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
     } catch (err: any) {
       console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
