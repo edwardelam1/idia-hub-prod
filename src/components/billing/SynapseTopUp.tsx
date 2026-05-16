@@ -307,7 +307,7 @@ const SynapseTopUp = () => {
                   <CreditCard className="h-4 w-4" />
                   <div className="text-left">
                     <div className="font-bold">Credit/Debit</div>
-                    <div className="text-[9px] opacity-70">Settle via Worldpay</div>
+                    <div className="text-[9px] opacity-70">Settle/div>
                   </div>
                 </button>
               </div>
