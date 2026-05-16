@@ -129,23 +129,43 @@ const SynapsePurchaseModal = ({
       // RAIL 1: WIX DIRECT PORT HANDSHAKE (CORS BYPASS)
       // ==========================================
       if (paymentRail === "wix") {
-        console.log("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] Packing parameters into query string...");
+        console.log("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId.");
 
-        const baseUrl = "https://www.thebigidia.com/idia-checkout";
-        const queryParams = new URLSearchParams({
-          uid: String(session.user.id),
-          amt: Number(usdAmount).toFixed(2),
-          cr: String(Math.floor(displayCredits)),
-          idem: String(crypto.randomUUID()),
+        const WIX_DOMAIN = "https://www.thebigidia.com";
+        const returnUrl = encodeURIComponent(`${window.location.origin}/purchase?success=true`);
+        const idempotencyKey = crypto.randomUUID();
+
+        const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: Number(usdAmount.toFixed(2)),
+            credits: Math.floor(displayCredits),
+            userId: session.user.id,
+            planId: "alacarte",
+            type: "alacarte",
+            idempotency_key: idempotencyKey,
+          }),
         });
 
-        const explicitTargetPort = `${baseUrl}?${queryParams.toString()}`;
-        console.log(
-          `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [REDIRECT] Direct ingress routing to vault portal: ${explicitTargetPort}`,
-        );
+        if (!wixResponse.ok) {
+          console.error(
+            `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`,
+          );
+          throw new Error(`Wix checkout failed: ${wixResponse.status}`);
+        }
 
-        // Hard escape straight out of the app layout into the native Wix canvas
-        window.location.href = explicitTargetPort;
+        const wixData = await wixResponse.json();
+        if (!wixData?.paymentId) {
+          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] Missing paymentId.");
+          throw new Error("Failed to get payment ID from Wix");
+        }
+
+        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+        console.log(
+          `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [REDIRECT] Routing to vault portal: ${target}`,
+        );
+        window.location.href = target;
         return;
       }
 
