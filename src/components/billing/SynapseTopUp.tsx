@@ -307,13 +307,13 @@ const SynapseTopUp = () => {
                   <CreditCard className="h-4 w-4" />
                   <div className="text-left">
                     <div className="font-bold">Credit/Debit</div>
-                    <div className="text-[9px] opacity-70">Settle/div>
+                    <div className="text-[9px] opacity-70">Settle</div>
                   </div>
                 </button>
               </div>
 
               <Button onClick={handlePurchase} disabled={!canProceed} className="w-full py-6 font-bold gap-2">
-                <Fingerprint className="w-4 h-4" /> AUTHORIZE WITH HARDWARE
+                <Fingerprint className="w-4 h-4" /> PAY HERE
               </Button>
 
               <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
