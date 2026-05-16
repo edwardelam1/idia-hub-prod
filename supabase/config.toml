@@ -13,3 +13,6 @@ verify_jwt = false
 
 [functions.verify-idia-life-tap]
 verify_jwt = false
+
+[functions.wix-payment-webhook]
+verify_jwt = false
