@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +19,7 @@ import {
   CreditCard,
   Coins,
   Receipt,
+  ArrowDownCircle,
 } from "lucide-react";
 import { useBillingData } from "@/hooks/useBillingData";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,7 +36,42 @@ const BillingCredits = () => {
     isLoading,
     downloadInvoice,
   } = useBillingData();
-  const ledgerTransactions: any[] = [];
+  const { user } = useAuth();
+  const userId = user?.user_id;
+
+  const { data: ledgerTransactions = [] } = useQuery({
+    queryKey: ["activity-ledger", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from("synapse_credit_ledger")
+        .select(
+          "id, amount, amount_usdc, entry_type, transaction_type, status, description, funding_source, created_at, transaction_id, blockchain_tx_hash, circle_transfer_id"
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data ?? []).map((r: any) => {
+        const credits = Number(r.amount ?? 0);
+        const isDebit = credits < 0;
+        const usd = r.amount_usdc != null ? Number(r.amount_usdc) : Math.abs(credits) * 0.75;
+        return {
+          id: r.id,
+          reference: r.description || r.transaction_type || "Settlement",
+          routing: r.entry_type || r.transaction_type || "ledger",
+          payment_method: r.funding_source || (r.amount_usdc != null ? "usdc" : "fiat"),
+          amount: usd,
+          credits,
+          isDebit,
+          created_at: r.created_at,
+          transaction_hash: r.blockchain_tx_hash || r.circle_transfer_id || r.transaction_id,
+          status: r.status,
+        };
+      });
+    },
+    enabled: !!userId,
+  });
 
   const [showPlans, setShowPlans] = useState(false);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
@@ -187,7 +226,11 @@ const BillingCredits = () => {
                         onClick={() => toggleExpand(tx.id)}
                       >
                         <div className="col-span-1">
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                          {tx.isDebit ? (
+                            <ArrowDownCircle className="h-5 w-5 text-rose-500" />
+                          ) : (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                          )}
                         </div>
                         <div className="col-span-4 flex items-center gap-3">
                           <div className="p-2 bg-primary/10 rounded-lg">
@@ -209,9 +252,14 @@ const BillingCredits = () => {
                             {tx.routing || "Direct"}
                           </Badge>
                         </div>
-                        <div className="col-span-2 text-right font-mono text-sm">${Number(tx.amount).toFixed(2)}</div>
+                        <div className="col-span-2 text-right font-mono text-sm">
+                          {tx.isDebit ? "-" : ""}${Math.abs(Number(tx.amount)).toFixed(2)}
+                        </div>
                         <div className="col-span-2 text-right">
-                          <div className="text-sm font-bold font-mono">+{formatCredits(tx.credits)}</div>
+                          <div className={`text-sm font-bold font-mono ${tx.isDebit ? "text-rose-500" : ""}`}>
+                            {tx.isDebit ? "" : "+"}
+                            {formatCredits(tx.credits)}
+                          </div>
                           {expandedTx === tx.id ? (
                             <ChevronUp className="h-4 w-4 ml-auto text-muted-foreground" />
                           ) : (
