@@ -1,65 +1,94 @@
-## Wire Activity Ledger to real data + close Wix → Hub credit gap
+## Wix → Hub settlement: Option 2 now, Option 1 as backstop
 
-### What I found
+### Goal
+Make every Wix payment land in `synapse_credit_ledger` so the Historical Settlement Ledger always reflects reality. Ship the return-URL path first (no Wix-side work), then add the webhook as a durable backstop. Backfill the missing $2.00 charge from today.
 
-Two independent problems, both contributing to the missing receipt:
+### Phase 0 — Backfill the missing receipt (one-time)
 
-**1. UI is hardcoded to empty.** `src/components/billing/BillingCredits.tsx` line 35:
-```ts
-const ledgerTransactions: any[] = [];
+Insert the row for the May 16, 2026 charge so the ledger shows it immediately after Phase 1 lights up the UI query:
+
+- `transaction_id`: `f438ad12-23c9-478d-842c-aa321a1d6580`
+- `user_id`: `217c6224-...` (current user)
+- `entry_type`: `deposit`
+- `transaction_type`: `wix_purchase`
+- `amount` (CR): `2.6666666666666665` (2.00 / 0.75)
+- `amount_usdc`: `2.00`
+- `funding_source`: `wix`
+- `status`: `completed`
+- `description`: `Wix à la carte purchase ($2.00)`
+
+Done via a single `INSERT` migration, idempotent on `transaction_id`.
+
+### Phase 1 — Option 2: Return-URL settlement (ship first)
+
+**New edge function `confirm-wix-payment`** (`verify_jwt = true`, default):
+
+Inputs (JSON body):
 ```
-The "Historical Settlement Ledger" tab never queries `synapse_credit_ledger`, so even existing entries (your USDC top-ups, marketplace burns) never show. That's why the page reads "No financial activity detected".
-
-**2. The Wix payment did not produce a ledger row.** Querying `synapse_credit_ledger` for your user (`217c6224-...`), the most recent entry is from 2026-05-15 (an internal_deposit of 5000). Nothing from today's Wix charge.
-
-The old flow minted credits inside the `create-wix-payment` edge function. The new direct-to-Wix handoff (`SynapsePurchaseModal` POSTs `/_functions/checkout`, then redirects to `/idia-checkout?paymentId=...&returnUrl=/purchase?success=true`) hands off correctly but **nothing on the Hub side records the settlement** once Wix completes. Wix has your money; the Hub ledger doesn't know.
-
-### Changes
-
-**A. Fix the UI (immediate, makes existing entries visible):**
-
-`src/components/billing/BillingCredits.tsx`
-- Replace the hardcoded empty array with a TanStack Query against `synapse_credit_ledger` filtered by the current user, ordered by `created_at desc`, limit ~100.
-- Map columns to the existing render shape:
-  - `tx.reference` ← `description || transaction_type`
-  - `tx.amount` ← `amount_usdc ?? amount` (deposit USD), or absolute USD-equivalent for fees
-  - `tx.credits` ← `amount` (CR delta, sign preserved)
-  - `tx.payment_method` ← `funding_source || transaction_type`
-  - `tx.created_at` ← `created_at`
-  - `tx.transaction_hash` ← `blockchain_tx_hash || circle_transfer_id || transaction_id`
-- Show debits (negative `amount`) with a red icon and a `-` sign, credits with the existing emerald check.
-- Keep the empty-state copy for true zero-rows.
-
-No schema change. No write paths. Pure read.
-
-**B. Close the Wix settlement loop (records future Wix purchases):**
-
-Reintroduce a thin server-side credit step so that money received at Wix becomes a ledger row in `synapse_credit_ledger`. Two viable patterns — I need your call:
-
-```text
-Option 1 (recommended): Wix webhook → Supabase edge function
-  Wix `paymentReceived` webhook POSTs to a new edge function
-  `wix-payment-webhook` with { paymentId, userId, credits, amount }.
-  Function verifies the signature/secret, then inserts an
-  `entry_type='deposit'`, `transaction_type='wix_purchase'`,
-  `status='completed'` row keyed by `transaction_id = paymentId`
-  (idempotent on paymentId).
-
-Option 2: Return-URL settlement
-  When the user lands on `/purchase?success=true&paymentId=...`,
-  the SPA calls a new `confirm-wix-payment` edge function which
-  hits Wix's order-status API to verify, then inserts the same
-  ledger row. Works without configuring webhooks but depends on
-  the user actually returning to the Hub.
+{ paymentId: string }
 ```
 
-I will not implement (B) in this plan until you pick an option, because each path needs different secrets (Wix webhook signing secret vs. Wix API key) and different edge-function code.
+Steps:
+1. Authenticate caller via JWT; resolve `user_id`.
+2. Call Wix Orders/Payments status API for `paymentId` using `WIX_API_KEY` + `WIX_SITE_ID` secrets.
+3. Reject unless Wix reports `status === "paid"` / `approved`.
+4. Read returned `amount` (USD) and compute `credits = amount / 0.75`.
+5. `INSERT ... ON CONFLICT (transaction_id) DO NOTHING` into `synapse_credit_ledger` keyed by `paymentId`.
+6. Return `{ ok: true, alreadyRecorded: boolean, credits, amount }`.
 
-### Files
+**Frontend wiring** (`src/components/billing/UniversalPurchaseScreen.tsx` + `SynapsePurchaseModal.tsx`):
 
-- `src/components/billing/BillingCredits.tsx` — replace `ledgerTransactions` with a live query + small row adapter. UI-only.
-- (Deferred until you choose) `supabase/functions/wix-payment-webhook/index.ts` **or** `supabase/functions/confirm-wix-payment/index.ts`.
+- On mount, if `searchParams.get("success") === "true"` and `paymentId` is present in the URL, call `supabase.functions.invoke("confirm-wix-payment", { body: { paymentId } })`.
+- While the call is in flight, keep the existing success screen but show "Verifying payment with Wix…".
+- On success, toast the credited amount and invalidate the `synapse_credit_ledger` query so `BillingCredits` re-renders.
+- On failure (Wix says not paid, network error), show a non-blocking warning with a "Retry verification" button — do NOT credit speculatively.
+
+**Wix-side change (one-line):** update the `returnUrl` builder so it includes the `paymentId`:
+```
+/billing?success=true&paymentId={paymentId}
+```
+`UniversalPurchaseScreen` already passes the encoded returnUrl when redirecting; just include the placeholder Wix will expand.
+
+### Phase 2 — Option 1: Wix webhook backstop
+
+**New edge function `wix-payment-webhook`** (`verify_jwt = false`, signature-checked):
+
+1. Read raw body + `x-wix-signature` header.
+2. HMAC-SHA256 verify against `WIX_WEBHOOK_SECRET`. Reject mismatches with 401.
+3. Parse `{ paymentId, userId, amount, status, metadata }`.
+4. Only act when `status === "paid"`.
+5. Same `INSERT ... ON CONFLICT (transaction_id) DO NOTHING` as Phase 1, same column shape.
+6. Return 200 quickly; log all rejections.
+
+Because both code paths use the same idempotency key (`paymentId`), they cannot double-credit. Whichever arrives first wins; the other is a no-op.
+
+**Wix configuration** (user does this once in Wix Automations):
+- Trigger: Payment received
+- Action: HTTPS POST to `https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/wix-payment-webhook`
+- Add `x-wix-signature` header signed with the shared secret
+
+### Phase 3 — Verify
+
+- Reload `/billing`, confirm Historical Settlement Ledger shows the backfilled $2.00 row plus prior entries.
+- Run a fresh $1 Wix test charge end-to-end: confirm Phase 1 inserts the row on return, then confirm Phase 2 logs an `alreadyRecorded` no-op when the webhook fires.
+
+### Secrets needed
+
+- Phase 1: `WIX_API_KEY`, `WIX_SITE_ID` (read from Wix dashboard → Settings → Headless / API Keys)
+- Phase 2: `WIX_WEBHOOK_SECRET` (any strong random string; user pastes the same value into Wix Automation header signing config)
+
+I will request these via the secrets tool only after you approve this plan.
 
 ### Out of scope
 
-- Backfilling today's Wix charge into the ledger. Once you confirm the paymentId and choose an option above, I can insert that single row via the data tool as a one-time reconciliation.
+- Refunds / chargebacks reversal entries (Wix doesn't emit those today on this account).
+- Periodic reconciler that scans Wix orders older than N minutes — easy to add later as a third backstop if either path ever drifts.
+
+### Files touched
+
+- New: `supabase/functions/confirm-wix-payment/index.ts`
+- New: `supabase/functions/wix-payment-webhook/index.ts`
+- Edit: `src/components/billing/UniversalPurchaseScreen.tsx` (verification call on success-return)
+- Edit: `src/components/billing/SynapsePurchaseModal.tsx` (same verification hook for à la carte path)
+- Migration: one-time backfill `INSERT` for `f438ad12-…`
+- `supabase/config.toml`: add `[functions.wix-payment-webhook] verify_jwt = false`
