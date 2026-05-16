@@ -132,7 +132,6 @@ const SynapsePurchaseModal = ({
         console.log("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId.");
 
         const WIX_DOMAIN = "https://www.thebigidia.com";
-        const returnUrl = encodeURIComponent(`${window.location.origin}/purchase?success=true`);
         const idempotencyKey = crypto.randomUUID();
 
         const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
@@ -161,6 +160,9 @@ const SynapsePurchaseModal = ({
           throw new Error("Failed to get payment ID from Wix");
         }
 
+        const returnUrl = encodeURIComponent(
+          `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
+        );
         const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
         console.log(
           `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [REDIRECT] Routing to vault portal: ${target}`,
