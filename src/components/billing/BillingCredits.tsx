@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,11 +20,13 @@ import {
   Coins,
   Receipt,
   ArrowDownCircle,
+  Loader2,
 } from "lucide-react";
 import { useBillingData } from "@/hooks/useBillingData";
 import { Skeleton } from "@/components/ui/skeleton";
 import AvailablePlansDialog from "./AvailablePlansDialog";
 import { formatCredits } from "@/lib/utils";
+import { toast } from "sonner";
 
 const BillingCredits = () => {
   const {
@@ -38,6 +40,109 @@ const BillingCredits = () => {
   } = useBillingData();
   const { user } = useAuth();
   const userId = user?.user_id;
+  const queryClient = useQueryClient();
+  const [verifyState, setVerifyState] = useState<"idle" | "verifying" | "success" | "error">("idle");
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const verifyAttempted = useRef<string | null>(null);
+
+  // ============================================================
+  // Wix Return-URL Settlement Loop
+  // Triggered when Wix redirects back to /billing?success=true&paymentId=...
+  // Idempotent: confirm-wix-payment uses ON CONFLICT (transaction_id) DO NOTHING.
+  // ============================================================
+  useEffect(() => {
+    console.log("[BillingCredits][WixReturn] >>> START: mount effect — scanning URL for Wix settlement parameters.");
+    if (!userId) {
+      console.log("[BillingCredits][WixReturn] --- HALT: no userId yet, deferring until auth context hydrates.");
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("success");
+    const paymentId = params.get("paymentId");
+    console.log(`[BillingCredits][WixReturn] --- PARAMS: success=${success} paymentId=${paymentId}`);
+
+    if (success !== "true" || !paymentId) {
+      console.log("[BillingCredits][WixReturn] <<< END: no actionable Wix return params; idle.");
+      return;
+    }
+
+    if (verifyAttempted.current === paymentId) {
+      console.log(`[BillingCredits][WixReturn] <<< END: paymentId ${paymentId} already attempted in this mount, skipping duplicate invoke.`);
+      return;
+    }
+    verifyAttempted.current = paymentId;
+
+    const verify = async () => {
+      console.log(`[BillingCredits][WixReturn] >>> START: invoking confirm-wix-payment edge function for paymentId=${paymentId}, userId=${userId}.`);
+      setVerifyState("verifying");
+      setVerifyError(null);
+      const startedAt = performance.now();
+
+      try {
+        const { data, error } = await supabase.functions.invoke("confirm-wix-payment", {
+          body: { paymentId },
+        });
+        const elapsed = Math.round(performance.now() - startedAt);
+        console.log(`[BillingCredits][WixReturn] --- INVOKE_RETURNED: elapsed=${elapsed}ms data=`, data, "error=", error);
+
+        if (error) {
+          console.error("[BillingCredits][WixReturn] !!! INVOKE_ERROR:", error);
+          setVerifyState("error");
+          setVerifyError(error.message || "Edge function invocation failed.");
+          toast.error("Verification stalled", {
+            description: error.message || "Could not reach the Wix settlement gateway. The webhook backstop will reconcile.",
+          });
+          return;
+        }
+
+        if (data?.ok) {
+          console.log("[BillingCredits][WixReturn] --- LEDGER_WRITE: confirmed by edge function.");
+          setVerifyState("success");
+          toast.success("Payment recorded on ledger", {
+            description: "Synapse Credits have been provisioned to your account.",
+          });
+          console.log(`[BillingCredits][WixReturn] --- INVALIDATING query key ["activity-ledger", "${userId}"].`);
+          await queryClient.invalidateQueries({ queryKey: ["activity-ledger", userId] });
+          // Strip the params so a refresh doesn't re-trigger.
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          console.warn("[BillingCredits][WixReturn] --- NOT_OK response payload:", data);
+          setVerifyState("error");
+          const reason = data?.reason || data?.error || "Wix has not yet marked this payment as paid.";
+          setVerifyError(reason);
+          toast("Payment captured by Wix", {
+            description: `${reason} The webhook backstop will finalize the ledger once Wix confirms.`,
+          });
+        }
+      } catch (err: any) {
+        const elapsed = Math.round(performance.now() - startedAt);
+        console.error(`[BillingCredits][WixReturn] !!! EXCEPTION after ${elapsed}ms:`, err);
+        setVerifyState("error");
+        setVerifyError(err?.message || "Unknown failure during verification.");
+        toast.error("Verification stalled", {
+          description: err?.message || "Unexpected error. Webhook backstop will reconcile.",
+        });
+      } finally {
+        console.log("[BillingCredits][WixReturn] <<< END: verification loop complete.");
+      }
+    };
+
+    verify();
+  }, [userId, queryClient]);
+
+  const retryVerification = () => {
+    console.log("[BillingCredits][WixReturn] --- RETRY requested by user; resetting attempt guard.");
+    verifyAttempted.current = null;
+    setVerifyState("idle");
+    setVerifyError(null);
+    // Re-trigger by nudging effect dependencies via a microtask; simplest is to reload the search.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "true" && params.get("paymentId")) {
+      // Force re-run by replacing state with same URL (effect deps don't change, so manually invoke).
+      window.location.reload();
+    }
+  };
 
   const { data: ledgerTransactions = [] } = useQuery({
     queryKey: ["activity-ledger", userId],
