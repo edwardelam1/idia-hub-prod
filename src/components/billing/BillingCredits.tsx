@@ -226,6 +226,51 @@ const BillingCredits = () => {
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-6">
+        {verifyState !== "idle" && (
+          <div
+            className={`mb-6 rounded-xl border p-4 flex items-start gap-3 ${
+              verifyState === "verifying"
+                ? "border-primary/30 bg-primary/5"
+                : verifyState === "success"
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-amber-500/30 bg-amber-500/5"
+            }`}
+          >
+            {verifyState === "verifying" && <Loader2 className="h-5 w-5 text-primary animate-spin mt-0.5" />}
+            {verifyState === "success" && <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5" />}
+            {verifyState === "error" && <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />}
+            <div className="flex-1 text-sm">
+              {verifyState === "verifying" && (
+                <>
+                  <div className="font-medium">Verifying payment with Wix…</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Confirming the settlement and provisioning Synapse Credits to your ledger.
+                  </div>
+                </>
+              )}
+              {verifyState === "success" && (
+                <>
+                  <div className="font-medium">Payment recorded on ledger</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Your Synapse Credits are now available. The transaction appears in the Activity Ledger below.
+                  </div>
+                </>
+              )}
+              {verifyState === "error" && (
+                <>
+                  <div className="font-medium">Payment captured by Wix — ledger sync pending</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {verifyError ?? "Wix has not yet confirmed the payment. The webhook backstop will reconcile automatically."}
+                  </div>
+                  <Button size="sm" variant="outline" className="mt-3 h-7 text-xs" onClick={retryVerification}>
+                    Retry verification
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <TabsContent value="overview" className="space-y-6 mt-0">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <Card className="border-primary/10 bg-gradient-to-br from-card to-primary/5">
