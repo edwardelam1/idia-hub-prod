@@ -1297,6 +1297,7 @@ export const PayAppBlueprint = () => {
       toast.error("Create failed", { description: error.message });
       return;
     }
+    await mirrorToManifestVault(newCode, data.payload);
     setProvisioningCode(newCode);
     setLoadedSchemaId(data.id);
     setSelectedModules([...defaultModules]);
