@@ -572,11 +572,12 @@ const defaultModules: SelectedModule[] = [
 const generateProvisioningCode = (): string => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "IDIA-";
-  for (let i = 0; i < 4; i++) {
+  // Canonical format: IDIA-XXXX-XXXX (matches DB generate_business_provisioning_code)
+  for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 4; j++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    if (i < 3) code += "-";
+    if (i < 1) code += "-";
   }
   return code;
 };
@@ -1094,6 +1095,9 @@ export const PayAppBlueprint = () => {
         return;
       }
 
+      // Mirror to manifest vault so IDIA Life's hydrate-terminal can locate the schema.
+      await mirrorToManifestVault(provisioningCode, blueprintPayload);
+
       setConfirmDialogOpen(false);
       toast.success("Blueprint deployed to edge network", {
         description: `Provisioning code: ${provisioningCode} is now LIVE.`,
@@ -1103,6 +1107,24 @@ export const PayAppBlueprint = () => {
       toast.error("Critical failure deploying blueprint.");
     } finally {
       console.log(`[PayAppBlueprint] END: handleSendToDevice execution for code: ${provisioningCode}`);
+    }
+  };
+
+  // Shared helper: keep the IDIA Life manifest vault in sync with the active blueprint
+  // payload for a given provisioning code. Safe to call alongside any save path.
+  const mirrorToManifestVault = async (code: string, payload: any) => {
+    if (!selectedBusiness || !code) return;
+    const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
+      {
+        business_id: selectedBusiness,
+        pairing_code: code,
+        schema_payload: payload,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "pairing_code" },
+    );
+    if (error) {
+      console.warn("[PayAppBlueprint] Manifest vault mirror failed:", error.message);
     }
   };
 
@@ -1125,7 +1147,7 @@ export const PayAppBlueprint = () => {
           schema_payload: payload,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "business_id" },
+        { onConflict: "pairing_code" },
       );
 
       if (error) {
@@ -1210,6 +1232,7 @@ export const PayAppBlueprint = () => {
           .update(update)
           .eq("id", targetId);
         if (error) throw error;
+        if (provisioningCode) await mirrorToManifestVault(provisioningCode, payload);
         toast.success("Schema saved");
       } else {
         // No loaded schema → create a new row using current code
@@ -1227,6 +1250,7 @@ export const PayAppBlueprint = () => {
         if (error) throw error;
         setLoadedSchemaId(data.id);
         setProvisioningCode(data.code);
+        await mirrorToManifestVault(data.code, payload);
         toast.success("New schema created");
       }
       await fetchSchemaLog();
@@ -1273,6 +1297,7 @@ export const PayAppBlueprint = () => {
       toast.error("Create failed", { description: error.message });
       return;
     }
+    await mirrorToManifestVault(newCode, data.payload);
     setProvisioningCode(newCode);
     setLoadedSchemaId(data.id);
     setSelectedModules([...defaultModules]);
