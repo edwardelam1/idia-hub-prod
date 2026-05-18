@@ -572,11 +572,12 @@ const defaultModules: SelectedModule[] = [
 const generateProvisioningCode = (): string => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "IDIA-";
-  for (let i = 0; i < 4; i++) {
+  // Canonical format: IDIA-XXXX-XXXX (matches DB generate_business_provisioning_code)
+  for (let i = 0; i < 2; i++) {
     for (let j = 0; j < 4; j++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    if (i < 3) code += "-";
+    if (i < 1) code += "-";
   }
   return code;
 };
