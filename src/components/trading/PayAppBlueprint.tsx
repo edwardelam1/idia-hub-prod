@@ -1095,6 +1095,9 @@ export const PayAppBlueprint = () => {
         return;
       }
 
+      // Mirror to manifest vault so IDIA Life's hydrate-terminal can locate the schema.
+      await mirrorToManifestVault(provisioningCode, blueprintPayload);
+
       setConfirmDialogOpen(false);
       toast.success("Blueprint deployed to edge network", {
         description: `Provisioning code: ${provisioningCode} is now LIVE.`,
@@ -1104,6 +1107,24 @@ export const PayAppBlueprint = () => {
       toast.error("Critical failure deploying blueprint.");
     } finally {
       console.log(`[PayAppBlueprint] END: handleSendToDevice execution for code: ${provisioningCode}`);
+    }
+  };
+
+  // Shared helper: keep the IDIA Life manifest vault in sync with the active blueprint
+  // payload for a given provisioning code. Safe to call alongside any save path.
+  const mirrorToManifestVault = async (code: string, payload: any) => {
+    if (!selectedBusiness || !code) return;
+    const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
+      {
+        business_id: selectedBusiness,
+        pairing_code: code,
+        schema_payload: payload,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "pairing_code" },
+    );
+    if (error) {
+      console.warn("[PayAppBlueprint] Manifest vault mirror failed:", error.message);
     }
   };
 
@@ -1126,7 +1147,7 @@ export const PayAppBlueprint = () => {
           schema_payload: payload,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "business_id" },
+        { onConflict: "pairing_code" },
       );
 
       if (error) {
