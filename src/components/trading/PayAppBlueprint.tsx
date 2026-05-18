@@ -1232,6 +1232,7 @@ export const PayAppBlueprint = () => {
           .update(update)
           .eq("id", targetId);
         if (error) throw error;
+        if (provisioningCode) await mirrorToManifestVault(provisioningCode, payload);
         toast.success("Schema saved");
       } else {
         // No loaded schema → create a new row using current code
@@ -1249,6 +1250,7 @@ export const PayAppBlueprint = () => {
         if (error) throw error;
         setLoadedSchemaId(data.id);
         setProvisioningCode(data.code);
+        await mirrorToManifestVault(data.code, payload);
         toast.success("New schema created");
       }
       await fetchSchemaLog();
