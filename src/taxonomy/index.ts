@@ -7,10 +7,10 @@ import { ALL_NANO_BITES } from "./nanoBites";
 import { REVENUE_ARCHETYPES } from "./archetypes";
 
 // Explicit exports for application consumers
-export { SECTORS } from "./sectors";
-export { ALL_INDUSTRIES } from "./industries";
-export { ALL_NANO_BITES } from "./nanoBites";
-export { REVENUE_ARCHETYPES } from "./archetypes";
+//export { SECTORS } from "./sectors";
+//export { ALL_INDUSTRIES } from "./industries";
+//export { ALL_NANO_BITES } from "./nanoBites";
+//export { REVENUE_ARCHETYPES } from "./archetypes";
 
 // Explicitly export other critical modules
 export { NAICS } from "./codes/naics";
