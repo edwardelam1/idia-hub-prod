@@ -2,7 +2,6 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { PAY_APP_ROUTING } from "../_shared/payAppRouting.ts";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -11,8 +10,6 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const MAX_OMNI_ROWS = 5000;
 
 // Pulls every relevant staged record for a user across BOTH staging tables.
-// Tables expose user_id, entity_id, AND pseudo_user_id — we OR-filter on all three
-// so a raw UUID, an entity ref, or a pre-hashed pseudonym all resolve correctly.
 async function fetchOmniRecords(
   supabase: ReturnType<typeof createClient>,
   pseudoId: string,
@@ -337,6 +334,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Pre-initialize variables for global scope
+  let operatorId: string | undefined;
+  let consumedReceipt: string[] = [];
+
   try {
     // 2. SAFE BODY PARSING (Fixes the "Unexpected end of JSON input" Crash)
     const bodyText = await req.text();
@@ -361,7 +362,10 @@ serve(async (req) => {
     }
     console.info("[END: BestFriendAI.PayloadValidation] Payload verified.");
 
-    const { message, context, history } = parsed.data;
+    const { message, context, history, client_id } = parsed.data;
+
+    // Set variables now that parsed data exists
+    operatorId = context?.platformGuid || context?.userId;
 
     if (!openAiApiKey) {
       console.error("[CRITICAL FAILURE: BestFriendAI.Environment] OPENAI_API_KEY is missing.");
@@ -381,24 +385,20 @@ serve(async (req) => {
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
 
     // OMNI-FETCH: override frontend payload with the full DB record set for this user.
-    // Runs in marketplace mode whenever we have an identifier to resolve.
-    const pseudoId = context?.platformGuid || context?.userId;
-    const operatorId = pseudoId;
-    let consumedReceipt: string[] = [];
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    if (pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${pseudoId}`);
-      const audit = await fetchOmniRecords(supabase, pseudoId);
+    if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
+      const audit = await fetchOmniRecords(supabase, operatorId);
       if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
         console.info(
-          `[STATUS: BestFriendAI.OmniFetchExecution] DB override for ${pseudoId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records.`,
+          `[STATUS: BestFriendAI.OmniFetchExecution] DB override for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records.`,
         );
       } else {
         console.warn(
-          `[WARNING: BestFriendAI.OmniFetchExecution] Omni-fetch failed for ${pseudoId}: ${audit.error ?? "see prior logs"}`,
+          `[WARNING: BestFriendAI.OmniFetchExecution] Omni-fetch failed for ${operatorId}: ${audit.error ?? "see prior logs"}`,
         );
       }
       console.info("[END: BestFriendAI.OmniFetchExecution]");
@@ -417,7 +417,6 @@ serve(async (req) => {
     if (isDataScientistMode) {
       systemPrompt = buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents);
     } else {
-      // FIX: Standard string concatenation
       let navSummary = "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
       if (healthMetrics.length || lifestyleEvents.length) {
         navSummary =
@@ -435,7 +434,6 @@ serve(async (req) => {
     const shouldAppendCurrentMessage =
       formattedHistory.length === 0 || formattedHistory[formattedHistory.length - 1]?.content !== message;
 
-    // FIX: Standard string concatenation for context
     const contextString =
       "Current Context: " +
       (context
@@ -471,19 +469,10 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        user_id: operatorId,
         model: "gpt-4o-mini",
         messages,
         temperature: 0.3,
         max_tokens: 4096,
-        client_id: parsed.data.client_id || "IDIA_HUB_APP",
-        aca_record_ids: consumedReceipt,
-        intent_type: "MARKETPLACE RESEARCH",
-        granularity: 0.95,
-        relevance: 1.0,
-        timeliness: 1.0,
-        completeness: 1.0,
-        origin_fidelity: 1.0,
       }),
     });
 
@@ -510,36 +499,28 @@ serve(async (req) => {
 
     // RECEIPT: every record actually shown to the AI counts as consumed.
     console.info("[BEGIN: BestFriendAI.ReceiptTransmission] Evaluating consumption vectors.");
-
     if (isDataScientistMode) {
       const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       consumedReceipt = [...healthIds, ...lifeIds];
 
       // THE MISSING WIRE: Actually send the receipt to Synapse!
-      if (consumedReceipt.length > 0) {
+      if (consumedReceipt.length > 0 && operatorId) {
         console.info(
           `[STATUS: BestFriendAI.ReceiptTransmission] Firing ${consumedReceipt.length} records to synapse-controller.`,
         );
         try {
-          // Resolve the operator ID to charge
-          if (!operatorId) throw new Error("Missing operator ID for Synapse billing.");
-
           const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
-
-          // HYDRATION: Pass the user's actual JWT downstream and include the apikey
-          const incomingAuthHeader = req.headers.get("Authorization");
-          const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-
           const synapseRes = await fetch(synapseUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: incomingAuthHeader as string, // Valid user JWT
-              apikey: anonKey, // Gateway clearance
+              Authorization: req.headers.get("Authorization") || "",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
             },
             body: JSON.stringify({
               user_id: operatorId,
+              client_id: client_id || "IDIA_HUB_APP",
               aca_record_ids: consumedReceipt,
               intent_type: "MARKETPLACE RESEARCH",
               granularity: 0.95,
@@ -599,10 +580,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
-    console.error(`[FATAL STALL: BestFriendAI Global] Offset: Outer Catch | Reason: ${error.message}`, error);
+    console.error(`[FATAL STALL]: ${error.message}`);
     return new Response(
       JSON.stringify({
-        response: `⚠️ Diagnostics Alert: ${error.message}`,
+        response: `Diagnostics Alert: ${error.message}`,
         agentStatus: "error",
         persona: "Chief Researcher",
       }),
