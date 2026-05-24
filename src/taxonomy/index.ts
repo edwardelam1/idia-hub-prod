@@ -5,23 +5,29 @@ import { SECTORS } from "./sectors";
 import { ALL_INDUSTRIES } from "./industries";
 import { ALL_NANO_BITES } from "./nanoBites";
 import { REVENUE_ARCHETYPES } from "./archetypes";
+import { NAICS } from "./codes/naics";
+import { GICS } from "./codes/gics";
 
 // Explicit exports for application consumers
-//export { SECTORS } from "./sectors";
-//export { ALL_INDUSTRIES } from "./industries";
-//export { ALL_NANO_BITES } from "./nanoBites";
-//export { REVENUE_ARCHETYPES } from "./archetypes";
+export { SECTORS, ALL_INDUSTRIES, ALL_NANO_BITES, REVENUE_ARCHETYPES, NAICS, GICS };
 
-// Explicitly export other critical modules
-//export { NAICS } from "./codes/naics";
-//export { GICS } from "./codes/gics";
-//export { initializeTaxonomy };
+/**
+ * Accessor for NanoBite definitions
+ * Filters the master list by industry identifier.
+ */
+export function getNanoBitesFor(industryId: string) {
+  if (!ALL_NANO_BITES) {
+    console.warn("[IDIA_TAXONOMY_CORE]: Warning - Attempted to access NanoBites before hydration.");
+    return [];
+  }
+  return ALL_NANO_BITES.filter((bite) => bite.industryId === industryId);
+}
 
 /**
  * Master Assembly of the Business Taxonomy Engine.
  * Single source of truth consumed by the IDIA Pay App Builder.
  */
-function initializeTaxonomy() {
+export function initializeTaxonomy() {
   console.log("[IDIA_TAXONOMY_CORE]: BEGIN - Assembly Execution");
 
   try {
@@ -30,6 +36,8 @@ function initializeTaxonomy() {
       industries: ALL_INDUSTRIES,
       nanoBites: ALL_NANO_BITES,
       archetypes: REVENUE_ARCHETYPES,
+      naics: NAICS,
+      gics: GICS,
     };
 
     if (!registry.sectors || !registry.industries) {
