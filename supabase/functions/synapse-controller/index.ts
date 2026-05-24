@@ -61,7 +61,6 @@ async function calculateDynamicFee(
     // 3. If there's an error (table missing, permission issue) OR profile missing,
     // fall back to default weight (1.0) instead of crashing.
     if (error || !profile) {
-      console.warn(`[Info] No business profile for ${userId}, using default fee.`);
       const feeCR = Math.ceil(1 * marketBaseValue * 1.0);
       return { feeCR, sectorLabel };
     }
