@@ -518,7 +518,6 @@ serve(async (req) => {
         );
         try {
           // Resolve the operator ID to charge
-          const operatorId = context?.platformGuid || context?.userId;
           if (!operatorId) throw new Error("Missing operator ID for Synapse billing.");
 
           const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
