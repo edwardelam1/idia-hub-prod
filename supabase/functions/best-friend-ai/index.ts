@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
+
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -330,33 +331,79 @@ function normalizeOutput(text: string, _agent: AgentType): string {
 }
 
 serve(async (req) => {
-  // Robust parsing logic
-  const bodyText = await req.text();
-
-  if (!bodyText || bodyText.trim() === "") {
-    return new Response(JSON.stringify({ error: "Empty request body" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  let json;
-  try {
-    json = JSON.parse(bodyText);
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "Invalid JSON format" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // If message is the auto-trigger, treat as initiation
-  const initialMessage = message || "I am ready to begin.";
-
+  // 1. HANDLE OPTIONS PREFLIGHT FIRST (Fixes the 400 Crash)
   if (req.method === "OPTIONS") {
-    console.info("[END: BestFriendAI.RequestGate] OPTIONS preflight handled.");
     return new Response(null, { headers: corsHeaders });
   }
+
+  try {
+    // 2. SAFE BODY PARSING (Fixes the "Unexpected end of JSON input" Crash)
+    const bodyText = await req.text();
+    if (!bodyText || bodyText.trim() === "") throw new Error("Empty request body");
+    
+    let rawPayload = JSON.parse(bodyText);
+    
+    // Catch the UI auto-trigger
+    if (!rawPayload.message || rawPayload.message.trim() === "") {
+      rawPayload.message = "I am ready to begin my data journey.";
+    }
+
+    const parsed = requestSchema.safeParse(rawPayload);
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const { message, context, history } = parsed.data;
+    const userId = context?.userId;
+
+    // 3. STRICT CONCIERGE GATE (Prevents Analyst Data Dump)
+    if (userId) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: session } = await supabase.from("intent_discovery_sessions").select("*").eq("user_id", userId).maybeSingle();
+
+      if (!session?.resolved_sub_module_id) {
+        console.info("[STATUS: BestFriendAI] Concierge Active - Data Blocked.");
+        
+        const conciergePrompt = `You are the IDIA Concierge. DISCOVERY MODE. Do not analyze data. Map the user to ONE sub_module_id from: ${JSON.stringify(PAY_APP_ROUTING)}. Respond with ONE sentence ending in a question. If resolving, output JSON: { "response": "string", "resolved_sub_module_id": "string" }.`;
+
+        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "system", content: conciergePrompt }, ...history, { role: "user", content: message }],
+            response_format: { type: "json_object" }
+          }),
+        });
+
+        const result = JSON.parse((await completion.json()).choices[0].message.content);
+
+        // Persist the conversation state
+        await supabase.from("intent_discovery_sessions").upsert({
+          user_id: userId,
+          history: [...history, { role: "user", content: message }, { role: "assistant", content: result.response }],
+          resolved_sub_module_id: result.resolved_sub_module_id
+        });
+
+        // Hydrate the battery when intent is found
+        if (result.resolved_sub_module_id) {
+          await supabase.from("business_interest_profiles").upsert({
+            business_id: userId, interest_weights: { [result.resolved_sub_module_id]: 2.0 }
+          });
+        }
+
+        // EARLY RETURN: Analyst code is never reached
+        return new Response(JSON.stringify({ 
+          response: result.response, 
+          status: "DISCOVERY", 
+          agentStatus: "active", 
+          persona: "Concierge" 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
 
   try {
     console.info("[BEGIN: BestFriendAI.PayloadValidation] Validating incoming JSON.");
