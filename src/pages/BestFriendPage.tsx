@@ -79,7 +79,7 @@ const BestFriendPage = () => {
       if (!activeGuid) throw new Error("Profile resolution failure: No platform_guid found.");
       console.info(`[SUCCESS: Profile Resolution] Platform GUID resolved: ${activeGuid}`);
 
-      // 2. WAREHOUSE FETCH
+      // 2. WAREHOUSE FETCH (Gated exclusively by the Marketplace Button)
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
         console.info("[EXEC: Warehouse Fetch] Marketplace mode active. Retrieving staged health data.");
@@ -92,6 +92,8 @@ const BestFriendPage = () => {
         if (healthError) throw healthError;
         realPipelineData = healthData || [];
         console.info(`[SUCCESS: Warehouse Fetch] Retrieved ${realPipelineData.length} records.`);
+      } else {
+        console.info("[SKIP: Warehouse Fetch] Marketplace mode inactive. Library exposure blocked.");
       }
 
       // 3. ORCHESTRATION INVOCATION
@@ -113,13 +115,15 @@ const BestFriendPage = () => {
       console.info("[SUCCESS: AI Orchestration] Edge function returned valid payload.");
 
       // 4. DIGIRAMP ANCHOR GENERATION
-      console.info("[EXEC: DigiRAMP Anchor] Generating cryptographic anchor for liability token.");
+      console.info("[EXEC: DigiRAMP Anchor] Evaluating cryptographic anchor for liability token.");
       const rawTokenHash = chatResponse?.liability_token || null;
       let digiRampAnchorId = null;
 
       if (rawTokenHash) {
         digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
         console.info(`[SUCCESS: DigiRAMP Anchor] Anchor generated: ${digiRampAnchorId}`);
+      } else {
+        console.info("[SKIP: DigiRAMP Anchor] No liability token returned by AI.");
       }
 
       // 5. UPDATE CONVERSATION
@@ -130,15 +134,17 @@ const BestFriendPage = () => {
           role: "assistant",
           content: chatResponse?.response || "Analysis complete.",
           liabilityTokenHash: digiRampAnchorId,
-          creditDeducted: !!digiRampAnchorId,
+          creditDeducted: marketplaceMode,
         },
       ]);
 
-      // Refresh the "Synapse Gas" gauge if a credit was burned
-      if (digiRampAnchorId) {
-        console.info("[EXEC: Credit Settlement] Refreshing Synapse balance after AI usage.");
+      // 6. SYNAPSE CREDIT DEDUCTION (Gated exclusively by the Marketplace Button)
+      if (marketplaceMode) {
+        console.info("[EXEC: Credit Settlement] Marketplace Mode enabled. Refreshing Synapse gas gauge.");
         await refreshBalance();
         console.info("[SUCCESS: Credit Settlement] Balance sync complete.");
+      } else {
+        console.info("[SKIP: Credit Settlement] Marketplace Mode disabled. No credits expended.");
       }
 
       setCurrentMessage("");
