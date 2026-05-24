@@ -106,9 +106,6 @@ const requestSchema = z.object({
     isMarketplaceMode: z.boolean().optional(),
     platformGuid: z.string().optional(),
     userId: z.string().optional(),
-    // DUAL-RAIL COMPLIANCE: optional at the schema level so Store-Clerk (non-marketplace)
-    // calls don't trip. Marketplace-mode handler enforces it explicitly below.
-    routing: z.enum(["fiat", "on-chain"]).optional(),
     marketplace: z
       .object({
         healthRecords: z.array(z.any()).optional().default([]),
@@ -505,23 +502,6 @@ serve(async (req) => {
           const operatorId = context?.platformGuid || context?.userId;
           if (!operatorId) throw new Error("Missing operator ID for Synapse billing.");
 
-          // [BEGIN: ROUTING_RESOLUTION] Like-for-Like compliance gate.
-          // Routing must be explicit on the inbound payload — no defaults, no coercion.
-          const routing = context?.routing;
-          if (routing !== "fiat" && routing !== "on-chain") {
-            console.error(
-              `🚨 [FATAL STALL: ROUTING_RESOLUTION] Missing/invalid routing. Received: ${routing ?? "undefined"}`,
-            );
-            return new Response(
-              JSON.stringify({
-                error: "ROUTING_HARD_STOP",
-                message: `'routing' must be exactly "fiat" or "on-chain". Received: ${routing ?? "undefined"}`,
-              }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-            );
-          }
-          console.info(`[END: ROUTING_RESOLUTION] Compliance rail locked: ${routing}`);
-
           const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
 
           // HYDRATION: Pass the user's actual JWT downstream and include the apikey
@@ -539,7 +519,6 @@ serve(async (req) => {
               user_id: operatorId,
               aca_record_ids: consumedReceipt,
               intent_type: "MARKETPLACE RESEARCH",
-              routing,
               granularity: 0.95,
               relevance: 1.0,
               timeliness: 1.0,
@@ -568,11 +547,17 @@ serve(async (req) => {
     console.info("[END: BestFriendAI.ReceiptTransmission]");
 
     console.info("[BEGIN: BestFriendAI.ResponseCompilation] Formatting final payload.");
+    const personaLabels: Record<AgentType, string> = {
+      MEDICAL_AGENT: "Health Analyst",
+      CONSTRUCTION_AGENT: "Project Architect",
+      FINANCE_AGENT: "Financial Controller",
+      GENERAL_NAVIGATOR: "Best Friend",
+    };
     const finalPayload = {
       response: aiResponse,
       timestamp: new Date().toISOString(),
       agentStatus: "active",
-      persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
+      persona: personaLabels[detectedAgent],
       activeAgent: detectedAgent,
       queryComplexity:
         detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT"
