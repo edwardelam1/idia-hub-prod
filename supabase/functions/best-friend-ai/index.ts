@@ -106,9 +106,6 @@ const requestSchema = z.object({
     isMarketplaceMode: z.boolean().optional(),
     platformGuid: z.string().optional(),
     userId: z.string().optional(),
-    // DUAL-RAIL COMPLIANCE: optional at the schema level so Store-Clerk (non-marketplace)
-    // calls don't trip. Marketplace-mode handler enforces it explicitly below.
-    routing: z.enum(["fiat", "on-chain"]).optional(),
     marketplace: z
       .object({
         healthRecords: z.array(z.any()).optional().default([]),
