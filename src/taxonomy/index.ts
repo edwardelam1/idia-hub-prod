@@ -13,9 +13,9 @@ import { REVENUE_ARCHETYPES } from "./archetypes";
 //export { REVENUE_ARCHETYPES } from "./archetypes";
 
 // Explicitly export other critical modules
-export { NAICS } from "./codes/naics";
-export { GICS } from "./codes/gics";
-export { initializeTaxonomy };
+//export { NAICS } from "./codes/naics";
+//export { GICS } from "./codes/gics";
+//export { initializeTaxonomy };
 
 /**
  * Master Assembly of the Business Taxonomy Engine.
