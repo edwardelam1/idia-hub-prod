@@ -547,11 +547,17 @@ serve(async (req) => {
     console.info("[END: BestFriendAI.ReceiptTransmission]");
 
     console.info("[BEGIN: BestFriendAI.ResponseCompilation] Formatting final payload.");
+    const personaLabels: Record<AgentType, string> = {
+      MEDICAL_AGENT: "Health Analyst",
+      CONSTRUCTION_AGENT: "Project Architect",
+      FINANCE_AGENT: "Financial Controller",
+      GENERAL_NAVIGATOR: "Best Friend",
+    };
     const finalPayload = {
       response: aiResponse,
       timestamp: new Date().toISOString(),
       agentStatus: "active",
-      persona: isDataScientistMode ? "Chief Researcher" : "Store Clerk",
+      persona: personaLabels[detectedAgent],
       activeAgent: detectedAgent,
       queryComplexity:
         detectedAgent === "MEDICAL_AGENT" || detectedAgent === "FINANCE_AGENT"
