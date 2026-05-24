@@ -93,6 +93,7 @@ type VerificationResult = {
 
 const requestSchema = z.object({
   message: z.string().min(1),
+  client_id: z.string().optional(),
   history: z
     .array(
       z.object({
