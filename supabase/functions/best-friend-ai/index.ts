@@ -330,8 +330,25 @@ function normalizeOutput(text: string, _agent: AgentType): string {
 }
 
 serve(async (req) => {
-  const json = await req.json();
-  const { message, context, history = [] } = json;
+  // Robust parsing logic
+  const bodyText = await req.text();
+
+  if (!bodyText || bodyText.trim() === "") {
+    return new Response(JSON.stringify({ error: "Empty request body" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  let json;
+  try {
+    json = JSON.parse(bodyText);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "Invalid JSON format" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   // If message is the auto-trigger, treat as initiation
   const initialMessage = message || "I am ready to begin.";
