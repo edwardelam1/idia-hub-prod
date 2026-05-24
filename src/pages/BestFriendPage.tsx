@@ -189,7 +189,7 @@ const BestFriendPage = () => {
                 : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
             }`}
           >
-            <Search size={14} /> {marketplaceMode ? "Data Pipeline: Active" : "Engage Data Pipeline"}
+            <Search size={14} /> {marketplaceMode ? "Full Library Search: Active" : "Searching the Library"}
           </button>
         </div>
       </div>
