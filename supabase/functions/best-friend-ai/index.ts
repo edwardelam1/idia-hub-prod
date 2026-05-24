@@ -383,6 +383,8 @@ serve(async (req) => {
     // OMNI-FETCH: override frontend payload with the full DB record set for this user.
     // Runs in marketplace mode whenever we have an identifier to resolve.
     const pseudoId = context?.platformGuid || context?.userId;
+    const operatorId = pseudoId;
+    let consumedReceipt: string[] = [];
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const operatorId = pseudoId; // Define this here, at the top scope.
 
@@ -489,7 +491,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    let consumedReceipt: string[] = [];
+
     if (!data.choices || data.choices.length === 0) {
       console.error("[CRITICAL FAILURE: BestFriendAI.OpenAIExecution] Empty response array from OpenAI.");
       throw new Error(`OpenAI returned an empty response.`);
