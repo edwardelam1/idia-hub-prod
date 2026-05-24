@@ -21,54 +21,17 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
-  const [interactionMode, setInteractionMode] = useState<"DISCOVERY" | "ANALYSIS">("DISCOVERY");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
-  const isProcessing = useRef(false);
 
   useEffect(() => {
-    const initDiscovery = async () => {
-      if (conversation.length === 0 && !isProcessing.current) {
-        // Small delay to ensure the UI is mounted
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setCurrentMessage("I'm ready to begin my data journey.");
-        await handleSendMessage();
-      }
-    };
-    initDiscovery();
-  }, []); // Empty dependency array ensures this runs once on mount
-  useEffect(() => {
-    const checkDiscoveryStatus = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Check if the user has an existing resolved intent
-      const { data: session } = await supabase
-        .from("intent_discovery_sessions")
-        .select("resolved_sub_module_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      // If no resolved intent, auto-initiate the Concierge flow
-      if (!session?.resolved_sub_module_id) {
-        // We send a "Hello" signal to the Edge Function to trigger the Concierge
-        // This forces the agent to greet the user with the first discovery question
-        setCurrentMessage("I'm ready to set up my data journey.");
-        // We use a slight timeout to ensure the UI is ready
-        setTimeout(() => handleSendMessage(), 1000);
-      }
-    };
-
-    checkDiscoveryStatus();
-  }, []);
+    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [conversation, isLoading]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isLoading || isProcessing.current) return;
+    if (!currentMessage.trim() || isLoading) return;
 
-    isProcessing.current = true;
     setIsLoading(true);
     setConversation((prev) => [...prev, { role: "user", content: currentMessage }]);
 
@@ -80,7 +43,7 @@ const BestFriendPage = () => {
 
       const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
 
-      // 3. ORCHESTRATION INVOCATION
+      // Orchestration Invocation
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -98,11 +61,6 @@ const BestFriendPage = () => {
 
       if (aiError) throw aiError;
 
-      // Update Interaction Mode based on backend status
-      if (chatResponse.status) {
-        setInteractionMode(chatResponse.status);
-      }
-
       setConversation((prev) => [
         ...prev,
         {
@@ -119,9 +77,10 @@ const BestFriendPage = () => {
       toast.error(error.message);
     } finally {
       setIsLoading(false);
-      isProcessing.current = false;
     }
   };
+
+  const truncateHash = (hash: string) => (hash ? `${hash.substring(0, 8)}...` : "—");
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
@@ -134,11 +93,8 @@ const BestFriendPage = () => {
             <h1 className="text-xl font-bold">Best Friend AI</h1>
             <div className="flex items-center gap-2">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
-                {interactionMode === "DISCOVERY" ? "CONCIERGE ACTIVE" : "AGENTIC ORCHESTRATION"}
+                AGENTIC ORCHESTRATION LAYER
               </p>
-              <Badge variant={interactionMode === "DISCOVERY" ? "secondary" : "default"} className="text-[9px]">
-                {interactionMode}
-              </Badge>
             </div>
           </div>
         </div>
@@ -156,12 +112,34 @@ const BestFriendPage = () => {
             <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
               <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"
+                  }`}
                 >
                   {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                 </div>
-                <div className="rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm bg-card border text-foreground">
-                  {msg.content}
+                <div className="space-y-2">
+                  <div
+                    className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border text-foreground"}`}
+                  >
+                    {msg.content}
+                  </div>
+                  {msg.role === "assistant" && msg.liabilityTokenHash && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] border-amber-200 bg-amber-50 text-amber-700 font-mono"
+                      >
+                        <FileKey size={10} className="mr-1" /> {truncateHash(msg.liabilityTokenHash)}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] border-emerald-200 bg-emerald-50 text-emerald-700 font-black"
+                      >
+                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -185,9 +163,7 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border max-w-3xl mx-auto w-full space-y-4">
         <div className="flex gap-2 relative">
           <Input
-            placeholder={
-              interactionMode === "DISCOVERY" ? "Ask your Best Friend where to start..." : "Querying Pipeline..."
-            }
+            placeholder="Message Best Friend..."
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
@@ -206,40 +182,15 @@ const BestFriendPage = () => {
         <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
           <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
-            disabled={interactionMode === "DISCOVERY" || isLoading}
+            disabled={isLoading}
             className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${
-              interactionMode === "DISCOVERY"
-                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
-                : marketplaceMode
-                  ? "bg-emerald-600 text-white border-emerald-700 shadow-lg shadow-emerald-900/20"
-                  : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
+              marketplaceMode
+                ? "bg-emerald-600 text-white border-emerald-700 shadow-lg shadow-emerald-900/20"
+                : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
             }`}
           >
-            {interactionMode === "DISCOVERY" ? (
-              <>
-                <Shield size={14} className="animate-pulse" /> Intent Discovery Required
-              </>
-            ) : marketplaceMode ? (
-              <>
-                <Activity size={14} /> Data Pipeline: Active
-              </>
-            ) : (
-              <>
-                <Search size={14} /> Engage Data Pipeline
-              </>
-            )}
+            <Search size={14} /> {marketplaceMode ? "Data Pipeline: Active" : "Engage Data Pipeline"}
           </button>
-
-          {/* Branch Indicator */}
-          <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50 flex items-center gap-2">
-            {interactionMode === "DISCOVERY" ? (
-              "Awaiting Intent Resolution..."
-            ) : (
-              <>
-                <Brain size={10} /> Mode: {interactionMode}
-              </>
-            )}
-          </div>
         </div>
       </div>
     </div>
