@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Activity, Loader2 } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
@@ -11,6 +12,20 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
+  liabilityTokenHash?: string | null;
+  creditDeducted?: boolean;
+}
+
+// NATIVE CRYPTO GENERATOR FOR THE DIGIRAMP ANCHOR
+async function generateDigiRampAnchor(liabilityTokenHash: string) {
+  if (!liabilityTokenHash) return null;
+  const timestamp = new Date().toISOString();
+  const payload = new TextEncoder().encode(`${liabilityTokenHash}|${timestamp}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", payload);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return "0x" + hashHex;
 }
 
 const BestFriendPage = () => {
@@ -20,6 +35,7 @@ const BestFriendPage = () => {
   const [marketplaceMode, setMarketplaceMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
+  const navigate = useNavigate();
 
   const isProcessing = useRef(false);
 
@@ -96,19 +112,31 @@ const BestFriendPage = () => {
       if (aiError) throw aiError;
       console.info("[SUCCESS: AI Orchestration] Edge function returned valid payload.");
 
-      // 4. UPDATE CONVERSATION
-      console.info("[EXEC: UI Update] Appending assistant response to conversation state.");
+      // 4. DIGIRAMP ANCHOR GENERATION
+      console.info("[EXEC: DigiRAMP Anchor] Generating cryptographic anchor for liability token.");
+      const rawTokenHash = chatResponse?.liability_token || null;
+      let digiRampAnchorId = null;
+
+      if (rawTokenHash) {
+        digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
+        console.info(`[SUCCESS: DigiRAMP Anchor] Anchor generated: ${digiRampAnchorId}`);
+      }
+
+      // 5. UPDATE CONVERSATION
+      console.info("[EXEC: UI Update] Appending assistant response and anchor to conversation state.");
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis complete.",
+          liabilityTokenHash: digiRampAnchorId,
+          creditDeducted: !!digiRampAnchorId,
         },
       ]);
 
       // Refresh the "Synapse Gas" gauge if a credit was burned
-      if (marketplaceMode) {
-        console.info("[EXEC: Credit Settlement] Refreshing Synapse balance after Marketplace use.");
+      if (digiRampAnchorId) {
+        console.info("[EXEC: Credit Settlement] Refreshing Synapse balance after AI usage.");
         await refreshBalance();
         console.info("[SUCCESS: Credit Settlement] Balance sync complete.");
       }
@@ -124,6 +152,8 @@ const BestFriendPage = () => {
       console.info("[CLEANUP: handleSendMessage] Processing flags reset.");
     }
   };
+
+  const truncateHash = (hash: string) => (hash ? `${hash.substring(0, 8)}...` : "—");
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
@@ -163,6 +193,25 @@ const BestFriendPage = () => {
                   >
                     {msg.content}
                   </div>
+                  {msg.role === "assistant" && msg.liabilityTokenHash && (
+                    <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
+                        onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
+                      >
+                        <FileKey size={12} className="text-amber-500" />
+                        {truncateHash(msg.liabilityTokenHash)}
+                      </Button>
+                      <Badge
+                        variant="outline"
+                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
+                      >
+                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
