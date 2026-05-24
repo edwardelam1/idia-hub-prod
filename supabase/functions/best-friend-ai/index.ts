@@ -469,10 +469,15 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages,
-        temperature: 0.3,
-        max_tokens: 4096,
+        user_id: operatorId,
+        client_id: parsed.data.client_id || "IDIA_HUB_APP", // ADD THIS LINE
+        aca_record_ids: consumedReceipt,
+        intent_type: "MARKETPLACE RESEARCH",
+        granularity: 0.95,
+        relevance: 1.0,
+        timeliness: 1.0,
+        completeness: 1.0,
+        origin_fidelity: 1.0,
       }),
     });
 
