@@ -28,8 +28,31 @@ const BestFriendPage = () => {
   const isProcessing = useRef(false);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
-  }, [conversation, isLoading]);
+    const checkDiscoveryStatus = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if the user has an existing resolved intent
+      const { data: session } = await supabase
+        .from("intent_discovery_sessions")
+        .select("resolved_sub_module_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      // If no resolved intent, auto-initiate the Concierge flow
+      if (!session?.resolved_sub_module_id) {
+        // We send a "Hello" signal to the Edge Function to trigger the Concierge
+        // This forces the agent to greet the user with the first discovery question
+        setCurrentMessage("I'm ready to set up my data journey.");
+        // We use a slight timeout to ensure the UI is ready
+        setTimeout(() => handleSendMessage(), 1000);
+      }
+    };
+
+    checkDiscoveryStatus();
+  }, []);
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading || isProcessing.current) return;
