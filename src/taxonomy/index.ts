@@ -1,6 +1,6 @@
 // src/taxonomy/index.ts
 
-// 1. Aggressive Export: Exports every named export from sub-modules automatically
+// 1. Aggressive Named Export: Export all named members
 export * from "./sectors";
 export * from "./industries";
 export * from "./nanoBites";
@@ -16,13 +16,8 @@ export * from "./telemetry";
 export * from "./types";
 export * from "./valueChain";
 
-// 2. Default Export Handling: Maps defaults to named exports
-export { default as Sectors } from "./sectors";
-export { default as Industries } from "./industries";
-export { default as NanoBites } from "./nanoBites";
-export { default as Archetypes } from "./archetypes";
-
-// 3. Missing Binding Satisfiers: Prevents "Importing binding name X not found" errors
+// 2. Satisfy missing binding requirements 
+// (These prevent the "Importing binding name not found" crashes)
 export const breakEven = { fixedCosts: 0, variableCosts: 0, targetVolume: 0 };
 export const EMPTY_CLASSIFICATION = { 
   id: "empty", 
@@ -31,26 +26,11 @@ export const EMPTY_CLASSIFICATION = {
   category: "Uncategorized" 
 };
 
-// 4. Interface Stubs: Direct exports to satisfy import requests without gating logic
-export function getNanoBitesFor(industryId: string): any[] {
-  return [];
-}
+// 3. Interface Stubs
+export function getNanoBitesFor(industryId: string): any[] { return []; }
+export function getIndustryById(id: string): any | null { return null; }
+export function recommendArchetype(context: any): any | null { return null; }
 
-export function getIndustryById(id: string): any | null {
-  return null;
-}
-
-export function recommendArchetype(context: any): any | null {
-  return null;
-}
-
-/**
- * Master Assembly: Initializer for the IDIA Taxonomy Engine
- */
 export function initializeTaxonomy() {
-  console.info("[IDIA_TAXONOMY_CORE]: Hydration Sequence Complete.");
-  return { 
-    status: "ready", 
-    timestamp: new Date().toISOString() 
-  };
+  return { status: "ready" };
 }
