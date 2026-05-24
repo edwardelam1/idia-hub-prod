@@ -9,6 +9,7 @@ import { createWalletClient, http, parseUnits, publicActions } from "https://esm
 // ══════════════════════════════════════════════════════════════════════
 
 const REVENUE_SPLIT = { CORPORATE: 0.6, WAR_CHEST: 0.1, DATA_YIELD: 0.3 };
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 // Network
 const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL") || "https://sepolia.base.org";
@@ -41,6 +42,7 @@ const ERC20_ABI = [
   },
 ] as const;
 
+// UPDATED: Corrected getter for IDIAPoolFactory public mapping
 const REGISTRY_ABI = [
   {
     name: "getPoolByLocation",
@@ -79,7 +81,7 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    console.info(`[BEGIN: circular-settlement] Pulse detected. Initializing settlement architecture.`);
+    console.info(`[BEGIN: circular-settlement] Pulse detected.`);
 
     currentStep = "SUPABASE_CLIENT_INIT";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -100,9 +102,6 @@ serve(async (req: Request) => {
     const executionLocation = location_string || "global";
     const ingestionReference = payment_reference || `SYN-${crypto.randomUUID().slice(0, 8)}`;
 
-    // ══════════════════════════════════════════════════════════════════════
-    // PHASE 0: BLOCKCHAIN CONFIGURATION (ALWAYS ON)
-    // ══════════════════════════════════════════════════════════════════════
     currentStep = "CONFIGURING_BLOCKCHAIN";
     const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
     if (!rawKey) throw new Error("RELAYER_PRIVATE_KEY missing.");
@@ -120,9 +119,7 @@ serve(async (req: Request) => {
       blockTag: "pending",
     });
 
-    // ══════════════════════════════════════════════════════════════════════
     // PHASE 1: CORPORATE SETTLEMENT (60%)
-    // ══════════════════════════════════════════════════════════════════════
     currentStep = "PHASE_1_CORPORATE_SETTLEMENT";
     const corporateRevenue = total_fiat_amount * REVENUE_SPLIT.CORPORATE;
 
@@ -135,21 +132,20 @@ serve(async (req: Request) => {
       nonce: masterNonce++,
     });
 
-    // ══════════════════════════════════════════════════════════════════════
     // PHASE 2: REGIONAL ROUTING (10%)
-    // ══════════════════════════════════════════════════════════════════════
     currentStep = "PHASE_2_REGIONAL_ROUTING";
     const regionalRevenue = total_fiat_amount * REVENUE_SPLIT.WAR_CHEST;
 
+    // Correctly calling the public mapping
     const poolTarget = await client.readContract({
       address: REGISTRY_ADDRESS,
       abi: REGISTRY_ABI,
-      functionName: "getPoolByLocation",
+      functionName: "deployedPools",
       args: [executionLocation],
     });
 
-    const finalRegionalAddress =
-      poolTarget && poolTarget !== "0x0000000000000000000000000000000000000000" ? poolTarget : GLOBAL_WAR_CHEST;
+    // Enforce Fallback Logic
+    const finalRegionalAddress = poolTarget && poolTarget !== ZERO_ADDRESS ? poolTarget : GLOBAL_WAR_CHEST;
 
     const regionalHash = await client.writeContract({
       address: USDC_ADDRESS,
@@ -160,9 +156,7 @@ serve(async (req: Request) => {
       nonce: masterNonce++,
     });
 
-    // ══════════════════════════════════════════════════════════════════════
-    // LEDGER HYDRATION (PHASES 1 & 2)
-    // ══════════════════════════════════════════════════════════════════════
+    // LEDGER HYDRATION
     await Promise.all([
       supabase.from("synapse_credit_ledger").insert({
         user_id: buyer_id,
@@ -188,9 +182,7 @@ serve(async (req: Request) => {
       }),
     ]);
 
-    // ══════════════════════════════════════════════════════════════════════
     // PHASE 3 & 5: ON-CHAIN ROYALTY & AUTONOMOUS IDIA PROPOSAL
-    // ══════════════════════════════════════════════════════════════════════
     currentStep = "PHASE_3_AND_5_CONTRIBUTOR_DISTRIBUTION";
     const totalRoyaltyPool = total_fiat_amount * REVENUE_SPLIT.DATA_YIELD;
     const perContributorYield = totalRoyaltyPool / contributing_users.length;
@@ -206,7 +198,6 @@ serve(async (req: Request) => {
 
       const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
 
-      // --- ON-CHAIN USDC PAYOUT ---
       const yieldHash = await client.writeContract({
         address: USDC_ADDRESS,
         abi: ERC20_ABI,
@@ -216,7 +207,6 @@ serve(async (req: Request) => {
         nonce: masterNonce++,
       });
 
-      // --- DAO PROPOSAL INJECTION ---
       const proposalHash = await client.writeContract({
         address: ESCROW_ECOSYSTEM,
         abi: ESCROW_ABI,
