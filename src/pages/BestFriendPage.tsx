@@ -231,6 +231,7 @@ const BestFriendPage = () => {
   </div>
 </div>
     </div>
+    </div>
   );
 };
 
