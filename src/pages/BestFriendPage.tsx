@@ -1,41 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity } from "lucide-react";
+import { Send, Bot, User, Brain, Search, Activity, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
-  liabilityTokenHash?: string | null;
-  creditDeducted?: boolean;
-}
-
-type ComplianceRail = "fiat" | "on-chain";
-
-// NATIVE CRYPTO GENERATOR FOR THE DIGIRAMP ANCHOR
-async function generateDigiRampAnchor(liabilityTokenHash: string) {
-  if (!liabilityTokenHash) return null;
-  const timestamp = new Date().toISOString();
-  const payload = new TextEncoder().encode(`${liabilityTokenHash}|${timestamp}`);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", payload);
-  const hashHex = Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return "0x" + hashHex;
 }
 
 const BestFriendPage = () => {
@@ -43,12 +18,8 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
-  const [complianceRail, setComplianceRail] = useState<ComplianceRail | null>(null);
-  const [railPickerOpen, setRailPickerOpen] = useState(false);
-  const [pendingSendAfterRail, setPendingSendAfterRail] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
-  const navigate = useNavigate();
 
   const isProcessing = useRef(false);
 
@@ -58,59 +29,10 @@ const BestFriendPage = () => {
     }
   }, [conversation, isLoading]);
 
-  // Hydrate compliance_rail from profiles on mount
-  useEffect(() => {
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user?.id) return;
-      const { data } = await supabase.from("profiles").select("compliance_rail").eq("user_id", user.id).maybeSingle();
-      const rail = (data as any)?.compliance_rail;
-      if (rail === "fiat" || rail === "on-chain") setComplianceRail(rail);
-    })();
-  }, []);
-
-  const persistRail = async (rail: ComplianceRail) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) throw new Error("Not authenticated");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ compliance_rail: rail } as any)
-      .eq("user_id", user.id);
-    if (error) throw error;
-    setComplianceRail(rail);
-  };
-
-  const handleRailChoice = async (rail: ComplianceRail) => {
-    try {
-      await persistRail(rail);
-      toast.success(`Settlement rail locked: ${rail.toUpperCase()}`);
-      setRailPickerOpen(false);
-      if (pendingSendAfterRail) {
-        setPendingSendAfterRail(false);
-        // Re-trigger send now that rail exists
-        setTimeout(() => handleSendMessage(rail), 0);
-      }
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
-
-  const handleSendMessage = async (overrideRail?: ComplianceRail) => {
+  const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading || isProcessing.current) return;
 
-    const activeRail = overrideRail ?? complianceRail;
-
-    // Marketplace Mode requires a locked compliance rail (Like-for-Like / MTL).
-    if (marketplaceMode && activeRail !== "fiat" && activeRail !== "on-chain") {
-      setPendingSendAfterRail(true);
-      setRailPickerOpen(true);
-      return;
-    }
-
+    console.info("[BEGIN: handleSendMessage] Initiating AI interaction cycle.");
     isProcessing.current = true;
     setIsLoading(true);
 
@@ -119,38 +41,52 @@ const BestFriendPage = () => {
 
     try {
       // 1. IDENTITY RESOLUTION
+      console.info("[EXEC: Identity Resolution] Authenticating current user session.");
       const {
         data: { user },
+        error: authError
       } = await supabase.auth.getUser();
-      if (!user?.id) throw new Error("Not authenticated.");
 
-      const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
+      if (authError) throw authError;
+      if (!user?.id) throw new Error("Identity resolution failure: Not authenticated.");
+      console.info(`[SUCCESS: Identity Resolution] User verified: ${user.id}`);
+
+      console.info("[EXEC: Profile Resolution] Fetching platform_guid from profiles.");
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("platform_guid")
+        .eq("user_id", user.id)
+        .single();
+
+      if (profileError) throw profileError;
       const activeGuid = profile?.platform_guid;
-      if (!activeGuid) throw new Error("Identity resolution failure: No platform_guid.");
+      if (!activeGuid) throw new Error("Profile resolution failure: No platform_guid found.");
+      console.info(`[SUCCESS: Profile Resolution] Platform GUID resolved: ${activeGuid}`);
 
-      // 2. WAREHOUSE FETCH (The Truth from DB)
+      // 2. WAREHOUSE FETCH
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
-        // Fetch fresh staged data to ensure the AI has the actual pipeline state
-        const { data: healthData } = await supabase
+        console.info("[EXEC: Warehouse Fetch] Marketplace mode active. Retrieving staged health data.");
+        const { data: healthData, error: healthError } = await supabase
           .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id)
           .limit(1000000000);
+
+        if (healthError) throw healthError;
         realPipelineData = healthData || [];
+        console.info(`[SUCCESS: Warehouse Fetch] Retrieved ${realPipelineData.length} records.`);
       }
 
       // 3. ORCHESTRATION INVOCATION
+      console.info("[EXEC: AI Orchestration] Invoking best-friend-ai edge function.");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
-          // Top-level: best-friend-ai forwards this to synapse-controller → cashier
-          routing: activeRail,
           context: {
             isMarketplaceMode: marketplaceMode,
             platformGuid: activeGuid,
             userId: user.id,
-            routing: activeRail,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
@@ -158,42 +94,36 @@ const BestFriendPage = () => {
       });
 
       if (aiError) throw aiError;
+      console.info("[SUCCESS: AI Orchestration] Edge function returned valid payload.");
 
-      // 4. DIGIRAMP ANCHOR GENERATION
-      const rawTokenHash = chatResponse?.liability_token || null;
-      let digiRampAnchorId = null;
-
-      if (rawTokenHash) {
-        digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
-      }
-
-      // 5. UPDATE CONVERSATION WITH THE AI RESPONSE AND ANCHOR
+      // 4. UPDATE CONVERSATION
+      console.info("[EXEC: UI Update] Appending assistant response to conversation state.");
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
           content: chatResponse?.response || "Analysis complete.",
-          liabilityTokenHash: digiRampAnchorId, // The 0x Address
-          creditDeducted: !!digiRampAnchorId,
         },
       ]);
 
       // Refresh the "Synapse Gas" gauge if a credit was burned
-      if (digiRampAnchorId) {
+      if (marketplaceMode) {
+        console.info("[EXEC: Credit Settlement] Refreshing Synapse balance after Marketplace use.");
         await refreshBalance();
+        console.info("[SUCCESS: Credit Settlement] Balance sync complete.");
       }
 
       setCurrentMessage("");
+      console.info("[END: handleSendMessage] Cycle fully complete and successful.");
     } catch (error: any) {
-      console.error("[BEST_FRIEND_UI_ERROR]:", error.message);
+      console.error(`🚨 [FATAL STALL: handleSendMessage]: Critical failure during execution. Reason: ${error.message}`, error);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
       isProcessing.current = false;
+      console.info("[CLEANUP: handleSendMessage] Processing flags reset.");
     }
   };
-
-  const truncateHash = (hash: string) => (hash ? `${hash.substring(0, 8)}...` : "—");
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
@@ -233,25 +163,6 @@ const BestFriendPage = () => {
                   >
                     {msg.content}
                   </div>
-                  {msg.role === "assistant" && msg.liabilityTokenHash && (
-                    <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                        onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
-                      >
-                        <FileKey size={12} className="text-amber-500" />
-                        {truncateHash(msg.liabilityTokenHash)}
-                      </Button>
-                      <Badge
-                        variant="outline"
-                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
-                      >
-                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -298,63 +209,12 @@ const BestFriendPage = () => {
             >
               <Search size={14} /> Marketplace Mode (1 CR)
             </button>
-            <button
-              onClick={() => setRailPickerOpen(true)}
-              title="Compliance settlement rail (Like-for-Like / MTL)"
-              className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2.5 rounded-full border transition-all ${
-                complianceRail === "on-chain"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : complianceRail === "fiat"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200"
-              }`}
-            >
-              <Shield size={12} />
-              {complianceRail ? `RAIL: ${complianceRail.toUpperCase()}` : "RAIL: NOT SET"}
-            </button>
           </div>
           <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50">
             Tell Your Best Friend Everything...
           </div>
         </div>
       </div>
-
-      <Dialog
-        open={railPickerOpen}
-        onOpenChange={(open) => {
-          setRailPickerOpen(open);
-          if (!open) setPendingSendAfterRail(false);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Choose Your Settlement Rail</DialogTitle>
-            <DialogDescription>
-              Federal Like-for-Like compliance: the rail you fund credits with is the rail used to settle earnings. This
-              cannot convert between fiat and crypto. Pick the rail that matches how you topped up.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <button
-              onClick={() => handleRailChoice("fiat")}
-              className="flex flex-col items-start gap-1 p-4 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-50 transition-all text-left"
-            >
-              <span className="text-xs font-black uppercase tracking-widest text-blue-700">Fiat (Worldpay)</span>
-              <span className="text-[10px] text-blue-700/80">USD ledger only. No blockchain.</span>
-            </button>
-            <button
-              onClick={() => handleRailChoice("on-chain")}
-              className="flex flex-col items-start gap-1 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left"
-            >
-              <span className="text-xs font-black uppercase tracking-widest text-emerald-700">USDC (On-Chain)</span>
-              <span className="text-[10px] text-emerald-700/80">Base network. Settles via smart contract.</span>
-            </button>
-          </div>
-          <DialogFooter>
-            <p className="text-[10px] text-muted-foreground">You can change this later from this same pill.</p>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
