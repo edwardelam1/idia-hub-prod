@@ -51,16 +51,14 @@ async function calculateDynamicFee(
 
   try {
     // 2. Attempt to fetch Buyer's interest battery
-    // We use maybeSingle() so it returns null instead of throwing if not found
     const { data: profile, error } = await adminClient
       .from("business_interest_profiles")
       .select("interest_weights")
       .eq("business_id", userId)
       .maybeSingle();
 
-    // 3. If there's an error (table missing, permission issue) OR profile missing,
-    // fall back to default weight (1.0) instead of crashing.
     if (error || !profile) {
+      console.info(`[Info] No business profile for ${userId}, using default fee.`);
       const feeCR = Math.ceil(1 * marketBaseValue * 1.0);
       return { feeCR, sectorLabel };
     }
@@ -71,7 +69,6 @@ async function calculateDynamicFee(
 
     return { feeCR, sectorLabel };
   } catch (e) {
-    // Catch-all for database connection issues or missing table relation errors
     console.error(`[Warning] Dynamic pricing default fallback triggered: ${e.message}`);
     return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
   }
@@ -84,16 +81,21 @@ async function calculateDynamicFee(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Pre-initialize variables for global scope
+  let operatorId: string | undefined;
+  let consumedReceipt: string[] = [];
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Strict payload parsing: No legacy defaults
+    // Strict payload parsing
     const body = await req.json();
+    console.info("[DEBUG: SynapseController.IncomingPayload]", JSON.stringify(body));
+
     const {
       user_id,
-      // CHANGE THIS LINE: Provide a fallback if client_id is missing
       client_id = "IDIA_HUB_APP",
       intent_type,
       sub_module_id = "general",
@@ -102,8 +104,10 @@ Deno.serve(async (req) => {
       country_of_origin = "US",
     } = body;
 
-    // Enforcement of Audit Provenance (Remove the strict check that's blocking you)
-    // if (!client_id) throw new Error("Rejected: Missing client_id"); // DELETE OR COMMENT OUT THIS LINE
+    // Set global scoped variables
+    operatorId = user_id;
+
+    // Enforcement of Audit Provenance
     if (!intent_type) throw new Error("Rejected: Missing intent_type");
     if (!user_id || user_id === "00000000-0000-0000-0000-000000000000") throw new Error("Invalid user_id");
 
@@ -162,6 +166,9 @@ Deno.serve(async (req) => {
     if (ledgerResult.error) throw new Error(`Ledger rejection: ${ledgerResult.error.message}`);
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
+    // Update global consumedReceipt
+    consumedReceipt = aca_record_ids;
+
     // 5. SETTLEMENT HANDOFF
     const { error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
       body: {
@@ -186,15 +193,24 @@ Deno.serve(async (req) => {
         success: true,
         fee: feeCR,
         reference_id: referenceId,
+        consumed_records: consumedReceipt,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[FATAL STALL: SynapseController Global]", error.message);
+    return new Response(
+      JSON.stringify({
+        error: error.message,
+        debug_operator: operatorId,
+        debug_records: consumedReceipt,
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
