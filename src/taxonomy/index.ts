@@ -1,6 +1,22 @@
 // src/taxonomy/index.ts
 
-// 1. Import all modules to access their named exports
+// 1. Export all named members
+export * from "./sectors";
+export * from "./industries";
+export * from "./nanoBites";
+export * from "./archetypes";
+export * from "./codes/naics";
+export * from "./codes/gics";
+export * from "./payAppRouting";
+export * from "./payAppVerticals";
+export * from "./positioning";
+export * from "./production";
+export * from "./selectors";
+export * from "./telemetry";
+export * from "./types";
+export * from "./valueChain";
+
+// 2. Import everything to create the default object
 import * as Sectors from "./sectors";
 import * as Industries from "./industries";
 import * as NanoBites from "./nanoBites";
@@ -16,24 +32,7 @@ import * as Telemetry from "./telemetry";
 import * as Types from "./types";
 import * as ValueChain from "./valueChain";
 
-// 2. Explicit Named Exports (Satisfies named imports)
-export { Sectors, Industries, NanoBites, Archetypes, Naics, Gics, PayAppRouting, PayAppVerticals, Positioning, Production, Selectors, Telemetry, Types, ValueChain };
-
-// 3. Explicit Binding Definitions (Satisfies "not found" errors)
-export const breakEven = { fixedCosts: 0, variableCosts: 0, targetVolume: 0 };
-export const EMPTY_CLASSIFICATION = { 
-  id: "empty", 
-  label: "Unclassified", 
-  industryId: "none", 
-  category: "Uncategorized" 
-};
-
-export function getNanoBitesFor(industryId: string): any[] { return []; }
-export function getIndustryById(id: string): any | null { return null; }
-export function recommendArchetype(context: any): any | null { return null; }
-export function initializeTaxonomy() { return { status: "ready" }; }
-
-// 4. THE DEFAULT EXPORT (Resolves the 'default' binding error)
+// 3. Define the aggregate default export
 const Taxonomy = {
   ...Sectors,
   ...Industries,
@@ -48,13 +47,7 @@ const Taxonomy = {
   ...Selectors,
   ...Telemetry,
   ...Types,
-  ...ValueChain,
-  breakEven,
-  EMPTY_CLASSIFICATION,
-  getNanoBitesFor,
-  getIndustryById,
-  recommendArchetype,
-  initializeTaxonomy
+  ...ValueChain
 };
 
 export default Taxonomy;
