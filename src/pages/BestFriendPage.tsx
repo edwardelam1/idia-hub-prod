@@ -217,11 +217,11 @@ const BestFriendPage = () => {
           >
             {interactionMode === "DISCOVERY" ? (
               <>
-                <Shield size={14} /> Intent Discovery Required
+                <Shield size={14} className="animate-pulse" /> Intent Discovery Required
               </>
             ) : marketplaceMode ? (
               <>
-                <Activity size={14} className="animate-pulse" /> Data Pipeline: Active
+                <Activity size={14} /> Data Pipeline: Active
               </>
             ) : (
               <>
