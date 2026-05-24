@@ -48,62 +48,44 @@ const BestFriendPage = () => {
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading || isProcessing.current) return;
 
-    console.info("[BEGIN: handleSendMessage] Initiating AI interaction cycle.");
+    console.info("[BEGIN: handleSendMessage] Processing message interaction.");
     isProcessing.current = true;
     setIsLoading(true);
 
-    // Optimistically push the user's message
     setConversation((prev) => [...prev, { role: "user", content: currentMessage }]);
 
     try {
       // 1. IDENTITY RESOLUTION
-      console.info("[EXEC: Identity Resolution] Authenticating current user session.");
-      const {
-        data: { user },
-        error: authError
-      } = await supabase.auth.getUser();
+      console.info("[EXEC: Identity Resolution]");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error("Authentication failure.");
 
-      if (authError) throw authError;
-      if (!user?.id) throw new Error("Identity resolution failure: Not authenticated.");
-      console.info(`[SUCCESS: Identity Resolution] User verified: ${user.id}`);
+      const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
+      if (!profile?.platform_guid) throw new Error("Identity resolution failure.");
+      console.info(`[SUCCESS: Identity] User ID: ${user.id}`);
 
-      console.info("[EXEC: Profile Resolution] Fetching platform_guid from profiles.");
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("platform_guid")
-        .eq("user_id", user.id)
-        .single();
-
-      if (profileError) throw profileError;
-      const activeGuid = profile?.platform_guid;
-      if (!activeGuid) throw new Error("Profile resolution failure: No platform_guid found.");
-      console.info(`[SUCCESS: Profile Resolution] Platform GUID resolved: ${activeGuid}`);
-
-      // 2. WAREHOUSE FETCH (Gated exclusively by the Marketplace Button)
+      // 2. WAREHOUSE FETCH (Ungated)
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
-        console.info("[EXEC: Warehouse Fetch] Marketplace mode active. Retrieving staged health data.");
+        console.info("[EXEC: Warehouse Fetch] Marketplace active: Pulling data pipeline.");
         const { data: healthData, error: healthError } = await supabase
           .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id)
           .limit(1000000000);
-
+        
         if (healthError) throw healthError;
         realPipelineData = healthData || [];
-        console.info(`[SUCCESS: Warehouse Fetch] Retrieved ${realPipelineData.length} records.`);
-      } else {
-        console.info("[SKIP: Warehouse Fetch] Marketplace mode inactive. Library exposure blocked.");
       }
 
       // 3. ORCHESTRATION INVOCATION
-      console.info("[EXEC: AI Orchestration] Invoking best-friend-ai edge function.");
+      console.info("[EXEC: Edge Orchestration]");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
-            platformGuid: activeGuid,
+            platformGuid: profile.platform_guid,
             userId: user.id,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
@@ -112,22 +94,16 @@ const BestFriendPage = () => {
       });
 
       if (aiError) throw aiError;
-      console.info("[SUCCESS: AI Orchestration] Edge function returned valid payload.");
 
       // 4. DIGIRAMP ANCHOR GENERATION
-      console.info("[EXEC: DigiRAMP Anchor] Evaluating cryptographic anchor for liability token.");
       const rawTokenHash = chatResponse?.liability_token || null;
       let digiRampAnchorId = null;
 
       if (rawTokenHash) {
         digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
-        console.info(`[SUCCESS: DigiRAMP Anchor] Anchor generated: ${digiRampAnchorId}`);
-      } else {
-        console.info("[SKIP: DigiRAMP Anchor] No liability token returned by AI.");
       }
 
-      // 5. UPDATE CONVERSATION
-      console.info("[EXEC: UI Update] Appending assistant response and anchor to conversation state.");
+      // 5. UPDATE UI
       setConversation((prev) => [
         ...prev,
         {
@@ -138,24 +114,19 @@ const BestFriendPage = () => {
         },
       ]);
 
-      // 6. SYNAPSE CREDIT DEDUCTION (Gated exclusively by the Marketplace Button)
       if (marketplaceMode) {
-        console.info("[EXEC: Credit Settlement] Marketplace Mode enabled. Refreshing Synapse gas gauge.");
+        console.info("[EXEC: Synapse Credit Settlement]");
         await refreshBalance();
-        console.info("[SUCCESS: Credit Settlement] Balance sync complete.");
-      } else {
-        console.info("[SKIP: Credit Settlement] Marketplace Mode disabled. No credits expended.");
       }
 
       setCurrentMessage("");
-      console.info("[END: handleSendMessage] Cycle fully complete and successful.");
     } catch (error: any) {
-      console.error(`🚨 [FATAL STALL: handleSendMessage]: Critical failure during execution. Reason: ${error.message}`, error);
+      console.error(`[FATAL STALL]: ${error.message}`);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
       isProcessing.current = false;
-      console.info("[CLEANUP: handleSendMessage] Processing flags reset.");
+      console.info("[END: handleSendMessage] Process terminated cleanly.");
     }
   };
 
@@ -163,6 +134,7 @@ const BestFriendPage = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
+      {/* ... [Header/Layout Remains Consistent] ... */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -175,10 +147,7 @@ const BestFriendPage = () => {
             </p>
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className="h-6 text-[10px] gap-1 px-2 border-emerald-200 text-emerald-700 bg-emerald-50"
-        >
+        <Badge variant="outline" className="h-6 text-[10px] gap-1 px-2 border-emerald-200 text-emerald-700 bg-emerald-50">
           <Activity className="h-3 w-3" /> PIPELINE LIVE
         </Badge>
       </div>
@@ -188,32 +157,20 @@ const BestFriendPage = () => {
           {conversation.map((msg, i) => (
             <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
               <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
-                >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}>
                   {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                 </div>
                 <div className="space-y-2">
-                  <div
-                    className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border text-foreground"}`}
-                  >
+                  <div className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border text-foreground"}`}>
                     {msg.content}
                   </div>
                   {msg.role === "assistant" && msg.liabilityTokenHash && (
                     <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                        onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
-                      >
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full" onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}>
                         <FileKey size={12} className="text-amber-500" />
                         {truncateHash(msg.liabilityTokenHash)}
                       </Button>
-                      <Badge
-                        variant="outline"
-                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
-                      >
+                      <Badge variant="outline" className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter">
                         <Shield size={10} className="mr-1" /> SHIELD VERIFIED
                       </Badge>
                     </div>
@@ -241,30 +198,24 @@ const BestFriendPage = () => {
       <div className="pt-4 border-t border-border max-w-3xl mx-auto w-full space-y-4">
         <div className="flex gap-2 relative">
           <Input
-            placeholder={marketplaceMode ? "Querying Pipeline via Person Anchor..." : "Message Best Friend..."}
+            placeholder={marketplaceMode ? "Marketplace Active: Exposing Warehouse Pipeline..." : "Message Best Friend..."}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
             disabled={isLoading}
             className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border"
           />
-          <Button
-            onClick={() => handleSendMessage()}
-            disabled={isLoading || !currentMessage.trim()}
-            className="absolute right-2 top-2 h-10 w-10 rounded-xl p-0"
-          >
+          <Button onClick={() => handleSendMessage()} disabled={isLoading || !currentMessage.trim()} className="absolute right-2 top-2 h-10 w-10 rounded-xl p-0">
             {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
           </Button>
         </div>
         <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setMarketplaceMode(!marketplaceMode)}
-              className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
-            >
-              <Search size={14} /> Marketplace Mode (1 CR)
-            </button>
-          </div>
+          <button
+            onClick={() => setMarketplaceMode(!marketplaceMode)}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${marketplaceMode ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "bg-card text-muted-foreground border-border hover:border-primary/40"}`}
+          >
+            <Search size={14} /> Marketplace Mode {marketplaceMode ? "(ENABLED)" : "(DISABLED)"}
+          </button>
           <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50">
             Tell Your Best Friend Everything...
           </div>
