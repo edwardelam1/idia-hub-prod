@@ -47,24 +47,35 @@ async function calculateDynamicFee(
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
-
-  // 2. Fetch Buyer's interest battery
-  const { data: profile, error } = await adminClient
-    .from("business_interest_profiles")
-    .select("interest_weights")
-    .eq("business_id", userId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    throw new Error(`Profile fetch error: ${error.message}`);
-  }
-
-  // 3. Calculate Weighting
-  const buyerWeight = profile?.interest_weights?.[sectorLabel] ?? 1.0;
   const marketBaseValue = SECTOR_VALUES[sectorLabel] ?? 1.0;
-  const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
 
-  return { feeCR, sectorLabel };
+  try {
+    // 2. Attempt to fetch Buyer's interest battery
+    // We use maybeSingle() so it returns null instead of throwing if not found
+    const { data: profile, error } = await adminClient
+      .from("business_interest_profiles")
+      .select("interest_weights")
+      .eq("business_id", userId)
+      .maybeSingle();
+
+    // 3. If there's an error (table missing, permission issue) OR profile missing,
+    // fall back to default weight (1.0) instead of crashing.
+    if (error || !profile) {
+      console.warn(`[Info] No business profile for ${userId}, using default fee.`);
+      const feeCR = Math.ceil(1 * marketBaseValue * 1.0);
+      return { feeCR, sectorLabel };
+    }
+
+    // 4. Calculate Weighting if profile exists
+    const buyerWeight = profile?.interest_weights?.[sectorLabel] ?? 1.0;
+    const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
+
+    return { feeCR, sectorLabel };
+  } catch (e) {
+    // Catch-all for database connection issues or missing table relation errors
+    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e.message}`);
+    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
+  }
 }
 
 // ====================================================================
