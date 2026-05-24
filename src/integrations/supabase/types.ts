@@ -3521,6 +3521,27 @@ export type Database = {
         }
         Relationships: []
       }
+      intent_discovery_sessions: {
+        Row: {
+          history: Json | null
+          resolved_sub_module_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          history?: Json | null
+          resolved_sub_module_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          history?: Json | null
+          resolved_sub_module_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       interests: {
         Row: {
           category: string | null

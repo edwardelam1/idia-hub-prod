@@ -75,9 +75,9 @@ const BestFriendPage = () => {
           message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
-            platformGuid: activeGuid,
+            platformGuid: profile?.platform_guid,
             userId: user.id,
-            marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
+            marketplace: marketplaceMode ? { healthRecords: [], lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
           client_id: "IDIA_HUB_APP",
@@ -230,6 +230,7 @@ const BestFriendPage = () => {
     )}
   </div>
 </div>
+    </div>
     </div>
   );
 };
