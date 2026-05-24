@@ -28,6 +28,17 @@ const BestFriendPage = () => {
   const isProcessing = useRef(false);
 
   useEffect(() => {
+    const initDiscovery = async () => {
+      if (conversation.length === 0 && !isProcessing.current) {
+        // Small delay to ensure the UI is mounted
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        setCurrentMessage("I'm ready to begin my data journey.");
+        await handleSendMessage();
+      }
+    };
+    initDiscovery();
+  }, []); // Empty dependency array ensures this runs once on mount
+  useEffect(() => {
     const checkDiscoveryStatus = async () => {
       const {
         data: { user },
@@ -193,44 +204,44 @@ const BestFriendPage = () => {
         </div>
 
         <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
-  <button
-    onClick={() => setMarketplaceMode(!marketplaceMode)}
-    disabled={interactionMode === "DISCOVERY" || isLoading}
-    className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${
-      interactionMode === "DISCOVERY" 
-        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60" 
-        : marketplaceMode 
-          ? "bg-emerald-600 text-white border-emerald-700 shadow-lg shadow-emerald-900/20" 
-          : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
-    }`}
-  >
-    {interactionMode === "DISCOVERY" ? (
-      <>
-        <Shield size={14} /> Intent Discovery Required
-      </>
-    ) : marketplaceMode ? (
-      <>
-        <Activity size={14} className="animate-pulse" /> Data Pipeline: Active
-      </>
-    ) : (
-      <>
-        <Search size={14} /> Engage Data Pipeline
-      </>
-    )}
-  </button>
+          <button
+            onClick={() => setMarketplaceMode(!marketplaceMode)}
+            disabled={interactionMode === "DISCOVERY" || isLoading}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-full border transition-all ${
+              interactionMode === "DISCOVERY"
+                ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                : marketplaceMode
+                  ? "bg-emerald-600 text-white border-emerald-700 shadow-lg shadow-emerald-900/20"
+                  : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
+            }`}
+          >
+            {interactionMode === "DISCOVERY" ? (
+              <>
+                <Shield size={14} /> Intent Discovery Required
+              </>
+            ) : marketplaceMode ? (
+              <>
+                <Activity size={14} className="animate-pulse" /> Data Pipeline: Active
+              </>
+            ) : (
+              <>
+                <Search size={14} /> Engage Data Pipeline
+              </>
+            )}
+          </button>
 
-  {/* Branch Indicator */}
-  <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50 flex items-center gap-2">
-    {interactionMode === "DISCOVERY" ? (
-      "Awaiting Intent Resolution..."
-    ) : (
-      <>
-        <Brain size={10} /> Mode: {interactionMode}
-      </>
-    )}
-  </div>
-</div>
-    </div>
+          {/* Branch Indicator */}
+          <div className="text-[9px] text-muted-foreground font-mono font-bold uppercase opacity-50 flex items-center gap-2">
+            {interactionMode === "DISCOVERY" ? (
+              "Awaiting Intent Resolution..."
+            ) : (
+              <>
+                <Brain size={10} /> Mode: {interactionMode}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
