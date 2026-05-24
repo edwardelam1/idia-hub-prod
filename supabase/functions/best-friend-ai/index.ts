@@ -489,7 +489,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-
+    let consumedReceipt: string[] = [];
     if (!data.choices || data.choices.length === 0) {
       console.error("[CRITICAL FAILURE: BestFriendAI.OpenAIExecution] Empty response array from OpenAI.");
       throw new Error(`OpenAI returned an empty response.`);
@@ -505,7 +505,7 @@ serve(async (req) => {
 
     // RECEIPT: every record actually shown to the AI counts as consumed.
     console.info("[BEGIN: BestFriendAI.ReceiptTransmission] Evaluating consumption vectors.");
-    let consumedReceipt: string[] = [];
+
     if (isDataScientistMode) {
       const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
