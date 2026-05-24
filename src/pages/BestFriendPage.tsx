@@ -45,7 +45,6 @@ const BestFriendPage = () => {
       if (!user?.id) throw new Error("Not authenticated.");
 
       const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
-
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -60,9 +59,8 @@ const BestFriendPage = () => {
         },
       });
 
-      if (aiError) throw aiError;
+      if (aiError) throw aiError; // Update Interaction Mode based on backend status
 
-      // Update Interaction Mode based on backend status
       if (chatResponse.status) {
         setInteractionMode(chatResponse.status);
       }
@@ -89,65 +87,93 @@ const BestFriendPage = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 bg-slate-50/30 font-sans">
+           {" "}
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 flex-shrink-0">
+               {" "}
         <div className="flex items-center gap-3">
+                   {" "}
           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Brain className="h-5 w-5 text-primary" />
+                        <Brain className="h-5 w-5 text-primary" />         {" "}
           </div>
+                   {" "}
           <div>
-            <h1 className="text-xl font-bold">Best Friend AI</h1>
+                        <h1 className="text-xl font-bold">Best Friend AI</h1>           {" "}
             <div className="flex items-center gap-2">
+                             
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold font-mono">
-                {interactionMode === "DISCOVERY" ? "CONCIERGE ACTIVE" : "AGENTIC ORCHESTRATION"}
+                                 {interactionMode === "DISCOVERY" ? "CONCIERGE ACTIVE" : "AGENTIC ORCHESTRATION"}       
+                       
               </p>
+                             
               <Badge variant={interactionMode === "DISCOVERY" ? "secondary" : "default"} className="text-[9px]">
-                {interactionMode}
+                                 {interactionMode}               
               </Badge>
+                         {" "}
             </div>
+                     {" "}
           </div>
+                 {" "}
         </div>
+               {" "}
         <Badge
           variant="outline"
           className="h-6 text-[10px] gap-1 px-2 border-emerald-200 text-emerald-700 bg-emerald-50"
         >
-          <Activity className="h-3 w-3" /> PIPELINE LIVE
+                    <Activity className="h-3 w-3" /> PIPELINE LIVE        {" "}
         </Badge>
+             {" "}
       </div>
-
+           {" "}
       <ScrollArea className="flex-1 py-4 pr-4">
+               {" "}
         <div className="space-y-6 max-w-3xl mx-auto">
+                   {" "}
           {conversation.map((msg, i) => (
             <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                           {" "}
               <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                               {" "}
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
                 >
-                  {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
+                                    {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}               {" "}
                 </div>
+                               {" "}
                 <div className="rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm bg-card border text-foreground">
-                  {msg.content}
+                                    {msg.content}               {" "}
                 </div>
+                             {" "}
               </div>
+                         {" "}
             </div>
           ))}
+                   {" "}
           {isLoading && (
             <div className="flex justify-start">
+                           {" "}
               <div className="flex gap-3 max-w-[85%]">
+                               {" "}
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-card border shadow-sm text-primary">
-                  <Bot size={16} />
+                                    <Bot size={16} />               {" "}
                 </div>
+                               {" "}
                 <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
-                  Best Friend AI is querying the data pipeline...
+                                    Best Friend AI is querying the data pipeline...                {" "}
                 </div>
+                             {" "}
               </div>
+                         {" "}
             </div>
           )}
-          <div ref={scrollRef} className="h-2" />
+                    <div ref={scrollRef} className="h-2" />       {" "}
         </div>
+             {" "}
       </ScrollArea>
-
+           {" "}
       <div className="pt-4 border-t border-border max-w-3xl mx-auto w-full space-y-4">
+               {" "}
         <div className="flex gap-2 relative">
+                   {" "}
           <Input
             placeholder={
               interactionMode === "DISCOVERY" ? "Ask your Best Friend where to start..." : "Querying Pipeline..."
@@ -158,16 +184,19 @@ const BestFriendPage = () => {
             disabled={isLoading}
             className="h-14 rounded-2xl pr-14 bg-card shadow-sm border-border"
           />
+                   {" "}
           <Button
             onClick={handleSendMessage}
             disabled={isLoading || !currentMessage.trim()}
             className="absolute right-2 top-2 h-10 w-10 rounded-xl p-0"
           >
-            {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                        {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}         {" "}
           </Button>
+                 {" "}
         </div>
-
+                        {" "}
         <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
+                   {" "}
           <button
             onClick={() => setMarketplaceMode(!marketplaceMode)}
             disabled={interactionMode === "DISCOVERY"} // Gated until intent is resolved
@@ -179,10 +208,14 @@ const BestFriendPage = () => {
                   : "bg-card text-muted-foreground border-border"
             }`}
           >
-            <Search size={14} /> Marketplace Mode {interactionMode === "DISCOVERY" ? "(Locked)" : "(Active)"}
+                        <Search size={14} /> Marketplace Mode{" "}
+            {interactionMode === "DISCOVERY" ? "(Locked)" : "(Active)"}         {" "}
           </button>
+                 {" "}
         </div>
+             {" "}
       </div>
+         {" "}
     </div>
   );
 };
