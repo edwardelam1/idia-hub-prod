@@ -14,36 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      aca_consent_artifacts: {
-        Row: {
-          created_at: string | null
-          expires_at: string | null
-          hash: string
-          id: string
-          metadata: Json | null
-          status: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          expires_at?: string | null
-          hash: string
-          id?: string
-          metadata?: Json | null
-          status?: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          expires_at?: string | null
-          hash?: string
-          id?: string
-          metadata?: Json | null
-          status?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       account_conversion_requests: {
         Row: {
           address_city: string | null
@@ -1157,6 +1127,38 @@ export type Database = {
           },
         ]
       }
+      committee_application_sponsorships: {
+        Row: {
+          application_id: string
+          created_at: string | null
+          id: string
+          sponsor_aca_hash: string
+          sponsor_user_id: string
+        }
+        Insert: {
+          application_id: string
+          created_at?: string | null
+          id?: string
+          sponsor_aca_hash: string
+          sponsor_user_id: string
+        }
+        Update: {
+          application_id?: string
+          created_at?: string | null
+          id?: string
+          sponsor_aca_hash?: string
+          sponsor_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "committee_application_sponsorships_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "committee_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       committee_applications: {
         Row: {
           aca_hash_key: string
@@ -1164,6 +1166,9 @@ export type Database = {
           committee_id: string
           created_at: string | null
           id: string
+          risk_flags: Json | null
+          risk_score: number | null
+          sponsor_count: number | null
           statement_of_competence: string
           status: string
           user_id: string
@@ -1174,6 +1179,9 @@ export type Database = {
           committee_id: string
           created_at?: string | null
           id?: string
+          risk_flags?: Json | null
+          risk_score?: number | null
+          sponsor_count?: number | null
           statement_of_competence: string
           status?: string
           user_id: string
@@ -1184,6 +1192,9 @@ export type Database = {
           committee_id?: string
           created_at?: string | null
           id?: string
+          risk_flags?: Json | null
+          risk_score?: number | null
+          sponsor_count?: number | null
           statement_of_competence?: string
           status?: string
           user_id?: string
@@ -1548,8 +1559,15 @@ export type Database = {
           granted_at: string
           hat_type: string
           id: string
+          provisioned_by: string | null
           revoked_at: string | null
           user_id: string
+          veto_aca_hash: string | null
+          veto_aca_payload: Json | null
+          veto_extended: boolean | null
+          veto_extended_at: string | null
+          veto_reason: string | null
+          veto_window_end: string | null
         }
         Insert: {
           created_at?: string | null
@@ -1557,8 +1575,15 @@ export type Database = {
           granted_at?: string
           hat_type: string
           id?: string
+          provisioned_by?: string | null
           revoked_at?: string | null
           user_id: string
+          veto_aca_hash?: string | null
+          veto_aca_payload?: Json | null
+          veto_extended?: boolean | null
+          veto_extended_at?: string | null
+          veto_reason?: string | null
+          veto_window_end?: string | null
         }
         Update: {
           created_at?: string | null
@@ -1566,8 +1591,15 @@ export type Database = {
           granted_at?: string
           hat_type?: string
           id?: string
+          provisioned_by?: string | null
           revoked_at?: string | null
           user_id?: string
+          veto_aca_hash?: string | null
+          veto_aca_payload?: Json | null
+          veto_extended?: boolean | null
+          veto_extended_at?: string | null
+          veto_reason?: string | null
+          veto_window_end?: string | null
         }
         Relationships: []
       }
@@ -1603,10 +1635,14 @@ export type Database = {
           category: string | null
           created_at: string | null
           description: string | null
+          escrow_target: string | null
           id: string
+          onchain_proposal_id: number | null
+          processed_at: string | null
           status: string | null
           timelock_expires_at: string
           title: string
+          tx_hash: string | null
           veto_count: number | null
           veto_threshold: number | null
         }
@@ -1614,10 +1650,14 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          escrow_target?: string | null
           id?: string
+          onchain_proposal_id?: number | null
+          processed_at?: string | null
           status?: string | null
           timelock_expires_at: string
           title: string
+          tx_hash?: string | null
           veto_count?: number | null
           veto_threshold?: number | null
         }
@@ -1625,10 +1665,14 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
+          escrow_target?: string | null
           id?: string
+          onchain_proposal_id?: number | null
+          processed_at?: string | null
           status?: string | null
           timelock_expires_at?: string
           title?: string
+          tx_hash?: string | null
           veto_count?: number | null
           veto_threshold?: number | null
         }
@@ -1747,6 +1791,7 @@ export type Database = {
           id: string
           proposal_id: string | null
           user_id: string | null
+          vote_type: string | null
           vote_weight: number
         }
         Insert: {
@@ -1757,6 +1802,7 @@ export type Database = {
           id?: string
           proposal_id?: string | null
           user_id?: string | null
+          vote_type?: string | null
           vote_weight: number
         }
         Update: {
@@ -1767,6 +1813,7 @@ export type Database = {
           id?: string
           proposal_id?: string | null
           user_id?: string | null
+          vote_type?: string | null
           vote_weight?: number
         }
         Relationships: [
@@ -8517,6 +8564,7 @@ export type Database = {
         }
         Returns: number
       }
+      auto_promote_pending_veto: { Args: never; Returns: number }
       calculate_business_health_index: {
         Args: { p_business_id: string; p_location_id?: string }
         Returns: number
@@ -8651,7 +8699,7 @@ export type Database = {
         Returns: undefined
       }
       increment_wallet_balance: {
-        Args: { increment_amount: number; target_user_id: string }
+        Args: { amount: number; target_user_id: string }
         Returns: undefined
       }
       increment_wallet_cash: {
@@ -8795,6 +8843,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      provision_pending_veto_hat: {
+        Args: { _hat_type: string; _provisioner: string; _target_user: string }
+        Returns: string
+      }
+      refresh_application_sponsor_count: {
+        Args: { _application_id: string }
+        Returns: number
+      }
       revoke_employee: {
         Args: { _employee_id: string }
         Returns: {
@@ -8875,6 +8931,10 @@ export type Database = {
             }
             Returns: Json
           }
+      sponsor_application: {
+        Args: { _application_id: string; _sponsor_aca_hash: string }
+        Returns: Json
+      }
       submit_variance_correction: {
         Args: {
           _corrective_action: string
