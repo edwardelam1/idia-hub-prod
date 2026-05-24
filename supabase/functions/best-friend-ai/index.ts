@@ -512,6 +512,7 @@ serve(async (req) => {
         try {
           const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
 
+<<<<<<< HEAD
 const synapseRes = await fetch(synapseUrl, {
   method: "POST",
   headers: {
@@ -533,6 +534,29 @@ const synapseRes = await fetch(synapseUrl, {
     origin_fidelity: 1.0,
   }),
 });
+=======
+          const synapseRes = await fetch(synapseUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              // FIX: Promote to Service Role to bypass Client Auth volatility
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+            },
+            body: JSON.stringify({
+              user_id: operatorId,
+              client_id: client_id || "IDIA_HUB_APP",
+              aca_record_ids: consumedReceipt,
+              intent_type: "MARKETPLACE RESEARCH",
+              // Maintain strict telemetry
+              granularity: 0.95,
+              relevance: 1.0,
+              timeliness: 1.0,
+              completeness: 1.0,
+              origin_fidelity: 1.0,
+            }),
+          });
+>>>>>>> 39d8830569018d9ed1bd44c4cdd95408290bebed
 
           if (!synapseRes.ok) {
             const errText = await synapseRes.text();
