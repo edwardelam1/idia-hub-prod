@@ -2,7 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
+import { PAY_APP_ROUTING } from "../_shared/payAppRouting.ts";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -340,74 +340,17 @@ serve(async (req) => {
     // 2. SAFE BODY PARSING (Fixes the "Unexpected end of JSON input" Crash)
     const bodyText = await req.text();
     if (!bodyText || bodyText.trim() === "") throw new Error("Empty request body");
-    
+
     let rawPayload = JSON.parse(bodyText);
-    
+
     // Catch the UI auto-trigger
     if (!rawPayload.message || rawPayload.message.trim() === "") {
       rawPayload.message = "I am ready to begin my data journey.";
     }
 
-    const parsed = requestSchema.safeParse(rawPayload);
-    if (!parsed.success) {
-      return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
-    const { message, context, history } = parsed.data;
-    const userId = context?.userId;
-
-    // 3. STRICT CONCIERGE GATE (Prevents Analyst Data Dump)
-    if (userId) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const { data: session } = await supabase.from("intent_discovery_sessions").select("*").eq("user_id", userId).maybeSingle();
-
-      if (!session?.resolved_sub_module_id) {
-        console.info("[STATUS: BestFriendAI] Concierge Active - Data Blocked.");
-        
-        const conciergePrompt = `You are the IDIA Concierge. DISCOVERY MODE. Do not analyze data. Map the user to ONE sub_module_id from: ${JSON.stringify(PAY_APP_ROUTING)}. Respond with ONE sentence ending in a question. If resolving, output JSON: { "response": "string", "resolved_sub_module_id": "string" }.`;
-
-        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [{ role: "system", content: conciergePrompt }, ...history, { role: "user", content: message }],
-            response_format: { type: "json_object" }
-          }),
-        });
-
-        const result = JSON.parse((await completion.json()).choices[0].message.content);
-
-        // Persist the conversation state
-        await supabase.from("intent_discovery_sessions").upsert({
-          user_id: userId,
-          history: [...history, { role: "user", content: message }, { role: "assistant", content: result.response }],
-          resolved_sub_module_id: result.resolved_sub_module_id
-        });
-
-        // Hydrate the battery when intent is found
-        if (result.resolved_sub_module_id) {
-          await supabase.from("business_interest_profiles").upsert({
-            business_id: userId, interest_weights: { [result.resolved_sub_module_id]: 2.0 }
-          });
-        }
-
-        // EARLY RETURN: Analyst code is never reached
-        return new Response(JSON.stringify({ 
-          response: result.response, 
-          status: "DISCOVERY", 
-          agentStatus: "active", 
-          persona: "Concierge" 
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-      }
-
-  try {
     console.info("[BEGIN: BestFriendAI.PayloadValidation] Validating incoming JSON.");
-    const parsed = requestSchema.safeParse(await req.json());
+    const parsed = requestSchema.safeParse(rawPayload);
+
     if (!parsed.success) {
       console.error("[ERROR: BestFriendAI.PayloadValidation] Schema mismatch:", parsed.error.flatten());
       return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
@@ -418,11 +361,73 @@ serve(async (req) => {
     console.info("[END: BestFriendAI.PayloadValidation] Payload verified.");
 
     const { message, context, history } = parsed.data;
+    const userId = context?.userId;
 
     if (!openAiApiKey) {
       console.error("[CRITICAL FAILURE: BestFriendAI.Environment] OPENAI_API_KEY is missing.");
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // 3. STRICT CONCIERGE GATE (Prevents Analyst Data Dump)
+    if (userId) {
+      const { data: session } = await supabase
+        .from("intent_discovery_sessions")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!session?.resolved_sub_module_id) {
+        console.info("[STATUS: BestFriendAI] Concierge Active - Data Blocked.");
+
+        const conciergePrompt = `You are the IDIA Concierge. DISCOVERY MODE. Do not analyze data. Map the user to ONE sub_module_id from: ${JSON.stringify(PAY_APP_ROUTING)}. Respond with ONE sentence ending in a question. If resolving, output JSON: { "response": "string", "resolved_sub_module_id": "string" }.`;
+
+        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "system", content: conciergePrompt }, ...history, { role: "user", content: message }],
+            response_format: { type: "json_object" },
+          }),
+        });
+
+        const result = JSON.parse((await completion.json()).choices[0].message.content);
+
+        // Persist the conversation state
+        await supabase.from("intent_discovery_sessions").upsert({
+          user_id: userId,
+          history: [...history, { role: "user", content: message }, { role: "assistant", content: result.response }],
+          resolved_sub_module_id: result.resolved_sub_module_id,
+        });
+
+        // Hydrate the battery when intent is found
+        if (result.resolved_sub_module_id) {
+          await supabase.from("business_interest_profiles").upsert({
+            business_id: userId,
+            interest_weights: { [result.resolved_sub_module_id]: 2.0 },
+          });
+        }
+
+        // EARLY RETURN: Analyst code is never reached
+        return new Response(
+          JSON.stringify({
+            response: result.response,
+            status: "DISCOVERY",
+            agentStatus: "active",
+            persona: "Concierge",
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
+    // ====================================================================
+    // 4. ANALYST MODE (This only executes if the intent is resolved)
+    // ====================================================================
 
     const isDataScientistMode = context?.isMarketplaceMode === true;
     const detectedAgent = routeIntent(message);
@@ -441,7 +446,6 @@ serve(async (req) => {
     const pseudoId = context?.platformGuid || context?.userId;
     if (pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${pseudoId}`);
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const audit = await fetchOmniRecords(supabase, pseudoId);
       if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
@@ -624,6 +628,7 @@ serve(async (req) => {
     const finalPayload = {
       response: aiResponse,
       timestamp: new Date().toISOString(),
+      status: "ANALYSIS",
       agentStatus: "active",
       persona: personaLabels[detectedAgent],
       activeAgent: detectedAgent,
