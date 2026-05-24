@@ -2,7 +2,6 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { PAY_APP_ROUTING } from "../_shared/payAppRouting.ts";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -331,7 +330,11 @@ function normalizeOutput(text: string, _agent: AgentType): string {
 }
 
 serve(async (req) => {
-  console.info("[BEGIN: BestFriendAI.RequestGate] Connection received.");
+  const json = await req.json();
+  const { message, context, history = [] } = json;
+
+  // If message is the auto-trigger, treat as initiation
+  const initialMessage = message || "I am ready to begin.";
 
   if (req.method === "OPTIONS") {
     console.info("[END: BestFriendAI.RequestGate] OPTIONS preflight handled.");
@@ -364,50 +367,6 @@ serve(async (req) => {
     console.info(
       `[STATUS: BestFriendAI.Routing] Mode: ${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}, Agent: ${detectedAgent}`,
     );
-
-    // 1. Resolve Session State
-    const { data: session } = await supabase
-      .from("intent_discovery_sessions")
-      .select("*")
-      .eq("user_id", context?.userId)
-      .maybeSingle();
-
-    // 2. Concierge Loop (if intent not resolved)
-    if (!session?.resolved_sub_module_id) {
-      const taxonomyContext = Object.values(PAY_APP_ROUTING).map((r) => ({ id: r.subModuleId, name: r.name }));
-
-      const conciergePrompt = `You are the IDIA Concierge. Your goal is to map the user to ONE sub_module_id from this taxonomy: ${JSON.stringify(taxonomyContext)}. Respond with ONE sentence ending in a question. If resolving, output { "response": "string", "resolved_sub_module_id": "string" }.`;
-
-      const discoveryRes = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${openAiApiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "system", content: conciergePrompt }, ...history, { role: "user", content: message }],
-          response_format: { type: "json_object" },
-        }),
-      }).then((r) => r.json());
-
-      const result = JSON.parse(discoveryRes.choices[0].message.content);
-
-      // Persist discovery state
-      await supabase.from("intent_discovery_sessions").upsert({
-        user_id: context?.userId,
-        history: [...history, { role: "assistant", content: result.response }],
-        resolved_sub_module_id: result.resolved_sub_module_id,
-      });
-
-      if (result.resolved_sub_module_id) {
-        await supabase.from("business_interest_profiles").upsert({
-          business_id: context?.userId,
-          interest_weights: { [result.resolved_sub_module_id]: 2.0 },
-        });
-      }
-
-      return new Response(JSON.stringify({ response: result.response }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     // Frontend payload (may be empty or partial)
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
