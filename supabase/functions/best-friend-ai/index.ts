@@ -472,7 +472,11 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         user_id: operatorId,
-        client_id: parsed.data.client_id || "IDIA_HUB_APP", // ADD THIS LINE
+        model: "gpt-4o-mini",
+        messages,
+        temperature: 0.3,
+        max_tokens: 4096,
+        client_id: parsed.data.client_id || "IDIA_HUB_APP",
         aca_record_ids: consumedReceipt,
         intent_type: "MARKETPLACE RESEARCH",
         granularity: 0.95,
