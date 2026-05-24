@@ -69,13 +69,15 @@ const BestFriendPage = () => {
 
       const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
 
+      // 3. ORCHESTRATION INVOCATION
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
           context: {
             isMarketplaceMode: marketplaceMode,
-            platformGuid: profile?.platform_guid,
+            platformGuid: activeGuid,
             userId: user.id,
+            marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
           client_id: "IDIA_HUB_APP",
