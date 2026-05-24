@@ -384,6 +384,7 @@ serve(async (req) => {
     // Runs in marketplace mode whenever we have an identifier to resolve.
     const pseudoId = context?.platformGuid || context?.userId;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const operatorId = pseudoId; // Define this here, at the top scope.
 
     if (pseudoId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${pseudoId}`);
