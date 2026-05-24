@@ -1,19 +1,19 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import { CreditCard, Coins, Zap, ShieldCheck, TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
-import { useBillingData } from '@/hooks/useBillingData';
-import { formatCredits } from '@/lib/utils';
-import AvailablePlansDialog from '@/components/billing/AvailablePlansDialog';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { CreditCard, Coins, Zap, ShieldCheck, TrendingUp, AlertTriangle, ArrowRight } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useBillingData } from "@/hooks/useBillingData";
+import { formatCredits } from "@/lib/utils";
+import AvailablePlansDialog from "@/components/billing/AvailablePlansDialog";
 
 const IndividualBilling = () => {
   const [showPlans, setShowPlans] = useState(false);
@@ -22,8 +22,7 @@ const IndividualBilling = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-primary" />
-            A La Carte Billing
+            <CreditCard className="h-5 w-5 text-primary" />A La Carte Billing
           </CardTitle>
           <CardDescription>Your current data access model.</CardDescription>
         </CardHeader>
@@ -31,30 +30,11 @@ const IndividualBilling = () => {
           <Alert className="border-muted bg-muted/30">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-sm">
-              Individual accounts have access to personal insights and A La Carte marketplace queries
-              (<span className="font-semibold">$10.00 USD per query, max 50 records</span>).
-              To purchase Data Bundles or access Premier Filters, you must upgrade to a Business Entity.
+              Individual accounts have access to personal insights and A La Carte marketplace queries (
+              <span className="font-semibold">$10.00 USD per query</span>). To purchase Data Bundles or access Premier
+              Filters, you must upgrade to a Business Entity.
             </AlertDescription>
           </Alert>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Queries Used (Lifetime)</p>
-                <p className="text-2xl font-bold text-foreground">7</p>
-                <p className="text-xs text-muted-foreground mt-1">$70.00 total spend</p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Per-Query Cost</p>
-                <p className="text-2xl font-bold text-foreground">$10.00</p>
-                <p className="text-xs text-muted-foreground mt-1">USD · Max 50 records</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Separator />
 
           <div className="flex items-center justify-between">
             <div>
@@ -82,7 +62,7 @@ const BusinessBilling = () => {
 
   const credits = balanceData?.available_credits ?? 0;
   const dailyBurn = burnRate?.daily_average ?? 0;
-  const burnStatus = burnRate?.burn_status ?? 'healthy';
+  const burnStatus = burnRate?.burn_status ?? "healthy";
   const usagePercent = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
 
   return (
@@ -96,15 +76,21 @@ const BusinessBilling = () => {
                 <ShieldCheck className="h-5 w-5 text-primary" />
                 Subscription Tier
               </CardTitle>
-              <CardDescription>{subscriptionPlan.name} · {subscriptionPlan.cost}</CardDescription>
+              <CardDescription>
+                {subscriptionPlan.name} · {subscriptionPlan.cost}
+              </CardDescription>
             </div>
-            <Badge variant="outline" className="text-xs">{daysRemaining} days remaining</Badge>
+            <Badge variant="outline" className="text-xs">
+              {daysRemaining} days remaining
+            </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Credit Usage</span>
-            <span className="font-medium">{formatCredits(currentUsage.used)} / {formatCredits(currentUsage.limit)}</span>
+            <span className="font-medium">
+              {formatCredits(currentUsage.used)} / {formatCredits(currentUsage.limit)}
+            </span>
           </div>
           <Progress value={Math.min(usagePercent, 100)} className="h-2" />
         </CardContent>
@@ -124,7 +110,9 @@ const BusinessBilling = () => {
             <Card className="border-border/50">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">Available Balance</p>
-                <p className={`text-2xl font-bold ${burnStatus === 'critical' ? 'text-destructive' : burnStatus === 'warning' ? 'text-orange-500' : 'text-foreground'}`}>
+                <p
+                  className={`text-2xl font-bold ${burnStatus === "critical" ? "text-destructive" : burnStatus === "warning" ? "text-orange-500" : "text-foreground"}`}
+                >
                   {formatCredits(credits)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Synapse Credits</p>
@@ -144,7 +132,7 @@ const BusinessBilling = () => {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">Estimated Runway</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {dailyBurn > 0 ? Math.floor(credits / dailyBurn) : '∞'}
+                  {dailyBurn > 0 ? Math.floor(credits / dailyBurn) : "∞"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">days</p>
               </CardContent>
@@ -152,11 +140,11 @@ const BusinessBilling = () => {
           </div>
 
           <div className="flex gap-2">
-            <Button size="sm" className="gap-1.5" onClick={() => navigate('/top-up')}>
+            <Button size="sm" className="gap-1.5" onClick={() => navigate("/top-up")}>
               <Zap className="h-3.5 w-3.5" />
               Top Up Credits
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate('/billing')}>
+            <Button variant="outline" size="sm" onClick={() => navigate("/billing")}>
               View Full Ledger
             </Button>
           </div>

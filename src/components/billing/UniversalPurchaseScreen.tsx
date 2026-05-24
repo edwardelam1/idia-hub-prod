@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,20 +26,54 @@ const UniversalPurchaseScreen = () => {
   
   const { user } = useAuth();
   const { paymentMethods } = useBillingData();
+  const queryClient = useQueryClient();
+  const paymentId = searchParams.get("paymentId");
 
   const [selectedPlan, setSelectedPlan] = useState(preselectedPlan);
   const [selectedPM, setSelectedPM] = useState("");
   const [step, setStep] = useState<"review" | "processing" | "success">(isSuccessReturn ? "success" : "review");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [verifyState, setVerifyState] = useState<"idle" | "verifying" | "verified" | "failed">(
+    isSuccessReturn ? "verifying" : "idle",
+  );
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const plan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
 
   useEffect(() => {
-    if (isSuccessReturn) {
-      console.log("[UniversalPurchaseScreen][Lifecycle] [START] Detected success parameter from Wix redirect.");
-      toast.success("Payment successfully processed via Wix.");
+    if (!isSuccessReturn) return;
+    console.log("[UniversalPurchaseScreen][Lifecycle] Detected Wix success return.");
+    if (!paymentId) {
+      setVerifyState("failed");
+      setVerifyError("Missing paymentId in return URL — cannot verify with Wix.");
+      return;
     }
-  }, [isSuccessReturn]);
+    void confirmPayment(paymentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccessReturn, paymentId]);
+
+  const confirmPayment = async (pid: string) => {
+    setVerifyState("verifying");
+    setVerifyError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("confirm-wix-payment", {
+        body: { paymentId: pid },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Verification failed");
+      setVerifyState("verified");
+      toast.success(
+        data.alreadyRecorded
+          ? "Payment already on ledger."
+          : `Payment verified — ${Number(data.credits).toFixed(2)} CR credited.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
+    } catch (err: any) {
+      console.error("[UniversalPurchaseScreen][confirmPayment] failed", err);
+      setVerifyState("failed");
+      setVerifyError(err?.message || "Could not verify payment with Wix.");
+    }
+  };
 
   const handlePurchase = async () => {
     console.log("[UniversalPurchaseScreen][handlePurchase] [START] Initiating checkout protocol.");
@@ -53,32 +88,38 @@ const UniversalPurchaseScreen = () => {
     }
 
     try {
-      console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [START] Requesting secure checkout session for ${plan.name} ($${plan.price}).`);
-      
-      // Call Edge Function that wraps the Wix wix-pay-backend SDK logic
-      const { data, error } = await supabase.functions.invoke("create-wix-payment", {
-        body: {
-          fiatAmount: plan.price,
-          platform_guid: userId,
+      console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId directly for ${plan.name} ($${plan.price}).`);
+
+      const WIX_DOMAIN = "https://www.thebigidia.com";
+
+      const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: plan.price,
+          credits: plan.credits,
+          userId,
           planId: plan.id,
-          creditsMinted: plan.credits,
-          type: "subscription"
-        }
+          type: "subscription",
+        }),
       });
 
-      if (error) {
-        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Edge function rejected checkout creation:", error);
-        throw new Error("Payment gateway initialization failed.");
+      if (!wixResponse.ok) {
+        console.error(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
+        throw new Error(`Wix checkout failed: ${wixResponse.status}`);
       }
 
-      if (data?.checkoutUrl) {
-        console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [SUCCESS] Received URL. Redirecting client to Wix Checkout.");
-        // Redirect completely to Wix. The success URL configured in Wix should point back here with ?success=true
-        window.location.href = data.checkoutUrl;
-      } else {
-        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_HANDOFF] [FAILED] Payload missing checkoutUrl.");
-        throw new Error("Invalid response from payment gateway.");
+      const wixData = await wixResponse.json();
+      if (!wixData?.paymentId) {
+        console.error("[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [FAILED] Payload missing paymentId.");
+        throw new Error("Failed to get payment ID from Wix");
       }
+
+      console.log("[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [SUCCESS] Received paymentId. Redirecting to Wix checkout page.");
+      const returnUrl = encodeURIComponent(
+        `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
+      );
+      window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
     } catch (err: any) {
       console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
       toast.error(err.message || "Purchase initialization failed");
@@ -99,11 +140,36 @@ const UniversalPurchaseScreen = () => {
   if (step === "success") {
     return (
       <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <CheckCircle2 className="w-16 h-16 text-emerald-500" />
-        <p className="text-foreground font-bold text-lg">{plan.name} Plan Activated!</p>
-        <p className="text-muted-foreground text-sm text-center">
-          {plan.credits.toLocaleString()} CRD have been automatically minted by the settlement engine. Your subscription is now active.
-        </p>
+        {verifyState === "verifying" && (
+          <>
+            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <p className="text-foreground font-semibold">Verifying payment with Wix…</p>
+            <p className="text-muted-foreground text-xs">paymentId: {paymentId}</p>
+          </>
+        )}
+        {verifyState === "verified" && (
+          <>
+            <CheckCircle2 className="w-16 h-16 text-emerald-500" />
+            <p className="text-foreground font-bold text-lg">Payment recorded on ledger</p>
+            <p className="text-muted-foreground text-sm text-center">
+              Your credits are now reflected in the Historical Settlement Ledger.
+            </p>
+          </>
+        )}
+        {verifyState === "failed" && (
+          <>
+            <CheckCircle2 className="w-16 h-16 text-amber-500" />
+            <p className="text-foreground font-bold text-lg">Payment captured by Wix</p>
+            <p className="text-muted-foreground text-sm text-center">
+              {verifyError ?? "We couldn't verify with Wix from the browser."} The webhook backstop will reconcile this shortly.
+            </p>
+            {paymentId && (
+              <Button variant="outline" size="sm" onClick={() => confirmPayment(paymentId)}>
+                Retry verification
+              </Button>
+            )}
+          </>
+        )}
         <Button onClick={() => navigate("/billing")} className="mt-4">
           Go to Billing
         </Button>

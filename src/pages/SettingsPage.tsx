@@ -1,13 +1,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { SettingsProfile } from '@/components/settings/SettingsProfile';
-import { SettingsInsights } from '@/components/settings/SettingsInsights';
 import { SettingsBusinessProfile } from '@/components/settings/SettingsBusinessProfile';
 import { SettingsBilling } from '@/components/settings/SettingsBilling';
-import { User, BarChart3, Building2, CreditCard } from 'lucide-react';
+import { User, Building2, CreditCard } from 'lucide-react';
 
 const SettingsPage = () => {
-  const { isBusinessAccount, isAdminRole } = useAuth();
+  const { isAdminRole } = useAuth();
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -24,12 +23,6 @@ const SettingsPage = () => {
             <User className="h-3.5 w-3.5" />
             My Profile
           </TabsTrigger>
-          {!isBusinessAccount && (
-            <TabsTrigger value="insights" className="flex items-center gap-2 text-xs sm:text-sm">
-              <BarChart3 className="h-3.5 w-3.5" />
-              My Insights
-            </TabsTrigger>
-          )}
           {isAdminRole && (
             <TabsTrigger value="business" className="flex items-center gap-2 text-xs sm:text-sm">
               <Building2 className="h-3.5 w-3.5" />
@@ -45,12 +38,6 @@ const SettingsPage = () => {
         <TabsContent value="profile">
           <SettingsProfile />
         </TabsContent>
-
-        {!isBusinessAccount && (
-          <TabsContent value="insights">
-            <SettingsInsights />
-          </TabsContent>
-        )}
 
         {isAdminRole && (
           <TabsContent value="business">
