@@ -8205,6 +8205,48 @@ export type Database = {
           },
         ]
       }
+      vulture_provenance_ledger: {
+        Row: {
+          action: string
+          bucket_path: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          manifest_path: string | null
+          original_file_name: string
+          original_hash: string | null
+          record_count: number | null
+          sanitized_hash: string | null
+          status: string
+        }
+        Insert: {
+          action?: string
+          bucket_path?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          manifest_path?: string | null
+          original_file_name: string
+          original_hash?: string | null
+          record_count?: number | null
+          sanitized_hash?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          bucket_path?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          manifest_path?: string | null
+          original_file_name?: string
+          original_hash?: string | null
+          record_count?: number | null
+          sanitized_hash?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           cash_balance: number | null
@@ -8915,6 +8957,7 @@ export type Database = {
         Args: { p_pseudo_id: string }
         Returns: string
       }
+      get_vulture_salt: { Args: never; Returns: string }
       grant_hat: {
         Args: { _hat_type: string; _target_user: string }
         Returns: string
