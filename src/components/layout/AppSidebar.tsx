@@ -67,6 +67,7 @@ const getRoleItems = (userRole: string): NavItem[] => {
     { title: "Data Marketplace", url: "/marketplace", icon: Database },
     { title: "Earnings & Settlement", url: "/earnings", icon: Landmark },
     { title: "Egress Logs", url: "/egress-logs", icon: ScrollText },
+    { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
   ];
 
   switch (userRole) {
@@ -84,7 +85,6 @@ const getRoleItems = (userRole: string): NavItem[] => {
         { title: "My Team", url: "/my-team", icon: Users },
         { title: "Auth Settings", url: "/auth-settings", icon: KeyRound },
         { title: "Trading Interface", url: "/trading", icon: TrendingUp },
-        { title: "Liquidity Pools", url: "/liquidity", icon: Coins },
         { title: "Saved Searches", url: "/saved-searches", icon: Search },
         { title: "Analytics", url: "/analytics", icon: TrendingUp },
         { title: "My Lists", url: "/my-lists", icon: FileText },
