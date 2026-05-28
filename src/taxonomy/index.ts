@@ -1,21 +1,64 @@
 // src/taxonomy/index.ts
+// Explicit named exports — no wildcards, no defaults.
 
-// 1. Explicit Named Exports only (No star exports)
+// Data
 export { SECTORS } from "./sectors";
-export { ALL_INDUSTRIES, PRIMARY_INDUSTRIES, SECONDARY_INDUSTRIES, TERTIARY_INDUSTRIES, QUATERNARY_INDUSTRIES, QUINARY_INDUSTRIES } from "./industries";
+export {
+  ALL_INDUSTRIES,
+  PRIMARY_INDUSTRIES,
+  SECONDARY_INDUSTRIES,
+  TERTIARY_INDUSTRIES,
+  QUATERNARY_INDUSTRIES,
+  QUINARY_INDUSTRIES,
+} from "./industries";
 export { ALL_NANO_BITES } from "./nanoBites";
 export { REVENUE_ARCHETYPES } from "./archetypes";
 export { NAICS as NAICS_CODES } from "./codes/naics";
 export { GICS as GICS_CODES } from "./codes/gics";
 export { PRODUCTION_METHODS, breakEven } from "./production";
 
-// 2. Types
-export type { NanoBite, IndustryNode, ArchetypeSpec, ProductionMethod } from "./types";
+// Value exports from types (constants)
+export { EMPTY_CLASSIFICATION } from "./types";
 
-// 3. Selectors and Utils
-export * from "./selectors";
-export { initializeTaxonomy } from "./telemetry";
+// Type exports
+export type {
+  NanoBite,
+  IndustryNode,
+  ArchetypeSpec,
+  ProductionMethod,
+  Classification,
+  BreakEvenInput,
+  BreakEvenResult,
+  PositioningArchetype,
+  PositioningSpec,
+  ValueChainStage,
+  SectorId,
+  Cadence,
+  NetworkModel,
+  RevenueArchetype,
+  TaxonomyNode,
+} from "./types";
 
-// STOP HERE. Do not add `export default`. 
-// If your components import Taxonomy from "@/taxonomy", change them 
-// to use named imports: import { ALL_NANO_BITES } from "@/taxonomy";
+// Selectors (explicit, no star)
+export {
+  getIndustriesBySector,
+  getIndustryById,
+  getNanoBitesFor,
+  getNanoBitesForSubModule,
+  getProductionMethodSpec,
+  getSubModuleCoverage,
+  recommendArchetype,
+  recommendedProductionFor,
+  serializeClassification,
+} from "./selectors";
+export type { NanoBiteFilter, SubModuleCoverageRow } from "./selectors";
+
+// Telemetry init shim — re-exported under a stable name even though the
+// underlying module only ships validators. Components import it for boot-time
+// no-op initialization; keep the surface here so callers don't break.
+import { TELEMETRY_CONSTANTS } from "./telemetry";
+export function initializeTaxonomy(): void {
+  // Touch the constants so tree-shaking keeps telemetry available, but do
+  // not perform any side effects at import time.
+  void TELEMETRY_CONSTANTS;
+}
