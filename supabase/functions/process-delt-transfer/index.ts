@@ -4,10 +4,11 @@ import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, publicActions, keccak256, toHex } from "https://esm.sh/viem@2.9.20";
 
-// Network
-const BASE_SEPOLIA_RPC = "https://sepolia.base.org";
-const BASE_MAINNET_RPC = "https://mainnet.base.org";
-const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL") || BASE_SEPOLIA_RPC;
+// Network — hard mainnet enforcement, no testnet fallback.
+const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
+if (!BASE_RPC_URL) {
+  throw new Error("CRITICAL: BASE_RPC_URL secret is not set. process-delt-transfer halted.");
+}
 
 // Protocol contracts (Base Sepolia — testnet)
 const IDIA_TOKEN_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";

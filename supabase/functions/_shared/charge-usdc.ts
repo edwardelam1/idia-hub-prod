@@ -98,7 +98,11 @@ export async function chargeBuyerUsdc(input: ChargeBuyerUsdcInput): Promise<Char
     const account = privateKeyToAccount(rawPk as `0x${string}`);
     console.info(`[END: chargeBuyerUsdc:LOAD_KEY] relayer=${account.address}`);
 
-    const transport = http(Deno.env.get("BASE_RPC_URL") || "https://mainnet.base.org");
+    const baseRpcUrl = Deno.env.get("BASE_RPC_URL");
+    if (!baseRpcUrl) {
+      return { ok: false, code: "CONFIG_MISSING", message: "BASE_RPC_URL env var is not set" };
+    }
+    const transport = http(baseRpcUrl);
     const publicClient = createPublicClient({ chain: base, transport });
     const walletClient = createWalletClient({ account, chain: base, transport });
 
