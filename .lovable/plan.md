@@ -1,57 +1,55 @@
 ## Goal
-Align `supabase/functions/idia-circular-settlement/index.ts` with the actual deployed Base contract topology so Phase 2 stops stalling on a bad ABI, and so the fallback address points at a real treasury — not the governance Timelock.
+Revert the fallback routing to `GLOBAL_WAR_CHEST` (Timelock = DAO War Chest) and keep only the ABI + telemetry + error-semantics fixes in `supabase/functions/idia-circular-settlement/index.ts`.
 
-## Address audit (from the deployed contract list)
+## Architectural correction (acknowledged)
+- `TimelockController` at `0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708` **IS** the Global War Chest — the DAO Governor controls and executes spending from it.
+- `ESCROW_ECOSYSTEM` (`0xDc93eca9…`) is for contributor/royalty `proposeDistribution` only, NOT the regional fallback.
+- Previous plan's repoint of the fallback to the Ecosystem escrow was wrong and is being reverted.
 
-| Code constant (current) | Address | Actually is |
-|---|---|---|
-| `REGISTRY_ADDRESS` | `0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7` | ✅ IDIARegistry (`getPoolByLocation(string) → address`) |
-| `GLOBAL_WAR_CHEST` | `0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708` | ❌ This is the **TimelockController**, not a war chest / treasury |
-| `ESCROW_ECOSYSTEM` | `0xDc93eca954fD2625001b2fb9E9A098914365ADe9` | ✅ IDIAEscrow (Ecosystem / Treasury, 30%) |
+## Changes to `supabase/functions/idia-circular-settlement/index.ts`
 
-The settlement function's Phase 2 fallback currently routes the 10% regional share to the Timelock when no regional pool is registered. That sends operational USDC into a governance contract that has no business custodying revenue.
-
-## Changes
-
-**File:** `supabase/functions/idia-circular-settlement/index.ts`
-
-1. **Registry ABI** — replace the `deployedPools` mapping fragment with the explicit getter:
+1. **Restore constant**
    ```ts
-   const REGISTRY_ABI = [
-     {
-       name: "getPoolByLocation",
-       type: "function",
-       stateMutability: "view",
-       inputs: [{ name: "location", type: "string" }],
-       outputs: [{ name: "", type: "address" }],
-     },
-   ] as const;
+   const GLOBAL_WAR_CHEST = "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708";
+   ```
+   Keep `ESCROW_ECOSYSTEM` as-is (still used by Phase 3 `proposeDistribution`).
+
+2. **Registry ABI** — keep the explicit getter:
+   ```ts
+   const REGISTRY_ABI = [{
+     name: "getPoolByLocation",
+     type: "function",
+     stateMutability: "view",
+     inputs: [{ name: "location", type: "string" }],
+     outputs: [{ name: "", type: "address" }],
+   }] as const;
    ```
 
-2. **Phase 2 call site** — change `functionName: "deployedPools"` → `functionName: "getPoolByLocation"`.
+3. **Phase 2 call site** — `functionName: "getPoolByLocation"` (already in place, retained).
 
-3. **Telemetry** — replace the existing log lines with:
+4. **Telemetry** — retain:
    - `[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`
    - `[END: Registry.getPoolByLocation] resolved=${poolTarget}`
 
-4. **Fallback address correctness** — rename and repoint the regional fallback so the 10% share lands in the Ecosystem treasury escrow instead of the Timelock:
-   - Remove `GLOBAL_WAR_CHEST = 0xd052…` (Timelock).
-   - Use `ESCROW_ECOSYSTEM = 0xDc93eca954fD2625001b2fb9E9A098914365ADe9` as the fallback target for `finalRegionalAddress` when `getPoolByLocation` returns `0x0`.
-   - Update the ledger `description` for that branch from `"10% Regional/War Chest"` to `"10% Regional → Ecosystem Treasury (fallback)"` when the fallback path triggers, so the ledger reflects where money actually went.
+5. **Fallback routing (revert)**
+   ```ts
+   const finalRegionalAddress = (!poolTarget || poolTarget === ZERO_ADDRESS)
+     ? GLOBAL_WAR_CHEST
+     : poolTarget;
+   ```
+   Ledger `description` reverts to:
+   `"10% Regional/War Chest: ${ingestionReference}"` (single description, no fallback branch).
 
-5. **Error semantics (preserve)** — keep the catch block returning:
+6. **Error semantics (preserve)**
    - `400` only when `currentStep === "VALIDATING_INPUTS"`
-   - `500` for every other step (contract / RPC / protocol fault)
+   - `500` for every other step.
 
 ## Out of scope
-- `IDIAPoolFactory` (`0x60EA…`) is not called from this function and is not added.
-- No changes to revenue split percentages, nonce sequencing, contributor distribution, or `proposeDistribution` against `ESCROW_ECOSYSTEM`.
-- No frontend changes.
-- No on-chain changes.
+- No changes to splits, nonce, Phase 1, Phase 3, `ESCROW_ECOSYSTEM` proposals, frontend, or on-chain contracts.
 
 ## Verification
-1. Re-trigger a settlement that previously failed in `PHASE_2_REGIONAL_ROUTING`.
-2. Confirm logs show `[BEGIN: Registry.getPoolByLocation] …` followed by `[END: Registry.getPoolByLocation] resolved=0x…` and no viem ABI error.
-3. With an unregistered `executionLocation`, confirm the regional `transfer` goes to `0xDc93eca9…` (Ecosystem escrow), not `0xd052…` (Timelock).
-4. Confirm Phase 3 contributor distribution still completes and the response is `200` with `corporateHash`, `regionalHash`, `payouts[]`.
-5. Confirm invalid input still returns `400`; an induced contract fault returns `500`.
+1. Re-trigger the previously failing settlement → no viem ABI error.
+2. Logs show `[BEGIN/END: Registry.getPoolByLocation]`.
+3. With unregistered `executionLocation`, the regional `transfer` lands at `0xd052…` (Timelock / War Chest).
+4. Phase 3 still completes; response `200` with `corporateHash`, `regionalHash`, `payouts[]`.
+5. Invalid input → `400`; induced contract fault → `500`.
