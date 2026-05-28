@@ -33,9 +33,16 @@ async function fetchOmniRecords(
         .limit(MAX_OMNI_ROWS),
     ]);
 
-    if (healthRes.error) console.error("[ERROR: OmniFetch.Health] Health table query failed:", healthRes.error.message);
-    if (lifestyleRes.error)
+    if (healthRes.error) {
+      console.info(`[BEGIN: OmniFetch.Health.Error] Evaluating Health API error response.`);
+      console.error("[ERROR: OmniFetch.Health] Health table query failed:", healthRes.error.message);
+      console.info(`[END: OmniFetch.Health.Error] Error logged.`);
+    }
+    if (lifestyleRes.error) {
+      console.info(`[BEGIN: OmniFetch.Lifestyle.Error] Evaluating Lifestyle API error response.`);
       console.error("[ERROR: OmniFetch.Lifestyle] Lifestyle table query failed:", lifestyleRes.error.message);
+      console.info(`[END: OmniFetch.Lifestyle.Error] Error logged.`);
+    }
 
     console.info(
       `[END: OmniFetch] Retrieval complete. Health: ${healthRes.data?.length || 0}, Lifestyle: ${lifestyleRes.data?.length || 0}`,
@@ -46,7 +53,9 @@ async function fetchOmniRecords(
       lifestyle: lifestyleRes.data ?? [],
     };
   } catch (err) {
+    console.info(`[BEGIN: OmniFetch.Stall] Catch block triggered during parallel retrieval.`);
     console.error("[CRITICAL FAILURE: OmniFetch] Fatal exception during parallel retrieval:", err);
+    console.info(`[END: OmniFetch.Stall] Returning empty result set following error.`);
     return { success: false, health: [], lifestyle: [], error: String(err) };
   }
 }
@@ -221,7 +230,6 @@ function shortenLongSentences(text: string): string {
           .join(" ")
           .trim();
         if (!chunk) continue;
-        // FIX: Standard concatenation
         chunks.push(/[.!?]$/.test(chunk) ? chunk : chunk + ".");
       }
       return chunks;
@@ -279,7 +287,6 @@ function buildOrchestratorPrompt(
   healthRecords: any[],
   lifestyleRecords: any[],
 ) {
-  // FIX: Bulletproof string concatenation instead of template literals
   let compactData = "No marketplace dataset is attached to this request.";
   if (marketplaceSummary) {
     compactData =
@@ -329,23 +336,22 @@ function normalizeOutput(text: string, _agent: AgentType): string {
 }
 
 serve(async (req) => {
-  // 1. HANDLE OPTIONS PREFLIGHT FIRST (Fixes the 400 Crash)
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Pre-initialize variables for global scope
   let operatorId: string | undefined;
   let consumedReceipt: string[] = [];
 
   try {
-    // 2. SAFE BODY PARSING (Fixes the "Unexpected end of JSON input" Crash)
     const bodyText = await req.text();
-    if (!bodyText || bodyText.trim() === "") throw new Error("Empty request body");
+    if (!bodyText || bodyText.trim() === "") {
+      console.info("[BEGIN: BestFriendAI.PayloadValidation.Stall] Empty request body received.");
+      throw new Error("Empty request body");
+    }
 
     let rawPayload = JSON.parse(bodyText);
 
-    // Catch the UI auto-trigger
     if (!rawPayload.message || rawPayload.message.trim() === "") {
       rawPayload.message = "I am ready to begin my data journey.";
     }
@@ -354,7 +360,9 @@ serve(async (req) => {
     const parsed = requestSchema.safeParse(rawPayload);
 
     if (!parsed.success) {
+      console.info("[BEGIN: BestFriendAI.PayloadValidation.Error] Handling schema parsing failure.");
       console.error("[ERROR: BestFriendAI.PayloadValidation] Schema mismatch:", parsed.error.flatten());
+      console.info("[END: BestFriendAI.PayloadValidation.Error] Returning 400 Bad Request.");
       return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -364,11 +372,12 @@ serve(async (req) => {
 
     const { message, context, history, client_id } = parsed.data;
 
-    // Set variables now that parsed data exists
     operatorId = context?.platformGuid || context?.userId;
 
     if (!openAiApiKey) {
+      console.info("[BEGIN: BestFriendAI.Environment.Error] Checking OpenAI API Key configuration.");
       console.error("[CRITICAL FAILURE: BestFriendAI.Environment] OPENAI_API_KEY is missing.");
+      console.info("[END: BestFriendAI.Environment.Error] Throwing missing key error.");
       throw new Error("OPENAI_API_KEY is missing from the Supabase Edge Function environment variables.");
     }
 
@@ -380,11 +389,9 @@ serve(async (req) => {
       `[STATUS: BestFriendAI.Routing] Mode: ${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}, Agent: ${detectedAgent}`,
     );
 
-    // Frontend payload (may be empty or partial)
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
 
-    // OMNI-FETCH: override frontend payload with the full DB record set for this user.
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -397,8 +404,12 @@ serve(async (req) => {
           `[STATUS: BestFriendAI.OmniFetchExecution] DB override for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records.`,
         );
       } else {
+        console.info(`[BEGIN: BestFriendAI.OmniFetchExecution.Warning] Handling OmniFetch failure condition.`);
         console.warn(
           `[WARNING: BestFriendAI.OmniFetchExecution] Omni-fetch failed for ${operatorId}: ${audit.error ?? "see prior logs"}`,
+        );
+        console.info(
+          `[END: BestFriendAI.OmniFetchExecution.Warning] OmniFetch failure recorded, proceeding with defaults.`,
         );
       }
       console.info("[END: BestFriendAI.OmniFetchExecution]");
@@ -477,15 +488,19 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
+      console.info(`[BEGIN: BestFriendAI.OpenAIExecution.Error] Parsing failed OpenAI API response.`);
       const errText = await response.text();
       console.error(`[CRITICAL FAILURE: BestFriendAI.OpenAIExecution] HTTP ${response.status}: ${errText}`);
+      console.info(`[END: BestFriendAI.OpenAIExecution.Error] Throwing formatted API error.`);
       throw new Error(`OpenAI API HTTP Error ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
 
     if (!data.choices || data.choices.length === 0) {
+      console.info(`[BEGIN: BestFriendAI.OpenAIExecution.Stall] Validating empty response payload.`);
       console.error("[CRITICAL FAILURE: BestFriendAI.OpenAIExecution] Empty response array from OpenAI.");
+      console.info(`[END: BestFriendAI.OpenAIExecution.Stall] Throwing empty response error.`);
       throw new Error(`OpenAI returned an empty response.`);
     }
     console.info("[END: BestFriendAI.OpenAIExecution] Response received successfully.");
@@ -512,6 +527,7 @@ serve(async (req) => {
         try {
           const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
 
+          console.info(`[BEGIN: BestFriendAI.ReceiptTransmission.Fetch] Initiating POST request to ${synapseUrl}`);
           const synapseRes = await fetch(synapseUrl, {
             method: "POST",
             headers: {
@@ -533,30 +549,17 @@ serve(async (req) => {
               origin_fidelity: 1.0,
             }),
           });
-          const synapseRes = await fetch(synapseUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              // FIX: Promote to Service Role to bypass Client Auth volatility
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-            },
-            body: JSON.stringify({
-              user_id: operatorId,
-              client_id: client_id || "IDIA_HUB_APP",
-              aca_record_ids: consumedReceipt,
-              intent_type: "MARKETPLACE RESEARCH",
-              // Maintain strict telemetry
-              granularity: 0.95,
-              relevance: 1.0,
-              timeliness: 1.0,
-              completeness: 1.0,
-              origin_fidelity: 1.0,
-            }),
-          });
+          console.info(
+            `[END: BestFriendAI.ReceiptTransmission.Fetch] Network resolution complete. HTTP Status: ${synapseRes.status}`,
+          );
 
           if (!synapseRes.ok) {
+            console.info(
+              `[BEGIN: BestFriendAI.ReceiptTransmission.ErrorParse] Extracting error payload for failed HTTP ${synapseRes.status}`,
+            );
             const errText = await synapseRes.text();
+            console.info(`[END: BestFriendAI.ReceiptTransmission.ErrorParse] Error payload extracted.`);
+
             console.error(
               `[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission] Synapse Controller rejected receipt. HTTP ${synapseRes.status}: ${errText}`,
             );
@@ -566,9 +569,11 @@ serve(async (req) => {
             );
           }
         } catch (synErr: any) {
+          console.info(`[BEGIN: BestFriendAI.ReceiptTransmission.Stall] Processing Synapse controller fetch error.`);
           console.error(
-            `[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission] Failed to reach Synapse network: ${synErr.message}`,
+            `[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission.Stall] Failed to reach Synapse network: ${synErr.message}`,
           );
+          console.info(`[END: BestFriendAI.ReceiptTransmission.Stall] Fetch error parsed and logged.`);
         }
       }
     }
@@ -604,7 +609,11 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
+    console.info(
+      `[BEGIN: BestFriendAI.Diagnostics.Stall] Processing top-level catch block for error: ${error.message}`,
+    );
     console.error(`[FATAL STALL]: ${error.message}`);
+    console.info(`[END: BestFriendAI.Diagnostics.Stall] Error handled. Exiting gracefully.`);
     return new Response(
       JSON.stringify({
         response: `Diagnostics Alert: ${error.message}`,
