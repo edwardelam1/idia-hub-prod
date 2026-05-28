@@ -2,7 +2,8 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const AI_MODEL = 'openai/gpt-5-mini';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,8 +29,8 @@ serve(async (req) => {
   try {
     const { action, data, bundleType } = await req.json();
 
-    if (!geminiApiKey) {
-      throw new Error('Gemini API key not configured');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY not configured');
     }
 
     const supabaseClient = createClient(
@@ -218,37 +219,41 @@ Provide pricing recommendation in this JSON format:
   return JSON.parse(response);
 }
 
-async function callGeminiAPI(prompt: string): Promise<string> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      generationConfig: {
-        temperature: 0.3,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
-        responseMimeType: 'application/json',
-      }
-    }),
-  });
+async function callAI(prompt: string): Promise<string> {
+  console.info('[BEGIN: Curator.AIGateway.Fetch] model=' + AI_MODEL);
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'X-Lovable-AIG-SDK': 'vercel-ai-sdk',
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        messages: [
+          { role: 'system', content: 'You output ONLY valid JSON matching the requested schema. No prose, no markdown fences.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    console.info(`[END: Curator.AIGateway.Fetch] status=${response.status}`);
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Gemini API error: ${response.status} ${errBody}`);
+    if (!response.ok) {
+      const errBody = await response.text();
+      if (response.status === 429) throw new Error(`AI rate limit (429): ${errBody}`);
+      if (response.status === 402) throw new Error(`AI credits exhausted (402): ${errBody}`);
+      throw new Error(`AI Gateway error: ${response.status} ${errBody}`);
+    }
+
+    const data = await response.json();
+    const text: string = data?.choices?.[0]?.message?.content ?? '';
+    return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  } catch (e) {
+    console.error(`[CATCH: Curator.AIGateway.Fetch] ${(e as Error).message}`);
+    throw e;
   }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  // Strip markdown fences if any slip through.
-  return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 }
 
 function calculateDataMetrics(data: any[]) {
