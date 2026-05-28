@@ -3,19 +3,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useNavigate } from "react-router-dom";
 import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
-import { Loader2, Bot } from "lucide-react";
+import { Loader2, Bot, Terminal, Boxes, Bird } from "lucide-react";
 import MarketplaceHeader from "./MarketplaceHeader";
 import MarketplaceFilters from "./MarketplaceFilters";
 import ResultsHeader from "./ResultsHeader";
 import BundleCard from "./BundleCard";
 import ShoppingCartComponent from "./ShoppingCart";
 import MarketplaceTerminal from "./MarketplaceTerminal";
+import VultureIngestionPanel from "./vulture/VultureIngestionPanel";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
 
 interface DataMarketplaceProps {
   userRole: string;
 }
+
+type ToolTile = "sql" | "bundles" | "vulture";
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
@@ -28,6 +31,9 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [activeTile, setActiveTile] = useState<ToolTile>("bundles");
+
+  const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
 
   // Responsive padding and sizing
   const containerPadding = isMobile ? "p-2" : isTablet ? "p-4" : "p-6";
@@ -117,6 +123,12 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     );
   }
 
+  const tiles: { id: ToolTile; title: string; icon: any; show: boolean }[] = [
+    { id: "sql", title: "SQL Terminal", icon: Terminal, show: true },
+    { id: "bundles", title: "AI Bundles", icon: Boxes, show: true },
+    { id: "vulture", title: "The Vulture", icon: Bird, show: isAdmin },
+  ];
+
   return (
     <div className={`space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
       <div className="flex items-center justify-between gap-2">
@@ -129,82 +141,100 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         />
       </div>
 
-      <MarketplaceFilters
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        appliedFilters={appliedFilters}
-        setAppliedFilters={setAppliedFilters}
-        userRole={userRole}
-        isMobile={isMobile}
-        isTablet={isTablet}
-        bundleCategory={bundleCategory}
-      />
-
-      {/* ─── Tool 1: Synapse SQL Terminal (independent of Datasets) ─── */}
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Tool · SQL Terminal
-          </h2>
-        </div>
-        <MarketplaceTerminal isBioKeyVerified={true} />
+      {/* ─── Tool Tile Panel ─── */}
+      <div className={`grid gap-2 ${isMobile ? "grid-cols-1" : isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+        {tiles.filter((t) => t.show).map((t) => {
+          const Icon = t.icon;
+          const active = activeTile === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTile(t.id)}
+              className={`text-left rounded-lg border-2 transition-all p-4 ${
+                active
+                  ? "border-primary bg-white shadow-md"
+                  : "border-transparent bg-white/60 hover:bg-white hover:border-primary/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
+                  {t.title}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {t.id === "sql" && "Bio-sovereign SQL editor with floating-rate pricing."}
+                {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
+                {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
+              </p>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ─── Tool 2: Curated Datasets ─── */}
-      <div className="space-y-2 pt-2">
-        <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Tool · Datasets
-          </h2>
-        </div>
-        <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
-      </div>
+      {/* ─── Active Tile Content Frame ─── */}
+      <div className="bg-white rounded-lg border p-3">
+        {activeTile === "sql" && <MarketplaceTerminal isBioKeyVerified={true} />}
 
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
-          <span className="text-gray-600 animate-pulse">Best Friend AI is curating data bundles...</span>
-        </div>
-      ) : (
-        <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
-          {filteredBundles.map((bundle) => (
-            <BundleCard
-              key={bundle.id}
-              bundle={bundle}
+        {activeTile === "bundles" && (
+          <div className="space-y-3">
+            <MarketplaceFilters
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              appliedFilters={appliedFilters}
+              setAppliedFilters={setAppliedFilters}
+              userRole={userRole}
               isMobile={isMobile}
               isTablet={isTablet}
-              userCredits={currentLedgerBalance}
-              onDownload={handleAnalyzeWithAI} // Rerouted to AI Analysis
-              onAddToCart={handleAddToCart}
+              bundleCategory={bundleCategory}
             />
-          ))}
-
-          {filteredBundles.length === 0 && (
-            <div className="col-span-full py-16 text-center">
-              <Bot className="h-12 w-12 mx-auto mb-4 text-primary opacity-20" />
-              <p className="text-muted-foreground">The AI Curator is currently processing the data pipeline.</p>
+            <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+                <span className="text-gray-600 animate-pulse">Best Friend AI is curating data bundles...</span>
+              </div>
+            ) : (
+              <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
+                {filteredBundles.map((bundle) => (
+                  <BundleCard
+                    key={bundle.id}
+                    bundle={bundle}
+                    isMobile={isMobile}
+                    isTablet={isTablet}
+                    userCredits={currentLedgerBalance}
+                    onDownload={handleAnalyzeWithAI}
+                    onAddToCart={handleAddToCart}
+                  />
+                ))}
+                {filteredBundles.length === 0 && (
+                  <div className="col-span-full py-16 text-center">
+                    <Bot className="h-12 w-12 mx-auto mb-4 text-primary opacity-20" />
+                    <p className="text-muted-foreground">The AI Curator is currently processing the data pipeline.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              <Card className="border-purple-200 bg-purple-50">
+                <CardContent className={cardPadding}>
+                  <p className={`text-purple-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
+                    🔒 Datasets are anonymized and curated solely by the IDIA AI Pipeline.
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-green-200 bg-green-50">
+                <CardContent className={cardPadding}>
+                  <p className={`text-green-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
+                    📊 Bundle cost floats with sector demand and your interest profile.
+                  </p>
+                </CardContent>
+              </Card>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Sovereign Privacy & Pricing Notice */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-        <Card className="border-purple-200 bg-purple-50">
-          <CardContent className={cardPadding}>
-            <p className={`text-purple-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-              🔒 Datasets are anonymized and curated solely by the IDIA AI Pipeline.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className={cardPadding}>
-            <p className={`text-green-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-              📊 Query cost floats with sector demand and your interest profile — typically 1–3 CR per session. Exact quote shown at execution.
-            </p>
-          </CardContent>
-        </Card>
+        {activeTile === "vulture" && <VultureIngestionPanel userRole={userRole} />}
       </div>
     </div>
   );
