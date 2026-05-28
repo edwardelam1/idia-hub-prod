@@ -17,6 +17,7 @@ const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL") || "https://sepolia.base.org";
 // Protocol contracts
 const REGISTRY_ADDRESS = "0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7";
 const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
+const GLOBAL_WAR_CHEST = "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708";
 
 // USDC on Base
 const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
@@ -143,9 +144,9 @@ serve(async (req: Request) => {
     });
     console.info(`[END: Registry.getPoolByLocation] resolved=${poolTarget}`);
 
-    // Enforce Fallback Logic — route to Ecosystem Treasury escrow when no regional pool registered
-    const usedFallback = !poolTarget || poolTarget === ZERO_ADDRESS;
-    const finalRegionalAddress = usedFallback ? ESCROW_ECOSYSTEM : poolTarget;
+    // Enforce Fallback Logic — route to Global War Chest (Timelock / DAO) when no regional pool registered
+    const finalRegionalAddress =
+      !poolTarget || poolTarget === ZERO_ADDRESS ? GLOBAL_WAR_CHEST : poolTarget;
 
     const regionalHash = await client.writeContract({
       address: USDC_ADDRESS,
@@ -178,9 +179,7 @@ serve(async (req: Request) => {
         blockchain_tx_hash: regionalHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
-        description: usedFallback
-          ? `10% Regional → Ecosystem Treasury (fallback): ${ingestionReference}`
-          : `10% Regional Pool (${finalRegionalAddress}): ${ingestionReference}`,
+        description: `10% Regional/War Chest: ${ingestionReference}`,
       }),
     ]);
 
