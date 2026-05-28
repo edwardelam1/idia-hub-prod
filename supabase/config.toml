@@ -16,3 +16,6 @@ verify_jwt = false
 
 [functions.wix-payment-webhook]
 verify_jwt = false
+
+[functions.base-rpc-proxy]
+verify_jwt = true
