@@ -140,10 +140,25 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         bundleCategory={bundleCategory}
       />
 
-      {/* Central Cashier's Terminal */}
-      <MarketplaceTerminal synapseBalance={currentLedgerBalance} isBioKeyVerified={true} />
+      {/* ─── Tool 1: Synapse SQL Terminal (independent of Datasets) ─── */}
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Tool · SQL Terminal
+          </h2>
+        </div>
+        <MarketplaceTerminal isBioKeyVerified={true} />
+      </div>
 
-      <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+      {/* ─── Tool 2: Curated Datasets ─── */}
+      <div className="space-y-2 pt-2">
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Tool · Datasets
+          </h2>
+        </div>
+        <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+      </div>
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-12">
