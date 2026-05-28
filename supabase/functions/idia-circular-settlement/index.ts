@@ -136,6 +136,28 @@ serve(async (req: Request) => {
     const regionalRevenue = total_fiat_amount * REVENUE_SPLIT.WAR_CHEST;
 
     console.info(`[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`);
+
+    // ── DIAGNOSTIC BLOCK ───────────────────────────────────────────────
+    console.info(`[DIAGNOSTIC: Network] Target RPC URL: ${BASE_RPC_URL}`);
+    console.info(`[DIAGNOSTIC: Network] Configured Wallet Address: ${account.address}`);
+    try {
+      const chainId = await client.getChainId();
+      console.info(`[DIAGNOSTIC: Network] Resolved Chain ID: ${chainId}`);
+    } catch (diagErr) {
+      console.error(`[DIAGNOSTIC: Network] Failed to resolve chain ID:`, diagErr);
+    }
+    console.info(`[BEGIN: Diagnostic.getBytecode] Testing address: ${REGISTRY_ADDRESS}`);
+    const bytecode = await client.getBytecode({ address: REGISTRY_ADDRESS as `0x${string}` });
+    console.info(`[END: Diagnostic.getBytecode] Bytecode result: ${bytecode ? bytecode.slice(0, 50) + "..." : "undefined/0x"}`);
+    if (!bytecode || bytecode === "0x") {
+      console.error(
+        `[DIAGNOSTIC CRITICAL ALERT] Zero bytecode found at ${REGISTRY_ADDRESS}. ` +
+          `This environment is either querying the wrong chain (e.g. falling back to Sepolia instead of Mainnet) ` +
+          `or the contract address constant is incorrect.`,
+      );
+    }
+    // ── END DIAGNOSTIC BLOCK ───────────────────────────────────────────
+
     const poolTarget = await client.readContract({
       address: REGISTRY_ADDRESS,
       abi: REGISTRY_ABI,
