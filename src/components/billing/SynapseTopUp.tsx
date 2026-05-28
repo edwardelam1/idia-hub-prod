@@ -146,7 +146,7 @@ const SynapseTopUp = () => {
         </h1>
         <p className="text-muted-foreground mt-2">
           Dual-Rail Settlement Protocol. Secure <strong>On-Chain USDC</strong> or <strong>Credit/Debit</strong> funds to
-          fuel AI operations.
+          fuel data consumption operations.
         </p>
       </div>
 
