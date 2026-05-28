@@ -2,6 +2,14 @@ project_id = "zxyngqciipcvveigrzqt"
 
 # Disable JWT verification for bundle generation function to allow database triggers to call it
 [functions.create-health-data-bundle]
+verify_jwt = false
+
+[functions.create-lifestyle-bundles]
+verify_jwt = false
+
+[functions.create-business-intelligence-bundles]
+verify_jwt = false
+
 [functions.top-up-credits]
 verify_jwt = false
 
