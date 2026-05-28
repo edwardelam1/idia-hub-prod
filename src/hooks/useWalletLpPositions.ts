@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { createPublicClient, http, getAddress, type Address } from 'viem';
+import { createPublicClient, custom, getAddress, type Address } from 'viem';
 import { base } from 'viem/chains';
+import { supabase } from '@/integrations/supabase/client';
 import {
   NONFUNGIBLE_POSITION_MANAGER_BASE,
   erc721BalanceAbi,
@@ -11,12 +12,22 @@ import {
 import { getAmountsForLiquidity, tickToSqrtPriceX96, formatTokenAmount } from '@/lib/uniswap-math';
 import type { UniswapPoolStat } from './useUniswapPoolStats';
 
-const RPC_URL = (import.meta.env.VITE_BASE_RPC_URL as string) || 'https://mainnet.base.org';
-
-const client = createPublicClient({
-  chain: base,
-  transport: http(RPC_URL),
+// Private RPC: every JSON-RPC call is proxied through the `base-rpc-proxy`
+// edge function so the Alchemy key never reaches the browser bundle.
+const proxyTransport = custom({
+  async request({ method, params }) {
+    const { data, error } = await supabase.functions.invoke('base-rpc-proxy', {
+      body: { jsonrpc: '2.0', id: 1, method, params: params ?? [] },
+    });
+    if (error) throw error;
+    if (data && typeof data === 'object' && 'error' in data && (data as { error: unknown }).error) {
+      throw new Error(JSON.stringify((data as { error: unknown }).error));
+    }
+    return (data as { result: unknown }).result;
+  },
 });
+
+const client = createPublicClient({ chain: base, transport: proxyTransport });
 
 export interface WalletPosition {
   tokenId: string;
