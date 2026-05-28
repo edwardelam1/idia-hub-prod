@@ -110,7 +110,7 @@ Provide analysis in this JSON format:
   "curation_notes": "specific recommendations"
 }`;
 
-  const response = await callGeminiAPI(analysisPrompt);
+  const response = await callAI(analysisPrompt);
   return JSON.parse(response);
 }
 
@@ -136,7 +136,7 @@ Create enterprise-grade bundle metadata in this JSON format:
   "use_cases": ["usecase1", "usecase2", "usecase3"]
 }`;
 
-  const response = await callGeminiAPI(curationPrompt);
+  const response = await callAI(curationPrompt);
   return JSON.parse(response);
 }
 
@@ -158,7 +158,7 @@ Provide validation results in this JSON format:
   "quality_issues": ["issue1", "issue2"] or null
 }`;
 
-  const response = await callGeminiAPI(validationPrompt);
+  const response = await callAI(validationPrompt);
   return JSON.parse(response);
 }
 
@@ -185,7 +185,7 @@ Generate 4-6 key insights that would be valuable to enterprise clients:
   ]
 }`;
 
-  const response = await callGeminiAPI(insightsPrompt);
+  const response = await callAI(insightsPrompt);
   return JSON.parse(response);
 }
 
@@ -215,7 +215,7 @@ Provide pricing recommendation in this JSON format:
   "competitive_positioning": "Market position"
 }`;
 
-  const response = await callGeminiAPI(pricingPrompt);
+  const response = await callAI(pricingPrompt);
   return JSON.parse(response);
 }
 
