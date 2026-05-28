@@ -116,6 +116,15 @@ serve(async (req: Request) => {
       transport: http(BASE_RPC_URL),
     }).extend(publicActions);
 
+    // Hard-mainnet enforcement: confirm RPC actually returns Base Mainnet chain ID (8453).
+    const resolvedChainId = await client.getChainId();
+    console.info(`[DIAGNOSTIC: Network] Resolved chain ID: ${resolvedChainId}`);
+    if (resolvedChainId !== 8453) {
+      throw new Error(
+        `CRITICAL: BASE_RPC_URL is not Base Mainnet. Expected chain ID 8453, got ${resolvedChainId}. Settlement halted.`,
+      );
+    }
+
     let masterNonce = await client.getTransactionCount({
       address: account.address,
       blockTag: "pending",

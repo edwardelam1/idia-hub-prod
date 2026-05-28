@@ -102,6 +102,7 @@ Deno.serve(async (req) => {
       aca_record_ids: rawIds = [],
       metadata = {},
       country_of_origin = "US",
+      location_string = "global",
     } = body;
 
     // Set global scoped variables
@@ -176,6 +177,7 @@ Deno.serve(async (req) => {
         buyer_id: user_id,
         payment_reference: referenceId,
         contributing_users: uniqueContributors,
+        location_string,
         intent_metadata: { intent_type, sector: sectorLabel },
       },
     });
