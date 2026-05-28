@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.create-business-intelligence-bundles]
 verify_jwt = false
 
+[functions.vulture-sanitization-agent]
+verify_jwt = false
+
 [functions.top-up-credits]
 verify_jwt = false
 
