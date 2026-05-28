@@ -58,7 +58,7 @@ export function useWalletLpPositions(
         abi: erc721BalanceAbi,
         functionName: 'balanceOf',
         args: [checksumed],
-      })) as bigint;
+      } as never)) as bigint;
 
       if (balance === 0n) return [];
 
@@ -70,7 +70,7 @@ export function useWalletLpPositions(
             abi: erc721BalanceAbi,
             functionName: 'tokenOfOwnerByIndex',
             args: [checksumed, BigInt(i)],
-          }),
+          } as never),
         ),
       )) as bigint[];
 
@@ -81,7 +81,7 @@ export function useWalletLpPositions(
             abi: positionsAbi,
             functionName: 'positions',
             args: [id],
-          }),
+          } as never),
         ),
       );
 
