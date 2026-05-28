@@ -1,51 +1,57 @@
-# Fix: `deployedPools` ABI mismatch crashing Phase 2 settlement
+## Goal
+Align `supabase/functions/idia-circular-settlement/index.ts` with the actual deployed Base contract topology so Phase 2 stops stalling on a bad ABI, and so the fallback address points at a real treasury — not the governance Timelock.
 
-## Root cause
+## Address audit (from the deployed contract list)
 
-In `supabase/functions/idia-circular-settlement/index.ts`:
-- `REGISTRY_ABI` declares `getPoolByLocation(string) → address`
-- The call site uses `functionName: "deployedPools"`
+| Code constant (current) | Address | Actually is |
+|---|---|---|
+| `REGISTRY_ADDRESS` | `0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7` | ✅ IDIARegistry (`getPoolByLocation(string) → address`) |
+| `GLOBAL_WAR_CHEST` | `0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708` | ❌ This is the **TimelockController**, not a war chest / treasury |
+| `ESCROW_ECOSYSTEM` | `0xDc93eca954fD2625001b2fb9E9A098914365ADe9` | ✅ IDIAEscrow (Ecosystem / Treasury, 30%) |
 
-viem aborts encoding before the RPC fires, throwing the `FATAL STALL: PHASE_2_REGIONAL_ROUTING` error. The deployed `IDIAPoolFactory.sol` exposes `deployedPools` as a public mapping auto-getter — the call site is correct; the ABI is wrong.
+The settlement function's Phase 2 fallback currently routes the 10% regional share to the Timelock when no regional pool is registered. That sends operational USDC into a governance contract that has no business custodying revenue.
 
 ## Changes
 
 **File:** `supabase/functions/idia-circular-settlement/index.ts`
 
-1. Replace the `REGISTRY_ABI` fragment with the public-mapping getter:
-
+1. **Registry ABI** — replace the `deployedPools` mapping fragment with the explicit getter:
    ```ts
    const REGISTRY_ABI = [
      {
-       inputs: [{ name: "", type: "string" }],
-       name: "deployedPools",
-       outputs: [{ type: "address" }],
-       stateMutability: "view",
+       name: "getPoolByLocation",
        type: "function",
+       stateMutability: "view",
+       inputs: [{ name: "location", type: "string" }],
+       outputs: [{ name: "", type: "address" }],
      },
    ] as const;
    ```
 
-2. Leave the existing `readContract({ functionName: "deployedPools", args: [executionLocation] })` call untouched — it now matches the ABI.
+2. **Phase 2 call site** — change `functionName: "deployedPools"` → `functionName: "getPoolByLocation"`.
 
-3. Tighten error semantics so this class of server-side fault stops masquerading as a client error:
-   - In the `catch` block, return **HTTP 500** (instead of 400) when `currentStep` indicates a protocol/contract fault (anything other than `VALIDATING_INPUTS`).
-   - Keep `failed_at` in the payload so the existing frontend telemetry breadcrumb is preserved.
+3. **Telemetry** — replace the existing log lines with:
+   - `[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`
+   - `[END: Registry.getPoolByLocation] resolved=${poolTarget}`
 
-4. Add one explicit telemetry line right before the `readContract` call and one right after, so any future ABI/RPC stall here is visible without re-deriving it from a stack trace:
-   - `[BEGIN: Registry.deployedPools] location=<executionLocation>`
-   - `[END: Registry.deployedPools] resolved=<poolTarget>`
+4. **Fallback address correctness** — rename and repoint the regional fallback so the 10% share lands in the Ecosystem treasury escrow instead of the Timelock:
+   - Remove `GLOBAL_WAR_CHEST = 0xd052…` (Timelock).
+   - Use `ESCROW_ECOSYSTEM = 0xDc93eca954fD2625001b2fb9E9A098914365ADe9` as the fallback target for `finalRegionalAddress` when `getPoolByLocation` returns `0x0`.
+   - Update the ledger `description` for that branch from `"10% Regional/War Chest"` to `"10% Regional → Ecosystem Treasury (fallback)"` when the fallback path triggers, so the ledger reflects where money actually went.
+
+5. **Error semantics (preserve)** — keep the catch block returning:
+   - `400` only when `currentStep === "VALIDATING_INPUTS"`
+   - `500` for every other step (contract / RPC / protocol fault)
 
 ## Out of scope
-
-- No changes to the on-chain factory contract.
-- No changes to revenue split, nonce handling, or any other phase.
-- No frontend changes — the fix is entirely inside the edge function.
+- `IDIAPoolFactory` (`0x60EA…`) is not called from this function and is not added.
+- No changes to revenue split percentages, nonce sequencing, contributor distribution, or `proposeDistribution` against `ESCROW_ECOSYSTEM`.
+- No frontend changes.
+- No on-chain changes.
 
 ## Verification
-
-1. Re-trigger a settlement that previously hit `PHASE_2_REGIONAL_ROUTING`.
-2. Confirm in Edge Function logs:
-   - `[BEGIN: Registry.deployedPools]` followed by `[END: Registry.deployedPools] resolved=0x…`
-   - Phase 2 emits a real `regionalHash` transaction (either to the resolved pool or, on `0x0`, to `GLOBAL_WAR_CHEST` via the existing fallback).
-3. Confirm Phase 3 contributor distribution proceeds and the response is `200` with `corporateHash`, `regionalHash`, `payouts[]`.
+1. Re-trigger a settlement that previously failed in `PHASE_2_REGIONAL_ROUTING`.
+2. Confirm logs show `[BEGIN: Registry.getPoolByLocation] …` followed by `[END: Registry.getPoolByLocation] resolved=0x…` and no viem ABI error.
+3. With an unregistered `executionLocation`, confirm the regional `transfer` goes to `0xDc93eca9…` (Ecosystem escrow), not `0xd052…` (Timelock).
+4. Confirm Phase 3 contributor distribution still completes and the response is `200` with `corporateHash`, `regionalHash`, `payouts[]`.
+5. Confirm invalid input still returns `400`; an induced contract fault returns `500`.
