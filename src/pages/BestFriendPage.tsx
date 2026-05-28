@@ -72,8 +72,20 @@ const BestFriendPage = () => {
       } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("Authentication failure.");
 
-      const { data: profile } = await supabase.from("profiles").select("platform_guid").eq("user_id", user.id).single();
-      if (!profile?.platform_guid) throw new Error("Identity resolution failure.");
+      console.info(`[BEGIN: UI.BestFriend.ProfileFetch] Fetching profile context for user ${user.id}`);
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("platform_guid, location")
+        .eq("user_id", user.id)
+        .single();
+
+      if (profileError || !profile?.platform_guid) {
+        console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
+        throw new Error("Identity resolution failure.");
+      }
+      console.info(
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${profile.location}`,
+      );
 
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
@@ -93,6 +105,7 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: profile.platform_guid,
             userId: user.id,
+            location_string: profile.location,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),

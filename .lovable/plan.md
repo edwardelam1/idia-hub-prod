@@ -1,44 +1,78 @@
-# Plan
+## Primary Objective
+Wire `location_string` from the Client UI → `best-friend-ai` → `synapse-controller` → `idia-circular-settlement`. The PHASE_2 stall is caused by `synapse-controller` defaulting to `"global"` whenever the caller omits a location. The fix is to thread the user's real location through the pipeline.
 
-## Goal
-Stop `idia-circular-settlement` from failing at `PHASE_2_REGIONAL_ROUTING` and make the settlement path strictly mainnet-safe and consistent with the live Synapse flow.
+## Step 1 — Frontend: `src/pages/BestFriendPage.tsx`
 
-## What I’ll change
+In `handleSendMessage`:
 
-1. **Harden network enforcement in settlement code**
-   - Keep `idia-circular-settlement` strict on `BASE_RPC_URL`.
-   - Add explicit runtime validation that the RPC is actually Base Mainnet, not just “set”.
-   - Fail loudly before any contract read/write if the resolved chain ID is wrong.
+- Extend the profile query to include `location`:
+  ```ts
+  console.info(`[BEGIN: UI.BestFriend.ProfileFetch] Fetching profile context for user ${user.id}`);
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("platform_guid, location")
+    .eq("user_id", user.id)
+    .single();
 
-2. **Fix the settlement handoff from `synapse-controller`**
-   - Pass the routing location into `idia-circular-settlement` instead of always falling back to `"global"`.
-   - Ensure the payload shape matches what settlement expects for regional routing.
+  if (profileError || !profile?.platform_guid) {
+    console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
+    throw new Error("Identity resolution failure.");
+  }
+  console.info(`[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${profile.location}`);
+  ```
+- Inject `location_string` into the invoke payload's `context`:
+  ```ts
+  context: {
+    isMarketplaceMode: marketplaceMode,
+    platformGuid: profile.platform_guid,
+    userId: user.id,
+    location_string: profile.location,
+    marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
+  },
+  ```
 
-3. **Remove remaining fallback/testnet drift around the same flow**
-   - Update adjacent Base-related settlement/transfer helpers that still contain Sepolia or silent mainnet fallback behavior.
-   - Align them with the live-system rule so this issue cannot recur through a sibling path.
+## Step 2 — Edge: `supabase/functions/best-friend-ai/index.ts`
 
-4. **Add minimal operational diagnostics for production safety**
-   - Log the resolved chain ID and routing location in a concise, non-temp way.
-   - Avoid the earlier bytecode debug block, but preserve enough signal to distinguish “wrong chain” from “missing pool entry”.
+A. Extend `requestSchema.context` (around line 100) with:
+```ts
+location_string: z.string().optional(),
+```
+All existing keys stay intact.
 
-5. **Validate the edge-function path**
-   - Verify the settlement function code path and the `synapse-controller` invocation path are consistent after the edit.
-   - Confirm the failure mode becomes deterministic: wrong RPC => immediate explicit error; missing pool => clean fallback to `GLOBAL_WAR_CHEST` only when the contract call itself succeeds.
+B. Inside the `[BEGIN: BestFriendAI.ReceiptTransmission.Fetch]` block (~line 530), add `location_string` to the JSON body posted to `synapse-controller`:
+```ts
+body: JSON.stringify({
+  user_id: operatorId,
+  client_id: client_id || "IDIA_HUB_APP",
+  aca_record_ids: consumedReceipt,
+  intent_type: "MARKETPLACE RESEARCH",
+  location_string: context?.location_string,
+  granularity: 0.95,
+  relevance: 1.0,
+  timeliness: 1.0,
+  completeness: 1.0,
+  origin_fidelity: 1.0,
+}),
+```
 
-## Expected outcome
-- No silent/testnet execution.
-- No implicit `global` routing caused by missing handoff data.
-- If the RPC is wrong, the function will fail with a precise mainnet enforcement error before `getPoolByLocation`.
-- If the RPC is correct, `getPoolByLocation` will execute against the real contract and either return a pool or fall back to the timelock as intended.
+**Hard constraint:** Do not remove or rewrite any existing `[BEGIN: …]` / `[END: …]` / `[STATUS: …]` / `[CRITICAL FAILURE: …]` log lines. Telemetry stays exactly as-is — only the schema entry and the body field are added.
 
-## Technical details
-- Files likely involved:
-  - `supabase/functions/idia-circular-settlement/index.ts`
-  - `supabase/functions/synapse-controller/index.ts`
-  - `supabase/functions/process-delt-transfer/index.ts`
-  - possibly `supabase/functions/_shared/charge-usdc.ts` for consistency hardening
-- Specific issue already confirmed during inspection:
-  - `synapse-controller` currently invokes settlement **without** `location_string`, so settlement defaults to `"global"` every time.
-- Specific risk also found:
-  - `process-delt-transfer` still contains `BASE_RPC_URL || "https://sepolia.base.org"`, which violates the hard-mainnet rule and should be aligned.
+## Step 3 — Secondary cleanup (carried from prior plan)
+
+After the wire-through is verified, finish the previously approved cleanups:
+
+1. **Legacy module removal**: delete `supabase/functions/_shared/charge-usdc.ts`, remove the `@shared/charge-usdc` entry from `supabase/functions/import_map.json`, and migrate `supabase/functions/top-up-credits/index.ts` off `chargeBuyerUsdc`. Open question still standing: replace the pull with (A) inbound-transfer verification or (B) inline the relayer pull. Awaiting your choice before touching `top-up-credits`.
+2. **PHASE_2 resilience in `idia-circular-settlement`**: wrap `getPoolByLocation` in try/catch so a missing/unseeded location key falls back cleanly to `GLOBAL_WAR_CHEST` instead of fatally stalling settlement. This is a belt-and-suspenders complement to the wire-through — once Step 1+2 land, real regions like `"US-CA"` will be passed and the registry lookup should succeed; the try/catch only protects against unseeded keys.
+
+## Verification
+
+- Trigger a Best Friend marketplace query.
+- Confirm logs show:
+  - `[END: UI.BestFriend.ProfileFetch] … location: <real value>`
+  - `synapse-controller` receives the non-`"global"` `location_string`
+  - `idia-circular-settlement` resolves `Registry.getPoolByLocation` against the real key without stalling at `PHASE_2_REGIONAL_ROUTING`.
+
+## Files touched
+- `src/pages/BestFriendPage.tsx`
+- `supabase/functions/best-friend-ai/index.ts`
+- (Step 3) `supabase/functions/idia-circular-settlement/index.ts`, `supabase/functions/top-up-credits/index.ts`, `supabase/functions/import_map.json`, deletion of `supabase/functions/_shared/charge-usdc.ts`

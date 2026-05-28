@@ -114,6 +114,7 @@ const requestSchema = z.object({
     isMarketplaceMode: z.boolean().optional(),
     platformGuid: z.string().optional(),
     userId: z.string().optional(),
+    location_string: z.string().optional(),
     marketplace: z
       .object({
         healthRecords: z.array(z.any()).optional().default([]),
@@ -541,6 +542,7 @@ serve(async (req) => {
               client_id: client_id || "IDIA_HUB_APP",
               aca_record_ids: consumedReceipt,
               intent_type: "MARKETPLACE RESEARCH",
+              location_string: context?.location_string,
               // Maintain strict telemetry
               granularity: 0.95,
               relevance: 1.0,
