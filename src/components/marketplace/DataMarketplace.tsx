@@ -13,6 +13,8 @@ import MarketplaceTerminal from "./MarketplaceTerminal";
 import VultureIngestionPanel from "./vulture/VultureIngestionPanel";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -24,7 +26,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useResponsive();
   const { bundles, isLoading, error } = useMarketplaceBundles();
-  const { balanceData } = useSynapseCredits();
+  const { balanceData, refreshBalance } = useSynapseCredits();
 
   const currentLedgerBalance = balanceData?.available_credits ?? 0;
 
@@ -89,10 +91,27 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     setCartItems(items);
   };
 
-  const handlePurchase = (totalCost: number) => {
-    if (currentLedgerBalance >= totalCost) {
+  const handlePurchase = async (totalCost: number) => {
+    if (currentLedgerBalance < totalCost) return;
+    try {
+      const results = await Promise.all(
+        cartItems.map((item) =>
+          supabase.functions.invoke("marketplace-bundle-access", {
+            body: { bundle_id: item.bundleId ?? item.id, quantity: item.quantity ?? 1 },
+          }),
+        ),
+      );
+      const failed = results.filter((r) => r.error || (r.data as any)?.error);
+      if (failed.length > 0) {
+        toast.error(`${failed.length} bundle(s) rejected by Liability Shield.`);
+      } else {
+        toast.success(`Liability Shield receipts issued for ${results.length} bundle(s).`);
+      }
+      await refreshBalance();
       setCartItems([]);
       navigate("/my-reports");
+    } catch (err: any) {
+      toast.error(`Purchase failed: ${err?.message ?? "Unknown error"}`);
     }
   };
 
