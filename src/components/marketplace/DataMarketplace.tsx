@@ -13,6 +13,8 @@ import MarketplaceTerminal from "./MarketplaceTerminal";
 import VultureIngestionPanel from "./vulture/VultureIngestionPanel";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -24,7 +26,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useResponsive();
   const { bundles, isLoading, error } = useMarketplaceBundles();
-  const { balanceData } = useSynapseCredits();
+  const { balanceData, refreshBalance } = useSynapseCredits();
 
   const currentLedgerBalance = balanceData?.available_credits ?? 0;
 
@@ -89,10 +91,27 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     setCartItems(items);
   };
 
-  const handlePurchase = (totalCost: number) => {
-    if (currentLedgerBalance >= totalCost) {
+  const handlePurchase = async (totalCost: number) => {
+    if (currentLedgerBalance < totalCost) return;
+    try {
+      const results = await Promise.all(
+        cartItems.map((item) =>
+          supabase.functions.invoke("marketplace-bundle-access", {
+            body: { bundle_id: item.bundleId ?? item.id, quantity: item.quantity ?? 1 },
+          }),
+        ),
+      );
+      const failed = results.filter((r) => r.error || (r.data as any)?.error);
+      if (failed.length > 0) {
+        toast.error(`${failed.length} bundle(s) rejected by Liability Shield.`);
+      } else {
+        toast.success(`Liability Shield receipts issued for ${results.length} bundle(s).`);
+      }
+      await refreshBalance();
       setCartItems([]);
       navigate("/my-reports");
+    } catch (err: any) {
+      toast.error(`Purchase failed: ${err?.message ?? "Unknown error"}`);
     }
   };
 
@@ -192,7 +211,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
-                <span className="text-gray-600 animate-pulse">Best Friend AI is curating data bundles...</span>
+                <span className="text-gray-600">Loading live bundle catalog…</span>
               </div>
             ) : (
               <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
@@ -210,27 +229,18 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 {filteredBundles.length === 0 && (
                   <div className="col-span-full py-16 text-center">
                     <Bot className="h-12 w-12 mx-auto mb-4 text-primary opacity-20" />
-                    <p className="text-muted-foreground">The AI Curator is currently processing the data pipeline.</p>
+                    <p className="text-muted-foreground">No live bundles available right now.</p>
                   </div>
                 )}
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-              <Card className="border-purple-200 bg-purple-50">
-                <CardContent className={cardPadding}>
-                  <p className={`text-purple-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-                    🔒 Datasets are anonymized and curated solely by the IDIA AI Pipeline.
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="border-green-200 bg-green-50">
-                <CardContent className={cardPadding}>
-                  <p className={`text-green-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-                    📊 Bundle cost floats with sector demand and your interest profile.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+            <Card className="border-primary/20 bg-primary/5 mt-4">
+              <CardContent className={cardPadding}>
+                <p className={`text-foreground ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
+                  Each access fires a Liability Shield receipt and burns Synapse Credits at the live sector rate.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         )}
 

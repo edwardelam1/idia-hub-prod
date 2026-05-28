@@ -13,6 +13,9 @@ verify_jwt = false
 [functions.vulture-sanitization-agent]
 verify_jwt = false
 
+[functions.marketplace-bundle-access]
+verify_jwt = false
+
 [functions.top-up-credits]
 verify_jwt = false
 
