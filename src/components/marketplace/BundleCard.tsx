@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, TrendingUp, PlayCircle } from 'lucide-react';
+import { Coins, Users, TrendingUp, Database, Loader2 } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
-import BundleSimulationModal from './BundleSimulationModal';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 
 interface BundleCardProps {
   bundle: any;
@@ -16,8 +19,10 @@ interface BundleCardProps {
 }
 
 const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
-  const [simulationOpen, setSimulationOpen] = useState(false);
-  
+  const navigate = useNavigate();
+  const { refreshBalance } = useSynapseCredits();
+  const [isAccessing, setIsAccessing] = useState(false);
+
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -33,8 +38,24 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
     }
   };
 
-  const handleFullDatasetAccess = () => {
-    setSimulationOpen(true);
+  const handleFullDatasetAccess = async () => {
+    if (isAccessing) return;
+    if (userCredits < (bundle.price ?? 1)) return;
+    setIsAccessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('marketplace-bundle-access', {
+        body: { bundle_id: bundle.bundle_id ?? bundle.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Liability Shield receipt issued (${data.fee_cr} CR burned).`);
+      await refreshBalance();
+      navigate(`/data-viewer/${bundle.bundle_id ?? bundle.id}?ref=${encodeURIComponent(data.reference_id)}`);
+    } catch (err: any) {
+      toast.error(`Access denied: ${err?.message ?? 'Unknown error'}`);
+    } finally {
+      setIsAccessing(false);
+    }
   };
 
   // Responsive sizing
@@ -137,13 +158,18 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
             <Button 
               className={`w-full ${isMobile || isTablet ? 'text-xs py-1.5 h-8' : ''}`}
               onClick={handleFullDatasetAccess}
-              disabled={userCredits < bundle.price}
+              disabled={userCredits < bundle.price || isAccessing}
             >
-              {userCredits < bundle.price ? (
+              {isAccessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Issuing Liability Shield…
+                </>
+              ) : userCredits < bundle.price ? (
                 'Insufficient Credits'
               ) : (
                 <>
-                  <PlayCircle className="h-4 w-4 mr-2" />
+                  <Database className="h-4 w-4 mr-2" />
                   Access Full Dataset
                 </>
               )}
@@ -158,14 +184,6 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
               />
             </div>
           </div>
-
-          {/* Simulation Modal - controlled externally */}
-          <BundleSimulationModal 
-            bundle={bundle} 
-            open={simulationOpen} 
-            onOpenChange={setSimulationOpen}
-            autoRun={true}
-          />
         </div>
       </CardContent>
     </Card>
