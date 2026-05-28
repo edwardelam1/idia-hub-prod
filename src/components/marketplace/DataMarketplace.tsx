@@ -120,7 +120,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   return (
     <div className={`space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
       <div className="flex items-center justify-between gap-2">
-        <MarketplaceHeader userCredits={currentLedgerBalance} isMobile={isMobile} isTablet={isTablet} />
+        <MarketplaceHeader userCredits={currentLedgerBalance} isMobile={isMobile} isTablet={isTablet} userRole={userRole} />
         <ShoppingCartComponent
           cartItems={cartItems}
           onUpdateCart={handleUpdateCart}
@@ -186,7 +186,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         <Card className="border-green-200 bg-green-50">
           <CardContent className={cardPadding}>
             <p className={`text-green-700 ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-              📊 Research interactions are fixed at 1 CR ($0.75) per session.
+              📊 Query cost floats with sector demand and your interest profile — typically 1–3 CR per session. Exact quote shown at execution.
             </p>
           </CardContent>
         </Card>
