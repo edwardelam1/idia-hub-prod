@@ -75,7 +75,7 @@ const BestFriendPage = () => {
       console.info(`[BEGIN: UI.BestFriend.ProfileFetch] Fetching profile context for user ${user.id}`);
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("platform_guid, location")
+        .select("platform_guid")
         .eq("user_id", user.id)
         .single();
 
@@ -83,9 +83,9 @@ const BestFriendPage = () => {
         console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
         throw new Error("Identity resolution failure.");
       }
-      const normalizedLocation = profile.location?.trim() || undefined;
+      const normalizedLocation = locationString;
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"}`,
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"} (browser status: ${locationStatus})`,
       );
 
       let realPipelineData: any[] = [];
