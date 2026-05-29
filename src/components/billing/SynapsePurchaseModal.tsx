@@ -163,7 +163,7 @@ const SynapsePurchaseModal = ({
         const returnUrl = encodeURIComponent(
           `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
         );
-        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}`;
         console.log(
           `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [REDIRECT] Routing to vault portal: ${target}`,
         );
