@@ -372,6 +372,7 @@ serve(async (req) => {
     console.info("[END: BestFriendAI.PayloadValidation] Payload verified.");
 
     const { message, context, history, client_id } = parsed.data;
+    const normalizedLocationString = context?.location_string?.trim() || undefined;
 
     operatorId = context?.platformGuid || context?.userId;
 
@@ -542,7 +543,7 @@ serve(async (req) => {
               client_id: client_id || "IDIA_HUB_APP",
               aca_record_ids: consumedReceipt,
               intent_type: "MARKETPLACE RESEARCH",
-              location_string: context?.location_string,
+              location_string: normalizedLocationString,
               // Maintain strict telemetry
               granularity: 0.95,
               relevance: 1.0,
