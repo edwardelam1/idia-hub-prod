@@ -72,7 +72,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       // 2. RPC CONFIG FETCH (Database Source of Truth)
       console.log("[useWalletBalance][fetchBalance][RPC] START: Querying system_configs for BASE_RPC_URL.");
-      let rpcUrl = "https://mainnet.base.org"; // High-availability default fallback
+      let rpcUrl = "https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N"; // Alchemy default
 
       try {
         // 🚨 FIXED: Cast query to 'any' to bypass SelectQueryError for missing relation types.

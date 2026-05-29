@@ -1,65 +1,20 @@
-## Goal
+# Replace Base public RPC with Alchemy endpoint
 
-Derive `location_string` from the browser at session time (not from `profiles.location`), broken down hierarchically as **city → state/province → country**, so regional pool routing reflects the user's current physical location. Also remove the legacy `_shared/charge-usdc.ts`.
+The fatal stall came from `process-delt-transfer` posting `eth_sendRawTransaction` to `https://mainnet.base.org`, which throttles delegated accounts ("in-flight transaction limit reached"). The `BASE_RPC_URL` edge secret is currently set to the public endpoint, and several client/proxy fallbacks also hard-code it.
 
-## Location string format
+## Changes
 
-Hierarchical, hyphen-delimited, ISO-style, most-specific-first:
+1. **Secret update** — set `BASE_RPC_URL` to `https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N` via the secrets tool. This is the single fix that resolves the runtime error, since `process-delt-transfer` and `idia-circular-settlement` both read `Deno.env.get("BASE_RPC_URL")`.
 
-```
-{CITY}-{STATE_OR_PROVINCE}-{COUNTRY}
-```
+2. **`supabase/functions/base-rpc-proxy/index.ts`** — also set the `ALCHEMY_BASE_RPC_URL` secret to the same Alchemy URL so the read-only proxy stops falling back to the public node. Update the in-file `FALLBACK_RPC` constant to the Alchemy URL as a defense-in-depth fallback.
 
-Examples:
-- `Austin-TX-US`
-- `Toronto-ON-CA`
-- `London-ENG-GB`
-- `TX-US` (city unavailable)
-- `US` (only country resolved)
-- `undefined` (denied / unavailable → controller falls back to GLOBAL pool)
+3. **`src/hooks/useWalletBalance.ts`** — change the hard-coded fallback (`let rpcUrl = "https://mainnet.base.org"`) to the Alchemy URL so read-only `balanceOf` calls also route through Alchemy when `system_configs.BASE_RPC_URL` is absent.
 
-Rules:
-- Country = ISO 3166-1 alpha-2 (`US`, `CA`, `GB`).
-- State/province = ISO 3166-2 subdivision code when the geocoder returns it; otherwise the principal subdivision name slugified (spaces → none, ASCII only).
-- City = localityInfo administrative city name, slugified (spaces → none, ASCII only, no diacritics).
-- Drop any segment that's missing; never emit empty hyphens (no `--US`).
+4. **`src/lib/usdc-approval.ts`** — update both occurrences (`wallet_addEthereumChain` rpcUrls array and `createPublicClient` transport) to the Alchemy URL.
 
-## Approach
-
-### 1. New hook: `src/hooks/useBrowserLocation.ts`
-
-- On mount, call `navigator.geolocation.getCurrentPosition` with `{ enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 }`.
-- Reverse-geocode `{lat, lng}` via BigDataCloud's keyless endpoint:
-  `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=…&longitude=…&localityLanguage=en`
-  - Returns `city`, `principalSubdivision`, `principalSubdivisionCode` (e.g. `"US-TX"`), `countryCode`.
-- Build the hierarchical string per the format above. Cache in `sessionStorage` under `idia.browserLocation` to avoid re-prompting on every page.
-- Expose `{ locationString, status, error }` where `status ∈ idle | requesting | ready | denied | unavailable`.
-- On any failure → `locationString = undefined`; controller already falls back to GLOBAL.
-
-### 2. Wire into `src/pages/BestFriendPage.tsx`
-
-- Replace `profile.location` read with `const { locationString } = useBrowserLocation();`.
-- Drop `location` from the `profiles` select (keep `platform_guid`).
-- Pass `location_string: locationString` in the edge-function payload.
-- Update telemetry log to print `locationString ?? "<none>"`.
-
-### 3. Edge functions
-
-No changes needed — `best-friend-ai`, `synapse-controller`, and `idia-circular-settlement` already normalize blank/null to GLOBAL fallback.
-
-### 4. Legacy cleanup
-
-- Delete `supabase/functions/_shared/charge-usdc.ts`.
-- Grep for any `charge-usdc` imports and remove dead references if found.
+5. **Redeploy** `process-delt-transfer`, `idia-circular-settlement`, and `base-rpc-proxy` after the secret update so they pick up the new env var.
 
 ## Out of scope
 
-- Storing browser location back to `profiles.location` (location is dynamic per session).
-- Permission UX beyond the native browser prompt.
-- Regional pool registration on the contract — controller's GLOBAL fallback handles unregistered regions today.
-
-## Files touched
-
-- add: `src/hooks/useBrowserLocation.ts`
-- edit: `src/pages/BestFriendPage.tsx`
-- delete: `supabase/functions/_shared/charge-usdc.ts`
+- No logic changes to the settlement flow itself.
+- viem's internal chain definition still lists `mainnet.base.org` as its default RPC, but we always pass an explicit `transport: http(URL)`, so that default is never used.
