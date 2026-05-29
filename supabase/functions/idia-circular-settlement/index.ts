@@ -128,23 +128,25 @@ serve(async (req: Request) => {
       );
     }
 
-    let masterNonce = await client.getTransactionCount({
-      address: account.address,
-      blockTag: "pending",
-    });
-
     // PHASE 1: CORPORATE SETTLEMENT (60%)
     currentStep = "PHASE_1_CORPORATE_SETTLEMENT";
     const corporateRevenue = total_fiat_amount * REVENUE_SPLIT.CORPORATE;
 
+    console.info(`[BEGIN: Phase_1_Corporate.Transfer] amount=${corporateRevenue}`);
     const corporateHash = await client.writeContract({
       address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: "transfer",
       args: [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
       account,
-      nonce: masterNonce++,
     });
+    console.info(`[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`);
+    const corporateReceipt = await client.waitForTransactionReceipt({ hash: corporateHash, confirmations: 1 });
+    if (corporateReceipt.status === "success") {
+      console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
+    } else {
+      console.error(`[ERROR: Phase_1_Corporate.Transfer] Transaction reverted on-chain. Hash: ${corporateHash}`);
+    }
 
     // PHASE 2: REGIONAL ROUTING (10%)
     currentStep = "PHASE_2_REGIONAL_ROUTING";
@@ -171,14 +173,21 @@ serve(async (req: Request) => {
     const finalRegionalAddress =
       !poolTarget || poolTarget === ZERO_ADDRESS ? GLOBAL_WAR_CHEST : poolTarget;
 
+    console.info(`[BEGIN: Phase_2_Regional.Transfer] amount=${regionalRevenue} target=${finalRegionalAddress}`);
     const regionalHash = await client.writeContract({
       address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: "transfer",
       args: [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
       account,
-      nonce: masterNonce++,
     });
+    console.info(`[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`);
+    const regionalReceipt = await client.waitForTransactionReceipt({ hash: regionalHash, confirmations: 1 });
+    if (regionalReceipt.status === "success") {
+      console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
+    } else {
+      console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
+    }
 
     // LEDGER HYDRATION
     await Promise.all([
@@ -213,59 +222,88 @@ serve(async (req: Request) => {
     const contributorPayouts = [];
     const idiaAwardAmount = parseUnits("1", 18);
 
-    for (const contributor of contributing_users) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("wallet_address")
-        .eq("id", contributor.user_id)
-        .single();
+    console.info("[BEGIN: Phase_3_Contributor.BatchExecution] Initializing sequential transaction pipeline.");
+    try {
+      for (let i = 0; i < contributing_users.length; i++) {
+        const contributor = contributing_users[i];
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("wallet_address")
+          .eq("id", contributor.user_id)
+          .single();
 
-      const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+        const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+        console.info(`[BEGIN: Batch.Item] Processing transfer ${i + 1}/${contributing_users.length} to ${lifeWallet}`);
 
-      const yieldHash = await client.writeContract({
-        address: USDC_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "transfer",
-        args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
-        account,
-        nonce: masterNonce++,
-      });
+        try {
+          // 1. Yield transfer (USDC)
+          const yieldHash = await client.writeContract({
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
+            account,
+          });
+          console.info(`[STATUS: Batch.Item] Yield TX Broadcasted. Hash: ${yieldHash}. Awaiting network confirmation...`);
+          const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash, confirmations: 1 });
+          if (yieldReceipt.status === "success") {
+            console.info(`[END: Batch.Item] Yield transfer successful. Block: ${yieldReceipt.blockNumber}`);
+          } else {
+            console.error(`[ERROR: Batch.Item] Yield transaction reverted on-chain. Hash: ${yieldHash}`);
+          }
 
-      const proposalHash = await client.writeContract({
-        address: ESCROW_ECOSYSTEM,
-        abi: ESCROW_ABI,
-        functionName: "proposeDistribution",
-        args: [
-          lifeWallet as `0x${string}`,
-          idiaAwardAmount,
-          `Automated royalty yield proposal: Ref ${ingestionReference}`,
-        ],
-        account,
-        nonce: masterNonce++,
-      });
+          // 2. Royalty proposal (escrow)
+          const proposalHash = await client.writeContract({
+            address: ESCROW_ECOSYSTEM,
+            abi: ESCROW_ABI,
+            functionName: "proposeDistribution",
+            args: [
+              lifeWallet as `0x${string}`,
+              idiaAwardAmount,
+              `Automated royalty yield proposal: Ref ${ingestionReference}`,
+            ],
+            account,
+          });
+          console.info(`[STATUS: Batch.Item] Proposal TX Broadcasted. Hash: ${proposalHash}. Awaiting network confirmation...`);
+          const proposalReceipt = await client.waitForTransactionReceipt({ hash: proposalHash, confirmations: 1 });
+          if (proposalReceipt.status === "success") {
+            console.info(`[END: Batch.Item] Proposal successful. Block: ${proposalReceipt.blockNumber}`);
+          } else {
+            console.error(`[ERROR: Batch.Item] Proposal reverted on-chain. Hash: ${proposalHash}`);
+          }
 
-      const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash });
-      const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
+          // 3. Ledger insert
+          const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
+          await supabase.from("synapse_credit_ledger").insert({
+            user_id: contributor.user_id,
+            amount: perContributorYield,
+            entry_type: "deposit",
+            transaction_type: "DATA_SALE_PAYOUT",
+            status: yieldStatus,
+            blockchain_tx_hash: yieldHash,
+            is_settled: true,
+            settled_at: new Date().toISOString(),
+            description: `Pro-rata yield for Ref: ${ingestionReference}`,
+          });
 
-      await supabase.from("synapse_credit_ledger").insert({
-        user_id: contributor.user_id,
-        amount: perContributorYield,
-        entry_type: "deposit",
-        transaction_type: "DATA_SALE_PAYOUT",
-        status: yieldStatus,
-        blockchain_tx_hash: yieldHash,
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        description: `Pro-rata yield for Ref: ${ingestionReference}`,
-      });
+          contributorPayouts.push({
+            wallet: lifeWallet,
+            yield_hash: yieldHash,
+            proposal_hash: proposalHash,
+          });
 
-      contributorPayouts.push({
-        wallet: lifeWallet,
-        yield_hash: yieldHash,
-        proposal_hash: proposalHash,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+          // 4. RPC rate-limit buffer
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (txError: any) {
+          console.info(`[BEGIN: Batch.Item.Error]`);
+          console.error(`[FATAL STALL: Batch.Item] Failed executing transfer for ${lifeWallet}: ${txError.message}`);
+          console.info(`[END: Batch.Item.Error]`);
+          continue;
+        }
+      }
+      console.info("[END: Phase_3_Contributor.BatchExecution] Pipeline cleared.");
+    } catch (globalError: any) {
+      console.error(`[FATAL STALL: Phase_3_Contributor.Global] ${globalError.message}`);
     }
 
     return new Response(
