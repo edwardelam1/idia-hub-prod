@@ -83,8 +83,9 @@ const BestFriendPage = () => {
         console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
         throw new Error("Identity resolution failure.");
       }
+      const normalizedLocation = profile.location?.trim() || undefined;
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${profile.location}`,
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"}`,
       );
 
       let realPipelineData: any[] = [];
@@ -105,7 +106,7 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: profile.platform_guid,
             userId: user.id,
-            location_string: profile.location,
+            location_string: normalizedLocation,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
