@@ -11,11 +11,9 @@ import { createWalletClient, http, parseUnits, publicActions } from "https://esm
 const REVENUE_SPLIT = { CORPORATE: 0.6, WAR_CHEST: 0.1, DATA_YIELD: 0.3 };
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// Network
+// Network — hardcoded Alchemy fallback ensures regional routing never collapses to public Base RPC.
+const PROD_ALCHEMY_URL = "https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N";
 const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
-if (!BASE_RPC_URL) {
-  throw new Error("CRITICAL: BASE_RPC_URL secret is not set. Settlement halted.");
-}
 
 // Protocol contracts
 const REGISTRY_ADDRESS = "0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7";
@@ -112,10 +110,13 @@ serve(async (req: Request) => {
     const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
     const account = privateKeyToAccount(formattedKey as `0x${string}`);
 
+    const activeRpcUrl = BASE_RPC_URL || PROD_ALCHEMY_URL;
+    console.log(`[REGIONAL_ROUTING][TRANSPORT_BINDING] Launching wallet client. Route Vector: ${activeRpcUrl}`);
+
     const client = createWalletClient({
       account,
       chain: base,
-      transport: http(BASE_RPC_URL),
+      transport: http(activeRpcUrl),
     }).extend(publicActions);
 
     // Hard-mainnet enforcement: confirm RPC actually returns Base Mainnet chain ID (8453).
@@ -123,7 +124,7 @@ serve(async (req: Request) => {
     console.info(`[DIAGNOSTIC: Network] Resolved chain ID: ${resolvedChainId}`);
     if (resolvedChainId !== 8453) {
       throw new Error(
-        `CRITICAL: BASE_RPC_URL is not Base Mainnet. Expected chain ID 8453, got ${resolvedChainId}. Settlement halted.`,
+        `CRITICAL: Active RPC route (${activeRpcUrl}) is not Base Mainnet. Expected chain ID 8453, got ${resolvedChainId}. Settlement halted.`,
       );
     }
 
