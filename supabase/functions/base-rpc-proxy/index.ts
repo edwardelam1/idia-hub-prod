@@ -17,7 +17,7 @@ const ALLOWED_METHODS = new Set([
   'net_version',
 ]);
 
-const FALLBACK_RPC = 'https://mainnet.base.org';
+const FALLBACK_RPC = 'https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N';
 
 function isAllowed(body: unknown): boolean {
   if (Array.isArray(body)) {
