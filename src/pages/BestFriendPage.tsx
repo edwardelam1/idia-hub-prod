@@ -8,6 +8,7 @@ import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Ale
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useBrowserLocation } from "@/hooks/useBrowserLocation";
 
 // ERROR BOUNDARY WRAPPER
 const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
@@ -53,6 +54,7 @@ const BestFriendPage = () => {
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
   const isProcessing = useRef(false);
+  const { locationString, status: locationStatus } = useBrowserLocation();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -75,7 +77,7 @@ const BestFriendPage = () => {
       console.info(`[BEGIN: UI.BestFriend.ProfileFetch] Fetching profile context for user ${user.id}`);
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("platform_guid, location")
+        .select("platform_guid")
         .eq("user_id", user.id)
         .single();
 
@@ -83,9 +85,9 @@ const BestFriendPage = () => {
         console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
         throw new Error("Identity resolution failure.");
       }
-      const normalizedLocation = profile.location?.trim() || undefined;
+      const normalizedLocation = locationString;
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"}`,
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"} (browser status: ${locationStatus})`,
       );
 
       let realPipelineData: any[] = [];
