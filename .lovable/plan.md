@@ -1,20 +1,20 @@
-# Replace Base public RPC with Alchemy endpoint
+# Force regional-routing edge transport to Alchemy with a hard fallback
 
-The fatal stall came from `process-delt-transfer` posting `eth_sendRawTransaction` to `https://mainnet.base.org`, which throttles delegated accounts ("in-flight transaction limit reached"). The `BASE_RPC_URL` edge secret is currently set to the public endpoint, and several client/proxy fallbacks also hard-code it.
+The remaining loop is in `supabase/functions/idia-circular-settlement/index.ts`, where the wallet client still binds directly to `BASE_RPC_URL` and aborts entirely if that secret is missing or stale. The requested fix is to make the transport binding ironclad by introducing a production Alchemy constant and resolving `activeRpcUrl = BASE_RPC_URL || PROD_ALCHEMY_URL` at client initialization.
 
-## Changes
+## Planned changes
 
-1. **Secret update** — set `BASE_RPC_URL` to `https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N` via the secrets tool. This is the single fix that resolves the runtime error, since `process-delt-transfer` and `idia-circular-settlement` both read `Deno.env.get("BASE_RPC_URL")`.
+1. **`supabase/functions/idia-circular-settlement/index.ts` top-level network constants** — replace the current hard failure on missing `BASE_RPC_URL` with a hardcoded `PROD_ALCHEMY_URL` constant plus a nullable `BASE_RPC_URL` read, so the function can always fall back to Alchemy.
 
-2. **`supabase/functions/base-rpc-proxy/index.ts`** — also set the `ALCHEMY_BASE_RPC_URL` secret to the same Alchemy URL so the read-only proxy stops falling back to the public node. Update the in-file `FALLBACK_RPC` constant to the Alchemy URL as a defense-in-depth fallback.
+2. **`supabase/functions/idia-circular-settlement/index.ts` wallet client initialization** — update the explicit initialization block to:
+   - compute `const activeRpcUrl = BASE_RPC_URL || PROD_ALCHEMY_URL`
+   - emit the requested `[REGIONAL_ROUTING][TRANSPORT_BINDING]` log
+   - bind `createWalletClient(... transport: http(activeRpcUrl))`
 
-3. **`src/hooks/useWalletBalance.ts`** — change the hard-coded fallback (`let rpcUrl = "https://mainnet.base.org"`) to the Alchemy URL so read-only `balanceOf` calls also route through Alchemy when `system_configs.BASE_RPC_URL` is absent.
+3. **Validation guard** — keep the Base Mainnet chain ID verification in place, but update the error wording so it reflects the active route rather than implying only `BASE_RPC_URL` was used.
 
-4. **`src/lib/usdc-approval.ts`** — update both occurrences (`wallet_addEthereumChain` rpcUrls array and `createPublicClient` transport) to the Alchemy URL.
+## Scope
 
-5. **Redeploy** `process-delt-transfer`, `idia-circular-settlement`, and `base-rpc-proxy` after the secret update so they pick up the new env var.
-
-## Out of scope
-
-- No logic changes to the settlement flow itself.
-- viem's internal chain definition still lists `mainnet.base.org` as its default RPC, but we always pass an explicit `transport: http(URL)`, so that default is never used.
+- Only the regional-routing edge function initialization block is changed.
+- No settlement math, routing, or ledger logic changes.
+- No frontend or other edge functions are modified in this pass.
