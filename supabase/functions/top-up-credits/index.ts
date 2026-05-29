@@ -158,31 +158,46 @@ Deno.serve(async (req: Request) => {
     }
 
     stage = "WALLET_HYDRATE";
-    console.log(`[BEGIN: ${stage}]`);
+    console.log(`[BEGIN: ${stage}] Initiating balance hydration for routing=${routing}`);
     let newBalance: number | null = null;
+
     if (routing === "fiat") {
       const targetColumn = "corporate_revenue";
+      console.log(`[LOG: ${stage}] Fetching prior balance from column=${targetColumn}`);
+
       const { data: wallet, error: fetchError } = await supabase
         .from("wallets")
         .select(targetColumn)
         .eq("user_id", user_id)
-        .single();
+        .maybeSingle();
 
-      if (fetchError) throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
+      if (fetchError) {
+        console.error(`🚨 [STALL DETECTED: ${stage}] Wallet fetch aborted: ${fetchError.message}`);
+        throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
+      }
 
-      const currentBalance = Number(wallet?.[targetColumn as keyof typeof wallet]) || 0;
+      const currentBalance = Number((wallet as any)?.[targetColumn]) || 0;
       newBalance = currentBalance + credit_amount;
+      console.log(`[LOG: ${stage}] Calculation: Previous(${currentBalance}) + Inbound(${credit_amount}) = Target(${newBalance})`);
 
-      const { error: updateError } = await supabase
+      console.log(`[LOG: ${stage}] Executing state upsert to guarantee persistence.`);
+      const { error: upsertError } = await supabase
         .from("wallets")
-        .update({
-          [targetColumn]: newBalance,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user_id);
+        .upsert(
+          {
+            user_id: user_id,
+            [targetColumn]: newBalance,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
 
-      if (updateError) throw new Error(`WALLET_UPDATE_FAILED: ${updateError.message}`);
-      console.log(`[END: ${stage}] fiat column=${targetColumn} newTotal=${newBalance}`);
+      if (upsertError) {
+        console.error(`🚨 [STALL DETECTED: ${stage}] Wallet upsert aborted: ${upsertError.message}`);
+        throw new Error(`WALLET_UPSERT_FAILED: ${upsertError.message}`);
+      }
+
+      console.log(`[END: ${stage}] fiat column=${targetColumn} newTotal=${newBalance} successfully committed.`);
     } else {
       console.log(`[SKIP: ${stage}] On-chain routing — USDC truth lives on Base.`);
     }
@@ -193,7 +208,7 @@ Deno.serve(async (req: Request) => {
       status: 200,
     });
   } catch (error: any) {
-    console.error(`🚨 [FATAL: ${stage}] ${error?.message}`);
+    console.error(`🚨 [FATAL EXCEPTION: ${stage}] System halted: ${error?.message}`);
     return new Response(JSON.stringify({ error: error?.message ?? "Unknown error", failed_at: stage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
