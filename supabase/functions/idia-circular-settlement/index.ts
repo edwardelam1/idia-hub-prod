@@ -101,7 +101,9 @@ serve(async (req: Request) => {
       throw new Error("Missing contributing_users.");
     }
 
-    const executionLocation = location_string || "global";
+    const executionLocation = typeof location_string === "string" && location_string.trim().length > 0
+      ? location_string.trim()
+      : "global";
     const ingestionReference = payment_reference || `SYN-${crypto.randomUUID().slice(0, 8)}`;
 
     currentStep = "CONFIGURING_BLOCKCHAIN";
@@ -149,13 +151,20 @@ serve(async (req: Request) => {
 
     console.info(`[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`);
 
-    const poolTarget = await client.readContract({
-      address: REGISTRY_ADDRESS,
-      abi: REGISTRY_ABI,
-      functionName: "getPoolByLocation",
-      args: [executionLocation],
-    });
-    console.info(`[END: Registry.getPoolByLocation] resolved=${poolTarget}`);
+    let poolTarget: string | undefined;
+    try {
+      poolTarget = await client.readContract({
+        address: REGISTRY_ADDRESS,
+        abi: REGISTRY_ABI,
+        functionName: "getPoolByLocation",
+        args: [executionLocation],
+      });
+      console.info(`[END: Registry.getPoolByLocation] resolved=${poolTarget}`);
+    } catch (routingError: any) {
+      console.error(
+        `[WARNING: Registry.getPoolByLocation] lookup failed for ${executionLocation}; falling back to GLOBAL_WAR_CHEST. ${routingError.message}`,
+      );
+    }
 
     // Enforce Fallback Logic — route to Global War Chest (Timelock / DAO) when no regional pool registered
     const finalRegionalAddress =
