@@ -119,7 +119,7 @@ const UniversalPurchaseScreen = () => {
       const returnUrl = encodeURIComponent(
         `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
       );
-      window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+      window.location.href = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}&uid=${userId}&amount=${plan.price}&credits=${plan.credits}`;
     } catch (err: any) {
       console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
       toast.error(err.message || "Purchase initialization failed");

@@ -133,7 +133,7 @@ const SynapseTopUp = () => {
         const returnUrl = encodeURIComponent(
           `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
         );
-        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}`;
+        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}`;
         console.log(`[SynapseTopUp][handlePurchase] [WIX_DIRECT] [REDIRECT] ${target}`);
         window.location.href = target;
         return;
