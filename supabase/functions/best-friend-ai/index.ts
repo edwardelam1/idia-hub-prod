@@ -114,7 +114,7 @@ const requestSchema = z.object({
     isMarketplaceMode: z.boolean().optional(),
     platformGuid: z.string().optional(),
     userId: z.string().optional(),
-    location_string: z.string().optional(),
+    location_string: z.string().nullable().optional(),
     marketplace: z
       .object({
         healthRecords: z.array(z.any()).optional().default([]),
