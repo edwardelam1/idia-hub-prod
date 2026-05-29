@@ -87,7 +87,7 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
               chainId: BASE_CHAIN_ID_HEX,
               chainName: "Base",
               nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: ["https://mainnet.base.org"],
+              rpcUrls: ["https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N"],
               blockExplorerUrls: ["https://basescan.org"],
             },
           ],
@@ -97,7 +97,7 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
       }
     }
 
-    const publicClient = createPublicClient({ chain: base, transport: http("https://mainnet.base.org") });
+    const publicClient = createPublicClient({ chain: base, transport: http("https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N") });
     const walletClient = createWalletClient({ chain: base, transport: custom(ethereum as any), account: owner });
 
     console.info(`[ensureUsdcApproval] reading current allowance`);
