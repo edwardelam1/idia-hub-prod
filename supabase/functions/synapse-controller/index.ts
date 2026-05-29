@@ -102,8 +102,12 @@ Deno.serve(async (req) => {
       aca_record_ids: rawIds = [],
       metadata = {},
       country_of_origin = "US",
-      location_string = "global",
+      location_string,
     } = body;
+    const normalizedLocationString =
+      typeof location_string === "string" && location_string.trim().length > 0
+        ? location_string.trim()
+        : undefined;
 
     // Set global scoped variables
     operatorId = user_id;
@@ -177,7 +181,7 @@ Deno.serve(async (req) => {
         buyer_id: user_id,
         payment_reference: referenceId,
         contributing_users: uniqueContributors,
-        location_string,
+        location_string: normalizedLocationString,
         intent_metadata: { intent_type, sector: sectorLabel },
       },
     });
