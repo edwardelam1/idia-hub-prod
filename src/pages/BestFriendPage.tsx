@@ -8,6 +8,7 @@ import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Ale
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useBrowserLocation } from "@/hooks/useBrowserLocation";
 
 // ERROR BOUNDARY WRAPPER
 const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
@@ -53,6 +54,7 @@ const BestFriendPage = () => {
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
   const isProcessing = useRef(false);
+  const { locationString, status: locationStatus } = useBrowserLocation();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
