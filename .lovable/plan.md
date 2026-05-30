@@ -1,42 +1,31 @@
-## Goal
-Instrument `supabase/functions/idia-circular-settlement/index.ts` to expose exactly where Base Sequencer rejection occurs for `in-flight transaction limit reached for delegated accounts`, while preserving the current Life-aligned contract/config state.
-
 ## Plan
-1. Add a Planck-scale executor helper above the main handler in `idia-circular-settlement/index.ts`.
-   - Log nonce acquisition from pending state.
-   - Simulate the contract call before signing.
-   - Prepare the raw transaction with the explicit nonce.
-   - Sign the prepared payload directly.
-   - Broadcast with `sendRawTransaction` and emit a fatal diagnostic dump on rejection.
 
-2. Replace only the Phase 1 and Phase 2 `client.writeContract` calls with the new executor.
-   - Keep all existing addresses, ABI constants, revenue-split logic, routing logic, chain-ID enforcement, and ledger writes intact.
-   - Preserve the current `ALCHEMY_BASE_RPC_URL` behavior.
-   - Do not alter unrelated phases unless required for type/runtime compatibility.
+Replace the `adminClient.functions.invoke("idia-circular-settlement")` handoff in `supabase/functions/synapse-controller/index.ts` with a direct `fetch()` to the function URL, then fully consume the response body before the parent finishes.
 
-3. Add a small sequencer-clear delay helper and apply it after confirmed success for Phase 1 and Phase 2.
-   - This keeps the function behavior aligned with the diagnostic goal while reducing back-to-back mempool pressure within a single execution.
+### Changes
+1. Build a dedicated `payoutData` object once in `synapse-controller` and use it for the settlement handoff.
+2. Remove the current `functions.invoke` + `EdgeRuntime.waitUntil(...)` handoff path entirely.
+3. Add a raw `fetch(`${SUPABASE_URL}/functions/v1/idia-circular-settlement`, ...)` handoff with:
+   - `method: "POST"`
+   - JSON body
+   - explicit `Connection: "close"`
+   - explicit auth headers for edge-to-edge invocation
+4. Immediately `await response.text()` to fully drain the child’s 202 response and force graceful socket closure before the parent isolate exits.
+5. Keep `[HANDOFF: settlement]` correlation logs, but update them to reflect the raw fetch lifecycle:
+   - initiated
+   - accepted / non-2xx failure
+   - network failure
+   - egress link success/failure
+6. Only update `egress_logs.synapse_ledger_entry_id` after the handoff returns an accepted response; leave orphaned rows unlinked on failure for audit, exactly as requested.
+7. Keep the parent response contract intact (`success`, `reference_id`, `settlement_status: "queued"`) so the frontend behavior does not regress.
 
-4. Tighten observability around settlement instance timing.
-   - Keep the top-level pulse logging.
-   - Add a per-execution correlation marker so logs can distinguish one settlement run from two overlapping invocations.
-   - This makes it obvious whether the failure is caused by duplicate Edge Function execution or stale RPC nonce state.
+### Technical details
+- Use the project’s established edge-to-edge raw fetch pattern for auth headers (`Authorization` + `apikey`) so the request clears the Supabase gateway reliably.
+- Preserve `idia-circular-settlement`’s existing fire-and-forget design; no changes are needed to its `EdgeRuntime.waitUntil(executeSettlement(...))` block unless logs expose a second issue afterward.
+- Do not change frontend code in this pass; the current UI already awaits `synapse-controller`.
+- Do not add tables or migrations in this pass.
 
-5. Validate the implementation by reviewing the updated edge-function log trace.
-   - Confirm logs show the full sequence: NonceCheck → Simulate → Prepare → Sign → Broadcast.
-   - Confirm failures now identify whether the collapse happened at broadcast and what nonce was attempted.
-
-## Guardrails
-- Do not touch `process-delt-transfer`.
-- Do not change the existing Life-aligned contract imports/constants behavior in `idia-circular-settlement` beyond the requested transaction execution path.
-- Do not add database/schema changes.
-- Do not broaden scope into frontend refactors unless the logs later prove duplicate submissions originate there.
-
-## Technical details
-- Target file: `supabase/functions/idia-circular-settlement/index.ts`
-- Replace `writeContract` only for:
-  - Phase 1 corporate USDC transfer
-  - Phase 2 regional USDC transfer
-- Use the existing wallet client and account already created in the function.
-- Keep receipt waiting via `waitForTransactionReceipt` so downstream ledger behavior stays consistent.
-- If the logs later show simultaneous function invocations, the next follow-up would be caller-side idempotency or dedupe at the function boundary, but that is outside this scoped change.
+### Validation
+- Confirm `synapse-controller` no longer references `functions.invoke("idia-circular-settlement")`.
+- Verify logs show the new handoff sequence and that the child reaches its `[ACCEPTED] circular-settlement queued` line without the previous 214ms EarlyDrop signature.
+- If the handoff clears but settlement still dies later, the next step is the queue/webhook architecture you outlined, not more isolate-to-isolate retries.
