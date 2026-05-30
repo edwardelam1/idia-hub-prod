@@ -7,6 +7,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Background-task escape hatch. EdgeRuntime.waitUntil keeps the isolate alive
+// after the HTTP Response has been flushed so the outbound invoke to
+// idia-circular-settlement is NOT torn down by AbortSignal propagation when
+// the parent isolate dies.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
+
 // ====================================================================
 // CORE HELPERS
 // ====================================================================
@@ -174,8 +180,18 @@ Deno.serve(async (req) => {
     // Update global consumedReceipt
     consumedReceipt = aca_record_ids;
 
-    // 5. SETTLEMENT HANDOFF
-    const { error: cashierError } = await adminClient.functions.invoke("idia-circular-settlement", {
+    // 5. SETTLEMENT HANDOFF — fire-and-forget.
+    // We do NOT await the invoke. Awaiting it ties this isolate's lifetime to
+    // the child isolate's response and propagates AbortSignal on teardown,
+    // which kills the child's EdgeRuntime.waitUntil() worker (EarlyDrop).
+    // Instead, hand the Promise to EdgeRuntime.waitUntil so the runtime keeps
+    // the outbound socket alive after we return 200 to the browser.
+    const handoffStart = Date.now();
+    console.info(
+      `[HANDOFF: settlement] fire-and-forget invoke initiated. reference=${referenceId} buyer=${user_id} fiat=${fiatEquivalentValue} contributors=${uniqueContributors.length} ts=${handoffStart}`,
+    );
+
+    const settlementInvoke = adminClient.functions.invoke("idia-circular-settlement", {
       body: {
         total_fiat_amount: fiatEquivalentValue,
         buyer_id: user_id,
@@ -186,13 +202,41 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (cashierError) throw new Error(`Circular Settlement Failed: ${cashierError.message}`);
-
-    // 6. LINK EGRESS TO LEDGER
-    await adminClient
-      .from("egress_logs")
-      .update({ synapse_ledger_entry_id: ledgerResult.data.id })
-      .eq("id", egressResult.data.id);
+    // 6. LINK EGRESS TO LEDGER — only on successful handoff.
+    // If the handoff fails the egress_logs row stays unlinked so orphaned
+    // data transfers remain auditable.
+    EdgeRuntime.waitUntil(
+      settlementInvoke
+        .then(async ({ error: cashierError }) => {
+          if (cashierError) {
+            console.error(
+              `🚨 [HANDOFF: settlement] FAILED reference=${referenceId} :: ${cashierError.message}. egress_logs intentionally left unlinked for audit.`,
+            );
+            return;
+          }
+          console.info(
+            `[HANDOFF: settlement] ACCEPTED by circular-settlement. reference=${referenceId} elapsed_ms=${Date.now() - handoffStart}`,
+          );
+          const { error: linkError } = await adminClient
+            .from("egress_logs")
+            .update({ synapse_ledger_entry_id: ledgerResult.data.id })
+            .eq("id", egressResult.data.id);
+          if (linkError) {
+            console.error(
+              `🚨 [HANDOFF: settlement] egress link failed reference=${referenceId} :: ${linkError.message}`,
+            );
+          } else {
+            console.info(
+              `[HANDOFF: settlement] egress_logs linked to ledger. reference=${referenceId} ledger_entry=${ledgerResult.data.id} egress_id=${egressResult.data.id}`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.error(
+            `🚨 [HANDOFF: settlement] THREW reference=${referenceId} :: ${err?.message ?? String(err)}`,
+          );
+        }),
+    );
 
     return new Response(
       JSON.stringify({
@@ -200,6 +244,7 @@ Deno.serve(async (req) => {
         fee: feeCR,
         reference_id: referenceId,
         consumed_records: consumedReceipt,
+        settlement_status: "queued",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
