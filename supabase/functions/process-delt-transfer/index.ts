@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, publicActions, keccak256, toHex } from "https://esm.sh/viem@2.9.20";
+import { PROTOCOL } from "../_shared/contracts.ts";
 
 // Network — hard mainnet enforcement, no testnet fallback.
 const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
@@ -10,22 +11,24 @@ if (!BASE_RPC_URL) {
   throw new Error("CRITICAL: BASE_RPC_URL secret is not set. process-delt-transfer halted.");
 }
 
-// Protocol contracts (Base Sepolia — testnet)
-const IDIA_TOKEN_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
-const REGISTRY_ADDRESS = "0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7";
-const LIABILITY_RECEIPT_ADDRESS = "0x9e1CD33c2534dbeb0E82db7A0366A483fC9bD6DE";
-const GLOBAL_WAR_CHEST = "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708"; // Timelock as fallback
-const POOL_FACTORY_ADDRESS = "0x60EA2012dd55B6E828c1ec3085821dA9d6658630";
+// Protocol contracts — Base Mainnet (sourced from _shared/contracts.ts).
+// BUG FIXES vs prior constants:
+//   * IDIA_TOKEN_ADDRESS was 0x137D913…387B — that is the Registry, not IDIA.
+//   * REGISTRY_ADDRESS    was 0x463ce6…74F7 — stale / not deployed.
+//   * LIABILITY_RECEIPT   was 0x9e1CD3…D6DE — pre-prod; canonical is 0x5eA573…0BD3.
+//   * USDC_ADDRESS        was 0x036CbD…CF7e — Base Sepolia USDC; mainnet is 0x833589f…02913.
+//   * GLOBAL_WAR_CHEST    was 0xd052C6F…e708 — that is escrow.ecosystem, not the DAO Safe.
+const IDIA_TOKEN_ADDRESS = PROTOCOL.idiaToken;
+const REGISTRY_ADDRESS = PROTOCOL.registry;
+const LIABILITY_RECEIPT_ADDRESS = PROTOCOL.liabilityReceipt;
+const POOL_FACTORY_ADDRESS = PROTOCOL.poolFactory;
+const GLOBAL_WAR_CHEST = PROTOCOL.safe;
+const USDC_ADDRESS = PROTOCOL.usdc;
+const TREASURY_WALLET = PROTOCOL.treasury;
+const ESCROW_ECOSYSTEM = PROTOCOL.escrow.ecosystem;
 
-// USDC on Base Sepolia
-const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
-
-// System wallets
+// System wallets (Hub-owned, not part of the governance protocol)
 const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
-const TREASURY_WALLET = "0xd816D83703764551A7F292dbC435669AA89631a7";
-
-// Escrow addresses (for token distribution after data purchase)
-const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
 
 const LIABILITY_RECEIPT_ABI = [
   {
