@@ -7,11 +7,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Background-task escape hatch. EdgeRuntime.waitUntil keeps the isolate alive
-// after the HTTP Response has been flushed so the outbound invoke to
-// idia-circular-settlement is NOT torn down by AbortSignal propagation when
-// the parent isolate dies.
-declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
+// NOTE: The previous EdgeRuntime.waitUntil + functions.invoke handoff still
+// succumbed to the TCP RST cascade on parent-isolate teardown. We now use a
+// raw fetch with `Connection: close` and we fully drain the response body
+// before this isolate exits, so there is no live socket left for the runtime
+// to reset against the child.
 
 // ====================================================================
 // CORE HELPERS
@@ -180,63 +180,82 @@ Deno.serve(async (req) => {
     // Update global consumedReceipt
     consumedReceipt = aca_record_ids;
 
-    // 5. SETTLEMENT HANDOFF — fire-and-forget.
-    // We do NOT await the invoke. Awaiting it ties this isolate's lifetime to
-    // the child isolate's response and propagates AbortSignal on teardown,
-    // which kills the child's EdgeRuntime.waitUntil() worker (EarlyDrop).
-    // Instead, hand the Promise to EdgeRuntime.waitUntil so the runtime keeps
-    // the outbound socket alive after we return 200 to the browser.
+    // 5. SETTLEMENT HANDOFF — raw fetch with forced graceful socket closure.
+    // Why not supabase-js .invoke(): the SDK opens a keep-alive socket. When
+    // this parent isolate is torn down, the orchestrator sends a TCP RST which
+    // kills the child's EdgeRuntime.waitUntil() worker (EarlyDrop @ ~214ms).
+    // Fix: explicit `Connection: close` + full body drain via await
+    //      response.text() so the socket is closed gracefully before exit.
     const handoffStart = Date.now();
+    const payoutData = {
+      total_fiat_amount: fiatEquivalentValue,
+      buyer_id: user_id,
+      payment_reference: referenceId,
+      contributing_users: uniqueContributors,
+      location_string: normalizedLocationString,
+      intent_metadata: { intent_type, sector: sectorLabel },
+    };
+    const settlementUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
     console.info(
-      `[HANDOFF: settlement] fire-and-forget invoke initiated. reference=${referenceId} buyer=${user_id} fiat=${fiatEquivalentValue} contributors=${uniqueContributors.length} ts=${handoffStart}`,
+      `[HANDOFF: settlement] raw-fetch initiated reference=${referenceId} buyer=${user_id} fiat=${fiatEquivalentValue} contributors=${uniqueContributors.length} url=${settlementUrl} ts=${handoffStart}`,
     );
 
-    const settlementInvoke = adminClient.functions.invoke("idia-circular-settlement", {
-      body: {
-        total_fiat_amount: fiatEquivalentValue,
-        buyer_id: user_id,
-        payment_reference: referenceId,
-        contributing_users: uniqueContributors,
-        location_string: normalizedLocationString,
-        intent_metadata: { intent_type, sector: sectorLabel },
-      },
-    });
+    let handoffAccepted = false;
+    try {
+      const settlementRes = await fetch(settlementUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Edge-to-edge auth: same pattern best-friend-ai &
+          // marketplace-bundle-access already use to clear the gateway.
+          Authorization: `Bearer ${serviceRoleKey}`,
+          apikey: serviceRoleKey,
+          // Force the runtime to NOT pool this socket. Combined with the
+          // body drain below, this guarantees a graceful FIN before the
+          // parent isolate exits — no TCP RST cascade.
+          Connection: "close",
+        },
+        body: JSON.stringify(payoutData),
+      });
+
+      // CRITICAL: fully drain the response stream. If we skip this the Deno
+      // runtime keeps the socket alive and the orchestrator's teardown sends
+      // a TCP RST that murders the child's waitUntil() worker.
+      const responseText = await settlementRes.text();
+      const elapsedMs = Date.now() - handoffStart;
+
+      if (!settlementRes.ok) {
+        console.error(
+          `🚨 [HANDOFF: settlement] non-2xx reference=${referenceId} status=${settlementRes.status} elapsed_ms=${elapsedMs} body=${responseText}. egress_logs intentionally left unlinked for audit.`,
+        );
+      } else {
+        handoffAccepted = true;
+        console.info(
+          `[HANDOFF: settlement] ACCEPTED reference=${referenceId} status=${settlementRes.status} elapsed_ms=${elapsedMs} body=${responseText}`,
+        );
+      }
+    } catch (handoffError: any) {
+      console.error(
+        `🚨 [HANDOFF: settlement] network failure reference=${referenceId} :: ${handoffError?.message ?? String(handoffError)}. egress_logs intentionally left unlinked for audit.`,
+      );
+    }
 
     // 6. LINK EGRESS TO LEDGER — only on successful handoff.
-    // If the handoff fails the egress_logs row stays unlinked so orphaned
-    // data transfers remain auditable.
-    EdgeRuntime.waitUntil(
-      settlementInvoke
-        .then(async ({ error: cashierError }) => {
-          if (cashierError) {
-            console.error(
-              `🚨 [HANDOFF: settlement] FAILED reference=${referenceId} :: ${cashierError.message}. egress_logs intentionally left unlinked for audit.`,
-            );
-            return;
-          }
-          console.info(
-            `[HANDOFF: settlement] ACCEPTED by circular-settlement. reference=${referenceId} elapsed_ms=${Date.now() - handoffStart}`,
-          );
-          const { error: linkError } = await adminClient
-            .from("egress_logs")
-            .update({ synapse_ledger_entry_id: ledgerResult.data.id })
-            .eq("id", egressResult.data.id);
-          if (linkError) {
-            console.error(
-              `🚨 [HANDOFF: settlement] egress link failed reference=${referenceId} :: ${linkError.message}`,
-            );
-          } else {
-            console.info(
-              `[HANDOFF: settlement] egress_logs linked to ledger. reference=${referenceId} ledger_entry=${ledgerResult.data.id} egress_id=${egressResult.data.id}`,
-            );
-          }
-        })
-        .catch((err) => {
-          console.error(
-            `🚨 [HANDOFF: settlement] THREW reference=${referenceId} :: ${err?.message ?? String(err)}`,
-          );
-        }),
-    );
+    if (handoffAccepted) {
+      const { error: linkError } = await adminClient
+        .from("egress_logs")
+        .update({ synapse_ledger_entry_id: ledgerResult.data.id })
+        .eq("id", egressResult.data.id);
+      if (linkError) {
+        console.error(
+          `🚨 [HANDOFF: settlement] egress link failed reference=${referenceId} :: ${linkError.message}`,
+        );
+      } else {
+        console.info(
+          `[HANDOFF: settlement] egress_logs linked reference=${referenceId} ledger_entry=${ledgerResult.data.id} egress_id=${egressResult.data.id}`,
+        );
+      }
+    }
 
     return new Response(
       JSON.stringify({
