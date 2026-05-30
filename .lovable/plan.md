@@ -1,27 +1,52 @@
-## Objective
-Fix the Wix bridge hydration stall by appending missing `uid`, `amount`, and `credits` query parameters to the checkout redirect URLs in all three Hub payment dispatch components.
+# Plan: Adopt `contracts.ts` as Hub source of truth & fix mislabeled addresses
 
-## Root Cause
-The Wix `/idia-checkout` endpoint expects `uid`, `amount`, and `credits` in the query string to instantiate the payment session. All three Hub components currently only pass `paymentId` and `returnUrl`, causing the Wix bridge to receive a blank payload and stall.
+## 1. Create canonical config in Hub repo
 
-## Files to Change
+Add **two parallel copies** of the IDIA Life `contracts.ts` (frontend + edge runtime) so the browser bundle and Deno functions both import from a typed source:
 
-### 1. `src/components/billing/UniversalPurchaseScreen.tsx`
-- **Location:** `handlePurchase` function, `window.location.href` redirect block (line ~122).
-- **Change:** Append `&uid=${userId}&amount=${plan.price}&credits=${plan.credits}` to the Wix checkout URL.
+- **`src/config/contracts.ts`** — verbatim copy of the IDIA Life file (mainnet + testnet blocks, `ACTIVE_DEPLOYMENT = 'mainnet'`, `PROTOCOL` export, ABIs, BOOT guard).
+- **`supabase/functions/_shared/contracts.ts`** — same address tables and ABIs, rewritten as a Deno-compatible module (no `import.meta` quirks; pure `export const`). Edge functions cannot import from `src/`, so this mirror is mandatory.
 
-### 2. `src/components/billing/SynapsePurchaseModal.tsx`
-- **Location:** `handlePurchase` function, inside the `RAIL 1: WIX DIRECT PORT HANDSHAKE` block (line ~166).
-- **Change:** Append `&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}` to the `target` URL before redirect.
+Both files share a hand-edited `// KEEP IN SYNC WITH …` header pointing at each other.
 
-### 3. `src/components/billing/SynapseTopUp.tsx`
-- **Location:** `handlePurchase` function, inside the `RAIL 1: WIX DIRECT PORT HANDSHAKE` block (line ~136).
-- **Change:** Append `&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}` to the `target` URL before redirect.
+## 2. Refactor `idia-circular-settlement/index.ts`
 
-## Validation
-- Verify all three `window.location.href` assignments now include `uid`, `amount`, and `credits`.
-- Confirm the return URL structure remains intact (Wix must still receive `paymentId` and `returnUrl`).
-- No other logic changes; USDC rail, ledger dispatch, and UI remain untouched.
+Replace the loose top-of-file constants with imports from `_shared/contracts.ts`:
 
-## Expected Outcome
-The Wix worker bridge receives a fully hydrated state payload on checkout initiation, eliminating the blank-slate stall and removing dependency on emergency fallbacks.
+- `USDC_ADDRESS` ← `PROTOCOL.usdc`
+- `REGISTRY_ADDRESS` ← `PROTOCOL.registry`
+- `POOL_FACTORY_ADDRESS` ← `PROTOCOL.poolFactory`
+- `GLOBAL_WAR_CHEST` ← `PROTOCOL.safe`  *(DAO Safe — unchanged value, clearer label)*
+- **`ESCROW_ECOSYSTEM` ← `PROTOCOL.escrow.ecosystem` (`0xd052C6F3…e708`)** — **bug fix**: today this constant holds `0xDc93eca9…ADe9`, which is `escrow.investors`. Every Phase 3 `proposeDistribution` is currently hitting the wrong escrow contract.
+- Keep `SYSTEM_CASH_REGISTER` (`0x649436db…f0e3`) as a local constant — not in `contracts.ts`.
+
+No behavioral changes to Phase 1/2/3 logic; only the address bindings move.
+
+## 3. Refactor `supabase/functions/process-delt-transfer/index.ts`
+
+Three coordinated relabels via the shared module:
+
+- `IDIA_TOKEN_ADDRESS`: **`0x137D913…387B` → `PROTOCOL.idiaToken` (`0x6526F939…01FB`)**. Today this is pointing at the Registry contract; any ERC20 call against it reverts or no-ops.
+- `REGISTRY_ADDRESS`: `0x463ce6…74F7` → `PROTOCOL.registry` (`0x137D913…387B`).
+- `GLOBAL_WAR_CHEST`: `0xd052C6F3…e708` → `PROTOCOL.safe` (`0x0910EF34…5d59`). The old value is actually `escrow.ecosystem`, not the DAO Safe.
+
+Walk every reference (ABI choice, fallback paths, ledger description strings) to confirm semantics still match the new labels.
+
+## 4. Verification
+
+- `grep` the repo for any remaining raw `0x` mainnet addresses outside `src/config/contracts.ts`, `supabase/functions/_shared/contracts.ts`, and the unrelated DEX/Uniswap files (`useWalletBalance.ts`, `usdc-approval.ts`, `uniswap-abi.ts`, `LiquidityPools.tsx`, `uniswap-pool-stats/index.ts`). Decide per-file whether to migrate or leave (USDC-only files can keep their inline constant — they are not protocol addresses).
+- Run `tsc --noEmit` implicit via the build pipeline.
+- Deploy `idia-circular-settlement` + `process-delt-transfer` and tail edge logs for the BOOT trace and chain-ID guard.
+- No DB migration; no schema impact.
+
+## Out of scope
+
+- Implementing a testnet toggle in edge functions (the IDIA Life `ACTIVE_DEPLOYMENT` flag is for the frontend bundle; Hub edge functions stay hard-mainnet under the existing `8453` chain-ID guard).
+- Rewriting any business logic in `execute-hub-query`, Phase batching, or ledger schema.
+- Frontend usages of `PROTOCOL.*` — once `src/config/contracts.ts` exists, components can adopt it in follow-up work.
+
+## Technical details
+
+- Edge `_shared/contracts.ts` must not import from npm/esm registries — it's a pure data module so it stays Deno-friendly.
+- Both files export `PROTOCOL` typed as `ProtocolAddresses` with the `escrow.{team,ecosystem,liquidity,investors,publicSale}` nested shape, so a future mislabel ("ecosystem vs investors") becomes a TypeScript-level distinction rather than a hex-string lookalike.
+- The BOOT-guard `console.log` at module load lets us confirm at runtime which deployment a function loaded.
