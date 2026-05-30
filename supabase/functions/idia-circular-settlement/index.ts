@@ -15,13 +15,17 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const PROD_ALCHEMY_URL = "https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N";
 const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
 
-// Protocol contracts
-const REGISTRY_ADDRESS = "0x463ce6d5B2E2c9D4bBE930f0CEBeF08b6Eb274F7";
+// Protocol contracts — Base Mainnet (mirrors src/config/contracts.ts)
+const REGISTRY_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
+const POOL_FACTORY_ADDRESS = "0x0188FCB027D834E03DD0288D360937ceC4d267bb";
 const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
-const GLOBAL_WAR_CHEST = "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708";
+// Wallet-as-Source-of-Truth: when location is null/blank, route to the DAO Safe
+// (Global War Chest). Funds remain in cryptographically-verifiable governance custody
+// even if the database goes dark.
+const GLOBAL_WAR_CHEST = "0x0910EF34C9F59A90d90FF505B1036DEed4a25d59";
 
-// USDC on Base
-const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+// USDC on Base Mainnet
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 // System wallets
 const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
@@ -50,6 +54,23 @@ const REGISTRY_ABI = [
     stateMutability: "view",
     inputs: [{ name: "location", type: "string" }],
     outputs: [{ name: "", type: "address" }],
+  },
+] as const;
+
+const POOL_FACTORY_ABI = [
+  {
+    name: "getPool",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "location", type: "string" }],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    name: "deployPool",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "location", type: "string" }],
+    outputs: [{ name: "pool", type: "address" }],
   },
 ] as const;
 
@@ -99,9 +120,11 @@ serve(async (req: Request) => {
       throw new Error("Missing contributing_users.");
     }
 
-    const executionLocation = typeof location_string === "string" && location_string.trim().length > 0
-      ? location_string.trim()
-      : "global";
+    // Null vs orphaned location distinction:
+    //   - missing/blank  → no location intent → route to GLOBAL_WAR_CHEST
+    //   - present string → real location → resolve via Registry; if zero, deploy a new pool
+    const hasLocation = typeof location_string === "string" && location_string.trim().length > 0;
+    const executionLocation = hasLocation ? location_string.trim() : null;
     const ingestionReference = payment_reference || `SYN-${crypto.randomUUID().slice(0, 8)}`;
 
     currentStep = "CONFIGURING_BLOCKCHAIN";
@@ -140,7 +163,9 @@ serve(async (req: Request) => {
       args: [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
       account,
     });
-    console.info(`[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`);
+    console.info(
+      `[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`,
+    );
     const corporateReceipt = await client.waitForTransactionReceipt({ hash: corporateHash, confirmations: 1 });
     if (corporateReceipt.status === "success") {
       console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
@@ -148,32 +173,79 @@ serve(async (req: Request) => {
       console.error(`[ERROR: Phase_1_Corporate.Transfer] Transaction reverted on-chain. Hash: ${corporateHash}`);
     }
 
-    // PHASE 2: REGIONAL ROUTING (10%)
+    // PHASE 2: REGIONAL ROUTING (10%) — Wallet-as-Source-of-Truth
     currentStep = "PHASE_2_REGIONAL_ROUTING";
     const regionalRevenue = total_fiat_amount * REVENUE_SPLIT.WAR_CHEST;
 
-    console.info(`[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`);
+    let finalRegionalAddress: string = GLOBAL_WAR_CHEST;
+    let routingMode: "war_chest_null" | "existing_pool" | "deployed_pool" | "war_chest_fallback" = "war_chest_null";
 
-    let poolTarget: string | undefined;
-    try {
-      poolTarget = await client.readContract({
-        address: REGISTRY_ADDRESS,
-        abi: REGISTRY_ABI,
-        functionName: "getPoolByLocation",
-        args: [executionLocation],
-      });
-      console.info(`[END: Registry.getPoolByLocation] resolved=${poolTarget}`);
-    } catch (routingError: any) {
-      console.error(
-        `[WARNING: Registry.getPoolByLocation] lookup failed for ${executionLocation}; falling back to GLOBAL_WAR_CHEST. ${routingError.message}`,
-      );
+    if (!hasLocation) {
+      console.info(`[ROUTING] location_string is null/blank → GLOBAL_WAR_CHEST ${GLOBAL_WAR_CHEST}`);
+      routingMode = "war_chest_null";
+    } else {
+      console.info(`[BEGIN: Registry.getPoolByLocation] location=${executionLocation}`);
+      let poolTarget: string | undefined;
+      try {
+        poolTarget = await client.readContract({
+          address: REGISTRY_ADDRESS,
+          abi: REGISTRY_ABI,
+          functionName: "getPoolByLocation",
+          args: [executionLocation as string],
+        });
+        console.info(`[END: Registry.getPoolByLocation] resolved=${poolTarget}`);
+      } catch (routingError: any) {
+        console.error(
+          `[WARNING: Registry.getPoolByLocation] lookup failed for ${executionLocation}: ${routingError.message}`,
+        );
+      }
+
+      if (poolTarget && poolTarget !== ZERO_ADDRESS) {
+        finalRegionalAddress = poolTarget;
+        routingMode = "existing_pool";
+        console.info(`[ROUTING] existing pool for ${executionLocation} → ${finalRegionalAddress}`);
+      } else {
+        // Orphaned but valid location → mint a new pool via PoolFactory
+        console.info(`[BEGIN: PoolFactory.deployPool] location=${executionLocation} — orphan detected, minting pool`);
+        try {
+          const deployHash = await client.writeContract({
+            address: POOL_FACTORY_ADDRESS,
+            abi: POOL_FACTORY_ABI,
+            functionName: "deployPool",
+            args: [executionLocation as string],
+            account,
+          });
+          console.info(`[STATUS: PoolFactory.deployPool] TX Broadcasted. Hash: ${deployHash}.`);
+          const deployReceipt = await client.waitForTransactionReceipt({ hash: deployHash, confirmations: 1 });
+          if (deployReceipt.status !== "success") {
+            throw new Error(`deployPool reverted (${deployHash})`);
+          }
+          // Re-resolve from factory to capture the freshly minted address
+          const minted = await client.readContract({
+            address: POOL_FACTORY_ADDRESS,
+            abi: POOL_FACTORY_ABI,
+            functionName: "getPool",
+            args: [executionLocation as string],
+          });
+          if (!minted || minted === ZERO_ADDRESS) {
+            throw new Error(`getPool returned zero post-deploy for ${executionLocation}`);
+          }
+          finalRegionalAddress = minted as string;
+          routingMode = "deployed_pool";
+          console.info(`[END: PoolFactory.deployPool] minted ${finalRegionalAddress} for ${executionLocation}`);
+        } catch (deployError: any) {
+          console.error(
+            `[WARNING: PoolFactory.deployPool] failed for ${executionLocation}: ${deployError.message} — falling back to GLOBAL_WAR_CHEST`,
+          );
+          finalRegionalAddress = GLOBAL_WAR_CHEST;
+          routingMode = "war_chest_fallback";
+        }
+      }
     }
 
-    // Enforce Fallback Logic — route to Global War Chest (Timelock / DAO) when no regional pool registered
-    const finalRegionalAddress =
-      !poolTarget || poolTarget === ZERO_ADDRESS ? GLOBAL_WAR_CHEST : poolTarget;
-
-    console.info(`[BEGIN: Phase_2_Regional.Transfer] amount=${regionalRevenue} target=${finalRegionalAddress}`);
+    console.info(
+      `[BEGIN: Phase_2_Regional.Transfer] amount=${regionalRevenue} target=${finalRegionalAddress} mode=${routingMode}`,
+    );
     const regionalHash = await client.writeContract({
       address: USDC_ADDRESS,
       abi: ERC20_ABI,
@@ -181,7 +253,9 @@ serve(async (req: Request) => {
       args: [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
       account,
     });
-    console.info(`[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`);
+    console.info(
+      `[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`,
+    );
     const regionalReceipt = await client.waitForTransactionReceipt({ hash: regionalHash, confirmations: 1 });
     if (regionalReceipt.status === "success") {
       console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
@@ -211,7 +285,7 @@ serve(async (req: Request) => {
         blockchain_tx_hash: regionalHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
-        description: `10% Regional/War Chest: ${ingestionReference}`,
+        description: `10% Regional/War Chest [${routingMode} → ${finalRegionalAddress}]: ${ingestionReference}`,
       }),
     ]);
 
@@ -244,7 +318,9 @@ serve(async (req: Request) => {
             args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
             account,
           });
-          console.info(`[STATUS: Batch.Item] Yield TX Broadcasted. Hash: ${yieldHash}. Awaiting network confirmation...`);
+          console.info(
+            `[STATUS: Batch.Item] Yield TX Broadcasted. Hash: ${yieldHash}. Awaiting network confirmation...`,
+          );
           const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash, confirmations: 1 });
           if (yieldReceipt.status === "success") {
             console.info(`[END: Batch.Item] Yield transfer successful. Block: ${yieldReceipt.blockNumber}`);
@@ -264,7 +340,9 @@ serve(async (req: Request) => {
             ],
             account,
           });
-          console.info(`[STATUS: Batch.Item] Proposal TX Broadcasted. Hash: ${proposalHash}. Awaiting network confirmation...`);
+          console.info(
+            `[STATUS: Batch.Item] Proposal TX Broadcasted. Hash: ${proposalHash}. Awaiting network confirmation...`,
+          );
           const proposalReceipt = await client.waitForTransactionReceipt({ hash: proposalHash, confirmations: 1 });
           if (proposalReceipt.status === "success") {
             console.info(`[END: Batch.Item] Proposal successful. Block: ${proposalReceipt.blockNumber}`);
@@ -311,6 +389,8 @@ serve(async (req: Request) => {
         success: true,
         corporateHash,
         regionalHash,
+        regionalTarget: finalRegionalAddress,
+        routingMode,
         payouts: contributorPayouts,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
