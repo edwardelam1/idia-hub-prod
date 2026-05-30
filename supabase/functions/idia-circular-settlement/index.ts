@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, parseUnits, publicActions } from "https://esm.sh/viem@2.9.20";
+import { PROTOCOL } from "../_shared/contracts.ts";
 
 // ══════════════════════════════════════════════════════════════════════
 // 1. PROTOCOL CONSTANTS & SPLIT CONFIG
@@ -15,17 +16,17 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const PROD_ALCHEMY_URL = "https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N";
 const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
 
-// Protocol contracts — Base Mainnet (mirrors src/config/contracts.ts)
-const REGISTRY_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
-const POOL_FACTORY_ADDRESS = "0x0188FCB027D834E03DD0288D360937ceC4d267bb";
-const ESCROW_ECOSYSTEM = "0xDc93eca954fD2625001b2fb9E9A098914365ADe9";
+// Protocol contracts — Base Mainnet (sourced from _shared/contracts.ts).
 // Wallet-as-Source-of-Truth: when location is null/blank, route to the DAO Safe
-// (Global War Chest). Funds remain in cryptographically-verifiable governance custody
-// even if the database goes dark.
-const GLOBAL_WAR_CHEST = "0x0910EF34C9F59A90d90FF505B1036DEed4a25d59";
-
-// USDC on Base Mainnet
-const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+// (Global War Chest). Funds remain in cryptographically-verifiable governance
+// custody even if the database goes dark.
+const REGISTRY_ADDRESS = PROTOCOL.registry;
+const POOL_FACTORY_ADDRESS = PROTOCOL.poolFactory;
+// BUG FIX: previously pointed at 0xDc93eca9… (escrow.investors). The correct
+// Ecosystem escrow for Phase-3 royalty proposals is escrow.ecosystem.
+const ESCROW_ECOSYSTEM = PROTOCOL.escrow.ecosystem;
+const GLOBAL_WAR_CHEST = PROTOCOL.safe;
+const USDC_ADDRESS = PROTOCOL.usdc;
 
 // System wallets
 const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
