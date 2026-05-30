@@ -231,7 +231,7 @@ serve(async (req) => {
         const mappedAcaHashes = normalizedAcaRecordIds.map((id: string) => keccak256(toHex(id)));
         const dataBundleRefStr = `bundle-${batchChecksum.slice(0, 8)}`;
 
-        console.info(`[TRACE: ${currentStep}] Broadcasting contract write to base-sepolia...`);
+        console.info(`[TRACE: ${currentStep}] Broadcasting contract write to Base Mainnet...`);
         const hash = await client.writeContract({
           address: LIABILITY_RECEIPT_ADDRESS,
           abi: LIABILITY_RECEIPT_ABI,
