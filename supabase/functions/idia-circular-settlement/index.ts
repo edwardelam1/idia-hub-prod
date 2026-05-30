@@ -221,19 +221,22 @@ serve(async (req: Request) => {
     const corporateRevenue = total_fiat_amount * REVENUE_SPLIT.CORPORATE;
 
     console.info(`[BEGIN: Phase_1_Corporate.Transfer] amount=${corporateRevenue}`);
-    const corporateHash = await client.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
+    const { txHash: corporateHash } = await executePlanckScaleTransaction(
+      client,
       account,
-    });
+      USDC_ADDRESS,
+      ERC20_ABI,
+      "transfer",
+      [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
+      "Phase_1_Corporate",
+    );
     console.info(
       `[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`,
     );
     const corporateReceipt = await client.waitForTransactionReceipt({ hash: corporateHash, confirmations: 1 });
     if (corporateReceipt.status === "success") {
       console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
+      await forceSequencerDelay();
     } else {
       console.error(`[ERROR: Phase_1_Corporate.Transfer] Transaction reverted on-chain. Hash: ${corporateHash}`);
     }
@@ -311,19 +314,22 @@ serve(async (req: Request) => {
     console.info(
       `[BEGIN: Phase_2_Regional.Transfer] amount=${regionalRevenue} target=${finalRegionalAddress} mode=${routingMode}`,
     );
-    const regionalHash = await client.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
+    const { txHash: regionalHash } = await executePlanckScaleTransaction(
+      client,
       account,
-    });
+      USDC_ADDRESS,
+      ERC20_ABI,
+      "transfer",
+      [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
+      "Phase_2_Regional",
+    );
     console.info(
       `[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`,
     );
     const regionalReceipt = await client.waitForTransactionReceipt({ hash: regionalHash, confirmations: 1 });
     if (regionalReceipt.status === "success") {
       console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
+      await forceSequencerDelay();
     } else {
       console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
     }
