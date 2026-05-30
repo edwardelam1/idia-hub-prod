@@ -95,6 +95,69 @@ const corsHeaders = {
 };
 
 // ══════════════════════════════════════════════════════════════════════
+// PLANCK-SCALE ATOMIC EXECUTOR
+// Replaces viem's writeContract wrapper to expose every micro-op
+// (Nonce → Simulate → Prepare → Sign → Broadcast) for sequencer diagnostics.
+// ══════════════════════════════════════════════════════════════════════
+async function executePlanckScaleTransaction(
+  client: any,
+  account: any,
+  contractAddress: string,
+  abi: any,
+  funcName: string,
+  args: any[],
+  stepName: string,
+): Promise<{ txHash: `0x${string}`; nonce: number }> {
+  console.info(`[BEGIN: ${stepName}.Planck.NonceCheck] Interrogating RPC for pending state...`);
+  const nextNonce = await client.getTransactionCount({ address: account.address, blockTag: "pending" });
+  console.info(`[END: ${stepName}.Planck.NonceCheck] Sequencer assigned Nonce: ${nextNonce}`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Simulate] Executing dry-run simulation on EVM...`);
+  const { request } = await client.simulateContract({
+    account,
+    address: contractAddress as `0x${string}`,
+    abi,
+    functionName: funcName,
+    args,
+  });
+  console.info(`[END: ${stepName}.Planck.Simulate] Simulation successful. No reverts detected.`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Prepare] Constructing raw transaction payload...`);
+  const preparedTx = await client.prepareTransactionRequest({
+    ...request,
+    nonce: nextNonce,
+  });
+  console.info(`[END: ${stepName}.Planck.Prepare] Payload constructed. Gas Limit: ${preparedTx.gas}`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Sign] Applying cryptographic signature...`);
+  const signedTx = await account.signTransaction(preparedTx);
+  console.info(`[END: ${stepName}.Planck.Sign] Signature applied securely.`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Broadcast] Injecting raw payload to Base mempool...`);
+  try {
+    const txHash = await client.sendRawTransaction({ serializedTransaction: signedTx });
+    console.info(`[END: ${stepName}.Planck.Broadcast] Mempool accepted payload. Hash: ${txHash}`);
+    return { txHash, nonce: nextNonce };
+  } catch (broadcastError: any) {
+    console.error(`[BEGIN: ${stepName}.Planck.FatalDump]`);
+    console.error(`🚨 [FATAL STALL: ${stepName}] Sequencer violently rejected payload injection.`);
+    console.error(
+      `[DIAGNOSTIC] Attempted Nonce: ${nextNonce} | Target: ${contractAddress} | Args: ${JSON.stringify(args)}`,
+    );
+    console.error(`[DIAGNOSTIC] Raw Error: ${broadcastError.message}`);
+    console.error(`[END: ${stepName}.Planck.FatalDump]`);
+    throw broadcastError;
+  }
+}
+
+// Brief mempool clear between sequential transactions in the same execution.
+async function forceSequencerDelay(ms = 3500): Promise<void> {
+  console.info(`[BEGIN: Sequencer.Delay] Pausing ${ms}ms to clear mempool...`);
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  console.info(`[END: Sequencer.Delay] Resumed.`);
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // 3. MAIN EXECUTION HANDLER
 // ══════════════════════════════════════════════════════════════════════
 
@@ -103,7 +166,8 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    console.info(`[BEGIN: circular-settlement] Pulse detected.`);
+    const runCorrelationId = crypto.randomUUID();
+    console.info(`[BEGIN: circular-settlement] Pulse detected. runId=${runCorrelationId} ts=${Date.now()}`);
 
     currentStep = "SUPABASE_CLIENT_INIT";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
