@@ -95,6 +95,69 @@ const corsHeaders = {
 };
 
 // ══════════════════════════════════════════════════════════════════════
+// PLANCK-SCALE ATOMIC EXECUTOR
+// Replaces viem's writeContract wrapper to expose every micro-op
+// (Nonce → Simulate → Prepare → Sign → Broadcast) for sequencer diagnostics.
+// ══════════════════════════════════════════════════════════════════════
+async function executePlanckScaleTransaction(
+  client: any,
+  account: any,
+  contractAddress: string,
+  abi: any,
+  funcName: string,
+  args: any[],
+  stepName: string,
+): Promise<{ txHash: `0x${string}`; nonce: number }> {
+  console.info(`[BEGIN: ${stepName}.Planck.NonceCheck] Interrogating RPC for pending state...`);
+  const nextNonce = await client.getTransactionCount({ address: account.address, blockTag: "pending" });
+  console.info(`[END: ${stepName}.Planck.NonceCheck] Sequencer assigned Nonce: ${nextNonce}`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Simulate] Executing dry-run simulation on EVM...`);
+  const { request } = await client.simulateContract({
+    account,
+    address: contractAddress as `0x${string}`,
+    abi,
+    functionName: funcName,
+    args,
+  });
+  console.info(`[END: ${stepName}.Planck.Simulate] Simulation successful. No reverts detected.`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Prepare] Constructing raw transaction payload...`);
+  const preparedTx = await client.prepareTransactionRequest({
+    ...request,
+    nonce: nextNonce,
+  });
+  console.info(`[END: ${stepName}.Planck.Prepare] Payload constructed. Gas Limit: ${preparedTx.gas}`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Sign] Applying cryptographic signature...`);
+  const signedTx = await account.signTransaction(preparedTx);
+  console.info(`[END: ${stepName}.Planck.Sign] Signature applied securely.`);
+
+  console.info(`[BEGIN: ${stepName}.Planck.Broadcast] Injecting raw payload to Base mempool...`);
+  try {
+    const txHash = await client.sendRawTransaction({ serializedTransaction: signedTx });
+    console.info(`[END: ${stepName}.Planck.Broadcast] Mempool accepted payload. Hash: ${txHash}`);
+    return { txHash, nonce: nextNonce };
+  } catch (broadcastError: any) {
+    console.error(`[BEGIN: ${stepName}.Planck.FatalDump]`);
+    console.error(`🚨 [FATAL STALL: ${stepName}] Sequencer violently rejected payload injection.`);
+    console.error(
+      `[DIAGNOSTIC] Attempted Nonce: ${nextNonce} | Target: ${contractAddress} | Args: ${JSON.stringify(args)}`,
+    );
+    console.error(`[DIAGNOSTIC] Raw Error: ${broadcastError.message}`);
+    console.error(`[END: ${stepName}.Planck.FatalDump]`);
+    throw broadcastError;
+  }
+}
+
+// Brief mempool clear between sequential transactions in the same execution.
+async function forceSequencerDelay(ms = 3500): Promise<void> {
+  console.info(`[BEGIN: Sequencer.Delay] Pausing ${ms}ms to clear mempool...`);
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  console.info(`[END: Sequencer.Delay] Resumed.`);
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // 3. MAIN EXECUTION HANDLER
 // ══════════════════════════════════════════════════════════════════════
 
@@ -103,7 +166,8 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    console.info(`[BEGIN: circular-settlement] Pulse detected.`);
+    const runCorrelationId = crypto.randomUUID();
+    console.info(`[BEGIN: circular-settlement] Pulse detected. runId=${runCorrelationId} ts=${Date.now()}`);
 
     currentStep = "SUPABASE_CLIENT_INIT";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -157,19 +221,22 @@ serve(async (req: Request) => {
     const corporateRevenue = total_fiat_amount * REVENUE_SPLIT.CORPORATE;
 
     console.info(`[BEGIN: Phase_1_Corporate.Transfer] amount=${corporateRevenue}`);
-    const corporateHash = await client.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
+    const { txHash: corporateHash } = await executePlanckScaleTransaction(
+      client,
       account,
-    });
+      USDC_ADDRESS,
+      ERC20_ABI,
+      "transfer",
+      [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
+      "Phase_1_Corporate",
+    );
     console.info(
       `[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`,
     );
     const corporateReceipt = await client.waitForTransactionReceipt({ hash: corporateHash, confirmations: 1 });
     if (corporateReceipt.status === "success") {
       console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
+      await forceSequencerDelay();
     } else {
       console.error(`[ERROR: Phase_1_Corporate.Transfer] Transaction reverted on-chain. Hash: ${corporateHash}`);
     }
@@ -247,19 +314,22 @@ serve(async (req: Request) => {
     console.info(
       `[BEGIN: Phase_2_Regional.Transfer] amount=${regionalRevenue} target=${finalRegionalAddress} mode=${routingMode}`,
     );
-    const regionalHash = await client.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
+    const { txHash: regionalHash } = await executePlanckScaleTransaction(
+      client,
       account,
-    });
+      USDC_ADDRESS,
+      ERC20_ABI,
+      "transfer",
+      [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
+      "Phase_2_Regional",
+    );
     console.info(
       `[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`,
     );
     const regionalReceipt = await client.waitForTransactionReceipt({ hash: regionalHash, confirmations: 1 });
     if (regionalReceipt.status === "success") {
       console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
+      await forceSequencerDelay();
     } else {
       console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
     }

@@ -1,52 +1,42 @@
-# Plan: Adopt `contracts.ts` as Hub source of truth & fix mislabeled addresses
+## Goal
+Instrument `supabase/functions/idia-circular-settlement/index.ts` to expose exactly where Base Sequencer rejection occurs for `in-flight transaction limit reached for delegated accounts`, while preserving the current Life-aligned contract/config state.
 
-## 1. Create canonical config in Hub repo
+## Plan
+1. Add a Planck-scale executor helper above the main handler in `idia-circular-settlement/index.ts`.
+   - Log nonce acquisition from pending state.
+   - Simulate the contract call before signing.
+   - Prepare the raw transaction with the explicit nonce.
+   - Sign the prepared payload directly.
+   - Broadcast with `sendRawTransaction` and emit a fatal diagnostic dump on rejection.
 
-Add **two parallel copies** of the IDIA Life `contracts.ts` (frontend + edge runtime) so the browser bundle and Deno functions both import from a typed source:
+2. Replace only the Phase 1 and Phase 2 `client.writeContract` calls with the new executor.
+   - Keep all existing addresses, ABI constants, revenue-split logic, routing logic, chain-ID enforcement, and ledger writes intact.
+   - Preserve the current `ALCHEMY_BASE_RPC_URL` behavior.
+   - Do not alter unrelated phases unless required for type/runtime compatibility.
 
-- **`src/config/contracts.ts`** — verbatim copy of the IDIA Life file (mainnet + testnet blocks, `ACTIVE_DEPLOYMENT = 'mainnet'`, `PROTOCOL` export, ABIs, BOOT guard).
-- **`supabase/functions/_shared/contracts.ts`** — same address tables and ABIs, rewritten as a Deno-compatible module (no `import.meta` quirks; pure `export const`). Edge functions cannot import from `src/`, so this mirror is mandatory.
+3. Add a small sequencer-clear delay helper and apply it after confirmed success for Phase 1 and Phase 2.
+   - This keeps the function behavior aligned with the diagnostic goal while reducing back-to-back mempool pressure within a single execution.
 
-Both files share a hand-edited `// KEEP IN SYNC WITH …` header pointing at each other.
+4. Tighten observability around settlement instance timing.
+   - Keep the top-level pulse logging.
+   - Add a per-execution correlation marker so logs can distinguish one settlement run from two overlapping invocations.
+   - This makes it obvious whether the failure is caused by duplicate Edge Function execution or stale RPC nonce state.
 
-## 2. Refactor `idia-circular-settlement/index.ts`
+5. Validate the implementation by reviewing the updated edge-function log trace.
+   - Confirm logs show the full sequence: NonceCheck → Simulate → Prepare → Sign → Broadcast.
+   - Confirm failures now identify whether the collapse happened at broadcast and what nonce was attempted.
 
-Replace the loose top-of-file constants with imports from `_shared/contracts.ts`:
-
-- `USDC_ADDRESS` ← `PROTOCOL.usdc`
-- `REGISTRY_ADDRESS` ← `PROTOCOL.registry`
-- `POOL_FACTORY_ADDRESS` ← `PROTOCOL.poolFactory`
-- `GLOBAL_WAR_CHEST` ← `PROTOCOL.safe`  *(DAO Safe — unchanged value, clearer label)*
-- **`ESCROW_ECOSYSTEM` ← `PROTOCOL.escrow.ecosystem` (`0xd052C6F3…e708`)** — **bug fix**: today this constant holds `0xDc93eca9…ADe9`, which is `escrow.investors`. Every Phase 3 `proposeDistribution` is currently hitting the wrong escrow contract.
-- Keep `SYSTEM_CASH_REGISTER` (`0x649436db…f0e3`) as a local constant — not in `contracts.ts`.
-
-No behavioral changes to Phase 1/2/3 logic; only the address bindings move.
-
-## 3. Refactor `supabase/functions/process-delt-transfer/index.ts`
-
-Three coordinated relabels via the shared module:
-
-- `IDIA_TOKEN_ADDRESS`: **`0x137D913…387B` → `PROTOCOL.idiaToken` (`0x6526F939…01FB`)**. Today this is pointing at the Registry contract; any ERC20 call against it reverts or no-ops.
-- `REGISTRY_ADDRESS`: `0x463ce6…74F7` → `PROTOCOL.registry` (`0x137D913…387B`).
-- `GLOBAL_WAR_CHEST`: `0xd052C6F3…e708` → `PROTOCOL.safe` (`0x0910EF34…5d59`). The old value is actually `escrow.ecosystem`, not the DAO Safe.
-
-Walk every reference (ABI choice, fallback paths, ledger description strings) to confirm semantics still match the new labels.
-
-## 4. Verification
-
-- `grep` the repo for any remaining raw `0x` mainnet addresses outside `src/config/contracts.ts`, `supabase/functions/_shared/contracts.ts`, and the unrelated DEX/Uniswap files (`useWalletBalance.ts`, `usdc-approval.ts`, `uniswap-abi.ts`, `LiquidityPools.tsx`, `uniswap-pool-stats/index.ts`). Decide per-file whether to migrate or leave (USDC-only files can keep their inline constant — they are not protocol addresses).
-- Run `tsc --noEmit` implicit via the build pipeline.
-- Deploy `idia-circular-settlement` + `process-delt-transfer` and tail edge logs for the BOOT trace and chain-ID guard.
-- No DB migration; no schema impact.
-
-## Out of scope
-
-- Implementing a testnet toggle in edge functions (the IDIA Life `ACTIVE_DEPLOYMENT` flag is for the frontend bundle; Hub edge functions stay hard-mainnet under the existing `8453` chain-ID guard).
-- Rewriting any business logic in `execute-hub-query`, Phase batching, or ledger schema.
-- Frontend usages of `PROTOCOL.*` — once `src/config/contracts.ts` exists, components can adopt it in follow-up work.
+## Guardrails
+- Do not touch `process-delt-transfer`.
+- Do not change the existing Life-aligned contract imports/constants behavior in `idia-circular-settlement` beyond the requested transaction execution path.
+- Do not add database/schema changes.
+- Do not broaden scope into frontend refactors unless the logs later prove duplicate submissions originate there.
 
 ## Technical details
-
-- Edge `_shared/contracts.ts` must not import from npm/esm registries — it's a pure data module so it stays Deno-friendly.
-- Both files export `PROTOCOL` typed as `ProtocolAddresses` with the `escrow.{team,ecosystem,liquidity,investors,publicSale}` nested shape, so a future mislabel ("ecosystem vs investors") becomes a TypeScript-level distinction rather than a hex-string lookalike.
-- The BOOT-guard `console.log` at module load lets us confirm at runtime which deployment a function loaded.
+- Target file: `supabase/functions/idia-circular-settlement/index.ts`
+- Replace `writeContract` only for:
+  - Phase 1 corporate USDC transfer
+  - Phase 2 regional USDC transfer
+- Use the existing wallet client and account already created in the function.
+- Keep receipt waiting via `waitForTransactionReceipt` so downstream ledger behavior stays consistent.
+- If the logs later show simultaneous function invocations, the next follow-up would be caller-side idempotency or dedupe at the function boundary, but that is outside this scoped change.
