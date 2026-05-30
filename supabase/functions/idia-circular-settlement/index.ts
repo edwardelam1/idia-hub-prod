@@ -4,6 +4,10 @@ import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, parseUnits, publicActions } from "https://esm.sh/viem@2.9.20";
 
+// Supabase Edge Runtime global — not in Deno's stdlib type defs. Provides
+// post-response background execution via waitUntil().
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
+
 // ══════════════════════════════════════════════════════════════════════
 // 1. PROTOCOL CONSTANTS & SPLIT CONFIG
 // ══════════════════════════════════════════════════════════════════════
