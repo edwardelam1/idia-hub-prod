@@ -5,10 +5,11 @@ import { base } from "https://esm.sh/viem@2.9.20/chains";
 import { createWalletClient, http, publicActions, keccak256, toHex } from "https://esm.sh/viem@2.9.20";
 import { PROTOCOL } from "../_shared/contracts.ts";
 
-// Network — hard mainnet enforcement, no testnet fallback.
-const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
-if (!BASE_RPC_URL) {
-  throw new Error("CRITICAL: BASE_RPC_URL secret is not set. process-delt-transfer halted.");
+// Network — hard mainnet enforcement. Single canonical Alchemy URL (BASE_RPC_URL retired
+// to eliminate dual-env-var collisions that caused out-of-sequence RPC calls).
+const ALCHEMY_BASE_RPC_URL = Deno.env.get("ALCHEMY_BASE_RPC_URL");
+if (!ALCHEMY_BASE_RPC_URL) {
+  throw new Error("CRITICAL: ALCHEMY_BASE_RPC_URL secret is not set. process-delt-transfer halted.");
 }
 
 // Protocol contracts — Base Mainnet (sourced from _shared/contracts.ts).
@@ -219,7 +220,7 @@ serve(async (req) => {
         const client = createWalletClient({
           account,
           chain: base,
-          transport: http(BASE_RPC_URL),
+          transport: http(ALCHEMY_BASE_RPC_URL),
         }).extend(publicActions);
 
         console.info(`[TRACE: ${currentStep}] Querying target profile for buyer wallet...`);
