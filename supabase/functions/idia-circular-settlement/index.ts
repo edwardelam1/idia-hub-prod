@@ -11,9 +11,10 @@ import { createWalletClient, http, parseUnits, publicActions } from "https://esm
 const REVENUE_SPLIT = { CORPORATE: 0.6, WAR_CHEST: 0.1, DATA_YIELD: 0.3 };
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-// Network — hardcoded Alchemy fallback ensures regional routing never collapses to public Base RPC.
+// Network — single canonical Alchemy URL. BASE_RPC_URL has been retired to prevent
+// out-of-sequence collisions from two parallel RPC env vars resolving to the same upstream.
 const PROD_ALCHEMY_URL = "https://base-mainnet.g.alchemy.com/v2/jKAs5SHfEFihKOngFIL2N";
-const BASE_RPC_URL = Deno.env.get("BASE_RPC_URL");
+const ALCHEMY_BASE_RPC_URL = Deno.env.get("ALCHEMY_BASE_RPC_URL");
 
 // Protocol contracts — Base Mainnet (mirrors src/config/contracts.ts)
 const REGISTRY_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
@@ -133,7 +134,7 @@ serve(async (req: Request) => {
     const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
     const account = privateKeyToAccount(formattedKey as `0x${string}`);
 
-    const activeRpcUrl = BASE_RPC_URL || PROD_ALCHEMY_URL;
+    const activeRpcUrl = ALCHEMY_BASE_RPC_URL || PROD_ALCHEMY_URL;
     console.log(`[REGIONAL_ROUTING][TRANSPORT_BINDING] Launching wallet client. Route Vector: ${activeRpcUrl}`);
 
     const client = createWalletClient({
