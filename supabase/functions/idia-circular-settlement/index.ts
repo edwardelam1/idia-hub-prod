@@ -165,12 +165,12 @@ async function forceSequencerDelay(ms = 3500): Promise<void> {
 // 3. MAIN EXECUTION HANDLER
 // ══════════════════════════════════════════════════════════════════════
 
-serve(async (req: Request) => {
+// Background settlement executor. Runs after the HTTP 202 has been flushed
+// to the caller via EdgeRuntime.waitUntil(). All errors are contained here —
+// nothing must escape this function or it can crash the Edge isolate.
+async function executeSettlement(payoutData: any, runCorrelationId: string): Promise<void> {
   let currentStep = "INIT";
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   try {
-    const runCorrelationId = crypto.randomUUID();
     console.info(`[BEGIN: circular-settlement] Pulse detected. runId=${runCorrelationId} ts=${Date.now()}`);
 
     currentStep = "SUPABASE_CLIENT_INIT";
@@ -180,14 +180,8 @@ serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseKey) throw new Error("Missing SUPABASE_URL or IDIA_SECRET_KEY.");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    currentStep = "VALIDATING_INPUTS";
-    const payoutData = await req.json();
+    currentStep = "EXTRACTING_PAYLOAD";
     const { total_fiat_amount, buyer_id, contributing_users, payment_reference, location_string } = payoutData;
-
-    if (!total_fiat_amount || total_fiat_amount <= 0) throw new Error("Invalid total_fiat_amount.");
-    if (!contributing_users || !Array.isArray(contributing_users) || contributing_users.length === 0) {
-      throw new Error("Missing contributing_users.");
-    }
 
     // Null vs orphaned location distinction:
     //   - missing/blank  → no location intent → route to GLOBAL_WAR_CHEST
@@ -459,23 +453,62 @@ serve(async (req: Request) => {
       console.error(`[FATAL STALL: Phase_3_Contributor.Global] ${globalError.message}`);
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        corporateHash,
-        regionalHash,
-        regionalTarget: finalRegionalAddress,
-        routingMode,
-        payouts: contributorPayouts,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+    console.info(
+      `[COMPLETE: circular-settlement] runId=${runCorrelationId} corporateHash=${corporateHash} regionalHash=${regionalHash} regionalTarget=${finalRegionalAddress} mode=${routingMode} payouts=${contributorPayouts.length}`,
     );
   } catch (error: any) {
-    console.error(`🚨 [FATAL STALL: ${currentStep}]: ${error.message}`);
-    const isClientFault = currentStep === "VALIDATING_INPUTS";
-    return new Response(JSON.stringify({ error: error.message, failed_at: currentStep }), {
-      status: isClientFault ? 400 : 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Containment: never let an exception escape the background worker.
+    console.error(
+      `🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`,
+    );
+    if (error?.stack) console.error(`[STACK] ${error.stack}`);
   }
+}
+
+// Fire-and-Forget HTTP handler.
+//   1. Validate payload synchronously.
+//   2. Return 202 Accepted immediately (<100ms target).
+//   3. Hand the 30-second Planck-scale settlement to EdgeRuntime.waitUntil().
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  let payoutData: any;
+  try {
+    payoutData = await req.json();
+  } catch (_e) {
+    return new Response(
+      JSON.stringify({ error: "Invalid JSON body.", failed_at: "VALIDATING_INPUTS" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const { total_fiat_amount, contributing_users } = payoutData ?? {};
+  if (!total_fiat_amount || total_fiat_amount <= 0) {
+    return new Response(
+      JSON.stringify({ error: "Invalid total_fiat_amount.", failed_at: "VALIDATING_INPUTS" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+  if (!contributing_users || !Array.isArray(contributing_users) || contributing_users.length === 0) {
+    return new Response(
+      JSON.stringify({ error: "Missing contributing_users.", failed_at: "VALIDATING_INPUTS" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const runCorrelationId = crypto.randomUUID();
+  console.info(`[ACCEPTED] circular-settlement queued. runId=${runCorrelationId} ts=${Date.now()}`);
+
+  // Hand off the heavy lifting. The HTTP response flushes immediately;
+  // EdgeRuntime keeps the worker alive until the promise resolves.
+  EdgeRuntime.waitUntil(executeSettlement(payoutData, runCorrelationId));
+
+  return new Response(
+    JSON.stringify({
+      accepted: true,
+      runId: runCorrelationId,
+      message: "Settlement queued for asynchronous execution. Poll synapse_credit_ledger for completion.",
+    }),
+    { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });
