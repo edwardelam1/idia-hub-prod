@@ -1,31 +1,18 @@
 ## Plan
 
-Replace the `adminClient.functions.invoke("idia-circular-settlement")` handoff in `supabase/functions/synapse-controller/index.ts` with a direct `fetch()` to the function URL, then fully consume the response body before the parent finishes.
+Force-deploy `synapse-controller` so the raw-fetch handoff goes live, then verify the version increments past 183 before declaring the EarlyDrop neutralized.
 
-### Changes
-1. Build a dedicated `payoutData` object once in `synapse-controller` and use it for the settlement handoff.
-2. Remove the current `functions.invoke` + `EdgeRuntime.waitUntil(...)` handoff path entirely.
-3. Add a raw `fetch(`${SUPABASE_URL}/functions/v1/idia-circular-settlement`, ...)` handoff with:
-   - `method: "POST"`
-   - JSON body
-   - explicit `Connection: "close"`
-   - explicit auth headers for edge-to-edge invocation
-4. Immediately `await response.text()` to fully drain the child’s 202 response and force graceful socket closure before the parent isolate exits.
-5. Keep `[HANDOFF: settlement]` correlation logs, but update them to reflect the raw fetch lifecycle:
-   - initiated
-   - accepted / non-2xx failure
-   - network failure
-   - egress link success/failure
-6. Only update `egress_logs.synapse_ledger_entry_id` after the handoff returns an accepted response; leave orphaned rows unlinked on failure for audit, exactly as requested.
-7. Keep the parent response contract intact (`success`, `reference_id`, `settlement_status: "queued"`) so the frontend behavior does not regress.
+### Steps
+1. Call `supabase--deploy_edge_functions` for `synapse-controller` to push the current `index.ts` (raw fetch + `Connection: close` + `await response.text()`) to the gateway.
+2. Pull the latest `function_edge_logs` for `synapse-controller` and confirm `m.version >= 184` on a fresh invocation.
+3. Once version 184+ is confirmed, ask you to fire a manual test purchase.
+4. After the test, tail logs for both functions and confirm the new handoff sequence:
+   - `[HANDOFF: settlement] raw-fetch initiated …`
+   - `[HANDOFF: settlement] ACCEPTED … elapsed_ms=<small>`
+   - child `[ACCEPTED] circular-settlement queued runId=…` followed by the full Planck trace to `[COMPLETE: circular-settlement]`
+   - no `EarlyDrop @ ~214ms` signature on the parent
 
-### Technical details
-- Use the project’s established edge-to-edge raw fetch pattern for auth headers (`Authorization` + `apikey`) so the request clears the Supabase gateway reliably.
-- Preserve `idia-circular-settlement`’s existing fire-and-forget design; no changes are needed to its `EdgeRuntime.waitUntil(executeSettlement(...))` block unless logs expose a second issue afterward.
-- Do not change frontend code in this pass; the current UI already awaits `synapse-controller`.
-- Do not add tables or migrations in this pass.
-
-### Validation
-- Confirm `synapse-controller` no longer references `functions.invoke("idia-circular-settlement")`.
-- Verify logs show the new handoff sequence and that the child reaches its `[ACCEPTED] circular-settlement queued` line without the previous 214ms EarlyDrop signature.
-- If the handoff clears but settlement still dies later, the next step is the queue/webhook architecture you outlined, not more isolate-to-isolate retries.
+### Notes
+- No code edits in this pass — the patch is already in `supabase/functions/synapse-controller/index.ts`.
+- If version still reports 183 after deploy, re-deploy and inspect the deploy response for build errors before retesting.
+- If version bumps but EarlyDrop persists, the next move is the Postgres → pg_net webhook queue architecture (insert into `settlement_queue`, let Postgres fire the child) — not more isolate-to-isolate retries.
