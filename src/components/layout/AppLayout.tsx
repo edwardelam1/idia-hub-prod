@@ -6,6 +6,7 @@ import { TopBar } from './TopBar';
 import { useResponsive } from '@/hooks/useResponsive';
 import FloatingBestFriend from '@/components/ai/FloatingBestFriend';
 import { SynapseCreditsProvider } from '@/contexts/SynapseCreditsContext';
+import NotificationsBridge from '@/components/notifications/NotificationsBridge';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
 
   return (
     <SynapseCreditsProvider>
+      <NotificationsBridge />
       <SidebarProvider 
         defaultOpen={!isMobile}
         className="w-full h-full"
