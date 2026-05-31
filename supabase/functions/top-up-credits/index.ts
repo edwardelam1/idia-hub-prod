@@ -25,8 +25,13 @@ Deno.serve(async (req: Request) => {
     });
 
     const user_id: string | undefined = body.user_id;
-    const credit_amount = Number(body.credit_amount ?? body.amount ?? 0);
-    const usd_amount = Number(body.usd_amount ?? credit_amount * 0.75 ?? 0);
+    const RATE_USD_PER_CR = 0.75;
+    const rawUsd = Number(body.usd_amount ?? 0);
+    const rawCredit = Number(body.credit_amount ?? body.amount ?? 0);
+    // usd_amount is the on-chain truth. Derive credit_amount server-side when absent.
+    const usd_amount = rawUsd > 0 ? rawUsd : rawCredit * RATE_USD_PER_CR;
+    const credit_amount =
+      rawCredit > 0 ? rawCredit : Math.round((usd_amount / RATE_USD_PER_CR) * 1e4) / 1e4;
     const user_wallet: string | undefined = body.user_wallet ?? body.recipient_address;
     const payment_method: string = (body.payment_method ?? "usdc").toLowerCase();
 
@@ -46,8 +51,11 @@ Deno.serve(async (req: Request) => {
     if (!user_id || typeof user_id !== "string") {
       throw new Error(`VALIDATION_FAILED: user_id is missing or invalid. Received: ${user_id}`);
     }
+    if (!Number.isFinite(usd_amount) || usd_amount <= 0) {
+      throw new Error(`VALIDATION_FAILED: usd_amount must be > 0. Received: ${body.usd_amount}`);
+    }
     if (!Number.isFinite(credit_amount) || credit_amount <= 0) {
-      throw new Error(`VALIDATION_FAILED: credit_amount must be > 0. Received: ${body.credit_amount ?? body.amount}`);
+      throw new Error(`VALIDATION_FAILED: derived credit_amount invalid. usd_amount=${usd_amount}`);
     }
     if (routing === "on-chain") {
       if (!user_wallet || typeof user_wallet !== "string" || !isAddress(user_wallet)) {
@@ -129,6 +137,7 @@ Deno.serve(async (req: Request) => {
         product_class: "SAAS_UTILITY_PURCHASE",
         fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
         usd_amount: usd_amount,
+        rate_usd_per_cr: RATE_USD_PER_CR,
         payment_reference: payment_reference,
         routing: routing,
         user_wallet: user_wallet ?? null,
