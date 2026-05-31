@@ -180,13 +180,10 @@ Deno.serve(async (req) => {
     // Update global consumedReceipt
     consumedReceipt = aca_record_ids;
 
-    // 5. SETTLEMENT HANDOFF — raw fetch with forced graceful socket closure.
-    // Why not supabase-js .invoke(): the SDK opens a keep-alive socket. When
-    // this parent isolate is torn down, the orchestrator sends a TCP RST which
-    // kills the child's EdgeRuntime.waitUntil() worker (EarlyDrop @ ~214ms).
-    // Fix: explicit `Connection: close` + full body drain via await
-    //      response.text() so the socket is closed gracefully before exit.
-    const handoffStart = Date.now();
+    // 5. POSTGRES FIREWALL HANDOFF — insert into settlement_queue and exit.
+    // Postgres fires the database webhook to idia-circular-settlement, fully
+    // insulating the child's EdgeRuntime.waitUntil() from this parent isolate's
+    // TCP teardown (no more EarlyDrop cascade).
     const payoutData = {
       total_fiat_amount: fiatEquivalentValue,
       buyer_id: user_id,
@@ -195,48 +192,27 @@ Deno.serve(async (req) => {
       location_string: normalizedLocationString,
       intent_metadata: { intent_type, sector: sectorLabel },
     };
-    const settlementUrl = `${supabaseUrl}/functions/v1/idia-circular-settlement`;
+
     console.info(
-      `[HANDOFF: settlement] raw-fetch initiated reference=${referenceId} buyer=${user_id} fiat=${fiatEquivalentValue} contributors=${uniqueContributors.length} url=${settlementUrl} ts=${handoffStart}`,
+      `[BEGIN: Controller.QueueInsert] Routing payload to Postgres Firewall for Reference: ${referenceId}`,
     );
 
     let handoffAccepted = false;
     try {
-      const settlementRes = await fetch(settlementUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // Edge-to-edge auth: same pattern best-friend-ai &
-          // marketplace-bundle-access already use to clear the gateway.
-          Authorization: `Bearer ${serviceRoleKey}`,
-          apikey: serviceRoleKey,
-          // Force the runtime to NOT pool this socket. Combined with the
-          // body drain below, this guarantees a graceful FIN before the
-          // parent isolate exits — no TCP RST cascade.
-          Connection: "close",
-        },
-        body: JSON.stringify(payoutData),
-      });
+      const { error: queueError } = await adminClient
+        .from("settlement_queue")
+        .insert({
+          reference_id: referenceId,
+          payload: payoutData,
+        });
 
-      // CRITICAL: fully drain the response stream. If we skip this the Deno
-      // runtime keeps the socket alive and the orchestrator's teardown sends
-      // a TCP RST that murders the child's waitUntil() worker.
-      const responseText = await settlementRes.text();
-      const elapsedMs = Date.now() - handoffStart;
+      if (queueError) throw queueError;
 
-      if (!settlementRes.ok) {
-        console.error(
-          `🚨 [HANDOFF: settlement] non-2xx reference=${referenceId} status=${settlementRes.status} elapsed_ms=${elapsedMs} body=${responseText}. egress_logs intentionally left unlinked for audit.`,
-        );
-      } else {
-        handoffAccepted = true;
-        console.info(
-          `[HANDOFF: settlement] ACCEPTED reference=${referenceId} status=${settlementRes.status} elapsed_ms=${elapsedMs} body=${responseText}`,
-        );
-      }
-    } catch (handoffError: any) {
+      console.info(`[END: Controller.QueueInsert] Payload successfully isolated in database.`);
+      handoffAccepted = true;
+    } catch (queueError: any) {
       console.error(
-        `🚨 [HANDOFF: settlement] network failure reference=${referenceId} :: ${handoffError?.message ?? String(handoffError)}. egress_logs intentionally left unlinked for audit.`,
+        `🚨 [FATAL STALL: Controller.QueueInsert] Failed to write to settlement_queue: ${queueError?.message ?? String(queueError)}. egress_logs intentionally left unlinked for audit.`,
       );
     }
 

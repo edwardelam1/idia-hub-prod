@@ -474,7 +474,13 @@ serve(async (req: Request) => {
 
   let payoutData: any;
   try {
-    payoutData = await req.json();
+    const rawBody = await req.json();
+    // Unwrap Postgres database-webhook envelope ({ type, table, record, ... });
+    // fall back to raw body for direct/manual invocations.
+    payoutData =
+      rawBody && typeof rawBody === "object" && rawBody.record && rawBody.record.payload
+        ? rawBody.record.payload
+        : rawBody;
   } catch (_e) {
     return new Response(
       JSON.stringify({ error: "Invalid JSON body.", failed_at: "VALIDATING_INPUTS" }),
