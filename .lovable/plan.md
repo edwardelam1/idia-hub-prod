@@ -1,15 +1,34 @@
 ## Plan
 
-1. Update `supabase/functions/synapse-controller/index.ts` to remove the raw `fetch()` handoff block and replace it with a single `adminClient.from('settlement_queue').insert({ reference_id, payload: payoutData })` handoff.
-2. Keep the existing `handoffAccepted` gate so `egress_logs.synapse_ledger_entry_id` is linked only after the queue write succeeds, preserving the orphan-audit behavior on handoff failure.
-3. Update `supabase/functions/idia-circular-settlement/index.ts` to unwrap webhook payloads via `rawBody.record ? rawBody.record.payload : rawBody`, while still accepting direct/manual invocations for testing.
-4. Verify or add the `settlement_queue` database structure with the fields already reflected in generated types (`id`, `reference_id`, `payload`, `status`, `created_at`). If anything is missing in the actual schema, add it via a Supabase migration rather than an ad hoc code-only assumption.
-5. Wire a Postgres-driven webhook/trigger so inserts into `settlement_queue` call `idia-circular-settlement` with the inserted row as the webhook `record`, following the project’s existing `net.http_post` / database-trigger pattern.
-6. Validate the end-to-end flow with a fresh manual test: `synapse-controller` should finish after queue insert, `idia-circular-settlement` should log `ACCEPTED` from the webhook path, and the settlement trace should continue without the parent-isolate `EarlyDrop` pattern.
+### 1. Fix the empty Notifications Center
 
-## Technical details
+**Diagnosis**: `hub_notifications` table is wired correctly (read hook, realtime subscription, bell UI all work), but the table has 0 rows because **nothing in the app actually inserts notifications**. `recordHubNotification()` exists in `src/lib/hub-notifications.ts` but is never called.
 
-- `synapse-controller` currently constructs `payoutData` and sets `handoffAccepted` around the existing handoff block, so the replacement is a surgical swap in that same section.
-- `idia-circular-settlement` currently parses `await req.json()` directly and validates `total_fiat_amount` / `contributing_users` from the top-level body; this needs a small wrapper-aware parse step at the top of the HTTP handler.
-- The generated Supabase types already include `settlement_queue`, but there is no matching migration in the repo, so implementation should confirm the live schema instead of assuming repo parity.
-- The webhook should preserve the queue row for auditability; no destructive dequeue behavior should be added unless explicitly requested later.
+**Fix**: Wire notification producers to the events that already drive toasts/realtime updates so the bell stops being empty.
+
+- Add a small global subscriber component (mounted once inside `AppLayout`) that listens to the same Postgres realtime channels already used in `SystemHealthDashboard` and `ProvenanceAuditLog`, and for the current user inserts a row into `hub_notifications` for:
+  - **Egress / Liability Shield events** (`egress_logs` INSERT scoped to `user_id`) → category `shield`, severity `success`, title "Liability Shield minted", body = truncated token hash, link `/trading` (Provenance tab).
+  - **Synapse credit movements** (`synapse_credit_ledger` INSERT scoped to `user_id`) → category `credits`, severity `info` for `PURCHASE`/`ROYALTY`, `warning` for `USAGE`, title/body from `description` + amount.
+  - **Settlement queue completions** (`settlement_queue` UPDATE where `status='completed'` and `payload.user_id = current user`) → category `settlement`, severity `success`.
+- Add a tiny helper `notifyAndToast(...)` in `src/lib/hub-notifications.ts` that fires a `sonner` toast AND inserts the notification row, then swap the existing toast calls inside `PayAppBlueprint.tsx` (blueprint created, generation errors) over to it so user-driven actions also show up in the bell.
+- No schema change, no new tables. RLS on `hub_notifications` is assumed already in place (table is read by the hook today); if INSERT fails silently, we'll log and surface that during verification.
+
+### 2. Show Synapse Credit Spend in Egress Logs
+
+Add a new "Credits Spent" column to `ProvenanceAuditLog.tsx` next to each row.
+
+- Extend the `egress_logs` select to include `synapse_ledger_entry_id` and `consumption_weight`.
+- After the egress logs query resolves, run a secondary `useQuery` that fetches matching rows from `synapse_credit_ledger` by `id IN (...)` and builds a `Map<ledgerId, amount>`.
+- New `<TableHead>` "Credits Spent" + `<TableCell>` rendering `{amount.toFixed(2)} CR` in primary color, with em-dash fallback when no linked ledger entry exists. Fix the empty-state `colSpan` from 5 → 6.
+- Realtime subscription stays as-is; the new column updates on next refetch (we already `invalidateQueries` on insert).
+
+### Technical notes
+
+- Files touched:
+  - `src/lib/hub-notifications.ts` — add `notifyAndToast` helper.
+  - `src/components/notifications/NotificationsBridge.tsx` — NEW, realtime → DB inserts. Mounted once in `AppLayout`.
+  - `src/components/layout/AppLayout.tsx` — mount `<NotificationsBridge />`.
+  - `src/components/trading/PayAppBlueprint.tsx` — swap a few toasts to `notifyAndToast`.
+  - `src/components/trading/ProvenanceAuditLog.tsx` — add Credits Spent column + ledger join query.
+- No edge function, migration, or backend change required.
+- Verification: open the bell after triggering a purchase / blueprint create; confirm rows appear in `hub_notifications` and the Egress Logs table renders a CR amount.
