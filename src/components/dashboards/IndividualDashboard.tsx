@@ -139,7 +139,7 @@ const IndividualDashboard = () => {
         {/* RAIL 2: GAS (COMPUTATIONAL) */}
         <Card className="bg-primary/5 border-primary/20 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-primary flex items-center gap-2">
-            <Zap className="h-3 w-3 fill-primary" /> Rail 2: Gas
+            <Zap className="h-3 w-3 fill-primary" /> Synapse Credits
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-primary">{rail2_Gas.toLocaleString()}</span>
