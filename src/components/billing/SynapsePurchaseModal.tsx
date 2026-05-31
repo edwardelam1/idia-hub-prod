@@ -263,7 +263,7 @@ const SynapsePurchaseModal = ({
       console.log("[SynapsePurchaseModal][handlePurchase] [APPROVAL_CHECK] Ensuring relayer allowance.");
       const approval = await ensureUsdcApproval({ owner: buyerWallet });
       if (!approval.ok) {
-        throw new Error(`Wallet authorization required: ${approval.reason}`);
+        throw new Error(`Wallet authorization required: ${(approval as { reason: string }).reason}`);
       }
 
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
