@@ -569,18 +569,34 @@ const defaultModules: SelectedModule[] = [
   { id: "default-coop-mode", name: "Co-Op Mode", isDefault: true, icon: Handshake },
 ];
 
-const generateProvisioningCode = (): string => {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "IDIA-";
-  // Canonical format: IDIA-XXXX-XXXX (matches DB generate_business_provisioning_code)
-  for (let i = 0; i < 2; i++) {
-    for (let j = 0; j < 4; j++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+/**
+ * NANO-BITE ID: hub.core.generator
+ * ROLE: Strictly enforces the IDIA-XXXX-XXXX hardware binding contract.
+ * Regex: /^IDIA-[A-Z0-9]{4}-[A-Z0-9]{4}$/
+ */
+export function generateStrictProvisioningCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  const generateSegment = (length: number) => {
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      // Utilizing cryptographic random values to prevent collision
+      const randomValues = new Uint32Array(1);
+      window.crypto.getRandomValues(randomValues);
+      result += chars[randomValues[0] % chars.length];
     }
-    if (i < 1) code += "-";
-  }
-  return code;
-};
+    return result;
+  };
+
+  const segment1 = generateSegment(4);
+  const segment2 = generateSegment(4);
+
+  // Forces absolute adherence to the IDIA Pay Regex: /^IDIA-[A-Z0-9]{4}-[A-Z0-9]{4}$/
+  return `IDIA-${segment1}-${segment2}`;
+}
+
+// Legacy alias retained for in-file call sites.
+const generateProvisioningCode = generateStrictProvisioningCode;
 
 export const PayAppBlueprint = () => {
   const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
