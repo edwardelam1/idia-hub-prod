@@ -451,6 +451,32 @@ const SynapseTopUp = () => {
                 </div>
               )}
 
+              {needsApproval && buyerWalletForRecovery && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 mb-3"
+                  disabled={isAuthorizingRelayer}
+                  onClick={async () => {
+                    setIsAuthorizingRelayer(true);
+                    try {
+                      const r = await ensureUsdcApproval({ owner: buyerWalletForRecovery });
+                      if (!r.ok) {
+                        toast({ title: "Authorization Failed", description: (r as { reason: string }).reason, variant: "destructive" });
+                        return;
+                      }
+                      setNeedsApproval(false);
+                      setError(null);
+                      await handlePurchase();
+                    } finally {
+                      setIsAuthorizingRelayer(false);
+                    }
+                  }}
+                >
+                  {isAuthorizingRelayer ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  Authorize Relayer (one-time)
+                </Button>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
                   <ArrowLeft className="w-4 h-4" /> Back
