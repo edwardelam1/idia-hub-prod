@@ -18,7 +18,10 @@ try {
     logging: {
       developerMode: true,
     },
-    checkInstallationImmediately: false,
+    // Force the SDK to detect and inject the local extension provider first
+    injectProvider: true,
+    // Run installation check up front so the extension popup takes priority over the QR bridge
+    checkInstallationImmediately: true,
   });
   console.log("[IDIA_WEB3_SDK][Init] <<< END: Standalone MetaMask SDK successfully compiled.");
 } catch (error: any) {
