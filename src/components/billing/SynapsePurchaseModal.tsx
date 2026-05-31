@@ -22,7 +22,6 @@ import {
   Tag,
   Loader2,
   ArrowRight,
-  ArrowLeft,
   CheckCircle2,
   AlertTriangle,
   CircleDollarSign,
