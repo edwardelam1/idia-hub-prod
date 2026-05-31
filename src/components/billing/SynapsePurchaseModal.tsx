@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { ensureUsdcApproval } from "@/lib/usdc-approval";
 import { Wallet } from "lucide-react";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
@@ -245,20 +246,37 @@ const SynapsePurchaseModal = ({
         throw new Error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
       }
 
-      const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
-      console.log(
-        "[SynapsePurchaseModal][handlePurchase] [INTERNAL_LOCK] [START] Securing custodial funds for swap...",
-      );
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Resolve the buyer's real on-chain wallet from profiles.
+      console.log("[SynapsePurchaseModal][handlePurchase] [PROFILE_LOOKUP] Reading wallet_address.");
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(`Profile lookup failed: ${profileError.message}`);
+      const buyerWallet = profile?.wallet_address as string | undefined;
+      if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
+        throw new Error("No IDIA Life wallet linked to this account. Connect MetaMask first.");
+      }
 
+      // One-time approval gate. Idempotent: returns immediately if already approved.
+      console.log("[SynapsePurchaseModal][handlePurchase] [APPROVAL_CHECK] Ensuring relayer allowance.");
+      const approval = await ensureUsdcApproval({ owner: buyerWallet });
+      if (!approval.ok) {
+        throw new Error(`Wallet authorization required: ${(approval as { reason: string }).reason}`);
+      }
+
+      const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
       const internalPayload = {
         user_id: session.user.id,
         credit_amount: displayCredits,
-        usd_amount: usdAmount,
+        usd_amount: Number(usdAmount.toFixed(2)),
         payment_reference: txReference,
         payment_method: "internal_usdc",
+        routing: "on-chain",
         target_synapse_wallet: IDIA_SYNAPSE_WALLET,
-        user_wallet: protocolState?.wallet_address || "user_wallet",
+        user_wallet: buyerWallet,
+        idempotency_key: txReference,
       };
 
       console.log(
@@ -266,7 +284,7 @@ const SynapsePurchaseModal = ({
         internalPayload,
       );
 
-      const { error: topUpError } = await supabase.functions.invoke("top-up-credits", {
+      const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
         body: internalPayload,
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -276,11 +294,16 @@ const SynapsePurchaseModal = ({
           "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected transaction.",
           topUpError,
         );
-        throw topUpError;
+        const msg = (topUpError as any)?.message ?? String(topUpError);
+        if (/APPROVAL_REQUIRED/i.test(msg)) {
+          throw new Error("MetaMask approval not yet confirmed on-chain. Please retry in a moment.");
+        }
+        throw new Error(msg);
       }
 
       console.log(
-        "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] Balance ledger hydration finalized.",
+        "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] hash=",
+        (topUpData as any)?.hash,
       );
 
       setStep("success");
