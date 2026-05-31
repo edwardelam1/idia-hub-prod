@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 /**
  * Insert a notification for the current user. Use this anywhere you'd
@@ -33,4 +34,23 @@ export const recordHubNotification = async (input: {
     return null;
   }
   return data;
+};
+
+/**
+ * Fire a sonner toast AND persist a row in hub_notifications so the bell
+ * always reflects the user's recent activity.
+ */
+export const notifyAndToast = async (input: {
+  title: string;
+  body?: string;
+  category?: string;
+  severity?: "info" | "success" | "warning" | "error";
+  link?: string;
+  metadata?: Record<string, unknown>;
+}) => {
+  const sev = input.severity ?? "info";
+  const fn =
+    sev === "success" ? toast.success : sev === "error" ? toast.error : sev === "warning" ? toast.warning : toast.info;
+  fn(input.title, input.body ? { description: input.body } : undefined);
+  return recordHubNotification(input);
 };
