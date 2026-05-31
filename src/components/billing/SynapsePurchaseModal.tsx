@@ -76,6 +76,9 @@ const SynapsePurchaseModal = ({
   const [alacarteAmount, setAlacarteAmount] = useState("");
   const [paymentRail, setPaymentRail] = useState<"wix" | "usdc">("usdc");
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [isAuthorizingRelayer, setIsAuthorizingRelayer] = useState(false);
+  const [buyerWalletForRecovery, setBuyerWalletForRecovery] = useState<string | null>(null);
 
   const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
@@ -258,13 +261,10 @@ const SynapsePurchaseModal = ({
       if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
         throw new Error("No IDIA Life wallet linked to this account. Connect MetaMask first.");
       }
-
-      // One-time approval gate. Idempotent: returns immediately if already approved.
-      console.log("[SynapsePurchaseModal][handlePurchase] [APPROVAL_CHECK] Ensuring relayer allowance.");
-      const approval = await ensureUsdcApproval({ owner: buyerWallet });
-      if (!approval.ok) {
-        throw new Error(`Wallet authorization required: ${(approval as { reason: string }).reason}`);
-      }
+      setBuyerWalletForRecovery(buyerWallet);
+      console.log(
+        "[SynapsePurchaseModal][handlePurchase] [GASLESS_PATH] IDIA Life wallet covers amount; skipping MetaMask approval. Relayer pre-authorized at provisioning.",
+      );
 
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
       const internalPayload = {
@@ -296,7 +296,10 @@ const SynapsePurchaseModal = ({
         );
         const msg = (topUpError as any)?.message ?? String(topUpError);
         if (/APPROVAL_REQUIRED/i.test(msg)) {
-          throw new Error("MetaMask approval not yet confirmed on-chain. Please retry in a moment.");
+          setNeedsApproval(true);
+          throw new Error(
+            "Relayer authorization missing for this wallet. Click 'Authorize Relayer (one-time)' to grant USDC spend permission, then retry.",
+          );
         }
         throw new Error(msg);
       }
@@ -307,6 +310,7 @@ const SynapsePurchaseModal = ({
       );
 
       setStep("success");
+      setNeedsApproval(false);
       toast.success("Synapse Hydrated!", {
         description: `${formatCredits(displayCredits)} added to your operational ledger.`,
       });
