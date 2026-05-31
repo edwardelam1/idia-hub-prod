@@ -20,6 +20,8 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { toast } from "@/hooks/use-toast";
 import { formatCredits } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { Wallet, AlertTriangle } from "lucide-react";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const WIX_DOMAIN = "https://www.thebigidia.com";
@@ -50,6 +52,7 @@ const SynapseTopUp = () => {
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
   const [paymentRail, setPaymentRail] = useState<"usdc" | "wix">("usdc");
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
 
   const currentSelection = pricingTiers.find((t) => t.crd === selectedTier) || pricingTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
@@ -59,6 +62,39 @@ const SynapseTopUp = () => {
   const displayCredits = purchaseMode === "alacarte" ? alacarteCredits : currentSelection.crd;
   const usdAmount = purchaseMode === "alacarte" ? alacarteUsd : currentSelection.crd * currentSelection.rate;
   const canProceed = purchaseMode === "alacarte" ? alacarteValid : true;
+
+  const shortfall = Math.max(0, usdAmount - availableUSDC);
+  const hasEnoughBalance = shortfall <= 0;
+
+  const handleConnectMetaMask = async () => {
+    console.log(
+      `[SynapseTopUp][MetaMaskOnboard] >>> START: Initiating MetaMask SDK onboarding flow. Shortfall: ${shortfall.toFixed(2)}`,
+    );
+    setIsConnectingWallet(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      if (accounts && accounts.length > 0) {
+        const connectedAddress = accounts[0];
+        console.log(`[SynapseTopUp][MetaMaskOnboard] --- DATA: Connected ${connectedAddress}`);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          await supabase.from("profiles").update({ wallet_address: connectedAddress }).eq("id", session.user.id);
+        }
+        await refreshWalletBalance?.();
+        toast({ title: "Wallet Connected", description: "Your IDIA Life wallet is now actively bridged." });
+      } else {
+        toast({ title: "Connection Cancelled", description: "No accounts returned from MetaMask.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      console.error(`[SynapseTopUp][MetaMaskOnboard] !!! FATAL ERROR: ${err?.message}`);
+      toast({ title: "Connection Failed", description: err?.message || "MetaMask onboarding was interrupted.", variant: "destructive" });
+    } finally {
+      setIsConnectingWallet(false);
+      console.log("[SynapseTopUp][MetaMaskOnboard] <<< END.");
+    }
+  };
 
   const handleProceedToPayment = () => {
     console.log(`[SynapseTopUp][handleProceedToPayment] [START] mode=${purchaseMode} credits=${displayCredits} usd=${usdAmount}`);
@@ -300,6 +336,44 @@ const SynapseTopUp = () => {
           ) : step === "payment" ? (
             <>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase mb-4">Authorize Settlement</h2>
+              {!hasEnoughBalance && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
+                    <AlertTriangle className="h-4 w-4" />
+                    Wallet Shortfall
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Total Required</span>
+                    <span className="font-mono">${usdAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Available in IDIA Life</span>
+                    <span className="font-mono">${availableUSDC.toFixed(2)}</span>
+                  </div>
+                  <div className="pt-2 border-t border-destructive/20 flex justify-between text-sm">
+                    <span className="font-semibold">Amount to Fund</span>
+                    <span className="font-mono font-bold text-destructive">${shortfall.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              {!hasEnoughBalance && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 mb-4 flex gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    To find your recovery phrase, open IDIA Life, visit the Wallet page, tap Security, and press Reveal Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device that is not your own.
+                  </p>
+                </div>
+              )}
+              {!hasEnoughBalance && (
+                <Button
+                  className="w-full gap-2 mb-4"
+                  onClick={handleConnectMetaMask}
+                  disabled={isConnectingWallet}
+                >
+                  {isConnectingWallet ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                  Connect MetaMask
+                </Button>
+              )}
               <div className="bg-muted/50 border border-border rounded-xl p-3 flex justify-between items-center mb-4">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
