@@ -30,6 +30,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
+import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { Wallet } from "lucide-react";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 const BASE_RATE = 0.75;
@@ -72,6 +74,7 @@ const SynapsePurchaseModal = ({
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
   const [paymentRail, setPaymentRail] = useState<"wix" | "usdc">("usdc");
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
 
   const currentTier = creditTiers.find((t) => t.id === selectedTier) || creditTiers[1];
   const alacarteUsd = parseInt(alacarteAmount) || 0;
@@ -99,6 +102,65 @@ const SynapsePurchaseModal = ({
   const handleProceedToPayment = () => {
     if (!canProceed) return;
     setStep("payment");
+  };
+
+  const shortfall = Math.max(0, usdAmount - availableUSDC);
+  const hasEnoughBalance = shortfall <= 0;
+
+  const handleConnectMetaMask = async () => {
+    console.log(
+      `[IDIA_PURCHASE_MODAL][MetaMaskOnboard] >>> START: Initiating MetaMask SDK onboarding flow. Shortfall: ${shortfall.toFixed(2)}`,
+    );
+    setIsConnectingWallet(true);
+    try {
+      console.log("[IDIA_PURCHASE_MODAL][MetaMaskOnboard] --- ACTION: Calling connectEmbeddedWallet.");
+      const accounts = await connectEmbeddedWallet();
+
+      if (accounts && accounts.length > 0) {
+        const connectedAddress = accounts[0];
+        console.log(
+          `[IDIA_PURCHASE_MODAL][MetaMaskOnboard] --- DATA: Successfully connected account: ${connectedAddress}`,
+        );
+
+        // Persist the connected address so useWalletBalance can re-hydrate.
+        console.log("[IDIA_PURCHASE_MODAL][MetaMaskOnboard] --- ACTION: Persisting wallet_address to profile.");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update({ wallet_address: connectedAddress })
+            .eq("id", session.user.id);
+          if (updateError) {
+            console.error(
+              `[IDIA_PURCHASE_MODAL][MetaMaskOnboard] !!! WARN: Failed to persist wallet_address: ${updateError.message}`,
+            );
+          }
+        }
+
+        console.log("[IDIA_PURCHASE_MODAL][MetaMaskOnboard] --- ACTION: Refreshing wallet balance state.");
+        await refreshWalletBalance();
+
+        toast.success("Wallet Connected", {
+          description: "Your IDIA Life wallet is now actively bridged.",
+        });
+      } else {
+        toast.error("Connection Cancelled", {
+          description: "No accounts were returned from MetaMask.",
+        });
+      }
+    } catch (error: any) {
+      console.error(
+        `[IDIA_PURCHASE_MODAL][MetaMaskOnboard] !!! FATAL ERROR: MetaMask handshake failed or stalled: ${error?.message}`,
+      );
+      toast.error("Connection Failed", {
+        description: error?.message || "MetaMask onboarding was interrupted.",
+      });
+    } finally {
+      setIsConnectingWallet(false);
+      console.log("[IDIA_PURCHASE_MODAL][MetaMaskOnboard] <<< END: MetaMask SDK onboarding flow terminated.");
+    }
   };
 
   const handleAlacarteInput = (val: string) => {
@@ -393,48 +455,114 @@ const SynapsePurchaseModal = ({
                 </Badge>
               </div>
 
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setPaymentRail("usdc")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "usdc" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
-                >
-                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentRail("wix")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "wix" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
-                >
-                  <CreditCard className="h-4 w-4" /> Credit/Debit
-                </button>
-              </div>
+              {hasEnoughBalance ? (
+                <>
+                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-500 font-semibold">
+                      <CircleDollarSign className="h-4 w-4" />
+                      Funded from IDIA Life Wallet
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Available Balance</span>
+                      <span className="font-mono">${availableUSDC.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Transfer Amount</span>
+                      <span className="font-mono text-destructive">-${usdAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="pt-3 border-t border-emerald-500/20 flex justify-between text-sm">
+                      <span className="text-muted-foreground">Remaining Balance</span>
+                      <span className="font-mono font-semibold">
+                        ${(availableUSDC - usdAmount).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="pt-2 flex justify-between text-sm">
+                      <span className="text-muted-foreground">Credits to Add</span>
+                      <span className="font-mono text-emerald-500">
+                        +{formatCredits(displayCredits)} CR
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="bg-muted/30 border border-border rounded-xl p-4 text-center text-xs text-muted-foreground leading-relaxed">
-                {paymentRail === "usdc" ? (
-                  <p>
-                    By clicking confirm, you authorize the secure transfer of{" "}
-                    <strong>${usdAmount.toFixed(2)} USDC</strong> from your IDIA wallet to the Treasury.
-                  </p>
-                ) : (
-                  <p>Bypassing standard gateway API handshakes. You will be sent directly to the root Wix portal.</p>
-                )}
-              </div>
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
+                      <ArrowLeft className="w-4 h-4" /> Back
+                    </Button>
+                    <Button
+                      className="flex-1 gap-2"
+                      size="lg"
+                      onClick={() => {
+                        setPaymentRail("usdc");
+                        handlePurchase();
+                      }}
+                    >
+                      <CircleDollarSign className="h-4 w-4" /> Pay from Wallet
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-destructive font-semibold">
+                      <AlertTriangle className="h-4 w-4" />
+                      Wallet Shortfall
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Required</span>
+                      <span className="font-mono">${usdAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Available in IDIA Life</span>
+                      <span className="font-mono">${availableUSDC.toFixed(2)}</span>
+                    </div>
+                    <div className="pt-3 border-t border-destructive/20 flex justify-between text-base">
+                      <span className="font-semibold">Amount to Fund</span>
+                      <span className="font-mono font-bold text-destructive">
+                        ${shortfall.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="flex gap-3">
-                <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </Button>
-                <Button className="flex-1 gap-2" size="lg" onClick={handlePurchase}>
-                  {paymentRail === "usdc" ? (
-                    <>
-                      <CircleDollarSign className="h-4 w-4" /> Confirm & Spend USDC
-                    </>
-                  ) : (
-                    <>Proceed to Wix</>
-                  )}
-                </Button>
-              </div>
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 flex gap-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      To find your recovery phrase, open IDIA Life, visit the Wallet page, tap
+                      Security, and press Reveal Recovery Phrase. Ensure no one is around you when
+                      you do this and do not do this on a device that is not your own.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
+                      <ArrowLeft className="w-4 h-4" /> Back
+                    </Button>
+                    <Button
+                      className="flex-1 gap-2"
+                      size="lg"
+                      onClick={handleConnectMetaMask}
+                      disabled={isConnectingWallet}
+                    >
+                      {isConnectingWallet ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wallet className="h-4 w-4" />
+                      )}
+                      Connect MetaMask
+                    </Button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentRail("wix");
+                      handlePurchase();
+                    }}
+                    className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <CreditCard className="h-3 w-3" /> Pay with Card instead
+                  </button>
+                </>
+              )}
             </div>
           )}
 
