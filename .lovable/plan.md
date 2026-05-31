@@ -1,34 +1,45 @@
-## Plan
+# Synapse Purchase Modal — Shortfall Calculation + MetaMask SDK Onboarding
 
-### 1. Fix the empty Notifications Center
+Branch the purchase popup on `availableUSDC` vs `usdAmount`. If funded, transfer from wallet to treasury. If short, surface the explicit shortfall and route into the MetaMask SDK so the user can natively import their IDIA Life recovery phrase.
 
-**Diagnosis**: `hub_notifications` table is wired correctly (read hook, realtime subscription, bell UI all work), but the table has 0 rows because **nothing in the app actually inserts notifications**. `recordHubNotification()` exists in `src/lib/hub-notifications.ts` but is never called.
+## Behavior
 
-**Fix**: Wire notification producers to the events that already drive toasts/realtime updates so the bell stops being empty.
+After tier/A-la-carte selection (existing UI), compute:
+```
+shortfall = usdAmount - availableUSDC
+hasEnoughBalance = shortfall <= 0
+```
 
-- Add a small global subscriber component (mounted once inside `AppLayout`) that listens to the same Postgres realtime channels already used in `SystemHealthDashboard` and `ProvenanceAuditLog`, and for the current user inserts a row into `hub_notifications` for:
-  - **Egress / Liability Shield events** (`egress_logs` INSERT scoped to `user_id`) → category `shield`, severity `success`, title "Liability Shield minted", body = truncated token hash, link `/trading` (Provenance tab).
-  - **Synapse credit movements** (`synapse_credit_ledger` INSERT scoped to `user_id`) → category `credits`, severity `info` for `PURCHASE`/`ROYALTY`, `warning` for `USAGE`, title/body from `description` + amount.
-  - **Settlement queue completions** (`settlement_queue` UPDATE where `status='completed'` and `payload.user_id = current user`) → category `settlement`, severity `success`.
-- Add a tiny helper `notifyAndToast(...)` in `src/lib/hub-notifications.ts` that fires a `sonner` toast AND inserts the notification row, then swap the existing toast calls inside `PayAppBlueprint.tsx` (blueprint created, generation errors) over to it so user-driven actions also show up in the bell.
-- No schema change, no new tables. RLS on `hub_notifications` is assumed already in place (table is read by the hook today); if INSERT fails silently, we'll log and surface that during verification.
+### Funded path
+Replace the current confirm screen with a green "Funded from IDIA Life Wallet" summary:
+- Available Balance, Transfer Amount, Remaining Balance
+- CTA **Pay from Wallet** → existing `top-up-credits` invoke (`payment_method: "internal_usdc"`). No backend change.
 
-### 2. Show Synapse Credit Spend in Egress Logs
+### Shortfall path
+Red/amber "Wallet Shortfall" card:
+- Total Required, Available in IDIA Life, **Amount to Fund** (emphasized)
+- Amber `AlertTriangle` block with verbatim text:
+  > To find your recovery phrase, open IDIA Life, visit the Wallet page, tap Security, and press Reveal Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device that is not your own.
+- CTA **Connect MetaMask** → calls `connectEmbeddedWallet()` from new SDK bridge. On success: refresh wallet balance, re-evaluate shortfall, transition back to summary (which now shows the funded path if balance covers it).
 
-Add a new "Credits Spent" column to `ProvenanceAuditLog.tsx` next to each row.
+All branches include the granular `[IDIA_PURCHASE_MODAL]` / `[IDIA_WEB3_SDK]` console logging from the spec (>>> START / --- ACTION / <<< END / !!! FATAL ERROR).
 
-- Extend the `egress_logs` select to include `synapse_ledger_entry_id` and `consumption_weight`.
-- After the egress logs query resolves, run a secondary `useQuery` that fetches matching rows from `synapse_credit_ledger` by `id IN (...)` and builds a `Map<ledgerId, amount>`.
-- New `<TableHead>` "Credits Spent" + `<TableCell>` rendering `{amount.toFixed(2)} CR` in primary color, with em-dash fallback when no linked ledger entry exists. Fix the empty-state `colSpan` from 5 → 6.
-- Realtime subscription stays as-is; the new column updates on next refetch (we already `invalidateQueries` on insert).
+## Files
 
-### Technical notes
+- **`src/components/billing/SynapsePurchaseModal.tsx`** — Replace the `step: "payment"` body with the funded/shortfall branch. Keep tier/A-la-carte selection, processing, and success states. Wire `Connect MetaMask` to the SDK helper and refresh `useWalletBalance` on resolved account.
+- **`src/components/billing/SynapseTopUp.tsx`** — Apply the same branch logic to the standalone top-up surface so both entry points behave identically.
+- **NEW `src/lib/metamask-sdk.ts`** — Singleton `MetaMaskSDK` instance with `dappMetadata: { name: "IDIA Sovereign Hub", url: "https://hub.thebigidia.com" }`, `checkInstallationImmediately: false`, `logging.developerMode: true`. Exports `connectEmbeddedWallet()` returning `string[]` via `provider.request({ method: 'eth_requestAccounts' })`. Full instrumented logging.
+- **`src/hooks/useWalletBalance.ts`** — Read-only check. If `refreshBalance` does not already accept an optional external address override, extend its signature so the MetaMask-returned address can drive the next USDC read. If the hook already keys off the auth user's wallet column, persist the connected address there before refreshing.
+- **`package.json`** — Add `@metamask/sdk` dependency.
 
-- Files touched:
-  - `src/lib/hub-notifications.ts` — add `notifyAndToast` helper.
-  - `src/components/notifications/NotificationsBridge.tsx` — NEW, realtime → DB inserts. Mounted once in `AppLayout`.
-  - `src/components/layout/AppLayout.tsx` — mount `<NotificationsBridge />`.
-  - `src/components/trading/PayAppBlueprint.tsx` — swap a few toasts to `notifyAndToast`.
-  - `src/components/trading/ProvenanceAuditLog.tsx` — add Credits Spent column + ledger join query.
-- No edge function, migration, or backend change required.
-- Verification: open the bell after triggering a purchase / blueprint create; confirm rows appear in `hub_notifications` and the Egress Logs table renders a CR amount.
+## Technical Notes
+
+- No edge function, migration, or RLS change. The funded path reuses the existing `top-up-credits` invocation verbatim.
+- Recovery phrase never reaches Hub code. MetaMask's native sandbox handles import; the SDK only returns the resolved public address back to React.
+- Use design tokens (`primary`, `destructive`, `emerald-500`, `muted`, `border`) — no hardcoded hex.
+- Numeric formatting stays on `.toFixed(2)` for USD and `formatCredits()` for CR.
+- Keep `IDIA_SYNAPSE_WALLET` constant as the treasury target on the funded path.
+
+## Out of Scope
+- No changes to `synapse-controller`, `idia-circular-settlement`, ledger writes, or settlement queue.
+- Wix/credit-card rail stays available as an alternate `paymentRail` toggle; not modified.
