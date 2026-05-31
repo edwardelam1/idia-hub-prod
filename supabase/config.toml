@@ -33,3 +33,6 @@ verify_jwt = false
 
 [functions.base-rpc-proxy]
 verify_jwt = true
+
+[functions.vault-bridge]
+verify_jwt = true
