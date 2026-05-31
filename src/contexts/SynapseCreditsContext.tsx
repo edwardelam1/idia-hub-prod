@@ -18,9 +18,6 @@ interface ProtocolState {
   // RAIL 3: USDC
   usdc_balance: number;
 
-  // ETH NETWORK GAS (native on Base)
-  eth_balance: number;
-
   // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
   fbo_royalty_balance: number;
 
@@ -33,7 +30,6 @@ interface BalanceData {
   hub_operating_cash: number;
   fbo_balance: number;
   usdc_balance: number;
-  eth_balance: number;
   wallet_address: string;
   currency: string;
   last_updated: string;
@@ -119,13 +115,11 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const computationalGas = Number(gasBalance ?? 0);
       // USDC = on-chain truth, read live from Base contract via useWalletBalance.
       const usdcOnChain = Number(onChainBalance?.usdc_balance ?? 0);
-      const ethOnChain = Number(onChainBalance?.eth_balance ?? 0);
 
       const newState: ProtocolState = {
         hub_operating_cash: fiatOperating,
         synapse_gas_credits: computationalGas,
         usdc_balance: usdcOnChain,
-        eth_balance: ethOnChain,
         fbo_royalty_balance: fiatRoyalty,
         wallet_address: vault?.wallet_address || "",
       };
@@ -135,7 +129,6 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
         hub_operating_cash: fiatOperating,
         fbo_balance: fiatRoyalty,
         usdc_balance: usdcOnChain,
-        eth_balance: ethOnChain,
         wallet_address: vault?.wallet_address || "",
         currency: "USD",
         last_updated: new Date().toISOString(),
@@ -159,7 +152,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
     } finally {
       setIsLoading(false);
     }
-  }, [user, onChainBalance?.usdc_balance, onChainBalance?.eth_balance]);
+  }, [user, onChainBalance?.usdc_balance]);
 
   useEffect(() => {
     fetchSovereignState();
