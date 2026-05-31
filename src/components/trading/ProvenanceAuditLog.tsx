@@ -27,6 +27,7 @@ interface ProvenanceLog {
   egress_type: string;
   client_id: string;
   user_id?: string;
+  synapse_ledger_entry_id?: string | null;
 }
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
@@ -70,7 +71,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
       const { data, error } = await supabase
         .from("egress_logs")
         .select(
-          "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id",
+          "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id",
         )
         .order("created_at", { ascending: false })
         .limit(500);
@@ -79,6 +80,26 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
       return (data || []) as ProvenanceLog[];
     },
     enabled: !!userId,
+  });
+
+  const ledgerIds = useMemo(
+    () => Array.from(new Set(logs.map((l) => l.synapse_ledger_entry_id).filter(Boolean))) as string[],
+    [logs],
+  );
+
+  const { data: spendMap = new Map<string, number>() } = useQuery({
+    queryKey: ["egress-credit-spend", ledgerIds],
+    enabled: ledgerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("synapse_credit_ledger")
+        .select("id, amount")
+        .in("id", ledgerIds);
+      if (error) throw error;
+      const m = new Map<string, number>();
+      (data || []).forEach((r: any) => m.set(r.id, Number(r.amount ?? 0)));
+      return m;
+    },
   });
 
   const filteredAndSortedLogs = useMemo(() => {
@@ -216,12 +237,13 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                 <TableHead className="text-xs uppercase tracking-wider">Liability Token Hash</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">ACA References</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">DigiRAMP Anchor</TableHead>
+                <TableHead className="text-xs uppercase tracking-wider text-right">Credits Spent</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAndSortedLogs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
                     {searchTerm
                       ? "No records found matching your search."
                       : "No Liability Shield transfers recorded yet."}
@@ -230,6 +252,10 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               ) : (
                 filteredAndSortedLogs.map((log) => {
                   const acaJoined = (log.aca_record_references || []).join(", ");
+                  const spendRaw = log.synapse_ledger_entry_id
+                    ? spendMap.get(log.synapse_ledger_entry_id)
+                    : undefined;
+                  const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
                   return (
                     <TableRow key={log.id}>
                       <TableCell className="text-foreground whitespace-nowrap">
@@ -295,6 +321,15 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             </button>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {spend !== null ? (
+                          <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
+                            {spend.toFixed(2)} CR
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
