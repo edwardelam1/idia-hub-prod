@@ -569,18 +569,34 @@ const defaultModules: SelectedModule[] = [
   { id: "default-coop-mode", name: "Co-Op Mode", isDefault: true, icon: Handshake },
 ];
 
-const generateProvisioningCode = (): string => {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "IDIA-";
-  // Canonical format: IDIA-XXXX-XXXX (matches DB generate_business_provisioning_code)
-  for (let i = 0; i < 2; i++) {
-    for (let j = 0; j < 4; j++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+/**
+ * NANO-BITE ID: hub.core.generator
+ * ROLE: Strictly enforces the IDIA-XXXX-XXXX hardware binding contract.
+ * Regex: /^IDIA-[A-Z0-9]{4}-[A-Z0-9]{4}$/
+ */
+export function generateStrictProvisioningCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  const generateSegment = (length: number) => {
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      // Utilizing cryptographic random values to prevent collision
+      const randomValues = new Uint32Array(1);
+      window.crypto.getRandomValues(randomValues);
+      result += chars[randomValues[0] % chars.length];
     }
-    if (i < 1) code += "-";
-  }
-  return code;
-};
+    return result;
+  };
+
+  const segment1 = generateSegment(4);
+  const segment2 = generateSegment(4);
+
+  // Forces absolute adherence to the IDIA Pay Regex: /^IDIA-[A-Z0-9]{4}-[A-Z0-9]{4}$/
+  return `IDIA-${segment1}-${segment2}`;
+}
+
+// Legacy alias retained for in-file call sites.
+const generateProvisioningCode = generateStrictProvisioningCode;
 
 export const PayAppBlueprint = () => {
   const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
@@ -1278,32 +1294,72 @@ export const PayAppBlueprint = () => {
 
   const handleNewSchema = async () => {
     if (!selectedBusiness) {
-      toast.error("Select a business first");
+      toast.error("Pick a business before deploying", {
+        description:
+          "The Deploy button needs a target business. Choose one from the dropdown above, then try again.",
+      });
       return;
     }
-    const newCode = generateProvisioningCode();
+
+    const targetBusiness = approvedBusinesses.find(
+      (b) => b.id.toString() === selectedBusiness,
+    );
+    const targetBusinessName = targetBusiness?.name?.trim();
+
+    if (!targetBusinessName) {
+      toast.error("Business is missing a name", {
+        description:
+          "We can't seed a blueprint without an organization name. Update the business profile in Settings, then deploy again.",
+      });
+      return;
+    }
+
+    const generatedCode = generateStrictProvisioningCode();
+
+    // Seed skeleton that matches the PayAppBlueprint interface so IDIA Pay
+    // never receives a NULL payload at first hydration.
+    const defaultManifestPayload = {
+      provisioningCode: generatedCode,
+      clientOrganization: targetBusinessName,
+      verticals: ["Hospitality"], // Default fallback
+      modules: {
+        default: [
+          { id: "default-pos", name: "Point of Sale" },
+          { id: "default-reports", name: "Reports" },
+        ],
+        custom: [],
+      },
+      issuedAt: new Date().toISOString(),
+    };
+
     const { data, error } = await (supabase as any)
       .from("device_provisioning_blueprints")
       .insert({
-        code: newCode,
         business_id: selectedBusiness,
-        payload: { version: "2.1.0", provisioningCode: newCode, modules: { default: [], custom: [], bundles: [] } },
+        code: generatedCode,
         status: "active",
-        label: "Untitled Schema",
+        label: "Standard Terminal Build",
+        // CRITICAL FIX: Never leave this null. Inject the skeleton immediately.
+        payload: defaultManifestPayload,
       })
       .select()
       .single();
     if (error) {
-      toast.error("Create failed", { description: error.message });
+      toast.error("Couldn't create the blueprint", {
+        description: `${error.message}. Refresh the page and try again, or contact support if this keeps happening.`,
+      });
       return;
     }
+    const newCode = generatedCode;
     await mirrorToManifestVault(newCode, data.payload);
     setProvisioningCode(newCode);
     setLoadedSchemaId(data.id);
     setSelectedModules([...defaultModules]);
     setSelectedSubModules(new Set());
     taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: [] }));
-    toast.success(`Created ${newCode}`);
+    toast.success(`Blueprint ${newCode} is live`, {
+      description: `Skeleton manifest seeded for ${targetBusinessName}. Terminals can now hydrate without a NULL payload.`,
+    });
     await fetchSchemaLog();
   };
 
