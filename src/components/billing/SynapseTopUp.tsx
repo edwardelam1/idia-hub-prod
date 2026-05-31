@@ -209,7 +209,6 @@ const SynapseTopUp = () => {
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
       const internalPayload = {
         user_id: session.user.id,
-        credit_amount: displayCredits,
         usd_amount: Number(usdAmount.toFixed(2)),
         payment_reference: txReference,
         payment_method: "internal_usdc",
