@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Radio, Play, Square, Activity, Database } from 'lucide-react';
+import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 
 interface FeatureFeed {
   id: string;
@@ -21,6 +22,7 @@ export default function FeatureFeedAccess() {
   const [activeFeeds, setActiveFeeds] = useState<Set<string>>(new Set());
   const [liveData, setLiveData] = useState<Record<string, any[]>>({});
   const { toast } = useToast();
+  const { refreshBalance } = useSynapseCredits();
 
   useEffect(() => {
     fetchFeeds();
@@ -31,7 +33,7 @@ export default function FeatureFeedAccess() {
     if (data) setFeeds(data);
   };
 
-  const toggleFeed = (topic: string) => {
+  const toggleFeed = async (topic: string) => {
     setActiveFeeds(prev => {
       const next = new Set(prev);
       if (next.has(topic)) {
@@ -57,6 +59,32 @@ export default function FeatureFeedAccess() {
       }
       return next;
     });
+
+    // Fire a Synapse consumption receipt for connects (vault egress).
+    if (!activeFeeds.has(topic)) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return;
+        const ref = `feed_${topic}_${Date.now().toString(36)}`;
+        const { data, error } = await supabase.functions.invoke('synapse-controller', {
+          body: {
+            user_id: user.id,
+            client_id: 'IDIA_HUB_FEATURE_FEED',
+            intent_type: 'FEATURE_FEED_SUBSCRIBE',
+            sub_module_id: topic,
+            aca_record_ids: [ref],
+            metadata: { topic },
+          },
+        });
+        if (error || (data as any)?.error) {
+          toast({ title: 'Receipt warning', description: 'Stream connected but receipt could not be issued.' });
+        } else {
+          await refreshBalance();
+        }
+      } catch (err: any) {
+        console.error('[FeatureFeedAccess] receipt error', err?.message);
+      }
+    }
   };
 
   return (
