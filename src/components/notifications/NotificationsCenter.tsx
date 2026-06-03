@@ -30,7 +30,7 @@ const NotificationsCenter = () => {
   };
 
   return (
-    <Popover>
+    <Popover modal={false}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="relative h-8 w-8 md:h-9 md:w-9">
           <Bell className="h-3 w-3 md:h-4 md:w-4" />
@@ -41,7 +41,12 @@ const NotificationsCenter = () => {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 md:w-96 p-0">
+      <PopoverContent
+        align="end"
+        collisionPadding={8}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="w-80 md:w-96 p-0"
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div>
             <h3 className="font-semibold text-sm">Notifications</h3>
@@ -55,7 +60,7 @@ const NotificationsCenter = () => {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-96">
+        <ScrollArea className="h-96">
           {loading ? (
             <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
           ) : items.length === 0 ? (

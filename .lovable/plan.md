@@ -1,62 +1,36 @@
-## Goal
-Replace the disabled legacy anon/service_role JWTs everywhere with the new Supabase publishable/secret key system. Login is currently 401'ing with "Legacy API keys are disabled".
+## 1. Rail 1 → ETH (with readable color)
 
-## Frontend (3 files)
+**File:** `src/hooks/useWalletBalance.ts`
+- Add a second on-chain read: `publicClient.getBalance({ address: walletAddress })` (native ETH on Base) alongside the existing USDC `balanceOf`.
+- Return shape becomes `{ usdc_balance, eth_balance }` (ETH formatted with `formatUnits(raw, 18)`).
+- Keep the same 15s polling, abort, and yield behavior.
 
-1. **`.env`**
-   - `VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B"` (replaces legacy anon JWT)
+**File:** `src/components/dashboards/IndividualDashboard.tsx`
+- Import `useWalletBalance` and pull `eth_balance`.
+- Replace the Rail 1 card content:
+  - Label: `Rail 1: ETH` with `Wallet` icon swapped for an ETH-style glyph (keep `Wallet` if no icon available — label change is what matters).
+  - Value: `eth_balance.toFixed(4)` with unit `ETH` instead of `USD`.
+  - Color: switch label from `text-muted-foreground` to `text-sky-400` and value to `text-sky-300` (matches the colored treatment used on Rail 2/3, much more legible on the dark card). Border/bg tinted `bg-sky-500/5 border-sky-500/20` to match the sibling rails.
+- Remove the `rail1_Operating` derivation (no longer reading `protocolState.hub_operating_cash` for this card).
 
-2. **`src/integrations/supabase/client.ts`**
-   - Rename const `SUPABASE_ANON_KEY` → `SUPABASE_PUBLISHABLE_KEY` and set value to `sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B`
-   - Pass it as the 2nd arg to `createClient` and as the `apikey` header
+## 2. MetaMask QR auto-popup on launch
 
-3. **`src/lib/api.ts`**
-   - Drop the legacy `VITE_SUPABASE_ANON_KEY` fallback; read only `VITE_SUPABASE_PUBLISHABLE_KEY`
+**File:** `src/lib/metamask-sdk.ts`
+- Set `checkInstallationImmediately: false` (currently `true`, which forces the SDK to surface its install/QR modal as soon as the singleton is constructed at module import).
+- Keep `injectProvider: true` so the extension is still detected when the user clicks "Connect MetaMask".
+- The explicit `connectEmbeddedWallet()` call already triggers `eth_requestAccounts`, which prompts the extension/QR only on user action — no other change needed.
 
-(`src/components/modules/InventoryManagement.tsx` already reads `VITE_SUPABASE_PUBLISHABLE_KEY` — no change.)
+## 3. Notifications Center frozen
 
-## Edge functions — rename env vars to new system
+**File:** `src/components/notifications/NotificationsCenter.tsx`
 
-Every function currently reads `Deno.env.get("SUPABASE_ANON_KEY")` or `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Rewrite each to:
-- `SUPABASE_ANON_KEY` → `SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_SECRET_KEY`
+Two issues compound:
 
-Files to update:
+- `ScrollArea` is given `max-h-96` but no fixed height. Radix `ScrollArea` only scrolls when its root has a concrete height; with `max-h` and a flex parent it collapses and the wheel never engages. Change to `h-96` (and keep `max-h-96` only as an upper cap if needed: `h-96`).
+- `PopoverContent` should be non-modal (default) and not trap pointer events. Add `onOpenAutoFocus={(e) => e.preventDefault()}` to stop the focus-trap from stealing scroll on the rest of the page, and add `collisionPadding={8}` so it repositions cleanly. Wrap the trigger `Popover` with `modal={false}` to be explicit (prevents the inert-overlay behavior some Radix versions apply when stacked under another portal).
+- The "Mark all read" / per-item delete buttons sit inside a `<li onClick>` — keep `e.stopPropagation()` (already present on delete) and add the same guard to "Mark all read" by moving it out of the row click path (it already is — verify no regression).
 
-```text
-ANON references:
-  confirm-wix-payment/index.ts
-  life-pii-bridge/index.ts
-  marketplace-bundle-access/index.ts
-  process-delt-transfer/index.ts
-
-SERVICE_ROLE references:
-  ai-data-curator, best-friend-ai, confirm-wix-payment, crazy-8-security,
-  create-business-intelligence-bundles, create-health-data-bundle,
-  create-lifestyle-bundles, execute-hub-query, hydrate-terminal,
-  life-pii-bridge, marketplace-bundle-access, process-delt-transfer,
-  process-lifestyle-data, recover-health-pipeline, security-event-generator,
-  seed-marketplace-catalog, synapse-controller, top-up-credits,
-  verify-idia-life-tap, vulture-sanitization-agent, wix-payment-webhook
-```
-
-Since the user states "some edge functions are updated, some are not" but filesystem timestamps are all identical (sandbox sync wipes mtimes), I'll treat any file still containing the legacy env var names as not yet updated and rewrite only those references — leaving any function that's already on the new names untouched.
-
-## Secrets
-
-Add the two new runtime secrets so edge functions resolve them at runtime:
-- `SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B`
-- `SUPABASE_SECRET_KEY` = (user-provided sb_secret_… value)
-
-I'll trigger the add-secret flow so you can paste the secret key into the secure form.
-
-## Out of scope (flagging only, not changing)
-
-- DB function `public.fn_trigger_synapse_autonomous` hardcodes a `sb_secret_…` key in its `Authorization` header. That's a security issue (secret in DB code) and a brittleness issue (won't survive future rotations). Recommend follow-up to read it from Vault via `get_service_role_key()` like the other triggers do — but it's out of scope for this key-migration pass unless you say otherwise.
-- Wix, Alchemy, relayer, and other non-Supabase secrets are unaffected.
-
-## Validation
-
-After changes:
-- Reload preview → login should succeed (no more "Legacy API keys are disabled")
-- Spot-check one edge function call (e.g. top-up-credits or hydrate-terminal) via the UI and confirm 200 in network log
+Verification after build:
+- Refresh app: no MetaMask QR/install modal on load.
+- Dashboard: Rail 1 card reads `ETH` with a 4-decimal ETH value in sky/blue.
+- Open bell: popover scrolls, "Mark all read" and trash buttons respond, page outside popover stays interactive.

@@ -19,6 +19,7 @@ const USDC_ABI = [
 
 interface WalletBalance {
   usdc_balance: number;
+  eth_balance: number;
 }
 
 /**
@@ -29,7 +30,7 @@ interface WalletBalance {
 export const useWalletBalance = (isYielding: boolean = false) => {
   console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
 
-  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0 });
+  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0, eth_balance: 0 });
   const [loading, setLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -63,7 +64,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (!session?.user) {
         console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session.");
-        setBalance({ usdc_balance: 0 });
+        setBalance({ usdc_balance: 0, eth_balance: 0 });
         return;
       }
       console.log(
@@ -104,7 +105,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (profileError || !profile?.wallet_address) {
         console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing from profile.");
-        setBalance({ usdc_balance: 0 });
+        setBalance({ usdc_balance: 0, eth_balance: 0 });
         return;
       }
       const walletAddress = profile.wallet_address;
@@ -118,18 +119,24 @@ export const useWalletBalance = (isYielding: boolean = false) => {
       });
 
       console.log(`[useWalletBalance][fetchBalance][Contract] START: Calling balanceOf(address) on-chain.`);
-      const rawBalance = await publicClient.readContract({
-        address: USDC_ADDRESS,
-        abi: USDC_ABI,
-        functionName: "balanceOf",
-        args: [walletAddress as `0x${string}`],
-      } as any);
+      const [rawUsdc, rawEth] = await Promise.all([
+        publicClient.readContract({
+          address: USDC_ADDRESS,
+          abi: USDC_ABI,
+          functionName: "balanceOf",
+          args: [walletAddress as `0x${string}`],
+        } as any) as Promise<bigint>,
+        publicClient.getBalance({ address: walletAddress as `0x${string}` }),
+      ]);
 
       // 5. STATE INJECTION
-      const hydratedBalance = Number(formatUnits(rawBalance as bigint, 6));
-      console.log(`[useWalletBalance][fetchBalance][Hydration] SUCCESS: Verified balance is $${hydratedBalance} USDC.`);
+      const hydratedUsdc = Number(formatUnits(rawUsdc as bigint, 6));
+      const hydratedEth = Number(formatUnits(rawEth as bigint, 18));
+      console.log(
+        `[useWalletBalance][fetchBalance][Hydration] SUCCESS: USDC=$${hydratedUsdc} | ETH=${hydratedEth}`,
+      );
 
-      setBalance({ usdc_balance: hydratedBalance });
+      setBalance({ usdc_balance: hydratedUsdc, eth_balance: hydratedEth });
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for transaction yield.");
