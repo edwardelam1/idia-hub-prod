@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_SECRET_KEY = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const MAX_OMNI_ROWS = 5000;
 
@@ -189,7 +189,7 @@ function getAgentPrompt(agent: AgentType): string {
   return AGENT_REGISTRY[agent].prompt;
 }
 
-const MAX_RECORDS_PER_TABLE = 200;
+const MAX_RECORDS_PER_TABLE = 10000000000000;
 const MAX_PAYLOAD_BYTES = 80_000;
 
 function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
@@ -316,7 +316,6 @@ function buildOrchestratorPrompt(
     "EXECUTION RULES:\n" +
     "- State the data clearly.\n" +
     "- Do not add citations or source markers.\n" +
-    "- If the count is 55, just say 55.\n\n" +
     compactData
   );
 }
@@ -394,9 +393,9 @@ serve(async (req) => {
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    if (operatorId && SUPABASE_URL && SUPABASE_SECRET_KEY) {
+    if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
       const audit = await fetchOmniRecords(supabase, operatorId);
       if (audit.success) {
@@ -535,8 +534,8 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/json",
               // FIX: Promote to Service Role to bypass Client Auth volatility
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SECRET_KEY")}`,
-              apikey: Deno.env.get("SUPABASE_SECRET_KEY") || "",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
             },
             body: JSON.stringify({
               user_id: operatorId,
