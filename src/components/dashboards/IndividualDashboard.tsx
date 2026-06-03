@@ -126,12 +126,10 @@ const IndividualDashboard = () => {
         {/* RAIL 1: ETH (NATIVE GAS) */}
         <Card className="bg-sky-500/5 border-sky-500/20 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-sky-400 flex items-center gap-2">
-            <Wallet className="h-3 w-3" /> Rail 1: ETH
+            <Wallet className="h-3 w-3" /> ETH
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-xl font-mono font-bold text-sky-300">
-              {rail1_Eth.toFixed(4)}
-            </span>
+            <span className="text-xl font-mono font-bold text-sky-300">{rail1_Eth.toFixed(4)}</span>
             <span className="text-[8px] font-bold text-sky-400/70 uppercase">ETH (Base)</span>
           </div>
           <Progress value={100} className="h-0.5 mt-2 bg-sky-500/20" />
@@ -140,7 +138,7 @@ const IndividualDashboard = () => {
         {/* RAIL 2: GAS (COMPUTATIONAL) */}
         <Card className="bg-primary/5 border-primary/20 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-primary flex items-center gap-2">
-            <Zap className="h-3 w-3 fill-primary" /> Rail 2: Gas
+            <Zap className="h-3 w-3 fill-primary" /> Synapse Credits
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-primary">{rail2_Gas.toLocaleString()}</span>
@@ -152,7 +150,7 @@ const IndividualDashboard = () => {
         {/* RAIL 3: STABLECOIN (LIQUIDITY) */}
         <Card className="bg-amber-500/5 border-amber-500/10 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-amber-500 flex items-center gap-2">
-            <TrendingUp className="h-3 w-3" /> Rail 3: USDC
+            <TrendingUp className="h-3 w-3" /> USDC
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-amber-500">
