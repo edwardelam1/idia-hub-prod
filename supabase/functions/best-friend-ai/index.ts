@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const SUPABASE_SECRET_KEY = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
 
 const MAX_OMNI_ROWS = 5000;
 
@@ -394,9 +394,9 @@ serve(async (req) => {
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
 
-    if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    if (operatorId && SUPABASE_URL && SUPABASE_SECRET_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
       const audit = await fetchOmniRecords(supabase, operatorId);
       if (audit.success) {
@@ -535,8 +535,8 @@ serve(async (req) => {
             headers: {
               "Content-Type": "application/json",
               // FIX: Promote to Service Role to bypass Client Auth volatility
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SECRET_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_SECRET_KEY") || "",
             },
             body: JSON.stringify({
               user_id: operatorId,

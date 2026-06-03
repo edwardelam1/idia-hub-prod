@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
 
     stage = "INIT_ADMIN_CLIENT";
     console.log(`[BEGIN: ${stage}]`);
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SECRET_KEY")!);
     console.log(`[END: ${stage}]`);
 
     stage = "IDEMPOTENCY_CHECK";

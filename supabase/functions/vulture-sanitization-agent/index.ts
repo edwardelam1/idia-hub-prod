@@ -4,7 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SERVICE_KEY = Deno.env.get('SUPABASE_SECRET_KEY')!
 const BUCKET = 'idia-data-quarantine-prod'
 const MANIFEST_BUCKET = 'rehabilitated-manifests'
 const PII_KEYS = new Set(['ssn', 'social_security', 'name', 'first_name', 'last_name', 'full_name', 'email', 'email_address'])
