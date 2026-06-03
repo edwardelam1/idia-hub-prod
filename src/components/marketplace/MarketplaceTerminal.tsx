@@ -41,8 +41,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
 
-  const { balanceData } = useSynapseCredits();
-  const { refreshBalance } = useSynapseCredits();
+  const { balanceData, refreshBalance } = useSynapseCredits();
   // Snapshot balance once at mount so live ledger refreshes don't re-render the terminal mid-edit.
   const initialBalanceRef = useRef<number>(propBalance ?? balanceData?.available_credits ?? 0);
   const liveBalance = propBalance ?? balanceData?.available_credits ?? initialBalanceRef.current;
