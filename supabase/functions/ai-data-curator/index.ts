@@ -42,6 +42,10 @@ serve(async (req) => {
 
     let response;
 
+    const __bundleT0 = (action === 'publish_bundle' || action === 'curate_and_publish')
+      ? performance.now()
+      : null;
+
     switch (action) {
       case 'analyze_data':
         response = await analyzeHealthData(data);
@@ -66,6 +70,34 @@ serve(async (req) => {
         break;
       default:
         throw new Error(`Unknown action: ${action}`);
+    }
+
+    if (__bundleT0 !== null) {
+      console.log("[HUB_TELEMETRY][INGEST][START] Capturing processing latency for runtime thread...");
+      try {
+        const ms = Math.max(0, Math.round(performance.now() - __bundleT0));
+        const bundleId = response?.bundle?.id ?? null;
+        const sourceCount =
+          (typeof data?.length === 'number' ? data.length : null) ??
+          data?.participant_count ?? data?.unique_users_count ?? null;
+        const { error: telemetryError } = await supabaseClient
+          .from('bundle_generation_logs')
+          .insert({
+            bundle_id: bundleId,
+            generation_type: bundleType ?? action,
+            data_source_count: sourceCount,
+            processing_duration: `${ms} milliseconds`,
+            quality_metrics: {
+              avg_quality_score: data?.avg_quality_score ?? null,
+              tier: data?.tier ?? response?.bundle?.tier ?? null,
+              latency_ms: ms,
+            },
+          });
+        if (telemetryError) throw telemetryError;
+        console.log("[HUB_TELEMETRY][INGEST][END:OK] Metrics written to database schema successfully.");
+      } catch (telemetryErr: any) {
+        console.error("[HUB_TELEMETRY][INGEST][END:FAIL] bundle_generation_logs insert failed:", telemetryErr?.message ?? String(telemetryErr));
+      }
     }
 
     return new Response(JSON.stringify({ 
