@@ -1,71 +1,60 @@
-# Telemetry Reporting Layer — Backend Wiring
+## What I’ll change
 
-Three Edge Functions get instrumented so `public.api_metrics`, `public.bundle_generation_logs`, and `public.egress_logs` reflect real operational latency. No schema changes — all three tables already exist with the needed columns.
+1. **Make Best Friend ACA replies deterministic, not prompt-only**
+   - Replace the current soft ACA prompt-append approach in `supabase/functions/best-friend-ai/index.ts` with a server-authored ACA response composer for ACA catalog / ACA file inspection requests.
+   - Enforce the agreed output shape: no ACA identifier echoed back, signal-only language, medium-length summary, grouped totals translated into meaning instead of raw table dumps.
+   - Ensure the ACA path wins over the older generic agent phrasing so the assistant cannot fall back to legacy wording.
 
-## Schema reality check (mapping the request to actual columns)
+2. **Normalize Best Friend receipt creation across AI usage**
+   - Audit the Best Friend request modes and make receipt issuance happen for AI-powered data access flows, not only `isMarketplaceMode === true`.
+   - Keep receipt generation tied to actual data/ACA usage so Synapse burns are consistent with what the AI accessed.
+   - Return receipt metadata in a stable way so the frontend can surface it reliably.
 
-- `public.api_metrics` columns: `endpoint` (text, NOT NULL), `latency_ms` (int, NOT NULL), `status_code` (int, NOT NULL), `error_details` (text), `user_id` (uuid), `key_id` (uuid), `timestamp` (default now).
-  - The spec asks for `endpoint_name` / `status='success'|'error'`. We will write to the real columns: `endpoint='best-friend-ai'`, `status_code=200` on success / `500` on error, with `error_details` populated on the error path.
-- `public.bundle_generation_logs.processing_duration` is `interval` — we write `${ms} milliseconds` via a parameterized insert.
-- `public.egress_logs` already auto-stamps `created_at`. `settled_at` is currently only written downstream by the settlement webhook; we will additionally write it inline on the synapse-controller success path so packets always have both stamps.
+3. **Close trading-desk receipt gaps**
+   - Keep the already-correct receipt paths intact:
+     - `marketplace-bundle-access` -> `synapse-controller`
+     - `APIEndpoints` live calls -> `synapse-controller`
+   - Add receipt-backed charging where it’s missing or incomplete for trading tools, especially:
+     - SQL terminal / query execution path
+     - feature-feed / live data access path where usage should count as billable consumption
+     - any AI/data-access path in the trading desk that currently reads data without a Synapse receipt
 
-## 1. `supabase/functions/best-friend-ai/index.ts`
+4. **Align billing/monitoring with the real receipt model**
+   - Make usage dashboards read the same ledger entry types that the Synapse controller actually writes, so the UI reflects real consumption.
+   - Verify the trading desk monitoring/billing views don’t undercount because they only look at legacy `deduction` rows.
 
-- At the top of the `serve` handler (after OPTIONS short-circuit), capture `const t0 = performance.now()`.
-- Add a helper `logApiMetric(supabase, { statusCode, errorDetails?, userId? })` that inserts into `public.api_metrics` with `endpoint='best-friend-ai'` and `latency_ms = Math.round(performance.now() - t0)`. Fire-and-forget via `EdgeRuntime.waitUntil(...)` so it never blocks the response.
-- Bookend logs around the insert:
-  - `console.log("[HUB_TELEMETRY][INGEST][START] Capturing processing latency for runtime thread...")`
-  - on success: `console.log("[HUB_TELEMETRY][INGEST][END:OK] Metrics written to database schema successfully.")`
-  - on insert failure: `console.error("[HUB_TELEMETRY][INGEST][END:FAIL] ...", err.message)`
-- Call the helper immediately before each terminal `return new Response(...)`:
-  - Success branch at line ~610 → `statusCode: 200`.
-  - Catch branch at line ~619 → `statusCode: 500, errorDetails: error.message`.
-  - Validation 400 branch at line ~366 → `statusCode: 400, errorDetails: 'zod_validation'`.
-- Use the existing service-role Supabase client already constructed in this function (no new client needed) — if none exists in scope at return points, construct a lightweight one once at handler top.
-
-## 2. `supabase/functions/ai-data-curator/index.ts` — bundle generation timing
-
-The `curate_and_publish` / `publish_bundle` actions are where bundles are actually emitted. Wrap those two case branches:
-
-- Capture `const bundleT0 = performance.now()` right before invoking `curateAndPublish` / `publishBundle`.
-- After the call resolves (and we have the new `bundle_id` from the returned `response`), insert into `public.bundle_generation_logs`:
-  - `bundle_id`: id returned by the publisher (nullable-safe).
-  - `generation_type`: the `bundleType` string.
-  - `data_source_count`: `data.length ?? data.participant_count ?? null`.
-  - `processing_duration`: `` `${Math.round(performance.now() - bundleT0)} milliseconds` ``.
-  - `quality_metrics`: `{ avg_quality_score: data.avg_quality_score, tier: data.tier }`.
-- Same bookended `[HUB_TELEMETRY][INGEST][START|END:OK|END:FAIL]` log triplet around the insert.
-- Insert is awaited inside a `try/catch` that only logs — never throws — so bundle publication never regresses if telemetry fails.
-
-## 3. `supabase/functions/synapse-controller/index.ts` — egress timestamp gap
-
-- The current `egress_logs` insert relies on the DB default for `created_at` and never writes `settled_at` until the downstream settlement webhook fires. To close the gap requested:
-  - On the existing insert, explicitly pass `created_at: new Date().toISOString()` (no behavior change, just explicit) and keep `settled_at` unset at insert time.
-  - After the `settlement_queue` insert succeeds (the `handoffAccepted = true` branch), add a follow-up update on the same `egress_logs` row setting `settled_at = new Date().toISOString()`. This guarantees both stamps exist as soon as the packet leaves the controller, which is what the network-delivery parser needs.
-- Wrap that update in the bookended `[HUB_TELEMETRY][INGEST][START|END:OK|END:FAIL]` log triplet.
-
-## 4. Bookended log constraint (all three functions)
-
-Every newly added telemetry insert/update path must be surrounded by:
-
-```
-console.log("[HUB_TELEMETRY][INGEST][START] Capturing processing latency for runtime thread...");
-// ... insert/update ...
-console.log("[HUB_TELEMETRY][INGEST][END:OK] Metrics written to database schema successfully.");
-```
-
-Failure paths use a matching `[HUB_TELEMETRY][INGEST][END:FAIL]` line so log scrapers can detect silent stalls.
-
-## Out of scope
-
-- No DB migrations (all columns already exist).
-- No frontend changes.
-- MCP/API and direct-SQL channels already flow through `synapse-controller` + `execute-hub-query`; only the egress-timestamp fix above is needed for them. `execute-hub-query` already writes `api_metrics` (verified separately) — flag only, no edit, unless inspection in build mode shows otherwise.
-
-## Files touched
+## Likely files involved
 
 - `supabase/functions/best-friend-ai/index.ts`
-- `supabase/functions/ai-data-curator/index.ts`
 - `supabase/functions/synapse-controller/index.ts`
+- `supabase/functions/execute-hub-query/index.ts` or the live query path used by the SQL terminal
+- `src/pages/BestFriendPage.tsx`
+- `src/components/marketplace/MarketplaceTerminal.tsx`
+- `src/components/trading/FeatureFeedAccess.tsx`
+- `src/hooks/useBillingData.tsx`
+- `src/contexts/SynapseCreditsContext.tsx` if balance/usage refresh needs alignment
 
-Deploy is automatic on save.
+## Key findings behind this plan
+
+- The new ACA behavior exists, but it is currently **only appended as prompt context** in `best-friend-ai`; that means the model can still answer in the old generic style instead of the agreed format.
+- Best Friend currently sends Synapse receipts only in the marketplace/data-scientist branch, so some AI interactions can still bypass receipt creation.
+- Marketplace bundle access and the API endpoint test flow already hand off to `synapse-controller`, but other trading-desk surfaces are not consistently wired into the same receipt path.
+- Billing currently appears to rely on legacy ledger filtering, which risks misreporting actual usage after Synapse-controller burns.
+
+## Technical details
+
+- **Best Friend formatter:** move ACA summary generation from “model instructed to summarize this JSON” to “server computes the summary, model only used when needed outside ACA mode.”
+- **Receipt standardization:** use one server-authoritative receipt contract centered on `synapse-controller` so marketplace, AI, API, and query tools burn credits the same way.
+- **Usage accounting:** update client queries to count the real Synapse usage entries (`USAGE`/settled burns and related receipt rows) instead of only older `deduction` records.
+- **Validation:** test ACA lookup responses, Best Friend receipt emission, bundle access, endpoint execution, and SQL/query execution so each produces both a user result and a ledger/receipt trail.
+
+```text
+User action
+  -> tool/feature call
+  -> server-side receipt decision
+  -> synapse-controller (or equivalent standardized burn path)
+  -> synapse_credit_ledger + egress_logs
+  -> UI refresh / monitoring / billing
+```
+
+If you approve, I’ll implement this end-to-end with the smallest possible set of targeted changes.
