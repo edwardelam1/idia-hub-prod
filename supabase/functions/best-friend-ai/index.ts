@@ -189,17 +189,16 @@ function getAgentPrompt(agent: AgentType): string {
   return AGENT_REGISTRY[agent].prompt;
 }
 
-const MAX_RECORDS_PER_TABLE = 10000000000000;
+const MAX_RECORDS_PER_TABLE = 150;
 const MAX_PAYLOAD_BYTES = 80_000;
 
 function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
   let h = health.slice(0, MAX_RECORDS_PER_TABLE);
   let l = lifestyle.slice(0, MAX_RECORDS_PER_TABLE);
-  const size = JSON.stringify(h).length + JSON.stringify(l).length;
-  if (size > MAX_PAYLOAD_BYTES) {
-    const half = Math.floor(MAX_RECORDS_PER_TABLE / 2);
-    h = h.slice(0, half);
-    l = l.slice(0, half);
+  // Iteratively shrink until under byte budget (gpt-4o-mini TPM = 200k tokens).
+  while (JSON.stringify(h).length + JSON.stringify(l).length > MAX_PAYLOAD_BYTES && (h.length > 1 || l.length > 1)) {
+    h = h.slice(0, Math.max(1, Math.floor(h.length / 2)));
+    l = l.slice(0, Math.max(1, Math.floor(l.length / 2)));
   }
   return { health: h, lifestyle: l };
 }
