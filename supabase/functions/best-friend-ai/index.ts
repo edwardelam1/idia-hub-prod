@@ -779,18 +779,75 @@ serve(async (req) => {
 
     // ── ACA file inspector: detect intent and inject signal-only context ──
     const acaIntent = detectAcaIntent(message);
+    let acaDirectResponse: string | null = null;
+    let acaTouched = false;
     if (acaIntent.mode !== "none") {
       console.info(`[BEGIN: BestFriendAI.AcaInspector] Intent=${acaIntent.mode}`);
-      let acaContext = "";
       if (acaIntent.mode === "list") {
         const listRes = await listAcaFiles(supabase);
-        acaContext = buildAcaContext({ mode: "list" }, listRes);
+        acaDirectResponse = buildAcaPlainResponse({ mode: "list" }, listRes);
+        acaTouched = (listRes?.total ?? 0) > 0;
       } else if (acaIntent.mode === "inspect" && acaIntent.hash) {
         const inspectRes = await inspectAcaFile(supabase, acaIntent.hash);
-        acaContext = buildAcaContext({ mode: "inspect", hash: acaIntent.hash }, undefined, inspectRes);
+        acaDirectResponse = buildAcaPlainResponse(
+          { mode: "inspect", hash: acaIntent.hash },
+          undefined,
+          inspectRes,
+        );
+        acaTouched = !!inspectRes?.found;
       }
-      systemPrompt += acaContext;
-      console.info(`[END: BestFriendAI.AcaInspector] Context bytes appended: ${acaContext.length}`);
+      console.info(
+        `[END: BestFriendAI.AcaInspector] Direct response: ${acaDirectResponse ? "yes" : "no"}, touched=${acaTouched}`,
+      );
+    }
+
+    // SHORT-CIRCUIT: ACA replies are server-authored so the agreed signal-only
+    // format cannot regress to legacy phrasing from the LLM. We still issue a
+    // Synapse receipt below for the data access.
+    if (acaDirectResponse) {
+      const aiResponse = normalizeOutput(acaDirectResponse, detectedAgent);
+
+      // Receipt for ACA introspection (data access counts as consumption).
+      if (operatorId && acaTouched) {
+        try {
+          const synapseUrl = `${SUPABASE_URL}/functions/v1/synapse-controller`;
+          const acaRef = acaIntent.hash
+            ? [acaIntent.hash]
+            : [`aca-list-${new Date().toISOString().slice(0, 10)}`];
+          await fetch(synapseUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+            },
+            body: JSON.stringify({
+              user_id: operatorId,
+              client_id: client_id || "IDIA_HUB_APP",
+              aca_record_ids: acaRef,
+              intent_type: acaIntent.mode === "list" ? "ACA_CATALOG_LOOKUP" : "ACA_FILE_INSPECT",
+              location_string: normalizedLocationString,
+            }),
+          });
+          consumedReceipt = acaRef;
+        } catch (synErr: any) {
+          console.error(`[BestFriendAI.AcaReceipt.Stall] ${synErr.message}`);
+        }
+      }
+
+      logApiMetric(200, undefined, operatorId);
+      return new Response(
+        JSON.stringify({
+          response: aiResponse,
+          timestamp: new Date().toISOString(),
+          agentStatus: "active",
+          persona: "Best Friend",
+          activeAgent: "GENERAL_NAVIGATOR",
+          aca_mode: acaIntent.mode,
+          consumed_records: consumedReceipt,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const formattedHistory = Array.isArray(history)
