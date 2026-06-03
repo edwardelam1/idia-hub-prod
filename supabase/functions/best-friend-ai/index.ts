@@ -340,6 +340,29 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const __t0 = performance.now();
+  const logApiMetric = (statusCode: number, errorDetails?: string, userId?: string) => {
+    const latencyMs = Math.max(0, Math.round(performance.now() - __t0));
+    const task = (async () => {
+      console.log("[HUB_TELEMETRY][INGEST][START] Capturing processing latency for runtime thread...");
+      try {
+        const metricsClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { error } = await metricsClient.from("api_metrics").insert({
+          endpoint: "best-friend-ai",
+          latency_ms: latencyMs,
+          status_code: statusCode,
+          error_details: errorDetails ?? null,
+          user_id: userId ?? null,
+        });
+        if (error) throw error;
+        console.log("[HUB_TELEMETRY][INGEST][END:OK] Metrics written to database schema successfully.");
+      } catch (err: any) {
+        console.error("[HUB_TELEMETRY][INGEST][END:FAIL] api_metrics insert failed:", err?.message ?? String(err));
+      }
+    })();
+    try { (globalThis as any).EdgeRuntime?.waitUntil?.(task); } catch { /* noop */ }
+  };
+
   let operatorId: string | undefined;
   let consumedReceipt: string[] = [];
 
@@ -363,6 +386,7 @@ serve(async (req) => {
       console.info("[BEGIN: BestFriendAI.PayloadValidation.Error] Handling schema parsing failure.");
       console.error("[ERROR: BestFriendAI.PayloadValidation] Schema mismatch:", parsed.error.flatten());
       console.info("[END: BestFriendAI.PayloadValidation.Error] Returning 400 Bad Request.");
+      logApiMetric(400, "zod_validation");
       return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -607,6 +631,7 @@ serve(async (req) => {
     console.info("[END: BestFriendAI.ResponseCompilation] Payload ready.");
 
     console.info("[END: BestFriendAI.RequestGate] Closing HTTP transaction cleanly.");
+    logApiMetric(200, undefined, operatorId);
     return new Response(JSON.stringify(finalPayload), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -616,6 +641,7 @@ serve(async (req) => {
     );
     console.error(`[FATAL STALL]: ${error.message}`);
     console.info(`[END: BestFriendAI.Diagnostics.Stall] Error handled. Exiting gracefully.`);
+    logApiMetric(500, error?.message ?? "unknown_error", operatorId);
     return new Response(
       JSON.stringify({
         response: `Diagnostics Alert: ${error.message}`,
