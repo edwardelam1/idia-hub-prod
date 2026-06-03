@@ -404,6 +404,109 @@ function buildAcaContext(
   }
   return "";
 }
+
+// ─── DETERMINISTIC ACA RESPONDER ───────────────────────────────────────────────
+// Server-authored, signal-only summary. Bypasses the LLM so the agreed format
+// cannot regress to legacy phrasing. Never echoes the hash.
+function buildAcaPlainResponse(
+  intent: { mode: "list" | "inspect"; hash?: string },
+  listResult?: Awaited<ReturnType<typeof listAcaFiles>>,
+  inspectResult?: Awaited<ReturnType<typeof inspectAcaFile>>,
+): string | null {
+  if (intent.mode === "list" && listResult) {
+    if (listResult.error) {
+      return `I could not read the ACA catalog right now (${listResult.error}). Try again in a moment.`;
+    }
+    const total = listResult.total;
+    const rows = listResult.rows ?? [];
+    if (total === 0) return "The ACA catalog is empty — no files have been registered yet.";
+    const sources = new Map<string, number>();
+    for (const r of rows) {
+      const src = (r as any).source_id ?? "unknown";
+      sources.set(src, (sources.get(src) ?? 0) + 1);
+    }
+    const consumed = rows.filter((r: any) => r.consumed_at).length;
+    const newest = rows[0]?.created_at;
+    const oldest = rows[rows.length - 1]?.created_at;
+    const topSources = [...sources.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([k, v]) => `${k} (${v})`)
+      .join(", ");
+    const consumedPct = rows.length ? Math.round((consumed / rows.length) * 100) : 0;
+    return [
+      `Across the registry there are ${total} ACA files on record.`,
+      `Of the ${rows.length} most recent, ${consumed} have already been consumed downstream (${consumedPct}%).`,
+      topSources ? `Activity is led by ${topSources}.` : "",
+      newest && oldest
+        ? `The window spans from ${new Date(oldest).toISOString().slice(0, 10)} to ${new Date(newest).toISOString().slice(0, 10)}.`
+        : "",
+      "Ask about a specific ACA prefix if you want a per-file readout.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (intent.mode === "inspect" && inspectResult) {
+    if (!inspectResult.found) {
+      return `That ACA lookup did not resolve — ${inspectResult.error ?? "no matching file"}. Try a longer prefix.`;
+    }
+    const t = inspectResult.totals;
+    const reg: any = inspectResult.registry ?? {};
+    const raw = (t["raw_health_data"] ?? 0) + (t["raw_app_data"] ?? 0);
+    const staged = (t["staged_health_data"] ?? 0) + (t["staged_lifestyle_data"] ?? 0);
+    const fin = (t["delt_transfers"] ?? 0) + (t["usdc_payments"] ?? 0);
+    const gov =
+      (t["governance_ledger"] ?? 0) +
+      (t["dao_proposals"] ?? 0) +
+      (t["dao_votes"] ?? 0) +
+      (t["dao_vetoes"] ?? 0) +
+      (t["proposal_comments"] ?? 0) +
+      (t["proposal_signatures"] ?? 0);
+    const lineage = t["data_lineage_index"] ?? 0;
+    const controller = t["synapse_controller"] ?? 0;
+    const total = raw + staged + fin + gov + lineage + controller;
+
+    const created = reg.created_at ? new Date(reg.created_at).toISOString().slice(0, 10) : null;
+    const source = reg.source_id ?? "an unspecified source";
+    const consent = reg.consent_type ? `, consent type ${reg.consent_type}` : "";
+
+    if (total === 0) {
+      return [
+        `This ACA file is dormant.`,
+        created ? `It was registered on ${created} from ${source}${consent},` : `Registered from ${source}${consent},`,
+        `but no downstream pipeline, financial, governance, or lineage activity has been recorded against it.`,
+        `Practically that means the file is sealed and untouched — eligible for use, not yet consumed.`,
+      ].join(" ");
+    }
+
+    const parts: string[] = [];
+    if (raw) parts.push(`${raw} raw signal${raw === 1 ? "" : "s"} ingested`);
+    if (staged) parts.push(`${staged} staged record${staged === 1 ? "" : "s"} prepared for downstream use`);
+    if (fin) parts.push(`${fin} financial event${fin === 1 ? "" : "s"}`);
+    if (gov) parts.push(`${gov} governance event${gov === 1 ? "" : "s"}`);
+    if (lineage) parts.push(`${lineage} lineage link${lineage === 1 ? "" : "s"}`);
+    if (controller) parts.push(`${controller} controller event${controller === 1 ? "" : "s"}`);
+
+    const activity = parts.join(", ");
+    const meaning =
+      fin > 0
+        ? "It has already produced settlement activity, so it is materially in use."
+        : staged > 0
+          ? "It is moving through the pipeline but has not yet generated settlement activity."
+          : raw > 0
+            ? "Ingestion has begun but the file has not yet been staged or monetized."
+            : "Activity is limited to governance or lineage — the file has not yet been monetized.";
+
+    return [
+      created ? `Registered on ${created} from ${source}${consent}.` : `Registered from ${source}${consent}.`,
+      `Across the system this file has ${activity}.`,
+      meaning,
+      `Total downstream touches: ${total}.`,
+    ].join(" ");
+  }
+  return null;
+}
 // ───────────────────────────────────────────────────────────────────────────────
 
 function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
