@@ -20,8 +20,9 @@ try {
     },
     // Force the SDK to detect and inject the local extension provider first
     injectProvider: true,
-    // Run installation check up front so the extension popup takes priority over the QR bridge
-    checkInstallationImmediately: true,
+    // Defer installation check until the user explicitly clicks "Connect MetaMask".
+    // When true the SDK surfaces its install/QR modal on app launch — not desired.
+    checkInstallationImmediately: false,
   });
   console.log("[IDIA_WEB3_SDK][Init] <<< END: Standalone MetaMask SDK successfully compiled.");
 } catch (error: any) {
