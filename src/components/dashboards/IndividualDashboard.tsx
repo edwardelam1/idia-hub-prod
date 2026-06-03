@@ -27,12 +27,14 @@ import {
   TrendingUp,
 } from "lucide-react";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
   const { protocolState, isLoading: creditsLoading, refreshState } = useSynapseCredits();
   const { currentUsage, subscription } = useBillingData();
   const navigate = useNavigate();
+  const { balance: walletBalance } = useWalletBalance();
 
   // ========================================================================
   // IDENTITY RECONCILIATION: Resolved GUID Bridge
@@ -49,18 +51,18 @@ const IndividualDashboard = () => {
   // ========================================================================
   // TRIPLE-RAIL FINALITY: Straight-Through Flow Mapping
   // ========================================================================
-  const rail1_Operating = protocolState?.hub_operating_cash ?? 0;
   const rail2_Gas = protocolState?.synapse_gas_credits ?? 0;
   const rail3_USDC = protocolState?.usdc_balance ?? 0;
   const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? 0;
+  const rail1_Eth = walletBalance?.eth_balance ?? 0;
 
   useEffect(() => {
     if (protocolState) {
       console.info(
-        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1: $${rail1_Operating} | R2: ${rail2_Gas} | R3-USDC: ${rail3_USDC} | S3: $${silo3_LifeYield}`,
+        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1-ETH: ${rail1_Eth} | R2: ${rail2_Gas} | R3-USDC: ${rail3_USDC} | S3: $${silo3_LifeYield}`,
       );
     }
-  }, [protocolState, rail1_Operating, rail2_Gas, rail3_USDC, silo3_LifeYield]);
+  }, [protocolState, rail1_Eth, rail2_Gas, rail3_USDC, silo3_LifeYield]);
 
   // ─── DYNAMIC LEDGER INTERROGATION ─────────────────────
   const { data: stats } = useQuery({
@@ -121,18 +123,18 @@ const IndividualDashboard = () => {
 
       {/* THE OPERATING GRID: FOUR-RAIL LIQUIDITY FLOW */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {/* RAIL 1: OPERATING (FIAT) */}
-        <Card className="bg-black/60 border-white/5 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
-          <h3 className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-            <Wallet className="h-3 w-3" /> Rail 1: Operating
+        {/* RAIL 1: ETH (NATIVE GAS) */}
+        <Card className="bg-sky-500/5 border-sky-500/20 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
+          <h3 className="text-[9px] font-bold uppercase tracking-widest text-sky-400 flex items-center gap-2">
+            <Wallet className="h-3 w-3" /> Rail 1: ETH
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-xl font-mono font-bold">
-              ${rail1_Operating.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <span className="text-xl font-mono font-bold text-sky-300">
+              {rail1_Eth.toFixed(4)}
             </span>
-            <span className="text-[8px] font-bold text-muted-foreground uppercase">USD</span>
+            <span className="text-[8px] font-bold text-sky-400/70 uppercase">ETH (Base)</span>
           </div>
-          <Progress value={100} className="h-0.5 mt-2 bg-white/5" />
+          <Progress value={100} className="h-0.5 mt-2 bg-sky-500/20" />
         </Card>
 
         {/* RAIL 2: GAS (COMPUTATIONAL) */}
