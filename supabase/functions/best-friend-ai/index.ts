@@ -674,6 +674,22 @@ serve(async (req) => {
       systemPrompt = STORE_CLERK_PERSONA + navSummary;
     }
 
+    // ── ACA file inspector: detect intent and inject signal-only context ──
+    const acaIntent = detectAcaIntent(message);
+    if (acaIntent.mode !== "none") {
+      console.info(`[BEGIN: BestFriendAI.AcaInspector] Intent=${acaIntent.mode}`);
+      let acaContext = "";
+      if (acaIntent.mode === "list") {
+        const listRes = await listAcaFiles(supabase);
+        acaContext = buildAcaContext({ mode: "list" }, listRes);
+      } else if (acaIntent.mode === "inspect" && acaIntent.hash) {
+        const inspectRes = await inspectAcaFile(supabase, acaIntent.hash);
+        acaContext = buildAcaContext({ mode: "inspect", hash: acaIntent.hash }, undefined, inspectRes);
+      }
+      systemPrompt += acaContext;
+      console.info(`[END: BestFriendAI.AcaInspector] Context bytes appended: ${acaContext.length}`);
+    }
+
     const formattedHistory = Array.isArray(history)
       ? history
           .filter((h: any) => h.role === "user" || h.role === "assistant")
