@@ -93,7 +93,15 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SECRET_KEY")!;
+    const serviceRoleKey =
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+      Deno.env.get("SUPABASE_SECRET_KEY") ??
+      "";
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error(
+        `Server configuration error: missing ${!supabaseUrl ? "SUPABASE_URL" : "SUPABASE_SERVICE_ROLE_KEY"}`,
+      );
+    }
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Strict payload parsing
