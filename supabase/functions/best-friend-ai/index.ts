@@ -192,6 +192,220 @@ function getAgentPrompt(agent: AgentType): string {
 const MAX_RECORDS_PER_TABLE = 150;
 const MAX_PAYLOAD_BYTES = 80_000;
 
+// ─── ACA FILE INSPECTOR ────────────────────────────────────────────────────────
+// Tables that carry an aca_hash_key reference (the canonical column).
+const ACA_HASH_KEY_TABLES = [
+  "raw_health_data",
+  "raw_app_data",
+  "staged_health_data",
+  "staged_lifestyle_data",
+  "governance_ledger",
+  "data_lineage_index",
+  "dao_proposals",
+  "dao_votes",
+  "committee_applications",
+  "proposal_comments",
+  "proposal_signatures",
+  "hat_recall_petitions",
+  "hat_recall_signatures",
+  "synapse_controller",
+] as const;
+// Tables that store the hash under a non-standard column name.
+const ACA_HASH_ALT_TABLES: Array<{ table: string; column: string }> = [
+  { table: "delt_transfers", column: "aca_hash" },
+  { table: "usdc_payments", column: "aca_hash" },
+  { table: "dao_vetoes", column: "veto_aca_hash" },
+];
+
+const PII_KEYS = new Set([
+  "platform_guid",
+  "user_id",
+  "pseudo_user_id",
+  "entity_id",
+  "owner_id",
+  "actor_id",
+]);
+
+function stripPiiRow(row: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(row ?? {})) {
+    if (PII_KEYS.has(k)) {
+      out[k] = typeof v === "string" && v.length >= 8 ? v.slice(0, 8) + "…" : null;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function detectAcaIntent(msg: string): { mode: "list" | "inspect" | "none"; hash?: string } {
+  const lower = msg.toLowerCase();
+  // Inspect: explicit hash token (hex >= 8 chars, optionally with "aca" nearby)
+  const hashMatch = msg.match(/\b([a-f0-9]{8,64})\b/i);
+  const mentionsAca = /\baca\b/i.test(msg);
+  if (hashMatch && (mentionsAca || /\b(inspect|what.?s in|contents of|inside|show me|file)\b/i.test(lower))) {
+    return { mode: "inspect", hash: hashMatch[1].toLowerCase() };
+  }
+  if (mentionsAca && /\b(list|all|every|catalog|index|how many|count|files?)\b/i.test(lower)) {
+    return { mode: "list" };
+  }
+  return { mode: "none" };
+}
+
+async function listAcaFiles(
+  supabase: ReturnType<typeof createClient>,
+  limit = 50,
+): Promise<{ total: number; rows: any[]; error?: string }> {
+  try {
+    const { count } = await supabase
+      .from("user_aca_records")
+      .select("*", { count: "exact", head: true });
+    const { data, error } = await supabase
+      .from("user_aca_records")
+      .select("aca_hash_key, source_id, consent_type, created_at, consumed_at")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return { total: count ?? data?.length ?? 0, rows: (data ?? []).map(stripPiiRow) };
+  } catch (err: any) {
+    return { total: 0, rows: [], error: err?.message ?? String(err) };
+  }
+}
+
+async function inspectAcaFile(
+  supabase: ReturnType<typeof createClient>,
+  hashOrPrefix: string,
+): Promise<{ found: boolean; registry?: any; totals: Record<string, number>; samples: Record<string, any[]>; error?: string }> {
+  const totals: Record<string, number> = {};
+  const samples: Record<string, any[]> = {};
+  try {
+    // Resolve prefix → unique full hash via user_aca_records.
+    let fullHash = hashOrPrefix;
+    if (hashOrPrefix.length < 32) {
+      const { data: matches, error: matchErr } = await supabase
+        .from("user_aca_records")
+        .select("aca_hash_key")
+        .ilike("aca_hash_key", `${hashOrPrefix}%`)
+        .limit(2);
+      if (matchErr) throw matchErr;
+      if (!matches || matches.length === 0) {
+        return { found: false, totals, samples, error: "No ACA file matches that prefix." };
+      }
+      if (matches.length > 1) {
+        return { found: false, totals, samples, error: "Prefix is ambiguous; provide more characters." };
+      }
+      fullHash = (matches[0] as any).aca_hash_key;
+    }
+
+    const { data: reg } = await supabase
+      .from("user_aca_records")
+      .select("aca_hash_key, source_id, consent_type, consent_scope, created_at, consumed_at")
+      .eq("aca_hash_key", fullHash)
+      .maybeSingle();
+
+    const probes = await Promise.all([
+      ...ACA_HASH_KEY_TABLES.map(async (t) => {
+        const { count } = await supabase
+          .from(t)
+          .select("*", { count: "exact", head: true })
+          .eq("aca_hash_key", fullHash);
+        const { data } = await supabase
+          .from(t)
+          .select("*")
+          .eq("aca_hash_key", fullHash)
+          .limit(3);
+        return { table: t, count: count ?? 0, rows: (data ?? []).map(stripPiiRow) };
+      }),
+      ...ACA_HASH_ALT_TABLES.map(async ({ table, column }) => {
+        const { count } = await supabase
+          .from(table)
+          .select("*", { count: "exact", head: true })
+          .eq(column, fullHash);
+        const { data } = await supabase
+          .from(table)
+          .select("*")
+          .eq(column, fullHash)
+          .limit(3);
+        return { table, count: count ?? 0, rows: (data ?? []).map(stripPiiRow) };
+      }),
+    ]);
+
+    for (const p of probes) {
+      totals[p.table] = p.count;
+      if (p.rows.length) samples[p.table] = p.rows;
+    }
+
+    return { found: true, registry: reg ? stripPiiRow(reg) : null, totals, samples };
+  } catch (err: any) {
+    return { found: false, totals, samples, error: err?.message ?? String(err) };
+  }
+}
+
+function buildAcaContext(
+  intent: { mode: "list" | "inspect"; hash?: string },
+  listResult?: Awaited<ReturnType<typeof listAcaFiles>>,
+  inspectResult?: Awaited<ReturnType<typeof inspectAcaFile>>,
+): string {
+  const guard =
+    "\n\nACA RESPONSE RULES (mandatory):\n" +
+    "- Never echo, quote, or reference the ACA hash value itself in your reply.\n" +
+    "- Translate counts into signal: describe what the activity pattern means, not the raw rows.\n" +
+    "- Aim for a medium-length summary (3-6 sentences). No tables, no IDs, no JSON.\n" +
+    "- If the file has no downstream activity, say it is dormant and explain implications.\n";
+
+  if (intent.mode === "list" && listResult) {
+    if (listResult.error) return `\n\nACA INDEX: error fetching catalog (${listResult.error}).` + guard;
+    const sources = new Map<string, number>();
+    for (const r of listResult.rows) sources.set(r.source_id ?? "unknown", (sources.get(r.source_id ?? "unknown") ?? 0) + 1);
+    const consumed = listResult.rows.filter((r: any) => r.consumed_at).length;
+    const oldest = listResult.rows[listResult.rows.length - 1]?.created_at;
+    const newest = listResult.rows[0]?.created_at;
+    return (
+      "\n\nACA CATALOG SIGNAL:\n" +
+      JSON.stringify({
+        total_files: listResult.total,
+        recent_window: listResult.rows.length,
+        consumed_in_window: consumed,
+        sources: Object.fromEntries(sources),
+        newest_at: newest,
+        oldest_in_window_at: oldest,
+      }) +
+      guard
+    );
+  }
+
+  if (intent.mode === "inspect" && inspectResult) {
+    if (!inspectResult.found) {
+      return `\n\nACA FILE LOOKUP: ${inspectResult.error ?? "not found"}.` + guard;
+    }
+    const totals = inspectResult.totals;
+    const grouped = {
+      raw_signals: (totals["raw_health_data"] ?? 0) + (totals["raw_app_data"] ?? 0),
+      staged_signals: (totals["staged_health_data"] ?? 0) + (totals["staged_lifestyle_data"] ?? 0),
+      financial_events: (totals["delt_transfers"] ?? 0) + (totals["usdc_payments"] ?? 0),
+      governance_events:
+        (totals["governance_ledger"] ?? 0) +
+        (totals["dao_proposals"] ?? 0) +
+        (totals["dao_votes"] ?? 0) +
+        (totals["dao_vetoes"] ?? 0) +
+        (totals["proposal_comments"] ?? 0) +
+        (totals["proposal_signatures"] ?? 0),
+      lineage_links: totals["data_lineage_index"] ?? 0,
+      controller_events: totals["synapse_controller"] ?? 0,
+    };
+    return (
+      "\n\nACA FILE SIGNAL:\n" +
+      JSON.stringify({
+        registry: inspectResult.registry,
+        grouped,
+      }) +
+      guard
+    );
+  }
+  return "";
+}
+// ───────────────────────────────────────────────────────────────────────────────
+
 function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
   let h = health.slice(0, MAX_RECORDS_PER_TABLE);
   let l = lifestyle.slice(0, MAX_RECORDS_PER_TABLE);
