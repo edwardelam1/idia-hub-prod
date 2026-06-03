@@ -17,7 +17,7 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SECRET_KEY') ?? ''
     );
 
     // 1. Verify the NFC Token (In production, exchange token for Auth UUID)

@@ -1,44 +1,62 @@
-## Move credit math to the backend; ship a lean on-chain payload
+## Goal
+Replace the disabled legacy anon/service_role JWTs everywhere with the new Supabase publishable/secret key system. Login is currently 401'ing with "Legacy API keys are disabled".
 
-The 400 is coming from `credit_amount` being a repeating decimal (`2.6666…`) computed in the UI and rejected downstream. On-chain we only move `usd_amount`; credit issuance is a server-side concern tied to the protocol conversion rate (1 CR = $0.75).
+## Frontend (3 files)
 
-### Behavior
+1. **`.env`**
+   - `VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B"` (replaces legacy anon JWT)
 
-- Frontend dispatch for "Pay from Wallet" sends only what the relayer + ledger need:
-  ```ts
-  {
-    user_id,
-    usd_amount: Number(usdAmount),
-    payment_reference,
-    payment_method: 'internal_usdc',
-    routing: 'on-chain',
-    idempotency_key,
-    user_wallet: profile.wallet_address, // still required for on-chain routing
-  }
-  ```
-  No `credit_amount`, no `amount`, no division in the UI.
-- Edge function derives `credit_amount` server-side from `usd_amount` using the canonical rate, rounded to 4 decimals (matches the Hub credit-nomenclature memory).
+2. **`src/integrations/supabase/client.ts`**
+   - Rename const `SUPABASE_ANON_KEY` → `SUPABASE_PUBLISHABLE_KEY` and set value to `sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B`
+   - Pass it as the 2nd arg to `createClient` and as the `apikey` header
 
-### Files
+3. **`src/lib/api.ts`**
+   - Drop the legacy `VITE_SUPABASE_ANON_KEY` fallback; read only `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-- `src/components/billing/SynapseTopUp.tsx`
-  - In `handlePurchase`, drop `credit_amount` from the `top-up-credits` invocation body for the on-chain path. Keep `usd_amount`, `user_wallet`, `payment_method: 'internal_usdc'`, `routing: 'on-chain'`, `payment_reference`, `idempotency_key`, `user_id`.
-  - Leave fiat/Wix path untouched.
+(`src/components/modules/InventoryManagement.tsx` already reads `VITE_SUPABASE_PUBLISHABLE_KEY` — no change.)
 
-- `src/components/billing/SynapsePurchaseModal.tsx`
-  - Same edit in its `handlePurchase` on-chain branch.
+## Edge functions — rename env vars to new system
 
-- `supabase/functions/top-up-credits/index.ts`
-  - In `PARSE_PAYLOAD`, treat `usd_amount` as the source of truth when present. If `credit_amount` is absent/zero, compute `credit_amount = round(usd_amount / 0.75, 4)`.
-  - Update `VALIDATION` so `usd_amount > 0` is the required check; `credit_amount` is derived, not required from the client.
-  - Ledger insert continues to write both fields; metadata records the server-applied rate (`rate_usd_per_cr: 0.75`).
+Every function currently reads `Deno.env.get("SUPABASE_ANON_KEY")` or `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Rewrite each to:
+- `SUPABASE_ANON_KEY` → `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_SECRET_KEY`
 
-### Out of scope
+Files to update:
 
-- No changes to `chargeBuyerUsdc`, `usdc-approval`, MetaMask SDK, shortfall UI, Wix rail, or `SynapseCreditsContext`.
-- No schema changes; the ledger already accepts the computed `amount` (credit_amount).
+```text
+ANON references:
+  confirm-wix-payment/index.ts
+  life-pii-bridge/index.ts
+  marketplace-bundle-access/index.ts
+  process-delt-transfer/index.ts
 
-### Technical notes
+SERVICE_ROLE references:
+  ai-data-curator, best-friend-ai, confirm-wix-payment, crazy-8-security,
+  create-business-intelligence-bundles, create-health-data-bundle,
+  create-lifestyle-bundles, execute-hub-query, hydrate-terminal,
+  life-pii-bridge, marketplace-bundle-access, process-delt-transfer,
+  process-lifestyle-data, recover-health-pipeline, security-event-generator,
+  seed-marketplace-catalog, synapse-controller, top-up-credits,
+  verify-idia-life-tap, vulture-sanitization-agent, wix-payment-webhook
+```
 
-- Conversion rate (`$0.75/CR`) lives in the edge function as a single constant so the UI never needs to know it for on-chain purchases. The A-La-Carte purchase memory (custom $10–$1000 @ $0.75/CR) is preserved.
-- Idempotency key behavior unchanged — replay still returns the prior ledger row.
+Since the user states "some edge functions are updated, some are not" but filesystem timestamps are all identical (sandbox sync wipes mtimes), I'll treat any file still containing the legacy env var names as not yet updated and rewrite only those references — leaving any function that's already on the new names untouched.
+
+## Secrets
+
+Add the two new runtime secrets so edge functions resolve them at runtime:
+- `SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_L_foF7A1ds9WBnsVnvcNVA_JYrRwm8B`
+- `SUPABASE_SECRET_KEY` = (user-provided sb_secret_… value)
+
+I'll trigger the add-secret flow so you can paste the secret key into the secure form.
+
+## Out of scope (flagging only, not changing)
+
+- DB function `public.fn_trigger_synapse_autonomous` hardcodes a `sb_secret_…` key in its `Authorization` header. That's a security issue (secret in DB code) and a brittleness issue (won't survive future rotations). Recommend follow-up to read it from Vault via `get_service_role_key()` like the other triggers do — but it's out of scope for this key-migration pass unless you say otherwise.
+- Wix, Alchemy, relayer, and other non-Supabase secrets are unaffected.
+
+## Validation
+
+After changes:
+- Reload preview → login should succeed (no more "Legacy API keys are disabled")
+- Spot-check one edge function call (e.g. top-up-credits or hydrate-terminal) via the UI and confirm 200 in network log

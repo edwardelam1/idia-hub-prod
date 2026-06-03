@@ -70,15 +70,15 @@ export async function fetchApi<T = any>(endpoint: string, options: RequestInit =
     } = await supabase.auth.getSession();
     console.log(`[END: fetchApi:SESSION_RETRIEVAL] session_exists=${!!session}`);
 
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    if (!anonKey) {
-      console.warn(`⚠️ [fetchApi:FETCH_FALLBACK] No anon key found. Perimeter rejection imminent.`);
+    const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    if (!publishableKey) {
+      console.warn(`⚠️ [fetchApi:FETCH_FALLBACK] No publishable key found. Perimeter rejection imminent.`);
     }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      apikey: anonKey ?? "",
-      Authorization: session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${anonKey ?? ""}`,
+      apikey: publishableKey ?? "",
+      Authorization: session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${publishableKey ?? ""}`,
     };
 
     const url = `${import.meta.env.VITE_API_BASE_URL || ""}${endpoint}`;

@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     )
 
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     // Fetch platform_guid from profiles (non-PII identifier)
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SECRET_KEY') ?? ''
     )
 
     const { data: profileRow } = await adminClient
