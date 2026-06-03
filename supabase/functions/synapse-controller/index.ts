@@ -231,6 +231,23 @@ Deno.serve(async (req) => {
           `[HANDOFF: settlement] egress_logs linked reference=${referenceId} ledger_entry=${ledgerResult.data.id} egress_id=${egressResult.data.id}`,
         );
       }
+
+      // Telemetry: explicitly stamp settled_at so packets always carry both
+      // created_at and settled_at for downstream network-delivery parsing.
+      console.log("[HUB_TELEMETRY][INGEST][START] Capturing processing latency for runtime thread...");
+      try {
+        const { error: settledError } = await adminClient
+          .from("egress_logs")
+          .update({ settled_at: new Date().toISOString() })
+          .eq("id", egressResult.data.id);
+        if (settledError) throw settledError;
+        console.log("[HUB_TELEMETRY][INGEST][END:OK] Metrics written to database schema successfully.");
+      } catch (settledErr: any) {
+        console.error(
+          "[HUB_TELEMETRY][INGEST][END:FAIL] egress_logs.settled_at update failed:",
+          settledErr?.message ?? String(settledErr),
+        );
+      }
     }
 
     return new Response(
