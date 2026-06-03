@@ -928,7 +928,11 @@ serve(async (req) => {
 
     // RECEIPT: every record actually shown to the AI counts as consumed.
     console.info("[BEGIN: BestFriendAI.ReceiptTransmission] Evaluating consumption vectors.");
-    if (isDataScientistMode) {
+    // Fire a receipt whenever the AI actually accessed user data — not just in
+    // marketplace mode. Any AI interaction that reads the Library of Data must
+    // produce a Synapse consumption receipt.
+    const touchedData = healthMetrics.length > 0 || lifestyleEvents.length > 0;
+    if (touchedData) {
       const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
       consumedReceipt = [...healthIds, ...lifeIds];
@@ -954,7 +958,7 @@ serve(async (req) => {
               user_id: operatorId,
               client_id: client_id || "IDIA_HUB_APP",
               aca_record_ids: consumedReceipt,
-              intent_type: "MARKETPLACE RESEARCH",
+              intent_type: isDataScientistMode ? "MARKETPLACE_RESEARCH" : "BEST_FRIEND_AI_CHAT",
               location_string: normalizedLocationString,
               // Maintain strict telemetry
               granularity: 0.95,
