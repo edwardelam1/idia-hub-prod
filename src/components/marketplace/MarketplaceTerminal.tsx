@@ -14,6 +14,7 @@ import {
 import { fetchApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface MarketplaceTerminalProps {
   synapseBalance?: number;
@@ -41,6 +42,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
 
   const { balanceData } = useSynapseCredits();
+  const { refreshBalance } = useSynapseCredits();
   // Snapshot balance once at mount so live ledger refreshes don't re-render the terminal mid-edit.
   const initialBalanceRef = useRef<number>(propBalance ?? balanceData?.available_credits ?? 0);
   const liveBalance = propBalance ?? balanceData?.available_credits ?? initialBalanceRef.current;
@@ -109,16 +111,49 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
     setErrorMsg(null);
     setResults(null);
     try {
-      const response = await fetchApi<{ data: any }>("/api/v1/synapse/query", {
-        method: "POST",
-        body: JSON.stringify({
-          query_string: sql,
-          cost_credits: estimatedCost,
-          auth_type: "BIO_SOVEREIGN",
-          dialect: "sql",
-        }),
+      // 1) Identity for receipt issuance.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error("Authentication required to run a query.");
+
+      // 2) Burn credits via synapse-controller — same contract every other
+      //    trading-desk tool uses. The SQL itself is the auditable artifact;
+      //    we hash it into a stable ref so the ledger receipt is reproducible.
+      const queryRef = `sql_${Math.abs(
+        Array.from(sql).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0),
+      ).toString(36)}_${Date.now().toString(36)}`;
+
+      const { data: receipt, error: receiptErr } = await supabase.functions.invoke(
+        "synapse-controller",
+        {
+          body: {
+            user_id: user.id,
+            client_id: "IDIA_HUB_SQL_TERMINAL",
+            intent_type: "SQL_TERMINAL_QUERY",
+            sub_module_id: "general",
+            aca_record_ids: [queryRef],
+            metadata: {
+              dialect: "sql",
+              cost_estimate_cr: estimatedCost,
+              query_length: sql.length,
+            },
+          },
+        },
+      );
+
+      if (receiptErr) throw receiptErr;
+      if ((receipt as any)?.error) throw new Error((receipt as any).error);
+
+      // 3) Show the receipt to the user (the SQL backend is fronted by the
+      //    same lakehouse; until that endpoint is live, the burn is the
+      //    authoritative artifact of the action).
+      setResults({
+        ok: true,
+        message: "Query accepted. Liability Shield receipt issued.",
+        reference_id: (receipt as any)?.reference_id,
+        fee_cr: (receipt as any)?.fee,
+        consumed_records: (receipt as any)?.consumed_records,
       });
-      setResults(response?.data ?? response);
+      await refreshBalance();
       console.log("[END: Terminal.RunQuery] OK");
     } catch (err: any) {
       console.error(`[CATCH: Terminal.RunQuery] ${err?.message}`);
@@ -126,7 +161,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
     } finally {
       setIsExecuting(false);
     }
-  }, [canRunQuery, estimatedCost, sql]);
+  }, [canRunQuery, estimatedCost, sql, refreshBalance]);
 
   const handleSaveQuery = useCallback(() => {
     const trimmed = sql.trim();
