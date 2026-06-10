@@ -7,10 +7,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ChevronDown, Coins, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
@@ -27,6 +28,14 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   const synapseCredits = balanceData?.available_credits ?? 0;
   const navigate = useNavigate();
   const { user, piiData } = useAuth();
+
+  // Cache-bust avatar when the Life app dispatches an update
+  const [avatarHash, setAvatarHash] = useState(() => Date.now());
+  useEffect(() => {
+    const handler = () => setAvatarHash(Date.now());
+    window.addEventListener("avatar-updated", handler);
+    return () => window.removeEventListener("avatar-updated", handler);
+  }, []);
 
   // Internal Master check (Global Override)
   const isInternalMaster = userRole === "super-admin" || userRole === "god_guid" || userRole === "csuite";
@@ -91,6 +100,9 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
   };
 
   const displayName = getUserName();
+  const avatarUrl = piiData?.avatarUrl
+    ? `${piiData.avatarUrl}${piiData.avatarUrl.includes("?") ? "&" : "?"}t=${avatarHash}`
+    : "";
 
   return (
     <header className="sticky top-0 z-40 h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex items-center justify-between px-4 md:px-6 flex-shrink-0">
@@ -125,6 +137,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9">
               <Avatar className="h-6 w-6 md:h-8 md:w-8">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
                 <AvatarFallback className="bg-primary/10 text-primary text-xs md:text-sm">
                   {displayName.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
