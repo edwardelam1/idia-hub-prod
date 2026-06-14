@@ -1,16 +1,25 @@
-## Show profile picture in TopBar
+## Fix: Standardize Phase 3 batch loop to use Planck-Scale executor + 3.5s sequencer pacing
 
-Replace the initials-only avatar in `src/components/layout/TopBar.tsx` with the user's actual profile picture, falling back to initials when no image is available. The avatar URL is already loaded into the auth context via the IDIA Life PII bridge (`piiData.avatarUrl`) and the `profiles.avatar_url` column — no new query or upload logic needed.
+**Root cause:** Phase 3's contributor loop uses raw `client.writeContract()` + a 500ms `setTimeout`, blasting two delegated-account transactions into the same Base block slot. Base/Reth enforces a one-in-flight-tx rule for EIP-7702 delegated accounts, so the second tx is rejected (surfaced by viem as a generic "missing/invalid parameters" stall). Phases 1 & 2 already use `executePlanckScaleTransaction` + `forceSequencerDelay(3500)` and succeed.
 
-### Changes
+### Change (only edit: `supabase/functions/idia-circular-settlement/index.ts`, lines ~400–468)
 
-**`src/components/layout/TopBar.tsx`**
-- Import `AvatarImage` alongside `Avatar` and `AvatarFallback`.
-- Read `piiData?.avatarUrl` from the existing `useAuth()` call.
-- In the dropdown trigger `<Avatar>`, render `<AvatarImage src={avatarUrl} alt={displayName} />` above the existing `<AvatarFallback>` so initials remain the graceful fallback when the image is missing or fails to load.
-- Add a cache-bust query param (`?t=…`) keyed to an `avatar-updated` window event listener (mirroring the Life app pattern) so a future upload flow can refresh the header instantly without a reload.
+Inside `for (...contributing_users)`, replace the existing per-iteration `try { ... } catch` body with the standardized sequence:
+
+1. **Yield (USDC transfer)** — call `executePlanckScaleTransaction(client, account, USDC_ADDRESS, ERC20_ABI, "transfer", [lifeWallet, parseUnits(perContributorYield.toFixed(6),6)], "Batch.Item.Yield")`, await receipt with `confirmations:1`, on success log `[END: Batch.Item.Yield]` and call `await forceSequencerDelay(3500)`; otherwise `throw` to break to the per-item catch.
+2. **Proposal (escrow `proposeDistribution`)** — same pattern via `executePlanckScaleTransaction(... ESCROW_ECOSYSTEM, ESCROW_ABI, "proposeDistribution", [...], "Batch.Item.Proposal")`, await receipt, on success log `[END: Batch.Item.Proposal]` and `await forceSequencerDelay(3500)` to clear the slot before the **next contributor**; otherwise `throw`.
+3. **Ledger hydration** — insert into `synapse_credit_ledger` exactly as today (user_id, amount, entry_type:`deposit`, transaction_type:`DATA_SALE_PAYOUT`, status:`completed`, blockchain_tx_hash: yieldHash, is_settled:true, settled_at, description). Wrap the `error` from `.insert(...)` and `throw` if present.
+4. **Push to `contributorPayouts`** with `{ wallet: lifeWallet, yield_hash, proposal_hash }`, log `[END: Batch.Item.Ledger]`.
+5. **Catch block** — keep `[BEGIN/END: Batch.Item.Error]` telemetry brackets around the `[FATAL STALL: Batch.Item]` error log; `continue;` so one bad contributor never halts the batch.
+6. **Remove** the obsolete `await new Promise(r => setTimeout(r, 500))` — pacing is now handled by `forceSequencerDelay(3500)` after each on-chain step.
 
 ### Out of scope
-- No upload UI is added in the Hub (Hub is zero-PII; uploads stay in the Life app).
-- No changes to `life-pii-bridge`, `AuthContext`, or the `profiles` table — `avatar_url` is already fetched.
-- No changes to dropdown menu items, identity pills, or credits chip.
+- No changes to Phases 1, 2, 4, 5 logic, signatures, or split percentages.
+- No changes to the executor itself, ABIs, contract addresses, env handling, or HTTP handler.
+- No DB schema / migration changes.
+- No frontend changes.
+
+### Verification
+- Re-deploy `idia-circular-settlement` and trigger a settlement.
+- In edge logs confirm: `[END: Batch.Item.Yield] → [BEGIN: Sequencer.Delay] 3500ms → [END: Batch.Item.Proposal] → [BEGIN: Sequencer.Delay] 3500ms` per contributor, with no `in-flight transaction limit reached` errors.
+- Confirm `synapse_credit_ledger` rows are created with `status='completed'` and valid `blockchain_tx_hash`.
