@@ -398,75 +398,68 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
         console.info(`[BEGIN: Batch.Item] Processing transfer ${i + 1}/${contributing_users.length} to ${lifeWallet}`);
 
         try {
-          // 1. USDC Yield Transfer — Planck-Scale executor + sequencer pacing.
-          console.info(`[BEGIN: Batch.Item.Yield] Preparing USDC payload...`);
-          const { txHash: yieldHash } = await executePlanckScaleTransaction(
-            client,
+          // 1. Yield transfer (USDC)
+          const yieldHash = await client.writeContract({
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
             account,
-            USDC_ADDRESS,
-            ERC20_ABI,
-            "transfer",
-            [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
-            "Batch.Item.Yield",
-          );
+          });
           console.info(
-            `[STATUS: Batch.Item.Yield] Broadcasted. Hash: ${yieldHash}. Awaiting block inclusion...`,
+            `[STATUS: Batch.Item] Yield TX Broadcasted. Hash: ${yieldHash}. Awaiting network confirmation...`,
           );
           const yieldReceipt = await client.waitForTransactionReceipt({ hash: yieldHash, confirmations: 1 });
           if (yieldReceipt.status === "success") {
-            console.info(`[END: Batch.Item.Yield] Settled. Block: ${yieldReceipt.blockNumber}.`);
-            await forceSequencerDelay(3500); // 🔒 Clear the Base block slot
+            console.info(`[END: Batch.Item] Yield transfer successful. Block: ${yieldReceipt.blockNumber}`);
           } else {
-            throw new Error(`Yield transfer reverted on-chain. Hash: ${yieldHash}`);
+            console.error(`[ERROR: Batch.Item] Yield transaction reverted on-chain. Hash: ${yieldHash}`);
           }
 
-          // 2. IDIA Royalty Proposal via ECOSYSTEM Escrow.
-          console.info(`[BEGIN: Batch.Item.Proposal] Preparing Escrow payload...`);
-          const { txHash: proposalHash } = await executePlanckScaleTransaction(
-            client,
-            account,
-            ESCROW_ECOSYSTEM,
-            ESCROW_ABI,
-            "proposeDistribution",
-            [
+          // 2. Royalty proposal (escrow)
+          const proposalHash = await client.writeContract({
+            address: ESCROW_ECOSYSTEM,
+            abi: ESCROW_ABI,
+            functionName: "proposeDistribution",
+            args: [
               lifeWallet as `0x${string}`,
               idiaAwardAmount,
               `Automated royalty yield proposal: Ref ${ingestionReference}`,
             ],
-            "Batch.Item.Proposal",
-          );
+            account,
+          });
           console.info(
-            `[STATUS: Batch.Item.Proposal] Broadcasted. Hash: ${proposalHash}. Awaiting block inclusion...`,
+            `[STATUS: Batch.Item] Proposal TX Broadcasted. Hash: ${proposalHash}. Awaiting network confirmation...`,
           );
           const proposalReceipt = await client.waitForTransactionReceipt({ hash: proposalHash, confirmations: 1 });
           if (proposalReceipt.status === "success") {
-            console.info(`[END: Batch.Item.Proposal] Settled. Block: ${proposalReceipt.blockNumber}.`);
-            await forceSequencerDelay(3500); // 🔒 Clear the Base block slot for the NEXT contributor
+            console.info(`[END: Batch.Item] Proposal successful. Block: ${proposalReceipt.blockNumber}`);
           } else {
-            throw new Error(`Escrow proposal reverted on-chain. Hash: ${proposalHash}`);
+            console.error(`[ERROR: Batch.Item] Proposal reverted on-chain. Hash: ${proposalHash}`);
           }
 
-          // 3. Ledger Hydration.
-          console.info(`[BEGIN: Batch.Item.Ledger] Committing transaction to off-chain ledger...`);
-          const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
+          // 3. Ledger insert
+          const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
+          await supabase.from("synapse_credit_ledger").insert({
             user_id: contributor.user_id,
             amount: perContributorYield,
             entry_type: "deposit",
-            transaction_type: "DATA_SALE_PAYOUT",
-            status: "completed",
+            transaction_type: "data_sale_payout",
+            status: yieldStatus,
             blockchain_tx_hash: yieldHash,
             is_settled: true,
             settled_at: new Date().toISOString(),
             description: `Pro-rata yield for Ref: ${ingestionReference}`,
           });
-          if (ledgerError) throw new Error(`Supabase Ledger Insert Failed: ${ledgerError.message}`);
 
           contributorPayouts.push({
             wallet: lifeWallet,
             yield_hash: yieldHash,
             proposal_hash: proposalHash,
           });
-          console.info(`[END: Batch.Item.Ledger] Sequence successful for ${lifeWallet}.`);
+
+          // 4. RPC rate-limit buffer
+          await new Promise((resolve) => setTimeout(resolve, 500));
         } catch (txError: any) {
           console.info(`[BEGIN: Batch.Item.Error]`);
           console.error(`[FATAL STALL: Batch.Item] Failed executing transfer for ${lifeWallet}: ${txError.message}`);
@@ -484,9 +477,7 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     );
   } catch (error: any) {
     // Containment: never let an exception escape the background worker.
-    console.error(
-      `🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`,
-    );
+    console.error(`🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`);
     if (error?.stack) console.error(`[STACK] ${error.stack}`);
   }
 }
@@ -508,24 +499,24 @@ serve(async (req: Request) => {
         ? rawBody.record.payload
         : rawBody;
   } catch (_e) {
-    return new Response(
-      JSON.stringify({ error: "Invalid JSON body.", failed_at: "VALIDATING_INPUTS" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: "Invalid JSON body.", failed_at: "VALIDATING_INPUTS" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const { total_fiat_amount, contributing_users } = payoutData ?? {};
   if (!total_fiat_amount || total_fiat_amount <= 0) {
-    return new Response(
-      JSON.stringify({ error: "Invalid total_fiat_amount.", failed_at: "VALIDATING_INPUTS" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: "Invalid total_fiat_amount.", failed_at: "VALIDATING_INPUTS" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
   if (!contributing_users || !Array.isArray(contributing_users) || contributing_users.length === 0) {
-    return new Response(
-      JSON.stringify({ error: "Missing contributing_users.", failed_at: "VALIDATING_INPUTS" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: "Missing contributing_users.", failed_at: "VALIDATING_INPUTS" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const runCorrelationId = crypto.randomUUID();
