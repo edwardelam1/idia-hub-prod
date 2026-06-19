@@ -20,7 +20,7 @@ serve(async (req) => {
   console.info("[BEGIN: Orchestrator.Handler]");
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     console.info(`[BEGIN: Orchestrator.ParallelFetch] targets=${CATEGORY_FUNCTIONS.join(",")}`);
     const results = await Promise.all(

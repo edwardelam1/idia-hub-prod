@@ -1,25 +1,50 @@
-## Fix: Standardize Phase 3 batch loop to use Planck-Scale executor + 3.5s sequencer pacing
+## Two fixes
 
-**Root cause:** Phase 3's contributor loop uses raw `client.writeContract()` + a 500ms `setTimeout`, blasting two delegated-account transactions into the same Base block slot. Base/Reth enforces a one-in-flight-tx rule for EIP-7702 delegated accounts, so the second tx is rejected (surfaced by viem as a generic "missing/invalid parameters" stall). Phases 1 & 2 already use `executePlanckScaleTransaction` + `forceSequencerDelay(3500)` and succeed.
+### 1. Replace `SUPABASE_SECRET_KEY` with `SUPABASE_SERVICE_ROLE_KEY`
 
-### Change (only edit: `supabase/functions/idia-circular-settlement/index.ts`, lines ~400–468)
+Supabase Edge Functions natively inject `SUPABASE_SERVICE_ROLE_KEY` — `SUPABASE_SECRET_KEY` is non-standard and unreliable. The same anti-pattern exists in **21 edge functions**, not just `top-up-credits`. Fix them all in one pass to prevent the next "supabaseKey is required" stall:
 
-Inside `for (...contributing_users)`, replace the existing per-iteration `try { ... } catch` body with the standardized sequence:
+```
+supabase/functions/top-up-credits/index.ts
+supabase/functions/marketplace-bundle-access/index.ts   (3 occurrences)
+supabase/functions/wix-payment-webhook/index.ts
+supabase/functions/vulture-sanitization-agent/index.ts
+supabase/functions/ai-data-curator/index.ts
+supabase/functions/verify-idia-life-tap/index.ts
+supabase/functions/synapse-controller/index.ts
+supabase/functions/seed-marketplace-catalog/index.ts
+supabase/functions/life-pii-bridge/index.ts
+supabase/functions/security-event-generator/index.ts
+supabase/functions/recover-health-pipeline/index.ts
+supabase/functions/process-lifestyle-data/index.ts
+supabase/functions/process-delt-transfer/index.ts
+supabase/functions/create-health-data-bundle/index.ts
+supabase/functions/crazy-8-security/index.ts
+supabase/functions/create-business-intelligence-bundles/index.ts
+supabase/functions/hydrate-terminal/index.ts
+supabase/functions/create-lifestyle-bundles/index.ts
+supabase/functions/execute-hub-query/index.ts
+supabase/functions/confirm-wix-payment/index.ts
+```
 
-1. **Yield (USDC transfer)** — call `executePlanckScaleTransaction(client, account, USDC_ADDRESS, ERC20_ABI, "transfer", [lifeWallet, parseUnits(perContributorYield.toFixed(6),6)], "Batch.Item.Yield")`, await receipt with `confirmations:1`, on success log `[END: Batch.Item.Yield]` and call `await forceSequencerDelay(3500)`; otherwise `throw` to break to the per-item catch.
-2. **Proposal (escrow `proposeDistribution`)** — same pattern via `executePlanckScaleTransaction(... ESCROW_ECOSYSTEM, ESCROW_ABI, "proposeDistribution", [...], "Batch.Item.Proposal")`, await receipt, on success log `[END: Batch.Item.Proposal]` and `await forceSequencerDelay(3500)` to clear the slot before the **next contributor**; otherwise `throw`.
-3. **Ledger hydration** — insert into `synapse_credit_ledger` exactly as today (user_id, amount, entry_type:`deposit`, transaction_type:`DATA_SALE_PAYOUT`, status:`completed`, blockchain_tx_hash: yieldHash, is_settled:true, settled_at, description). Wrap the `error` from `.insert(...)` and `throw` if present.
-4. **Push to `contributorPayouts`** with `{ wallet: lifeWallet, yield_hash, proposal_hash }`, log `[END: Batch.Item.Ledger]`.
-5. **Catch block** — keep `[BEGIN/END: Batch.Item.Error]` telemetry brackets around the `[FATAL STALL: Batch.Item]` error log; `continue;` so one bad contributor never halts the batch.
-6. **Remove** the obsolete `await new Promise(r => setTimeout(r, 500))` — pacing is now handled by `forceSequencerDelay(3500)` after each on-chain step.
+Mechanical string replace: `SUPABASE_SECRET_KEY` → `SUPABASE_SERVICE_ROLE_KEY`. No other logic changes. Deploy all touched functions.
+
+### 2. Add `data_sale_payout` to `idia_transaction_type` enum
+
+A PostgREST caller is filtering `transaction_type = 'DATA_SALE_PAYOUT'` against `synapse_credit_ledger` and failing with SQLSTATE 22P02. The enum currently contains only: `data_sale, deposit, withdrawl, fee, reward, INTERNAL_DEPOSIT`. There is no `data_sale_payout` value — that's the actual gap.
+
+Per your "all enums lowercase" rule, run a migration that:
+1. Adds `data_sale_payout` (lowercase) to `idia_transaction_type`.
+2. Normalizes the legacy uppercase `INTERNAL_DEPOSIT` value to lowercase `internal_deposit` to remove the casing inconsistency that introduced this whole class of bug.
+
+Postgres requires the rename path: `ALTER TYPE ... RENAME VALUE 'INTERNAL_DEPOSIT' TO 'internal_deposit'` (no data rewrite needed), then `ADD VALUE IF NOT EXISTS 'data_sale_payout'`. The lowercase `internal_deposit` is already what `top-up-credits` inserts (`transaction_type: "internal_deposit"`), so this aligns enum values with the code.
 
 ### Out of scope
-- No changes to Phases 1, 2, 4, 5 logic, signatures, or split percentages.
-- No changes to the executor itself, ABIs, contract addresses, env handling, or HTTP handler.
-- No DB schema / migration changes.
-- No frontend changes.
+
+- No changes to query logic, RLS, ledger schema columns, or the circular settlement function.
+- Not touching the `DATA_SALE` string in `SystemHealthDashboard.tsx` (that compares `egress_type`, a different column, not the enum).
 
 ### Verification
-- Re-deploy `idia-circular-settlement` and trigger a settlement.
-- In edge logs confirm: `[END: Batch.Item.Yield] → [BEGIN: Sequencer.Delay] 3500ms → [END: Batch.Item.Proposal] → [BEGIN: Sequencer.Delay] 3500ms` per contributor, with no `in-flight transaction limit reached` errors.
-- Confirm `synapse_credit_ledger` rows are created with `status='completed'` and valid `blockchain_tx_hash`.
+
+- Confirm `top-up-credits` no longer stalls at `INIT_ADMIN_CLIENT`.
+- Confirm the PostgREST query against `synapse_credit_ledger` with `transaction_type=eq.data_sale_payout` (lowercase) returns 200 instead of 22P02. The caller must send lowercase; uppercase `DATA_SALE_PAYOUT` will continue to fail by design.

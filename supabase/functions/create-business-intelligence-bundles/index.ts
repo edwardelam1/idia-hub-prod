@@ -18,7 +18,7 @@ serve(async (req) => {
   console.info("[BEGIN: BusinessBundle.Handler]");
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, serviceKey);
 
     console.info("[BEGIN: BusinessBundle.DB.SelectStagedBusiness]");
