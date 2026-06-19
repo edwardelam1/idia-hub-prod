@@ -10,8 +10,12 @@ import { createPublicClient, createWalletClient, custom, http, isAddress, getAdd
 import { base } from "viem/chains";
 
 export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
-// Public address derived from RELAYER_PRIVATE_KEY. Safe to embed client-side.
-export const RELAYER_ADDRESS = "0xfd57Ab321639EA41f8943bca9b7226eCa04072f1" as const;
+// Public address derived from the deployed RELAYER_PRIVATE_KEY edge-function secret.
+// MUST stay in lock-step with whatever privateKeyToAccount(RELAYER_PRIVATE_KEY) yields
+// inside supabase/functions/_shared/charge-usdc.ts — otherwise the buyer approves a
+// spender that the backend never uses and transferFrom() reverts with APPROVAL_REQUIRED.
+// Safe to embed client-side (public address only).
+export const RELAYER_ADDRESS = "0xd816D83703764551A7F292dbC435669AA89631a7" as const;
 
 const ERC20_APPROVE_ABI = [
   {
