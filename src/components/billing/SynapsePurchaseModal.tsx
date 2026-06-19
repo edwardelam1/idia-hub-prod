@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { unpackEdgeError } from "@/lib/unpack-edge-error";
 import {
   Dialog,
   DialogContent,

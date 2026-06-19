@@ -1,6 +1,7 @@
 // src/components/billing/SynapseTopUp.tsx
 import { useState } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { unpackEdgeError } from "@/lib/unpack-edge-error";
 import {
   CreditCard,
   Zap,
