@@ -468,6 +468,9 @@ const SynapseTopUp = () => {
                       setNeedsApproval(false);
                       setError(null);
                       await handlePurchase();
+                    } catch (err: any) {
+                      console.error("[AuthorizeRelayer] threw:", err);
+                      toast({ title: "Authorization Failed", description: err?.message ?? String(err), variant: "destructive" });
                     } finally {
                       setIsAuthorizingRelayer(false);
                     }
