@@ -1,50 +1,85 @@
-## Two fixes
+## Root cause: recursive policy on `business_users` itself
 
-### 1. Replace `SUPABASE_SECRET_KEY` with `SUPABASE_SERVICE_ROLE_KEY`
-
-Supabase Edge Functions natively inject `SUPABASE_SERVICE_ROLE_KEY` — `SUPABASE_SECRET_KEY` is non-standard and unreliable. The same anti-pattern exists in **21 edge functions**, not just `top-up-credits`. Fix them all in one pass to prevent the next "supabaseKey is required" stall:
+The 42P17 fires on table `business_users`, not on the ledger or profile fetch. Its single `ALL` policy is recursive on its own table:
 
 ```
-supabase/functions/top-up-credits/index.ts
-supabase/functions/marketplace-bundle-access/index.ts   (3 occurrences)
-supabase/functions/wix-payment-webhook/index.ts
-supabase/functions/vulture-sanitization-agent/index.ts
-supabase/functions/ai-data-curator/index.ts
-supabase/functions/verify-idia-life-tap/index.ts
-supabase/functions/synapse-controller/index.ts
-supabase/functions/seed-marketplace-catalog/index.ts
-supabase/functions/life-pii-bridge/index.ts
-supabase/functions/security-event-generator/index.ts
-supabase/functions/recover-health-pipeline/index.ts
-supabase/functions/process-lifestyle-data/index.ts
-supabase/functions/process-delt-transfer/index.ts
-supabase/functions/create-health-data-bundle/index.ts
-supabase/functions/crazy-8-security/index.ts
-supabase/functions/create-business-intelligence-bundles/index.ts
-supabase/functions/hydrate-terminal/index.ts
-supabase/functions/create-lifestyle-bundles/index.ts
-supabase/functions/execute-hub-query/index.ts
-supabase/functions/confirm-wix-payment/index.ts
+(user_id = auth.uid())
+OR (business_id IN (
+      SELECT business_id FROM get_user_business_access(auth.uid())
+       WHERE business_id IN (
+         SELECT bu2.business_id FROM business_users bu2          -- ← recurses into same table
+          WHERE bu2.user_id = auth.uid()
+            AND bu2.role = 'leadership'
+            AND bu2.is_active = true)))
 ```
 
-Mechanical string replace: `SUPABASE_SECRET_KEY` → `SUPABASE_SERVICE_ROLE_KEY`. No other logic changes. Deploy all touched functions.
+`get_user_business_access` is SECURITY DEFINER and safe, but the inner `SELECT … FROM business_users bu2` re-triggers the same policy → recursion. Any PostgREST query that touches a table whose policy joins `business_users` (e.g. `merchant_notifications`, which is what the log shows) inherits the loop.
 
-### 2. Add `data_sale_payout` to `idia_transaction_type` enum
+## Fix
 
-A PostgREST caller is filtering `transaction_type = 'DATA_SALE_PAYOUT'` against `synapse_credit_ledger` and failing with SQLSTATE 22P02. The enum currently contains only: `data_sale, deposit, withdrawl, fee, reward, INTERNAL_DEPOSIT`. There is no `data_sale_payout` value — that's the actual gap.
+### 1. Add SECURITY DEFINER helper
 
-Per your "all enums lowercase" rule, run a migration that:
-1. Adds `data_sale_payout` (lowercase) to `idia_transaction_type`.
-2. Normalizes the legacy uppercase `INTERNAL_DEPOSIT` value to lowercase `internal_deposit` to remove the casing inconsistency that introduced this whole class of bug.
+```sql
+CREATE OR REPLACE FUNCTION public.is_business_leadership(_business_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.business_users
+    WHERE business_id = _business_id
+      AND user_id = auth.uid()
+      AND role = 'leadership'::user_role
+      AND is_active = true
+  );
+$$;
+```
 
-Postgres requires the rename path: `ALTER TYPE ... RENAME VALUE 'INTERNAL_DEPOSIT' TO 'internal_deposit'` (no data rewrite needed), then `ADD VALUE IF NOT EXISTS 'data_sale_payout'`. The lowercase `internal_deposit` is already what `top-up-credits` inserts (`transaction_type: "internal_deposit"`), so this aligns enum values with the code.
+The function body bypasses RLS, so the inner `SELECT FROM business_users` no longer re-evaluates the policy.
 
-### Out of scope
+### 2. Replace the recursive policy on `business_users`
 
-- No changes to query logic, RLS, ledger schema columns, or the circular settlement function.
-- Not touching the `DATA_SALE` string in `SystemHealthDashboard.tsx` (that compares `egress_type`, a different column, not the enum).
+```sql
+DROP POLICY "Users can access their business user records" ON public.business_users;
 
-### Verification
+CREATE POLICY "Users see their own membership"
+  ON public.business_users FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
 
-- Confirm `top-up-credits` no longer stalls at `INIT_ADMIN_CLIENT`.
-- Confirm the PostgREST query against `synapse_credit_ledger` with `transaction_type=eq.data_sale_payout` (lowercase) returns 200 instead of 22P02. The caller must send lowercase; uppercase `DATA_SALE_PAYOUT` will continue to fail by design.
+CREATE POLICY "Leadership sees co-members in their businesses"
+  ON public.business_users FOR SELECT TO authenticated
+  USING (
+    business_id IN (SELECT business_id FROM public.get_user_business_access(auth.uid()))
+    AND public.is_business_leadership(business_id)
+  );
+```
+
+Mutations (INSERT/UPDATE/DELETE) on `business_users` are not currently exposed by any frontend code path; if you need write paths later we'll add scoped policies. The `ALL` policy is split into SELECT-only because that's what the existing logic actually covers.
+
+### 3. Lowercase the legacy enum literal in `on_fiat_deposit_confirmed`
+
+The function body still compares `NEW.transaction_type = 'DATA_SALE_PAYOUT'` (uppercase). The enum value we just added is lowercase `data_sale_payout`. The uppercase comparison silently never matches; rewrite the literal so DELT royalty mirroring actually fires.
+
+### 4. Harden `charge-usdc.ts` diagnostic logging
+
+At each call, emit a single `[TRIAD]` line covering:
+
+- `relayer=<account.address>` (derived from `RELAYER_PRIVATE_KEY`)
+- `usdc=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+- `chainId=8453`
+- `buyer=<buyer>` `treasury=<treasury>`
+- `allowance=<bigint>` `balance=<bigint>` `required=<bigint>`
+- `rpc_host=<hostname of getRpc()>`
+
+So an APPROVAL_REQUIRED stall immediately reveals whether the relayer address in the log matches what IDIA Life provisioned against on BaseScan. No business-logic changes.
+
+## Out of scope
+
+- No frontend changes; `SynapseCreditsContext` / `PurchaseHistoryContext` queries are clean (`auth.uid() = user_id` only).
+- No changes to RLS on `synapse_credit_ledger`, `profiles`, `wallets`, `user_subscriptions`, `user_payment_methods` — already audited and policy-clean.
+- No new env vars, no contract address changes, no relayer key rotation.
+
+## Verification
+
+1. After migration, repeat the PostgREST request that produced 42P17 (`GET /merchant_notifications`) → expect 200, no recursion.
+2. Run `SELECT * FROM public.business_users LIMIT 1` as an authenticated user → no error.
+3. Trigger a USDC top-up that previously returned `APPROVAL_REQUIRED` → the new `[TRIAD]` log line in `top-up-credits` / `charge-usdc` reveals the exact relayer + allowance the chain is returning, which you can compare to BaseScan.
