@@ -1,37 +1,32 @@
-## Plan
+## Goal
+Surface the real backend error (`USDC_CHARGE_REJECTED: APPROVAL_REQUIRED`) so the amber "Authorize Relayer" recovery UI triggers, instead of being swallowed by Supabase's generic `FunctionsHttpError`.
 
-1. **Align the frontend approval spender with the live relayer**
-   - Update the client-side `RELAYER_ADDRESS` used by `ensureUsdcApproval()` from `0xfd57Ab321639EA41f8943bca9b7226eCa04072f1` to the live relayer shown in the `[TRIAD]` logs: `0xd816D83703764551A7F292dbC435669AA89631a7`.
-   - This makes the wallet approval transaction grant allowance to the same spender that `charge-usdc.ts` uses for `transferFrom()`.
+## Root cause
+`supabase.functions.invoke()` wraps non-2xx responses into a `FunctionsHttpError` whose `.message` is the generic `"Edge Function returned a non-2xx status code"`. The real JSON payload (containing `error: "USDC_CHARGE_REJECTED: APPROVAL_REQUIRED"`) lives on `error.context` (a `Response`). Current regex `/APPROVAL_REQUIRED/i` runs against the generic wrapper string and never matches → `setNeedsApproval(true)` never fires.
 
-2. **Preserve the hardened charge logging**
-   - Keep the existing `[TRIAD]` diagnostics in `supabase/functions/_shared/charge-usdc.ts` unchanged.
-   - No contract address, treasury address, RPC, or relayer private key changes.
+## Changes
 
-3. **Add a small safety note in code**
-   - Add a concise comment near the frontend relayer constant explaining it must match the public address derived from the deployed `RELAYER_PRIVATE_KEY`.
+### 1. `src/components/billing/SynapsePurchaseModal.tsx` (around lines 291–304)
+Replace the `if (topUpError)` block with logic that:
+- Logs raw error
+- If `topUpError.context` is a `Response`, clones and reads it via `.json()` (fallback `.text()`), extracting `errorBody.error || errorBody.message`
+- Reassigns `backendErrorString` to the unpacked value
+- Runs `/APPROVAL_REQUIRED/i.test(backendErrorString)` → `setNeedsApproval(true)` and `return` (no throw, so the amber recovery card renders without a destructive toast)
+- Otherwise `throw new Error(backendErrorString)`
 
-4. **Validation target**
-   - After implementation, the next approval flow should approve spender `0xd816D83703764551A7F292dbC435669AA89631a7`; then `top-up-credits` should see nonzero allowance for buyer `0x429F7fd3CCd6514Cedef76DB12f7bA2151355A40` on Base USDC.
+### 2. `src/components/billing/SynapseTopUp.tsx` (around lines 230–239)
+Apply the identical unpacking pattern.
 
-## Technical details
+### 3. Shared helper (optional, keeps both call sites tidy)
+Add `src/lib/unpack-edge-error.ts` exporting `async function unpackEdgeError(error: unknown): Promise<string>` that handles the `error.context.clone().json()` extraction with text/JSON fallback and returns the best available backend error string. Both components import it.
 
-The current logs prove the backend signer is:
+## Out of scope
+- No edge function changes
+- No changes to `charge-usdc.ts` `[TRIAD]` logging
+- No changes to `RELAYER_ADDRESS` or approval flow itself
 
-```text
-relayer=0xd816D83703764551A7F292dbC435669AA89631a7
-buyer=0x429F7fd3CCd6514Cedef76DB12f7bA2151355A40
-allowance=0
-balance=7590425
-required=2000000
-chainId=8453
-usdc=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-```
-
-But `src/lib/usdc-approval.ts` currently asks the user wallet to approve:
-
-```text
-0xfd57Ab321639EA41f8943bca9b7226eCa04072f1
-```
-
-So the chain state is consistent: the user approved the wrong spender relative to the deployed edge-function relayer. The fix is frontend-only unless you want to rotate the deployed `RELAYER_PRIVATE_KEY` instead.
+## Validation
+1. Trigger a purchase from a wallet with zero relayer allowance
+2. Console shows `[Unpacked backend error body]` containing `USDC_CHARGE_REJECTED: APPROVAL_REQUIRED`
+3. Amber "Authorize Relayer (One-Time)" button renders in the modal
+4. Clicking it runs the existing approval flow; retrying the purchase succeeds
