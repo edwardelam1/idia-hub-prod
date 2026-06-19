@@ -8,6 +8,7 @@
 
 import { createPublicClient, createWalletClient, custom, http, isAddress, getAddress, maxUint256 } from "viem";
 import { base } from "viem/chains";
+import { getMetaMaskSDK, connectEmbeddedWallet } from "@/lib/metamask-sdk";
 
 export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 // Public address derived from the deployed RELAYER_PRIVATE_KEY edge-function secret.
@@ -58,18 +59,29 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
     }
     const owner = getAddress(opts.owner);
 
-    const ethereum = (typeof window !== "undefined" ? (window as any).ethereum : null) as
+    // Prefer the initialized MetaMask SDK provider (handles desktop extension,
+    // mobile deep-link, and QR fallback). Fall back to bare window.ethereum if
+    // the SDK provider hasn't hydrated yet.
+    const sdkProvider = (() => {
+      try { return getMetaMaskSDK()?.getProvider() ?? null; } catch { return null; }
+    })();
+    const winEth = (typeof window !== "undefined" ? (window as any).ethereum : null) ?? null;
+    const ethereum = (sdkProvider ?? winEth) as
       | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
       | null;
     if (!ethereum) {
-      console.error("[ensureUsdcApproval] WALLET_NOT_FOUND — window.ethereum is null");
+      console.error("[ensureUsdcApproval] WALLET_NOT_FOUND — no SDK provider and window.ethereum is null");
       throw new Error("WALLET_NOT_FOUND: No browser wallet detected. Install MetaMask and reload.");
     }
+    console.info(`[ensureUsdcApproval] using provider: ${sdkProvider ? "MetaMask SDK" : "window.ethereum"}`);
 
     console.info(`[ensureUsdcApproval] requesting accounts`);
     let accounts: string[];
     try {
-      accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+      // connectEmbeddedWallet drives the SDK's modal/extension popup correctly.
+      accounts = sdkProvider
+        ? await connectEmbeddedWallet()
+        : ((await ethereum.request({ method: "eth_requestAccounts" })) as string[]);
     } catch (reqErr: any) {
       console.error("[ensureUsdcApproval] eth_requestAccounts failed:", reqErr);
       const code = reqErr?.code;
