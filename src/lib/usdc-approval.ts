@@ -62,11 +62,29 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
       | { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
       | null;
     if (!ethereum) {
-      return { ok: false, reason: "No browser wallet detected (install MetaMask or similar)." };
+      console.error("[ensureUsdcApproval] WALLET_NOT_FOUND — window.ethereum is null");
+      throw new Error("WALLET_NOT_FOUND: No browser wallet detected. Install MetaMask and reload.");
     }
 
     console.info(`[ensureUsdcApproval] requesting accounts`);
-    const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+    let accounts: string[];
+    try {
+      accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
+    } catch (reqErr: any) {
+      console.error("[ensureUsdcApproval] eth_requestAccounts failed:", reqErr);
+      const code = reqErr?.code;
+      const msg = String(reqErr?.message ?? reqErr ?? "");
+      if (code === 4001) {
+        throw new Error("APPROVAL_USER_REJECTED: You rejected the wallet connection request.");
+      }
+      if (code === -32002) {
+        throw new Error("APPROVAL_POPUP_BLOCKED: A MetaMask request is already pending — open the extension and complete it.");
+      }
+      if (/unsafe-eval|Content Security Policy|CSP/i.test(msg) || reqErr instanceof EvalError) {
+        throw new Error("APPROVAL_CSP_BLOCKED: Browser CSP blocked the MetaMask SDK from executing. Reload after the CSP update deploys.");
+      }
+      throw new Error(`APPROVAL_POPUP_BLOCKED: MetaMask popup did not open (${msg || "unknown reason"}).`);
+    }
     const active = accounts?.[0];
     if (!active || getAddress(active) !== owner) {
       return {
@@ -117,13 +135,27 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
     }
 
     console.info(`[ensureUsdcApproval] sending approve(RELAYER, MAX_UINT256)`);
-    const hash = (await walletClient.writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_APPROVE_ABI,
-      functionName: "approve",
-      args: [RELAYER_ADDRESS, maxUint256],
-      chain: base,
-    } as any)) as `0x${string}`;
+    let hash: `0x${string}`;
+    try {
+      hash = (await walletClient.writeContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_APPROVE_ABI,
+        functionName: "approve",
+        args: [RELAYER_ADDRESS, maxUint256],
+        chain: base,
+      } as any)) as `0x${string}`;
+    } catch (writeErr: any) {
+      console.error("[ensureUsdcApproval] writeContract failed:", writeErr);
+      const code = writeErr?.code ?? writeErr?.cause?.code;
+      const msg = String(writeErr?.shortMessage ?? writeErr?.message ?? writeErr ?? "");
+      if (code === 4001 || /user rejected|User denied/i.test(msg)) {
+        throw new Error("APPROVAL_USER_REJECTED: You rejected the approval transaction.");
+      }
+      if (/unsafe-eval|Content Security Policy|CSP/i.test(msg) || writeErr instanceof EvalError) {
+        throw new Error("APPROVAL_CSP_BLOCKED: Browser CSP blocked the MetaMask SDK from broadcasting.");
+      }
+      throw new Error(`APPROVAL_POPUP_BLOCKED: Approval transaction never broadcast (${msg || "unknown reason"}).`);
+    }
     console.info(`[ensureUsdcApproval] approval tx=${hash}, waiting for receipt`);
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") {
@@ -133,6 +165,12 @@ export async function ensureUsdcApproval(opts: { owner: string }): Promise<Appro
     return { ok: true, hash };
   } catch (err: any) {
     console.error(`🚨 [FATAL: ensureUsdcApproval] ${err?.message ?? err}`);
+    // Re-throw tagged errors so the UI surfaces the actual cause instead of
+    // silently proceeding to the purchase retry.
+    const msg = String(err?.message ?? "");
+    if (/^(WALLET_NOT_FOUND|APPROVAL_USER_REJECTED|APPROVAL_POPUP_BLOCKED|APPROVAL_CSP_BLOCKED):/.test(msg)) {
+      throw err;
+    }
     return { ok: false, reason: err?.message ?? "Approval failed" };
   }
 }
