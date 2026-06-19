@@ -42,17 +42,59 @@ const NotificationsBridge = () => {
         (payload) => {
           const row = payload.new as Record<string, any>;
           const entryType = (row.entry_type as string) || "ENTRY";
+          const txType = (row.transaction_type as string) || "";
           const amount = Number(row.amount ?? 0);
-          const severity: "info" | "success" | "warning" =
-            entryType === "USAGE" ? "warning" : entryType === "ROYALTY" || entryType === "PURCHASE" ? "success" : "info";
+          const metadata = (row.metadata as Record<string, any>) || {};
+          const normalized = entryType.toLowerCase();
+          const isPurchase =
+            normalized === "deposit" ||
+            normalized === "purchase" ||
+            txType === "internal_deposit" ||
+            metadata.class === "Synapse_Purchase" ||
+            metadata.product_class === "SAAS_UTILITY_PURCHASE";
+          const isUsage = normalized === "usage" || normalized === "deduction";
+          const isRoyalty = normalized === "royalty" || normalized === "revenue";
+
+          const severity: "info" | "success" | "warning" = isUsage
+            ? "warning"
+            : isPurchase || isRoyalty
+              ? "success"
+              : "info";
+
           const sign = amount >= 0 ? "+" : "";
+          const usd = Number(metadata.usd_amount);
+          const hash = row.blockchain_tx_hash as string | undefined;
+          const truncatedHash =
+            hash && hash.startsWith("0x") && hash.length > 16
+              ? ` · ${hash.slice(0, 8)}…${hash.slice(-6)}`
+              : "";
+
+          const title = isPurchase
+            ? "Synapse Credits purchased"
+            : isUsage
+              ? "Synapse Credits · usage"
+              : isRoyalty
+                ? "Synapse Credits · royalty"
+                : `Synapse Credits · ${entryType}`;
+
+          const body = isPurchase
+            ? `${sign}${amount.toFixed(2)} CR${Number.isFinite(usd) && usd > 0 ? ` ($${usd.toFixed(2)})` : ""}${truncatedHash}`
+            : `${sign}${amount.toFixed(2)} CR${row.description ? ` — ${row.description}` : ""}`;
+
           recordHubNotification({
-            title: `Synapse Credits · ${entryType}`,
-            body: `${sign}${amount.toFixed(2)} CR${row.description ? ` — ${row.description}` : ""}`,
+            title,
+            body,
             category: "credits",
             severity,
             link: "/settings",
-            metadata: { ledger_id: row.id, entry_type: entryType, amount },
+            metadata: {
+              ledger_id: row.id,
+              entry_type: entryType,
+              transaction_type: txType,
+              amount,
+              usd_amount: Number.isFinite(usd) ? usd : null,
+              hash: hash ?? null,
+            },
           });
         },
       )
