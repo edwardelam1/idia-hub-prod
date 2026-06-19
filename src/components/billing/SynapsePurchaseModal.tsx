@@ -532,6 +532,9 @@ const SynapsePurchaseModal = ({
                           setNeedsApproval(false);
                           setPaymentRail("usdc");
                           await handlePurchase();
+                        } catch (err: any) {
+                          console.error("[AuthorizeRelayer] threw:", err);
+                          toast.error("Authorization Failed", { description: err?.message ?? String(err) });
                         } finally {
                           setIsAuthorizingRelayer(false);
                         }
