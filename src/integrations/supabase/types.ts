@@ -10723,7 +10723,12 @@ export type Database = {
         | "analyst"
         | "professional"
         | "enterprise"
-      idia_transaction_status: "pending" | "settled" | "failed" | "completed"
+      idia_transaction_status:
+        | "pending"
+        | "settled"
+        | "failed"
+        | "completed"
+        | "pending_wallet"
       idia_transaction_type:
         | "data_sale"
         | "deposit"
@@ -10738,6 +10743,7 @@ export type Database = {
         | "ecosystem_war_chest"
         | "hub_protocol_fee"
         | "synapse_purchase"
+        | "."
       sync_status: "pending" | "processing" | "completed" | "failed"
       user_role: "leadership" | "manager" | "employee" | "csuite"
     }
@@ -10878,7 +10884,13 @@ export const Constants = {
         "professional",
         "enterprise",
       ],
-      idia_transaction_status: ["pending", "settled", "failed", "completed"],
+      idia_transaction_status: [
+        "pending",
+        "settled",
+        "failed",
+        "completed",
+        "pending_wallet",
+      ],
       idia_transaction_type: [
         "data_sale",
         "deposit",
@@ -10893,6 +10905,7 @@ export const Constants = {
         "ecosystem_war_chest",
         "hub_protocol_fee",
         "synapse_purchase",
+        ".",
       ],
       sync_status: ["pending", "processing", "completed", "failed"],
       user_role: ["leadership", "manager", "employee", "csuite"],
