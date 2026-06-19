@@ -1,42 +1,50 @@
-## Goal
-Unblock the MetaMask SDK approval flow by relaxing CSP and making `ensureUsdcApproval` fail loudly instead of silently when the wallet popup is blocked.
+## Problem
 
-## Findings
-- `index.html` currently has **no** `<meta http-equiv="Content-Security-Policy">` tag. If CSP is actively blocking `unsafe-eval`, it is coming from a server/host header — a meta tag cannot loosen a header-level CSP. I will still add the meta tag as the directive requests, but flag this caveat.
-- `src/lib/usdc-approval.ts` currently catches errors and returns `{ ok: false, reason }` — the caller may interpret this softly. We need it to also detect popup-blocked / user-rejected / no-provider conditions and throw distinctly.
+Clicking "Authorize Relayer (one-time)" shows the amber bridge card but MetaMask never opens. Two root causes:
 
-## Changes
+1. **`ensureUsdcApproval` bypasses the initialized MetaMask SDK.** The rest of the app connects through `getMetaMaskSDK().getProvider()` / `connectEmbeddedWallet()` (`src/lib/metamask-sdk.ts`), which handles desktop extension, mobile deep-link, and QR fallback. The approval helper instead reads raw `window.ethereum`, which is often undefined (mobile browser, fresh tab, extension not yet injected) — so it throws `WALLET_NOT_FOUND` immediately and the popup never gets a chance to render.
 
-### 1. `index.html` — add CSP meta tag
-Insert a new `<meta http-equiv="Content-Security-Policy">` inside `<head>` with directives that:
-- include `'unsafe-eval'` and `'unsafe-inline'` on `script-src` (MetaMask SDK requirement)
-- preserve all currently-loaded origins so nothing else regresses:
-  - `connect-src`: self, `https://*.supabase.co`, `wss://*.supabase.co`, `https://*.alchemy.com`, `https://*.g.alchemy.com`, `https://api.bigdatacloud.net`, `https://*.metamask.io`, `https://*.infura.io`, `https://*.walletconnect.com`, `wss://*.walletconnect.com`, `https://storage.googleapis.com`
-  - `img-src`: `'self' data: blob: https:`
-  - `style-src`: `'self' 'unsafe-inline' https:`
-  - `font-src`: `'self' data: https:`
-  - `frame-src`: `'self' https://*.metamask.io https://*.walletconnect.com`
-  - `default-src 'self'`
+2. **The click handler swallows thrown errors.** The hardened helper now `throw`s tagged errors (`WALLET_NOT_FOUND`, `APPROVAL_USER_REJECTED`, `APPROVAL_POPUP_BLOCKED`, `APPROVAL_CSP_BLOCKED`). The `onClick` only handles the `{ ok: false }` return branch — thrown errors bubble past `finally`, the spinner stops, and the user sees nothing. Result: "total failure" with no feedback.
 
-### 2. `src/lib/usdc-approval.ts` — harden the catch
-Wrap the `ethereum.request({ method: "eth_requestAccounts" })` call (and the subsequent `writeContract`) in a tighter `try/catch` that:
-- Throws (not returns) when `window.ethereum` is missing, with a clear `WALLET_NOT_FOUND` message.
-- Detects MetaMask error codes (`4001` user rejected, `-32002` request already pending, popup-blocked / `evalError` / CSP errors) and rethrows with a tagged message (`APPROVAL_POPUP_BLOCKED`, `APPROVAL_USER_REJECTED`, `APPROVAL_CSP_BLOCKED`).
-- Returns `{ ok: false, reason }` only for benign cases (wrong chain that we successfully recovered from, allowance already infinite is still `ok: true`).
-- Logs the raw error object before rethrowing so the call site can surface it.
+## Fix
 
-### 3. Caller awareness (no logic change)
-`SynapsePurchaseModal.tsx` / `SynapseTopUp.tsx` already gate on `result.ok`; the hardened throws will bubble through their existing try/catch and the unpacked-error helper will display the tagged reason. No edits needed there — confirmed by re-reading both files.
+### 1. Route approval through the SDK provider — `src/lib/usdc-approval.ts`
 
-## Out of scope
-- No edge function changes.
-- No `RELAYER_ADDRESS` changes.
-- No changes to the purchase retry flow itself.
+- Import `getMetaMaskSDK`, `connectEmbeddedWallet` from `@/lib/metamask-sdk`.
+- Resolve the provider in this order:
+  1. `getMetaMaskSDK()?.getProvider()` (SDK-injected, supports desktop + mobile)
+  2. `window.ethereum` (legacy fallback)
+- Use `connectEmbeddedWallet()` to request accounts so the SDK opens the extension/mobile bridge instead of relying on a possibly-missing global.
+- Pass that provider into `createWalletClient({ transport: custom(provider) })` so `writeContract` broadcasts via the same channel.
+- Keep the existing tagged-error throws and CSP/user-reject detection.
 
-## Caveat to flag to the user
-If after this change CSP errors still appear in the console, the CSP is being injected by the hosting layer (response header), and a meta tag cannot override it — that would need to be addressed at the host config, not in the app code.
+### 2. Surface thrown errors at the click site — `src/components/billing/SynapsePurchaseModal.tsx` and `src/components/billing/SynapseTopUp.tsx`
+
+In both "Authorize Relayer" onClick handlers, wrap the call:
+
+```ts
+try {
+  const r = await ensureUsdcApproval({ owner: buyerWalletForRecovery });
+  if (!r.ok) { toast.error("Authorization Failed", { description: r.reason }); return; }
+  ...
+} catch (err: any) {
+  console.error("[AuthorizeRelayer] threw:", err);
+  toast.error("Authorization Failed", { description: err?.message ?? String(err) });
+} finally {
+  setIsAuthorizingRelayer(false);
+}
+```
+
+This makes every failure mode (no wallet, CSP, user reject, popup blocked) visible as a toast instead of a silent stall.
+
+### 3. No other files change
+
+- `index.html` CSP stays as-is (already permits `'unsafe-eval'` and MetaMask origins).
+- Edge functions, relayer address, purchase flow — untouched.
 
 ## Validation
-1. Reload preview, open DevTools → Network → Doc; confirm the new `Content-Security-Policy` meta is present and no `unsafe-eval` violation appears in console on app load.
-2. Trigger purchase with zero allowance → amber "Authorize Relayer" button renders → click it → MetaMask popup opens → sign approval → tx hash logged.
-3. Simulate popup-block (deny in MetaMask) → toast shows `APPROVAL_USER_REJECTED`, UI does not advance to retry.
+
+1. Click "Authorize Relayer" with the MetaMask extension installed → MetaMask popup opens, approve, tx hash logged, purchase auto-retries and succeeds.
+2. Click without MetaMask installed → toast reads `WALLET_NOT_FOUND: No browser wallet detected…`.
+3. Click and reject in MetaMask → toast reads `APPROVAL_USER_REJECTED: …`.
+4. Verify console shows `[IDIA_WEB3_SDK][Connect]` logs from the SDK path on every click (proves we're no longer using bare `window.ethereum`).
