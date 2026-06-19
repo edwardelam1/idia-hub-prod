@@ -228,14 +228,15 @@ const SynapseTopUp = () => {
         `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} error=${topUpError ? topUpError.message : "none"}`,
       );
       if (topUpError) {
-        const msg = (topUpError as any)?.message ?? String(topUpError);
-        if (/APPROVAL_REQUIRED/i.test(msg)) {
+        console.error("[SynapseTopUp][handlePurchase] [USDC_FLOW] raw edge error:", topUpError);
+        const backendErrorString = await unpackEdgeError(topUpError);
+        console.log("[SynapseTopUp][handlePurchase] [USDC_FLOW] unpacked backend error:", backendErrorString);
+        if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
+          console.warn("[SynapseTopUp][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.");
           setNeedsApproval(true);
-          throw new Error(
-            "Relayer authorization missing for this wallet. Click 'Authorize Relayer (one-time)' to grant USDC spend permission, then retry.",
-          );
+          return;
         }
-        throw new Error(msg);
+        throw new Error(backendErrorString);
       }
 
       setStep("success");

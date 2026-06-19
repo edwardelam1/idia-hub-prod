@@ -293,14 +293,19 @@ const SynapsePurchaseModal = ({
           "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [FAILED] Edge function rejected transaction.",
           topUpError,
         );
-        const msg = (topUpError as any)?.message ?? String(topUpError);
-        if (/APPROVAL_REQUIRED/i.test(msg)) {
-          setNeedsApproval(true);
-          throw new Error(
-            "Relayer authorization missing for this wallet. Click 'Authorize Relayer (one-time)' to grant USDC spend permission, then retry.",
+        const backendErrorString = await unpackEdgeError(topUpError);
+        console.log(
+          "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] unpacked backend error:",
+          backendErrorString,
+        );
+        if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
+          console.warn(
+            "[SynapsePurchaseModal][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
           );
+          setNeedsApproval(true);
+          return;
         }
-        throw new Error(msg);
+        throw new Error(backendErrorString);
       }
 
       console.log(
