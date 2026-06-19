@@ -101,7 +101,10 @@ export async function chargeBuyerUsdc(opts: {
     const amount = parseUnits(opts.usd_amount.toFixed(6), 6);
 
     const account = privateKeyToAccount(normalizedPk);
-    const transport = http(getRpc());
+    const rpcUrl = getRpc();
+    let rpcHost = "unknown";
+    try { rpcHost = new URL(rpcUrl).host; } catch { /* ignore */ }
+    const transport = http(rpcUrl);
     const publicClient = createPublicClient({ chain: base, transport });
     const walletClient = createWalletClient({ chain: base, transport, account });
 
@@ -123,6 +126,15 @@ export async function chargeBuyerUsdc(opts: {
       } as any) as Promise<bigint>,
     ]);
     console.log(`[${stage}] allowance=${allowance.toString()} balance=${buyerBalance.toString()}`);
+
+    // Triad-of-Execution diagnostic — surfaces every parameter the chain evaluates,
+    // so APPROVAL_REQUIRED stalls can be compared 1:1 against BaseScan.
+    console.log(
+      `[TRIAD] relayer=${account.address} usdc=${USDC_ADDRESS} chainId=${base.id} ` +
+      `buyer=${buyer} treasury=${treasury} ` +
+      `allowance=${allowance.toString()} balance=${buyerBalance.toString()} required=${amount.toString()} ` +
+      `rpc_host=${rpcHost}`
+    );
 
     if (allowance < amount) {
       return {
