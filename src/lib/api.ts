@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
  * supabase.functions.invoke() so that JWT + apikey hydration
  * is handled by the SDK (bypassing 401 Gateway rejections).
  */
-const EDGE_MAP: Record<string, string> = {
+export const EDGE_MAP: Record<string, string> = {
   "/api/v1/synapse/controller": "synapse-controller",
   "/api/v1/settlement/circular": "idia-circular-settlement",
   "/api/v1/billing/withdraw/crypto": "withdraw-to-crypto",
