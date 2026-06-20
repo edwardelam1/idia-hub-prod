@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +13,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Copy, Download, Plug, Code2, ShieldCheck, Globe } from "lucide-react";
+import { Copy, Download, Plug, Code2, ShieldCheck, Globe, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { useMcpToolSchemas, type McpToolSchema } from "@/hooks/useMcpToolSchemas";
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
   const [drawerTool, setDrawerTool] = useState<McpToolSchema | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
+  }, []);
+
+  const SUPABASE_PROJECT_REF = "zxyngqciipcvveigrzqt";
+  const fnBase = `https://${SUPABASE_PROJECT_REF}.functions.supabase.co`;
+  const remoteManifestUrl = userId
+    ? `${fnBase}/mcp-manifest?user_id=${userId}`
+    : `${fnBase}/mcp-manifest?user_id=<your-user-id>`;
+  const relayUrl = `${fnBase}/mcp-edge-relay`;
+  const bridgeScriptUrl = `${window.location.origin}/downloads/idia-mcp-bridge.js`;
 
   const enabledCount = tools.filter((t) => t.enabled).length;
 
@@ -71,6 +85,30 @@ export const MCPConfigurator = () => {
     }
   }
 }`;
+
+  const bridgeConfigSnippet = `{
+  "mcpServers": {
+    "idia-hub": {
+      "command": "node",
+      "args": ["/absolute/path/to/idia-mcp-bridge.js"],
+      "env": {
+        "IDIA_API_KEY": "idia_live_...",
+        "IDIA_MANIFEST_URL": "${remoteManifestUrl}",
+        "IDIA_HUB_URL": "${relayUrl}"
+      }
+    }
+  }
+}`;
+
+  const handleDownloadBridge = () => {
+    console.log("[MCPConfigurator] START handleDownloadBridge");
+    const a = document.createElement("a");
+    a.href = bridgeScriptUrl;
+    a.download = "idia-mcp-bridge.js";
+    a.click();
+    toast.success("idia-mcp-bridge.js download started");
+    console.log("[MCPConfigurator] END handleDownloadBridge");
+  };
 
   return (
     <div className="space-y-6">
