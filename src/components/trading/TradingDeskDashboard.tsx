@@ -15,13 +15,15 @@ import {
   Lock,
   Copy,
   Eye,
-  EyeOff
+  EyeOff,
+  Plug
 } from "lucide-react";
 import { APIKeyManagement } from "./APIKeyManagement";
 import { APIEndpoints } from "./APIEndpoints";
 import APIMonitoring from "./APIMonitoring";
 import { APIBilling } from "./APIBilling";
 import FeatureFeedAccess from "./FeatureFeedAccess";
+import { MCPConfigurator } from "./MCPConfigurator";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -109,7 +111,7 @@ export const TradingDeskDashboard = () => {
 
       {/* Main Tabs Interface */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 h-auto gap-1 p-1">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto gap-1 p-1">
           <TabsTrigger value="overview">
             <BarChart3 className="h-4 w-4 mr-2" />
             Overview
@@ -121,6 +123,10 @@ export const TradingDeskDashboard = () => {
           <TabsTrigger value="endpoints">
             <FileCode className="h-4 w-4 mr-2" />
             Endpoints
+          </TabsTrigger>
+          <TabsTrigger value="mcp">
+            <Plug className="h-4 w-4 mr-2" />
+            MCP
           </TabsTrigger>
           <TabsTrigger value="monitoring">
             <Activity className="h-4 w-4 mr-2" />
@@ -212,6 +218,11 @@ export const TradingDeskDashboard = () => {
         {/* Endpoints Tab */}
         <TabsContent value="endpoints">
           <APIEndpoints />
+        </TabsContent>
+
+        {/* MCP Tab */}
+        <TabsContent value="mcp">
+          <MCPConfigurator />
         </TabsContent>
 
         {/* Monitoring Tab */}
