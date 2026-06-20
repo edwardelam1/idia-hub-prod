@@ -4987,6 +4987,24 @@ export type Database = {
         }
         Relationships: []
       }
+      mcp_manifests: {
+        Row: {
+          tools: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          tools?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          tools?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       menu_history: {
         Row: {
           action: string
