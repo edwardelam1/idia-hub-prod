@@ -16,7 +16,17 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { TOOL_TO_EDGE } from "../_shared/edge-map.ts";
+import { TOOL_ROUTES } from "../_shared/edge-map.ts";
+import { sanitizeArgs } from "../_shared/mcp_sanitizer.ts";
+import {
+  extractTraceContext,
+  injectTraceHeaders,
+} from "../_shared/trace-context.ts";
+import {
+  generateStatelessChallenge,
+  hashArgs,
+  verifySignatureChallenge,
+} from "../_shared/mcp_edge_handshake_validator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,59 +58,25 @@ async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
-// ----------------------------------------------------------------------------
-// Ingress sanitization. Tags are intentionally protocol-neutral
-// (HexadecimalAssetIdentifier / ProtocolAddressBody) — never named after
-// any specific chain or wallet family — to preserve corporate banking
-// compliance nomenclature.
-// ----------------------------------------------------------------------------
-const SANITIZE_RULES: Array<{ tag: string; pattern: RegExp }> = [
-  { tag: "ProtocolAddressBody", pattern: /\b0x[a-fA-F0-9]{40}\b/g },
-  { tag: "HexadecimalAssetIdentifier", pattern: /\b0x[a-fA-F0-9]{64}\b/g },
-  { tag: "EmailIdentifierString", pattern: /[\w.+-]+@[\w-]+\.[\w.-]+/g },
-  {
-    tag: "TelephonyContactString",
-    pattern: /(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}/g,
-  },
-  { tag: "GovernmentTaxIdentifier", pattern: /\b\d{3}-\d{2}-\d{4}\b/g },
-];
-
-function sanitizeArguments(args: Record<string, unknown>, reqId: string) {
-  console.log(`[mcp-edge-relay][${reqId}] START ingress-sanitization`);
-  const flags: Array<{ tag: string; count: number }> = [];
-  const walk = (v: unknown): unknown => {
-    if (typeof v === "string") {
-      let out = v;
-      for (const rule of SANITIZE_RULES) {
-        const m = out.match(rule.pattern);
-        if (m && m.length > 0) {
-          flags.push({ tag: rule.tag, count: m.length });
-          // Preserve structural shape — pass cleaned token markers so downstream
-          // services receive deterministic placeholders, not raw values.
-          out = out.replace(rule.pattern, `<${rule.tag}>`);
-        }
-      }
-      return out;
-    }
-    if (Array.isArray(v)) return v.map(walk);
-    if (v && typeof v === "object") {
-      const next: Record<string, unknown> = {};
-      for (const [k, vv] of Object.entries(v as Record<string, unknown>)) next[k] = walk(vv);
-      return next;
-    }
-    return v;
-  };
-  const cleaned = walk(args) as Record<string, unknown>;
-  if (flags.length) {
-    console.log(
-      `[mcp-edge-relay][${reqId}] WARN ingress-sanitization scrubbed ${JSON.stringify(flags)}`,
-    );
-  }
-  console.log(`[mcp-edge-relay][${reqId}] END ingress-sanitization`);
-  return cleaned;
-}
-
 console.log("[mcp-edge-relay] START boot");
+
+// EdgeRuntime is provided by Supabase Edge Runtime; declare to satisfy TS.
+declare const EdgeRuntime:
+  | { waitUntil: (p: Promise<unknown>) => void }
+  | undefined;
+
+function deferTelemetry(p: Promise<unknown>) {
+  try {
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(p);
+    } else {
+      // dev/test fallback — fire and forget
+      p.catch((e) => console.log(`[mcp-edge-relay] telemetry-bg ERROR ${e?.message}`));
+    }
+  } catch (e: any) {
+    console.log(`[mcp-edge-relay] telemetry-defer ERROR ${e?.message}`);
+  }
+}
 
 serve(async (req) => {
   const reqId = crypto.randomUUID().slice(0, 8);
@@ -130,6 +106,11 @@ serve(async (req) => {
   }
 
   const { id, method, params } = body;
+  const meta = (params as any)?._meta as Record<string, unknown> | undefined;
+  const traceCtx = extractTraceContext(meta);
+  console.log(
+    `[mcp-edge-relay][${reqId}] START trace parent=${traceCtx.traceId} span=${traceCtx.parentSpanId}`,
+  );
 
   // ---- auth ----
   console.log(`[mcp-edge-relay][${reqId}] START auth`);
@@ -180,10 +161,29 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
     const tools = (Array.isArray(row?.tools) ? (row!.tools as any[]) : [])
-      .filter((t) => t && t.enabled !== false && TOOL_TO_EDGE[t.name])
+      .filter((t) => t && t.enabled !== false && TOOL_ROUTES[t.name])
       .map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
     console.log(`[mcp-edge-relay][${reqId}] END tools-list count=${tools.length}`);
     return rpcResponse(id, { tools });
+  }
+
+  // ---- tools/challenge — issues a stateless HMAC-anchored handshake token --
+  if (method === "tools/challenge") {
+    console.log(`[mcp-edge-relay][${reqId}] START tools-challenge`);
+    const toolName = (params as any)?.name as string | undefined;
+    const rawArgs = ((params as any)?.arguments ?? {}) as Record<string, unknown>;
+    if (!toolName || !TOOL_ROUTES[toolName]) {
+      return rpcResponse(id, null, { code: -32601, message: `Tool unmapped: ${toolName}` });
+    }
+    const serverSecret = Deno.env.get("MCP_HANDSHAKE_SECRET") ?? "";
+    if (!serverSecret) {
+      console.log(`[mcp-edge-relay][${reqId}] ERROR challenge missing MCP_HANDSHAKE_SECRET`);
+      return rpcResponse(id, null, { code: -32603, message: "Handshake secret unconfigured" });
+    }
+    const argsHash = await hashArgs(rawArgs);
+    const challenge = await generateStatelessChallenge(argsHash, serverSecret);
+    console.log(`[mcp-edge-relay][${reqId}] END tools-challenge issued nonce=${challenge.nonce}`);
+    return rpcResponse(id, { challenge });
   }
 
   if (method !== "tools/call") {
@@ -199,11 +199,12 @@ serve(async (req) => {
 
   // ---- map validation against single source of truth ----
   console.log(`[mcp-edge-relay][${reqId}] START tool-route-validate name=${toolName}`);
-  const targetFn = TOOL_TO_EDGE[toolName];
-  if (!targetFn) {
+  const route = TOOL_ROUTES[toolName];
+  if (!route) {
     console.log(`[mcp-edge-relay][${reqId}] END tool-route-validate REJECT unmapped=${toolName}`);
     return rpcResponse(id, null, { code: -32601, message: `Tool unmapped: ${toolName}` });
   }
+  const targetFn = route.fn;
   console.log(`[mcp-edge-relay][${reqId}] END tool-route-validate target=${targetFn}`);
 
   // ---- enablement check ----
@@ -224,26 +225,94 @@ serve(async (req) => {
   }
   console.log(`[mcp-edge-relay][${reqId}] END tool-enabled-check OK`);
 
+  // ---- premium handshake gate (stateless HMAC + Ed25519) ----
+  if (route.premium) {
+    console.log(`[mcp-edge-relay][${reqId}] START premium-handshake`);
+    const serverSecret = Deno.env.get("MCP_HANDSHAKE_SECRET") ?? "";
+    if (!serverSecret) {
+      console.log(`[mcp-edge-relay][${reqId}] ERROR premium-handshake missing secret`);
+      return rpcResponse(id, null, { code: -32603, message: "Handshake secret unconfigured" });
+    }
+    const verdict = await verifySignatureChallenge(rawArgs, meta, serverSecret);
+    if (!verdict.valid) {
+      console.log(`[mcp-edge-relay][${reqId}] END premium-handshake REJECT ${verdict.error}`);
+      return rpcResponse(id, null, {
+        code: -32001,
+        message: verdict.error ?? "Handshake rejected",
+      });
+    }
+    console.log(`[mcp-edge-relay][${reqId}] END premium-handshake OK`);
+  }
+
   // ---- sanitize args ----
-  const cleanArgs = sanitizeArguments(rawArgs, reqId);
+  console.log(`[mcp-edge-relay][${reqId}] START ingress-sanitization`);
+  const { cleaned: cleanArgs, flags } = sanitizeArgs(rawArgs);
+  if (flags.length) {
+    console.log(
+      `[mcp-edge-relay][${reqId}] WARN ingress-sanitization scrubbed ${JSON.stringify(flags)}`,
+    );
+  }
+  console.log(`[mcp-edge-relay][${reqId}] END ingress-sanitization`);
 
   // ---- invoke downstream edge fn (service role) ----
+  const startedAt = performance.now();
   try {
     console.log(`[mcp-edge-relay][${reqId}] START downstream-invoke fn=${targetFn}`);
-    const { data, error } = await supabase.functions.invoke(targetFn, { body: cleanArgs });
+    const { data, error } = await supabase.functions.invoke(targetFn, {
+      body: cleanArgs,
+      headers: injectTraceHeaders(traceCtx),
+    });
+    const durationMs = Math.round(performance.now() - startedAt);
     if (error) {
       console.log(`[mcp-edge-relay][${reqId}] END downstream-invoke ERROR ${error.message}`);
+      deferTelemetry(
+        supabase.from("mcp_relay_events").insert({
+          user_id: userId,
+          tool_name: toolName,
+          trace_id: traceCtx.traceId,
+          parent_span_id: traceCtx.parentSpanId,
+          duration_ms: durationMs,
+          status: "error",
+          sanitized_args: cleanArgs as any,
+          error_code: -32002,
+          error_message: error.message,
+        }),
+      );
       return rpcResponse(id, null, {
         code: -32002,
         message: `Downstream failure: ${error.message}`,
       });
     }
     console.log(`[mcp-edge-relay][${reqId}] END downstream-invoke OK`);
+    deferTelemetry(
+      supabase.from("mcp_relay_events").insert({
+        user_id: userId,
+        tool_name: toolName,
+        trace_id: traceCtx.traceId,
+        parent_span_id: traceCtx.parentSpanId,
+        duration_ms: durationMs,
+        status: "ok",
+        sanitized_args: cleanArgs as any,
+      }),
+    );
     return rpcResponse(id, {
       content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
     });
   } catch (err: any) {
     console.log(`[mcp-edge-relay][${reqId}] ERROR downstream-invoke unhandled ${err?.message}`);
+    deferTelemetry(
+      supabase.from("mcp_relay_events").insert({
+        user_id: userId,
+        tool_name: toolName,
+        trace_id: traceCtx.traceId,
+        parent_span_id: traceCtx.parentSpanId,
+        duration_ms: Math.round(performance.now() - startedAt),
+        status: "exception",
+        sanitized_args: cleanArgs as any,
+        error_code: -32603,
+        error_message: err?.message,
+      }),
+    );
     return rpcResponse(id, null, { code: -32603, message: `Internal error: ${err?.message}` });
   }
 });
