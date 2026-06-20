@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +13,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Copy, Download, Plug, Code2, ShieldCheck, Globe } from "lucide-react";
+import { Copy, Download, Plug, Code2, ShieldCheck, Globe, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { useMcpToolSchemas, type McpToolSchema } from "@/hooks/useMcpToolSchemas";
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
   const [drawerTool, setDrawerTool] = useState<McpToolSchema | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
+  }, []);
+
+  const SUPABASE_PROJECT_REF = "zxyngqciipcvveigrzqt";
+  const fnBase = `https://${SUPABASE_PROJECT_REF}.functions.supabase.co`;
+  const remoteManifestUrl = userId
+    ? `${fnBase}/mcp-manifest?user_id=${userId}`
+    : `${fnBase}/mcp-manifest?user_id=<your-user-id>`;
+  const relayUrl = `${fnBase}/mcp-edge-relay`;
+  const bridgeScriptUrl = `${window.location.origin}/downloads/idia-mcp-bridge.js`;
 
   const enabledCount = tools.filter((t) => t.enabled).length;
 
@@ -71,6 +85,30 @@ export const MCPConfigurator = () => {
     }
   }
 }`;
+
+  const bridgeConfigSnippet = `{
+  "mcpServers": {
+    "idia-hub": {
+      "command": "node",
+      "args": ["/absolute/path/to/idia-mcp-bridge.js"],
+      "env": {
+        "IDIA_API_KEY": "idia_live_...",
+        "IDIA_MANIFEST_URL": "${remoteManifestUrl}",
+        "IDIA_HUB_URL": "${relayUrl}"
+      }
+    }
+  }
+}`;
+
+  const handleDownloadBridge = () => {
+    console.log("[MCPConfigurator] START handleDownloadBridge");
+    const a = document.createElement("a");
+    a.href = bridgeScriptUrl;
+    a.download = "idia-mcp-bridge.js";
+    a.click();
+    toast.success("idia-mcp-bridge.js download started");
+    console.log("[MCPConfigurator] END handleDownloadBridge");
+  };
 
   return (
     <div className="space-y-6">
@@ -216,6 +254,69 @@ export const MCPConfigurator = () => {
             <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
               {ollamaSnippet}
             </pre>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-primary" />
+            Local Bridge (Recommended)
+          </CardTitle>
+          <CardDescription>
+            Run the IDIA MCP Bridge locally to expose your enabled tools to any MCP client over stdio. The bridge
+            authenticates with your API key, pulls your live manifest from the Hub, and relays every <code>tools/call</code>{" "}
+            envelope through the Liability Shield perimeter — sanitization, billing, and provenance fire automatically
+            server-side.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={handleDownloadBridge}>
+              <Download className="h-4 w-4 mr-2" />
+              Download idia-mcp-bridge.js
+            </Button>
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              <ShieldCheck className="h-3 w-3 mr-1" />
+              Liability Shield enforced
+            </Badge>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 text-xs">
+            <div className="space-y-1">
+              <div className="font-semibold text-muted-foreground">Manifest URL</div>
+              <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">
+                {remoteManifestUrl}
+              </code>
+            </div>
+            <div className="space-y-1">
+              <div className="font-semibold text-muted-foreground">JSON-RPC Relay URL</div>
+              <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold">Claude Desktop config (bridge mode)</h4>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  navigator.clipboard.writeText(bridgeConfigSnippet);
+                  toast.success("Bridge config copied");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+              {bridgeConfigSnippet}
+            </pre>
+            <p className="text-xs text-muted-foreground">
+              Set <code>IDIA_API_KEY</code> to an active key from API Key Management. Trace logs land in{" "}
+              <code>idia_mcp_bridge_trace.log</code> next to the script.
+            </p>
           </div>
         </CardContent>
       </Card>

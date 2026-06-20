@@ -33,3 +33,9 @@ verify_jwt = false
 
 [functions.base-rpc-proxy]
 verify_jwt = true
+
+[functions.mcp-manifest]
+verify_jwt = false
+
+[functions.mcp-edge-relay]
+verify_jwt = false

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EDGE_MAP } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * useMcpToolSchemas
@@ -109,6 +110,7 @@ const ENDPOINT_CONTRACTS: Record<
 };
 
 const STORAGE_KEY = "mcp.tools.enabled";
+const SYNC_DEBOUNCE_MS = 600;
 
 const loadEnabledMap = (): Record<string, boolean> => {
   console.log("[useMcpToolSchemas] START loadEnabledMap");
@@ -148,6 +150,41 @@ export function useMcpToolSchemas() {
   useEffect(() => {
     console.log("[useMcpToolSchemas] START hydrate effect");
     setEnabledMap(loadEnabledMap());
+    // Pull remote manifest — remote wins on conflict.
+    (async () => {
+      console.log("[useMcpToolSchemas] START remote-hydrate");
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess.session?.user?.id;
+        if (!uid) {
+          console.log("[useMcpToolSchemas] END remote-hydrate: no session");
+          return;
+        }
+        const { data, error } = await supabase
+          .from("mcp_manifests")
+          .select("tools")
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (error) {
+          console.error("[useMcpToolSchemas] ERROR: Remote manifest fetch failed, maintaining local-first state isolation", error);
+          return;
+        }
+        const tools: any[] = Array.isArray(data?.tools) ? (data!.tools as any[]) : [];
+        if (tools.length === 0) {
+          console.log("[useMcpToolSchemas] END remote-hydrate: empty remote");
+          return;
+        }
+        const merged: Record<string, boolean> = {};
+        tools.forEach((t) => {
+          if (t?.name) merged[t.name] = t.enabled !== false;
+        });
+        setEnabledMap(merged);
+        persistEnabledMap(merged);
+        console.log("[useMcpToolSchemas] END remote-hydrate count=", tools.length);
+      } catch (err) {
+        console.error("[useMcpToolSchemas] ERROR: Remote manifest sync failed, maintaining local-first state isolation", err);
+      }
+    })();
     console.log("[useMcpToolSchemas] END hydrate effect");
   }, []);
 
@@ -194,6 +231,51 @@ export function useMcpToolSchemas() {
     });
     console.log("[useMcpToolSchemas] END toggleTool", name);
   }, []);
+
+  // Debounced remote upsert — never blocks UI thread, never throws.
+  useEffect(() => {
+    console.log("[useMcpToolSchemas] START debounce-wrapper");
+    const handle = setTimeout(async () => {
+      console.log("[useMcpToolSchemas] START debounced-upsert");
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess.session?.user?.id;
+        if (!uid) {
+          console.log("[useMcpToolSchemas] END debounced-upsert: no session, local-only");
+          return;
+        }
+        // Build full tool payload (enabled + metadata) so the server-side
+        // mcp-manifest endpoint can serve clients without needing client code.
+        const payload = Object.entries(ENDPOINT_CONTRACTS).map(([endpoint, contract]) => ({
+          name: contract.name,
+          description: contract.description,
+          endpoint,
+          scope: contract.scope,
+          enabled: enabledMap[contract.name] ?? false,
+          inputSchema: {
+            type: "object",
+            properties: contract.properties,
+            required: contract.required,
+            additionalProperties: false,
+          },
+        }));
+        const { error } = await supabase
+          .from("mcp_manifests")
+          .upsert({ user_id: uid, tools: payload, updated_at: new Date().toISOString() });
+        if (error) {
+          console.error("[useMcpToolSchemas] ERROR: Remote manifest sync failed, maintaining local-first state isolation", error);
+        } else {
+          console.log("[useMcpToolSchemas] END debounced-upsert OK");
+        }
+      } catch (err) {
+        console.error("[useMcpToolSchemas] ERROR: Remote manifest sync failed, maintaining local-first state isolation", err);
+      }
+    }, SYNC_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(handle);
+      console.log("[useMcpToolSchemas] END debounce-wrapper (cleared)");
+    };
+  }, [enabledMap]);
 
   const manifestUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
