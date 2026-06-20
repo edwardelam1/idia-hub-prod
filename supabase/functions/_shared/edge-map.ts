@@ -13,12 +13,23 @@ export const EDGE_MAP: Record<string, string> = {
 };
 
 /**
- * Canonical MCP tool name -> edge function name.
+ * Canonical MCP tool name -> edge function name + premium-gate flag.
  * Tool names match ENDPOINT_CONTRACTS in src/hooks/useMcpToolSchemas.ts.
+ * Premium tools require an Ed25519 signed-challenge handshake.
  */
-export const TOOL_TO_EDGE: Record<string, string> = {
-  "synapse.controller.execute": "synapse-controller",
-  "settlement.circular.post": "idia-circular-settlement",
-  "billing.withdraw.crypto": "withdraw-to-crypto",
-  "best_friend.chat": "best-friend-ai",
+export interface ToolRoute {
+  fn: string;
+  premium: boolean;
+}
+
+export const TOOL_ROUTES: Record<string, ToolRoute> = {
+  "synapse.controller.execute": { fn: "synapse-controller", premium: true },
+  "settlement.circular.post": { fn: "idia-circular-settlement", premium: true },
+  "billing.withdraw.crypto": { fn: "withdraw-to-crypto", premium: true },
+  "best_friend.chat": { fn: "best-friend-ai", premium: false },
 };
+
+/** Back-compat flat map. Existing callers depend on this name. */
+export const TOOL_TO_EDGE: Record<string, string> = Object.fromEntries(
+  Object.entries(TOOL_ROUTES).map(([k, v]) => [k, v.fn]),
+);
