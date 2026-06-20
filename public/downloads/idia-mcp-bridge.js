@@ -17,12 +17,15 @@
 
 const fs = require("fs");
 const https = require("https");
+const crypto = require("crypto");
 const readline = require("readline");
 
 const API_KEY = process.env.IDIA_API_KEY;
 const HUB_ENDPOINT = process.env.IDIA_HUB_URL;
 const MANIFEST_URL = process.env.IDIA_MANIFEST_URL;
 const LOG_FILE = process.env.IDIA_BRIDGE_LOG || "idia_mcp_bridge_trace.log";
+const SIGNING_PRIVATE_KEY_HEX = process.env.IDIA_SIGNING_PRIVATE_KEY || "";
+const SIGNING_PUBLIC_KEY_HEX = process.env.IDIA_SIGNING_PUBLIC_KEY || "";
 
 function logTrace(message) {
   const ts = new Date().toISOString();
@@ -45,6 +48,92 @@ if (!HUB_ENDPOINT) {
 logTrace("[idia-mcp-bridge] START initialization");
 
 const enabledToolsMap = new Map();
+const PREMIUM_TOOLS = new Set([
+  "synapse.controller.execute",
+  "settlement.circular.post",
+  "billing.withdraw.crypto",
+]);
+
+function randomHex(bytes) {
+  return crypto.randomBytes(bytes).toString("hex");
+}
+
+function newTraceparent() {
+  return `00-${randomHex(16)}-${randomHex(8)}-01`;
+}
+
+function hashArgsHex(args) {
+  return crypto.createHash("sha256").update(JSON.stringify(args)).digest("hex");
+}
+
+function signEd25519Hex(messageStr) {
+  if (!SIGNING_PRIVATE_KEY_HEX || !SIGNING_PUBLIC_KEY_HEX) {
+    throw new Error("Missing IDIA_SIGNING_PRIVATE_KEY / IDIA_SIGNING_PUBLIC_KEY env vars for premium tool");
+  }
+  // Build PKCS8 wrapper around raw 32-byte Ed25519 seed.
+  const seed = Buffer.from(SIGNING_PRIVATE_KEY_HEX, "hex");
+  if (seed.length !== 32) throw new Error("IDIA_SIGNING_PRIVATE_KEY must be 32-byte hex (Ed25519 seed)");
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  const pkcs8 = Buffer.concat([pkcs8Prefix, seed]);
+  const keyObj = crypto.createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+  const sig = crypto.sign(null, Buffer.from(messageStr), keyObj);
+  return sig.toString("base64");
+}
+
+function postJsonRpc(rpcPayload) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(rpcPayload);
+    const url = new URL(HUB_ENDPOINT);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Length": Buffer.byteLength(payload),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let body = "";
+      res.on("data", (c) => (body += c));
+      res.on("end", () => {
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    });
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function buildPremiumMeta(toolName, args) {
+  logTrace(`[bridge:premiumHandshake] START tool=${toolName}`);
+  const challengeReq = {
+    jsonrpc: "2.0",
+    id: `challenge-${Date.now()}`,
+    method: "tools/challenge",
+    params: { name: toolName, arguments: args },
+  };
+  logTrace(`[bridge:premiumHandshake] EXEC requesting challenge`);
+  const resp = await postJsonRpc(challengeReq);
+  if (!resp || !resp.result || !resp.result.challenge) {
+    throw new Error(`Challenge denied: ${JSON.stringify(resp?.error || resp)}`);
+  }
+  const challenge = resp.result.challenge;
+  logTrace(`[bridge:premiumHandshake] EXEC signing nonce=${challenge.nonce}`);
+  const message = `${challenge.nonce}:${challenge.expiresAt}:${challenge.argsHash}`;
+  const signature = signEd25519Hex(message);
+  logTrace(`[bridge:premiumHandshake] END signed`);
+  return {
+    "org.paymentauth/credential": {
+      signature,
+      challenge,
+      publicKeyRaw: SIGNING_PUBLIC_KEY_HEX,
+    },
+  };
+}
 
 function httpsGetJson(url, headers) {
   return new Promise((resolve) => {
@@ -104,13 +193,24 @@ function sendJsonRpcResponse(id, result, error = null) {
   logTrace(`[sendJsonRpcResponse] END len=${serialized.length}`);
 }
 
-function executeLiveEdgeRelay(id, toolName, args) {
+async function executeLiveEdgeRelay(id, toolName, args) {
   logTrace(`[executeLiveEdgeRelay] START tool=${toolName}`);
+  let meta = { traceparent: newTraceparent() };
+  if (PREMIUM_TOOLS.has(toolName)) {
+    try {
+      const premiumMeta = await buildPremiumMeta(toolName, args);
+      meta = { ...meta, ...premiumMeta };
+    } catch (err) {
+      logTrace(`[executeLiveEdgeRelay] ERROR premium handshake ${err.message}`);
+      sendJsonRpcResponse(id, null, { code: -32001, message: `Handshake failed: ${err.message}` });
+      return;
+    }
+  }
   const payload = JSON.stringify({
     jsonrpc: "2.0",
     id,
     method: "tools/call",
-    params: { name: toolName, arguments: args },
+    params: { name: toolName, arguments: args, _meta: meta },
   });
   const url = new URL(HUB_ENDPOINT);
   const options = {
