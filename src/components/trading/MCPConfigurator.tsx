@@ -258,8 +258,6 @@ export const MCPConfigurator = () => {
         </CardContent>
       </Card>
 
-      <Sheet open={!!drawerTool} onOpenChange={(open) => !open && setDrawerTool(null)}>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
