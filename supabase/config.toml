@@ -39,3 +39,6 @@ verify_jwt = false
 
 [functions.mcp-edge-relay]
 verify_jwt = false
+
+[functions.mcp-telemetry-stream]
+verify_jwt = false
