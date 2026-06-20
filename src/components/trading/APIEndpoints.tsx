@@ -267,10 +267,28 @@ axios.get('${origin}/v1/features/market-data', config)
       );
       console.info("[APIEndpoints][executeLiveCall][resolve_wallet] END");
 
+      // Resolve real ACA records — controller rejects synthetic ids.
+      console.info("[APIEndpoints][executeLiveCall][resolve_aca] BEGIN");
+      const { data: acaRows, error: acaErr } = await supabase
+        .from("user_aca_records")
+        .select("id")
+        .eq("platform_guid", userId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (acaErr || !acaRows || acaRows.length === 0) {
+        console.error(
+          `[APIEndpoints][executeLiveCall][resolve_aca] HALT no ACA records (err=${acaErr?.message ?? "none"})`,
+        );
+        toast.error("No auditable lineage on file — generate data before probing endpoints.");
+        return;
+      }
+      const acaIds = acaRows.map((r) => r.id);
+      console.info(`[APIEndpoints][executeLiveCall][resolve_aca] END count=${acaIds.length}`);
+
       const payload: Record<string, unknown> = {
         user_id: userId,
         client_id: referenceId,
-        aca_record_ids: [referenceId],
+        aca_record_ids: acaIds,
         intent_type: `API_DOC_PROBE:${endpoint.method}:${endpoint.path}`,
         query_complexity: 1.0,
         country_of_origin: "US",
