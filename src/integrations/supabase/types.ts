@@ -5005,6 +5005,48 @@ export type Database = {
         }
         Relationships: []
       }
+      mcp_relay_events: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_code: number | null
+          error_message: string | null
+          id: number
+          parent_span_id: string | null
+          sanitized_args: Json | null
+          status: string
+          tool_name: string
+          trace_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: number | null
+          error_message?: string | null
+          id?: number
+          parent_span_id?: string | null
+          sanitized_args?: Json | null
+          status: string
+          tool_name: string
+          trace_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: number | null
+          error_message?: string | null
+          id?: number
+          parent_span_id?: string | null
+          sanitized_args?: Json | null
+          status?: string
+          tool_name?: string
+          trace_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       menu_history: {
         Row: {
           action: string
