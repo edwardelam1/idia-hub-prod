@@ -383,6 +383,23 @@ export function useMcpToolSchemas() {
             additionalProperties: false,
           },
         }));
+        // Include local-only vault tools so the bridge manifest advertises
+        // them; cloud relay will still reject any cloud invocation.
+        for (const [endpoint, contract] of Object.entries(VAULT_CONTRACTS)) {
+          payload.push({
+            name: contract.name,
+            description: contract.description,
+            endpoint,
+            scope: contract.scope,
+            enabled: enabledMap[contract.name] ?? false,
+            inputSchema: {
+              type: "object",
+              properties: contract.properties,
+              required: contract.required,
+              additionalProperties: false,
+            },
+          });
+        }
         const { error } = await supabase
           .from("mcp_manifests")
           .upsert({ user_id: uid, tools: payload, updated_at: new Date().toISOString() });
