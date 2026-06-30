@@ -25,6 +25,7 @@ import { APIBilling } from "./APIBilling";
 import FeatureFeedAccess from "./FeatureFeedAccess";
 import { MCPConfigurator } from "./MCPConfigurator";
 import { MCPLiveTelemetry } from "./MCPLiveTelemetry";
+import { SovereignVault } from "@/components/knowledge/SovereignVault";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -224,6 +225,9 @@ export const TradingDeskDashboard = () => {
         {/* MCP Tab */}
         <TabsContent value="mcp">
           <MCPConfigurator />
+          <div className="mt-6">
+            <SovereignVault />
+          </div>
           <div className="mt-6">
             <MCPLiveTelemetry />
           </div>
