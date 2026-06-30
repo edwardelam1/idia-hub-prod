@@ -62,3 +62,20 @@ export function createHookLogger(scope: string): HookLogger {
     },
   };
 }
+
+/* -------------------------------------------------------------------------
+ * Back-compat free-function API used by older hooks. These keep the same
+ * lowest-level granularity contract but accept the scope as the first arg.
+ * ------------------------------------------------------------------------- */
+export function logBegin(scope: string, detail?: unknown): string {
+  return createHookLogger(scope).begin("scope", detail);
+}
+export function logExec(scope: string, detail?: unknown): void {
+  createHookLogger(scope).exec("scope", detail);
+}
+export function logEnd(scope: string, detail?: unknown): void {
+  createHookLogger(scope).end("scope", detail);
+}
+export function logError(scope: string, err: unknown, detail?: unknown): void {
+  createHookLogger(scope).error("scope", err, detail);
+}
