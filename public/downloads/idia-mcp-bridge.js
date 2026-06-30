@@ -469,6 +469,7 @@ function handleIncomingMessageFrame(line) {
 async function main() {
   logTrace("[main] START");
   await fetchManifestAndSync();
+  startLocalRpcServer();
   const reader = readline.createInterface({ input: process.stdin, terminal: false });
   reader.on("line", handleIncomingMessageFrame);
   process.on("SIGINT", () => {
