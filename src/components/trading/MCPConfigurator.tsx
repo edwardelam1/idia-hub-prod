@@ -25,9 +25,6 @@ export const MCPConfigurator = () => {
   const [drawerTool, setDrawerTool] = useState<McpToolSchema | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [bridgeUrl, setBridgeUrlLocal] = useState<string>(getBridgeUrl());
-  const [vaultRoot, setVaultRoot] = useState<string>(
-    typeof window !== "undefined" ? localStorage.getItem("idia.vault.root") ?? "" : "",
-  );
   const [pingState, setPingState] = useState<"idle" | "ok" | "fail">("idle");
 
   useEffect(() => {
@@ -121,11 +118,6 @@ export const MCPConfigurator = () => {
   const handleSaveBridgeUrl = async () => {
     console.log("[MCPConfigurator] START handleSaveBridgeUrl", bridgeUrl);
     setBridgeUrl(bridgeUrl);
-    try {
-      localStorage.setItem("idia.vault.root", vaultRoot);
-    } catch (err) {
-      console.error("[MCPConfigurator] ERROR persist vaultRoot", err);
-    }
     const r = await pingBridge();
     setPingState(r.ok ? "ok" : "fail");
     if (r.ok) toast.success("Local bridge reachable");
@@ -165,8 +157,8 @@ export const MCPConfigurator = () => {
         <CardHeader>
           <CardTitle className="text-lg">Local Bridge Transport</CardTitle>
           <CardDescription>
-            Required for the Sovereign Vault. The browser posts JSON-RPC directly to the local bridge for any
-            tool flagged <code>local: true</code>; the cloud relay rejects those tools with −32004.
+            Optional. Lets local MCP clients (Claude Desktop, Ollama) reach Hub tools over a local stdio bridge.
+            All vault data now lives in Supabase under your RLS — no local bridge required for Sovereign Vault.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
@@ -177,15 +169,6 @@ export const MCPConfigurator = () => {
               value={bridgeUrl}
               onChange={(e) => setBridgeUrlLocal(e.target.value)}
               placeholder="http://127.0.0.1:47615/rpc"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="vault-root">IDIA_VAULT_ROOT (set on bridge env)</Label>
-            <Input
-              id="vault-root"
-              value={vaultRoot}
-              onChange={(e) => setVaultRoot(e.target.value)}
-              placeholder="/Users/you/Documents/IDIA_Vault"
             />
           </div>
           <div className="md:col-span-2 flex items-center gap-3">
