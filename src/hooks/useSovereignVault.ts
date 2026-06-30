@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { callBridge, pingBridge, type BridgeRpcOutcome } from "@/lib/mcpBridgeSocket";
+import { callBridge, pingBridge, type BridgeRpcOutcome, type BridgeRpcFailure } from "@/lib/mcpBridgeSocket";
 import { validateVaultArgs } from "@/hooks/useMcpToolSchemas";
 import { createHookLogger } from "@/lib/hook-logger";
 
@@ -42,13 +42,14 @@ async function invokeLocalVault<T>(
 ): Promise<BridgeRpcOutcome<T>> {
   const span = LOG.begin("invokeLocalVault", { toolName });
   const validated = validateVaultArgs(toolName, rawArgs);
-  if (!validated.ok) {
-    const msg = validated.error;
+  if (validated.ok === false) {
+    const msg = (validated as { ok: false; error: string }).error;
     LOG.error("invokeLocalVault:validate", msg, { toolName });
     return { ok: false, code: -32602, message: msg };
   }
-  LOG.exec("invokeLocalVault:dispatch", { toolName, keys: Object.keys(validated.value) });
-  const outcome = await callBridge<T>(toolName, validated.value);
+  const okValue = (validated as { ok: true; value: Record<string, unknown> }).value;
+  LOG.exec("invokeLocalVault:dispatch", { toolName, keys: Object.keys(okValue) });
+  const outcome = await callBridge<T>(toolName, okValue);
   LOG.end("invokeLocalVault", { span, ok: outcome.ok });
   return outcome;
 }
@@ -62,7 +63,7 @@ export function useSovereignVault() {
     const span = LOG.begin("refreshBridgeStatus");
     const r = await pingBridge();
     setBridgeStatus(r.ok ? "online" : "offline");
-    if (!r.ok) setLastError(r.message);
+    if (r.ok === false) setLastError((r as BridgeRpcFailure).message);
     LOG.end("refreshBridgeStatus", { span, status: r.ok ? "online" : "offline" });
   }, []);
 
@@ -75,8 +76,8 @@ export function useSovereignVault() {
     setLastError(null);
     const r = await invokeLocalVault<VaultReadResult>("vault.note.read", { filePath });
     setBusy(false);
-    if (!r.ok) {
-      setLastError(r.message);
+    if (r.ok === false) {
+      setLastError((r as BridgeRpcFailure).message);
       return null;
     }
     return r.result;
@@ -88,8 +89,8 @@ export function useSovereignVault() {
       setLastError(null);
       const r = await invokeLocalVault<{ hits: VaultSearchHit[] }>("vault.search", { query, limit });
       setBusy(false);
-      if (!r.ok) {
-        setLastError(r.message);
+      if (r.ok === false) {
+        setLastError((r as BridgeRpcFailure).message);
         return [];
       }
       return r.result.hits ?? [];
@@ -103,8 +104,8 @@ export function useSovereignVault() {
       setLastError(null);
       const r = await invokeLocalVault<VaultAppendResult>("vault.note.append", { filePath, content });
       setBusy(false);
-      if (!r.ok) {
-        setLastError(r.message);
+      if (r.ok === false) {
+        setLastError((r as BridgeRpcFailure).message);
         return false;
       }
       return r.result.appended === true;
