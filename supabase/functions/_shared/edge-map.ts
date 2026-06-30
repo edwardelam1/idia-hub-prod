@@ -10,6 +10,7 @@ export const EDGE_MAP: Record<string, string> = {
   "/api/v1/settlement/circular": "idia-circular-settlement",
   "/api/v1/billing/withdraw/crypto": "withdraw-to-crypto",
   "/api/v1/best-friend/chat": "best-friend-ai",
+  "/api/v1/vault/query": "execute-vault-query",
 };
 
 /**
@@ -31,10 +32,10 @@ export const TOOL_ROUTES: Record<string, ToolRoute> = {
   "settlement.circular.post": { fn: "idia-circular-settlement", premium: true },
   "billing.withdraw.crypto": { fn: "withdraw-to-crypto", premium: true },
   "best_friend.chat": { fn: "best-friend-ai", premium: false },
-  // ---- Sovereign Vault — local filesystem only, no cloud route ----
-  "vault.note.read": { fn: "__local__", premium: false, local: true },
-  "vault.search": { fn: "__local__", premium: false, local: true },
-  "vault.note.append": { fn: "__local__", premium: false, local: true },
+  // ---- Sovereign Vault — Supabase-backed under user's RLS ----
+  "vault.note.read": { fn: "execute-vault-query", premium: false },
+  "vault.search": { fn: "execute-vault-query", premium: false },
+  "vault.note.append": { fn: "execute-vault-query", premium: false },
 };
 
 /** Back-compat flat map. Existing callers depend on this name. */

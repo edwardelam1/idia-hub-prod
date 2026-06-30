@@ -110,13 +110,8 @@ const ENDPOINT_CONTRACTS: Record<
 };
 
 /**
- * Local-only Sovereign Vault tools. These NEVER traverse the cloud relay —
- * `mcp-edge-relay` rejects them with JSON-RPC -32004. The local
- * idia-mcp-bridge executes them against the user's filesystem.
- *
- * They are surfaced through `useMcpToolSchemas` so the configurator UI,
- * manifest exporter, and bridge manifest sync all agree on the same set
- * of advertised tools, but `endpoint`/`edgeFunction` are sentinel values.
+ * Sovereign Vault tools — now Supabase-backed under per-user RLS.
+ * Routed through the `execute-vault-query` edge function.
  */
 const VAULT_CONTRACTS: Record<
   string,
@@ -128,40 +123,37 @@ const VAULT_CONTRACTS: Record<
     required: string[];
   }
 > = {
-  "local://vault/note.read": {
+  "/api/v1/vault/note.read": {
     name: "vault.note.read",
     description:
-      "Read a markdown/text note from the user's local Sovereign Vault. Path is resolved inside IDIA_VAULT_ROOT on the bridge — no traversal.",
+      "Read a Sovereign Vault note by id. Returns title, content, tags. RLS-scoped to the caller.",
     scope: "public",
     properties: {
-      filePath: {
-        type: "string",
-        description: "Vault-relative path, e.g. 'projects/idea-board.md'.",
-      },
+      id: { type: "string", description: "UUID of the vault note." },
     },
-    required: ["filePath"],
+    required: ["id"],
   },
-  "local://vault/search": {
+  "/api/v1/vault/search": {
     name: "vault.search",
     description:
-      "Substring/regex search over every .md/.txt file in the local Sovereign Vault. Empty query returns the root index.",
+      "Postgres full-text search across every Sovereign Vault note (GIN-indexed tsvector). Empty query lists the index.",
     scope: "public",
     properties: {
-      query: { type: "string", description: "Search expression (substring or /regex/)." },
+      query: { type: "string", description: "Free-text search expression." },
       limit: { type: "number", description: "Max hits to return. Default 50." },
     },
     required: ["query"],
   },
-  "local://vault/note.append": {
+  "/api/v1/vault/note.append": {
     name: "vault.note.append",
     description:
-      "Append AI-reasoned content to an existing note in the local Sovereign Vault. Will NOT create new files.",
+      "Append content to an existing Sovereign Vault note. Atomic via SECURITY DEFINER row-locked RPC.",
     scope: "public",
     properties: {
-      filePath: { type: "string", description: "Vault-relative path of an existing note." },
+      id: { type: "string", description: "UUID of the vault note." },
       content: { type: "string", description: "Text to append (will be prefixed with a newline)." },
     },
-    required: ["filePath", "content"],
+    required: ["id", "content"],
   },
 };
 
@@ -180,10 +172,10 @@ export function validateVaultArgs(
     switch (toolName) {
       case "vault.note.read": {
         console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.note.read");
-        if (typeof a.filePath !== "string" || a.filePath.length === 0) {
-          return { ok: false, error: "filePath required (string)" };
+        if (typeof a.id !== "string" || a.id.length === 0) {
+          return { ok: false, error: "id required (string)" };
         }
-        return { ok: true, value: { filePath: a.filePath } };
+        return { ok: true, value: { id: a.id } };
       }
       case "vault.search": {
         console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.search");
@@ -195,13 +187,13 @@ export function validateVaultArgs(
       }
       case "vault.note.append": {
         console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.note.append");
-        if (typeof a.filePath !== "string" || a.filePath.length === 0) {
-          return { ok: false, error: "filePath required (string)" };
+        if (typeof a.id !== "string" || a.id.length === 0) {
+          return { ok: false, error: "id required (string)" };
         }
         if (typeof a.content !== "string" || a.content.length === 0) {
           return { ok: false, error: "content required (non-empty string)" };
         }
-        return { ok: true, value: { filePath: a.filePath, content: a.content } };
+        return { ok: true, value: { id: a.id, content: a.content } };
       }
       default:
         console.error("[useMcpToolSchemas] ERROR validateVaultArgs unknown tool", toolName);
@@ -327,7 +319,7 @@ export function useMcpToolSchemas() {
           name: contract.name,
           description: contract.description,
           endpoint,
-          edgeFunction: "__local_bridge__",
+          edgeFunction: "execute-vault-query",
           scope: contract.scope,
           enabled: enabledMap[contract.name] ?? false,
           inputSchema: {
