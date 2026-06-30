@@ -204,6 +204,30 @@ serve(async (req) => {
     console.log(`[mcp-edge-relay][${reqId}] END tool-route-validate REJECT unmapped=${toolName}`);
     return rpcResponse(id, null, { code: -32601, message: `Tool unmapped: ${toolName}` });
   }
+  // Local-only tools (Sovereign Vault) MUST execute on the user's hardware
+  // through idia-mcp-bridge. The cloud relay refuses to route them so vault
+  // contents never traverse Supabase.
+  if (route.local) {
+    console.log(`[mcp-edge-relay][${reqId}] EXEC tool-route-validate LOCAL-ONLY ${toolName}`);
+    deferTelemetry(
+      supabase.from("mcp_relay_events").insert({
+        user_id: userId,
+        tool_name: toolName,
+        trace_id: traceCtx.traceId,
+        parent_span_id: traceCtx.parentSpanId,
+        duration_ms: 0,
+        status: "local_only",
+        sanitized_args: {} as any,
+        error_code: -32004,
+        error_message: "Local-only tool; execute via local MCP bridge",
+      }),
+    );
+    console.log(`[mcp-edge-relay][${reqId}] END tool-route-validate LOCAL-REJECT`);
+    return rpcResponse(id, null, {
+      code: -32004,
+      message: "Local-only tool; execute via local MCP bridge",
+    });
+  }
   const targetFn = route.fn;
   console.log(`[mcp-edge-relay][${reqId}] END tool-route-validate target=${targetFn}`);
 

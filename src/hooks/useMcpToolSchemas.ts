@@ -109,6 +109,112 @@ const ENDPOINT_CONTRACTS: Record<
   },
 };
 
+/**
+ * Local-only Sovereign Vault tools. These NEVER traverse the cloud relay —
+ * `mcp-edge-relay` rejects them with JSON-RPC -32004. The local
+ * idia-mcp-bridge executes them against the user's filesystem.
+ *
+ * They are surfaced through `useMcpToolSchemas` so the configurator UI,
+ * manifest exporter, and bridge manifest sync all agree on the same set
+ * of advertised tools, but `endpoint`/`edgeFunction` are sentinel values.
+ */
+const VAULT_CONTRACTS: Record<
+  string,
+  {
+    name: string;
+    description: string;
+    scope: McpScope;
+    properties: Record<string, { type: string; description?: string }>;
+    required: string[];
+  }
+> = {
+  "local://vault/note.read": {
+    name: "vault.note.read",
+    description:
+      "Read a markdown/text note from the user's local Sovereign Vault. Path is resolved inside IDIA_VAULT_ROOT on the bridge — no traversal.",
+    scope: "public",
+    properties: {
+      filePath: {
+        type: "string",
+        description: "Vault-relative path, e.g. 'projects/idea-board.md'.",
+      },
+    },
+    required: ["filePath"],
+  },
+  "local://vault/search": {
+    name: "vault.search",
+    description:
+      "Substring/regex search over every .md/.txt file in the local Sovereign Vault. Empty query returns the root index.",
+    scope: "public",
+    properties: {
+      query: { type: "string", description: "Search expression (substring or /regex/)." },
+      limit: { type: "number", description: "Max hits to return. Default 50." },
+    },
+    required: ["query"],
+  },
+  "local://vault/note.append": {
+    name: "vault.note.append",
+    description:
+      "Append AI-reasoned content to an existing note in the local Sovereign Vault. Will NOT create new files.",
+    scope: "public",
+    properties: {
+      filePath: { type: "string", description: "Vault-relative path of an existing note." },
+      content: { type: "string", description: "Text to append (will be prefixed with a newline)." },
+    },
+    required: ["filePath", "content"],
+  },
+};
+
+/** Runtime validators for vault tool arguments. Wrapped in granular logs. */
+export function validateVaultArgs(
+  toolName: string,
+  args: unknown,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  console.log("[useMcpToolSchemas] BEGIN validateVaultArgs", toolName);
+  try {
+    if (!args || typeof args !== "object") {
+      console.error("[useMcpToolSchemas] ERROR validateVaultArgs: args not an object");
+      return { ok: false, error: "arguments must be an object" };
+    }
+    const a = args as Record<string, unknown>;
+    switch (toolName) {
+      case "vault.note.read": {
+        console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.note.read");
+        if (typeof a.filePath !== "string" || a.filePath.length === 0) {
+          return { ok: false, error: "filePath required (string)" };
+        }
+        return { ok: true, value: { filePath: a.filePath } };
+      }
+      case "vault.search": {
+        console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.search");
+        if (typeof a.query !== "string") {
+          return { ok: false, error: "query required (string)" };
+        }
+        const limit = typeof a.limit === "number" && a.limit > 0 ? Math.min(a.limit, 500) : 50;
+        return { ok: true, value: { query: a.query, limit } };
+      }
+      case "vault.note.append": {
+        console.log("[useMcpToolSchemas] EXEC validateVaultArgs vault.note.append");
+        if (typeof a.filePath !== "string" || a.filePath.length === 0) {
+          return { ok: false, error: "filePath required (string)" };
+        }
+        if (typeof a.content !== "string" || a.content.length === 0) {
+          return { ok: false, error: "content required (non-empty string)" };
+        }
+        return { ok: true, value: { filePath: a.filePath, content: a.content } };
+      }
+      default:
+        console.error("[useMcpToolSchemas] ERROR validateVaultArgs unknown tool", toolName);
+        return { ok: false, error: `unknown vault tool: ${toolName}` };
+    }
+  } catch (err: any) {
+    console.error("[useMcpToolSchemas] ERROR validateVaultArgs threw", err);
+    return { ok: false, error: err?.message ?? "validator threw" };
+  } finally {
+    console.log("[useMcpToolSchemas] END validateVaultArgs", toolName);
+  }
+}
+
 const STORAGE_KEY = "mcp.tools.enabled";
 const SYNC_DEBOUNCE_MS = 600;
 
@@ -214,6 +320,24 @@ export function useMcpToolSchemas() {
           },
         });
       }
+      // ---- Sovereign Vault (local-only) -----------------------------------
+      for (const [endpoint, contract] of Object.entries(VAULT_CONTRACTS)) {
+        console.log("[useMcpToolSchemas] EXEC tool generation loop: derive vault", endpoint);
+        out.push({
+          name: contract.name,
+          description: contract.description,
+          endpoint,
+          edgeFunction: "__local_bridge__",
+          scope: contract.scope,
+          enabled: enabledMap[contract.name] ?? false,
+          inputSchema: {
+            type: "object",
+            properties: contract.properties,
+            required: contract.required,
+            additionalProperties: false,
+          },
+        });
+      }
     } catch (err) {
       console.error("[useMcpToolSchemas] ERROR tool generation loop", err);
     } finally {
@@ -259,6 +383,23 @@ export function useMcpToolSchemas() {
             additionalProperties: false,
           },
         }));
+        // Include local-only vault tools so the bridge manifest advertises
+        // them; cloud relay will still reject any cloud invocation.
+        for (const [endpoint, contract] of Object.entries(VAULT_CONTRACTS)) {
+          payload.push({
+            name: contract.name,
+            description: contract.description,
+            endpoint,
+            scope: contract.scope,
+            enabled: enabledMap[contract.name] ?? false,
+            inputSchema: {
+              type: "object",
+              properties: contract.properties,
+              required: contract.required,
+              additionalProperties: false,
+            },
+          });
+        }
         const { error } = await supabase
           .from("mcp_manifests")
           .upsert({ user_id: uid, tools: payload, updated_at: new Date().toISOString() });
