@@ -16,6 +16,9 @@
  */
 
 const fs = require("fs");
+const fsp = require("fs/promises");
+const path = require("path");
+const http = require("http");
 const https = require("https");
 const crypto = require("crypto");
 const readline = require("readline");
@@ -26,6 +29,9 @@ const MANIFEST_URL = process.env.IDIA_MANIFEST_URL;
 const LOG_FILE = process.env.IDIA_BRIDGE_LOG || "idia_mcp_bridge_trace.log";
 const SIGNING_PRIVATE_KEY_HEX = process.env.IDIA_SIGNING_PRIVATE_KEY || "";
 const SIGNING_PUBLIC_KEY_HEX = process.env.IDIA_SIGNING_PUBLIC_KEY || "";
+const VAULT_ROOT = process.env.IDIA_VAULT_ROOT ? path.resolve(process.env.IDIA_VAULT_ROOT) : "";
+const LOCAL_RPC_PORT = parseInt(process.env.IDIA_BRIDGE_LOCAL_PORT || "47615", 10);
+const LOCAL_RPC_ORIGINS = (process.env.IDIA_BRIDGE_ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim());
 
 function logTrace(message) {
   const ts = new Date().toISOString();
@@ -46,12 +52,18 @@ if (!HUB_ENDPOINT) {
 }
 
 logTrace("[idia-mcp-bridge] START initialization");
+logTrace(`[idia-mcp-bridge] VAULT_ROOT=${VAULT_ROOT || "<unset>"} LOCAL_RPC_PORT=${LOCAL_RPC_PORT}`);
 
 const enabledToolsMap = new Map();
 const PREMIUM_TOOLS = new Set([
   "synapse.controller.execute",
   "settlement.circular.post",
   "billing.withdraw.crypto",
+]);
+const LOCAL_VAULT_TOOLS = new Set([
+  "vault.note.read",
+  "vault.search",
+  "vault.note.append",
 ]);
 
 function randomHex(bytes) {
@@ -78,6 +90,154 @@ function signEd25519Hex(messageStr) {
   const keyObj = crypto.createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
   const sig = crypto.sign(null, Buffer.from(messageStr), keyObj);
   return sig.toString("base64");
+}
+
+// ===========================================================================
+// Sovereign Vault — local filesystem operations. Every call is chokepoint-
+// validated through resolveInsideVault() so paths cannot escape VAULT_ROOT.
+// Every operation emits [START]/[END]/[ERROR] trace lines.
+// ===========================================================================
+
+function resolveInsideVault(filePath) {
+  logTrace(`[START] vault.resolveInsideVault input=${filePath}`);
+  try {
+    if (!VAULT_ROOT) throw new Error("IDIA_VAULT_ROOT is not set");
+    if (typeof filePath !== "string" || filePath.length === 0) throw new Error("filePath required");
+    if (path.isAbsolute(filePath)) throw new Error("filePath must be vault-relative");
+    const abs = path.resolve(VAULT_ROOT, filePath);
+    const rel = path.relative(VAULT_ROOT, abs);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error("path escapes vault root");
+    logTrace(`[END] vault.resolveInsideVault abs=${abs}`);
+    return abs;
+  } catch (err) {
+    logTrace(`[ERROR] vault.resolveInsideVault Silent stall prevented. Details: ${err.message}`);
+    throw err;
+  }
+}
+
+async function vaultReadNote(args) {
+  const targetPath = resolveInsideVault(args.filePath);
+  logTrace(`[START] idia-mcp-bridge: Attempting fs.readFile for path: ${targetPath}`);
+  try {
+    const content = await fsp.readFile(targetPath, "utf8");
+    logTrace(`[END] idia-mcp-bridge: fs.readFile successful for path: ${targetPath} bytes=${content.length}`);
+    return { filePath: args.filePath, content };
+  } catch (err) {
+    logTrace(`[ERROR] idia-mcp-bridge: fs.readFile failed. Silent stall prevented. Details: ${err.message}`);
+    throw err;
+  }
+}
+
+async function walkVault(dir, acc) {
+  logTrace(`[START] idia-mcp-bridge: walkVault dir=${dir}`);
+  try {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith(".")) continue;
+        await walkVault(full, acc);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (ext === ".md" || ext === ".txt" || ext === ".markdown") acc.push(full);
+      }
+    }
+    logTrace(`[END] idia-mcp-bridge: walkVault dir=${dir} totalSoFar=${acc.length}`);
+  } catch (err) {
+    logTrace(`[ERROR] idia-mcp-bridge: walkVault failed. Silent stall prevented. Details: ${err.message}`);
+    throw err;
+  }
+}
+
+async function vaultSearch(args) {
+  logTrace(`[START] idia-mcp-bridge: vaultSearch query=${JSON.stringify(args.query)} limit=${args.limit}`);
+  try {
+    if (!VAULT_ROOT) throw new Error("IDIA_VAULT_ROOT is not set");
+    const files = [];
+    await walkVault(VAULT_ROOT, files);
+    const limit = Math.max(1, Math.min(args.limit || 50, 500));
+    const query = String(args.query || "");
+    let matcher;
+    const regexMatch = query.match(/^\/(.+)\/([gimsu]*)$/);
+    if (regexMatch) {
+      try {
+        matcher = new RegExp(regexMatch[1], regexMatch[2].includes("i") ? regexMatch[2] : regexMatch[2]);
+      } catch (_) {
+        matcher = null;
+      }
+    }
+    const hits = [];
+    // Empty query → return the file index only.
+    if (!query) {
+      for (const f of files.slice(0, limit)) {
+        hits.push({ filePath: path.relative(VAULT_ROOT, f), line: 0, snippet: "" });
+      }
+      logTrace(`[END] idia-mcp-bridge: vaultSearch index-only count=${hits.length}`);
+      return { hits };
+    }
+    for (const f of files) {
+      if (hits.length >= limit) break;
+      try {
+        const text = await fsp.readFile(f, "utf8");
+        const lines = text.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+          const ln = lines[i];
+          const hit = matcher ? matcher.test(ln) : ln.toLowerCase().includes(query.toLowerCase());
+          if (hit) {
+            hits.push({ filePath: path.relative(VAULT_ROOT, f), line: i + 1, snippet: ln.slice(0, 240) });
+            if (hits.length >= limit) break;
+          }
+        }
+      } catch (perFileErr) {
+        logTrace(`[ERROR] idia-mcp-bridge: vaultSearch read-skip ${f} ${perFileErr.message}`);
+      }
+    }
+    logTrace(`[END] idia-mcp-bridge: vaultSearch count=${hits.length}`);
+    return { hits };
+  } catch (err) {
+    logTrace(`[ERROR] idia-mcp-bridge: vaultSearch failed. Silent stall prevented. Details: ${err.message}`);
+    throw err;
+  }
+}
+
+async function vaultAppendNote(args) {
+  const targetPath = resolveInsideVault(args.filePath);
+  logTrace(`[START] idia-mcp-bridge: Attempting fs.appendFile for path: ${targetPath}`);
+  try {
+    // Require existing file — append never creates a new note.
+    await fsp.access(targetPath, fs.constants.F_OK);
+    await fsp.appendFile(targetPath, "\n" + String(args.content || ""));
+    logTrace(`[END] idia-mcp-bridge: fs.appendFile successful for path: ${targetPath}`);
+    return { filePath: args.filePath, appended: true };
+  } catch (err) {
+    logTrace(`[ERROR] idia-mcp-bridge: fs.appendFile failed. Silent stall prevented. Details: ${err.message}`);
+    throw err;
+  }
+}
+
+async function dispatchVaultTool(toolName, args) {
+  logTrace(`[START] idia-mcp-bridge: dispatchVaultTool ${toolName}`);
+  try {
+    let result;
+    switch (toolName) {
+      case "vault.note.read":
+        result = await vaultReadNote(args || {});
+        break;
+      case "vault.search":
+        result = await vaultSearch(args || {});
+        break;
+      case "vault.note.append":
+        result = await vaultAppendNote(args || {});
+        break;
+      default:
+        throw new Error(`unknown vault tool: ${toolName}`);
+    }
+    logTrace(`[END] idia-mcp-bridge: dispatchVaultTool ${toolName} OK`);
+    return result;
+  } catch (err) {
+    logTrace(`[ERROR] idia-mcp-bridge: dispatchVaultTool ${toolName} ${err.message}`);
+    throw err;
+  }
 }
 
 function postJsonRpc(rpcPayload) {
@@ -195,6 +355,18 @@ function sendJsonRpcResponse(id, result, error = null) {
 
 async function executeLiveEdgeRelay(id, toolName, args) {
   logTrace(`[executeLiveEdgeRelay] START tool=${toolName}`);
+  if (LOCAL_VAULT_TOOLS.has(toolName)) {
+    try {
+      const result = await dispatchVaultTool(toolName, args);
+      sendJsonRpcResponse(id, {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+      });
+    } catch (err) {
+      sendJsonRpcResponse(id, null, { code: -32010, message: `Vault op failed: ${err.message}` });
+    }
+    logTrace(`[executeLiveEdgeRelay] END id=${id} local-vault`);
+    return;
+  }
   let meta = { traceparent: newTraceparent() };
   if (PREMIUM_TOOLS.has(toolName)) {
     try {
