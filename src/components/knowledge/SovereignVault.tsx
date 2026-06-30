@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FolderLock, RefreshCw, Search, FileText, Plus, AlertTriangle, ShieldCheck } from "lucide-react";
-import { useSovereignVault, type VaultSearchHit } from "@/hooks/useSovereignVault";
-import { getBridgeUrl } from "@/lib/mcpBridgeSocket";
+import { FolderLock, RefreshCw, Search, FileText, Plus, ShieldCheck } from "lucide-react";
+import { useSovereignVault, type VaultNoteSummary } from "@/hooks/useSovereignVault";
 
 /**
  * SovereignVault — local knowledge-base browser that talks ONLY to the
@@ -15,60 +14,59 @@ import { getBridgeUrl } from "@/lib/mcpBridgeSocket";
  * tools (the cloud relay rejects them with -32004).
  */
 export const SovereignVault = () => {
-  const { bridgeStatus, busy, lastError, refreshBridgeStatus, readNote, search, appendNote } =
+  const { busy, lastError, notes, listNotes, search, readNote, createNote, appendNote } =
     useSovereignVault();
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<VaultSearchHit[]>([]);
-  const [activePath, setActivePath] = useState<string | null>(null);
+  const [searchHits, setSearchHits] = useState<VaultNoteSummary[] | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeTitle, setActiveTitle] = useState<string>("");
   const [activeContent, setActiveContent] = useState<string>("");
   const [appendDraft, setAppendDraft] = useState<string>("");
+  const [newTitle, setNewTitle] = useState<string>("");
 
-  useEffect(() => {
-    // Initial index load on mount when bridge is online.
-    if (bridgeStatus === "online" && hits.length === 0 && query === "") {
-      void (async () => {
-        const initial = await search("", 100);
-        setHits(initial);
-      })();
-    }
-  }, [bridgeStatus, hits.length, query, search]);
+  const items = useMemo(() => searchHits ?? notes, [searchHits, notes]);
 
   const handleSearch = async () => {
+    if (!query.trim()) {
+      setSearchHits(null);
+      return;
+    }
     const r = await search(query, 100);
-    setHits(r);
+    setSearchHits(r);
   };
 
-  const handleOpen = async (filePath: string) => {
-    setActivePath(filePath);
+  const handleOpen = async (id: string) => {
+    setActiveId(id);
+    setActiveTitle("");
     setActiveContent("");
-    const r = await readNote(filePath);
-    if (r) setActiveContent(r.content);
+    const r = await readNote(id);
+    if (r) {
+      setActiveTitle(r.title);
+      setActiveContent(r.content);
+    }
   };
 
   const handleAppend = async () => {
-    if (!activePath || !appendDraft.trim()) return;
-    const ok = await appendNote(activePath, appendDraft.trim());
+    if (!activeId || !appendDraft.trim()) return;
+    const ok = await appendNote(activeId, "\n" + appendDraft.trim());
     if (ok) {
       setAppendDraft("");
-      const r = await readNote(activePath);
+      const r = await readNote(activeId);
       if (r) setActiveContent(r.content);
     }
   };
 
-  const statusBadge =
-    bridgeStatus === "online" ? (
-      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-        <ShieldCheck className="h-3 w-3 mr-1" />
-        Local bridge online
-      </Badge>
-    ) : bridgeStatus === "offline" ? (
-      <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30">
-        <AlertTriangle className="h-3 w-3 mr-1" />
-        Bridge offline
-      </Badge>
-    ) : (
-      <Badge variant="outline">Probing…</Badge>
-    );
+  const handleCreate = async () => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const note = await createNote(title, "", []);
+    setNewTitle("");
+    if (note) void handleOpen(note.id);
+  };
+
+  useEffect(() => {
+    // initial load handled by hook
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -79,17 +77,33 @@ export const SovereignVault = () => {
             Sovereign Vault
           </CardTitle>
           <CardDescription>
-            Your local-only knowledge base. All operations run on your machine through the IDIA MCP bridge —
-            vault contents never leave your hardware.
+            Your private knowledge base, stored in Supabase under row-level security. Only you can read or
+            modify your notes — full-text indexed for instant search as your vault compounds.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          {statusBadge}
-          <code className="text-xs text-muted-foreground truncate">{getBridgeUrl()}</code>
-          <Button variant="outline" size="sm" onClick={() => void refreshBridgeStatus()}>
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+            <ShieldCheck className="h-3 w-3 mr-1" />
+            RLS-scoped to your account
+          </Badge>
+          <span className="text-xs text-muted-foreground">{notes.length} note{notes.length === 1 ? "" : "s"}</span>
+          <Button variant="outline" size="sm" onClick={() => void listNotes()} disabled={busy}>
             <RefreshCw className="h-4 w-4 mr-1" />
-            Re-probe
+            Refresh
           </Button>
+          <div className="flex items-center gap-2 ml-auto">
+            <Input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="New note title"
+              className="w-56"
+              onKeyDown={(e) => e.key === "Enter" && void handleCreate()}
+            />
+            <Button size="sm" onClick={() => void handleCreate()} disabled={!newTitle.trim() || busy}>
+              <Plus className="h-4 w-4 mr-1" />
+              Create
+            </Button>
+          </div>
           {lastError && (
             <span className="text-xs text-rose-500 truncate max-w-md" title={lastError}>
               {lastError}
@@ -102,44 +116,52 @@ export const SovereignVault = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Search & Index</CardTitle>
-            <CardDescription>Substring or /regex/ over every .md/.txt note.</CardDescription>
+            <CardDescription>
+              Postgres full-text search across every note (GIN-indexed tsvector). Empty = full list.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Empty = full index"
+                placeholder="Search title + content…"
                 onKeyDown={(e) => e.key === "Enter" && void handleSearch()}
               />
-              <Button onClick={() => void handleSearch()} disabled={busy || bridgeStatus !== "online"}>
+              <Button onClick={() => void handleSearch()} disabled={busy}>
                 <Search className="h-4 w-4 mr-1" />
                 Search
               </Button>
             </div>
             <ScrollArea className="h-[340px] rounded-md border border-border">
               <div className="divide-y divide-border">
-                {hits.map((h, i) => (
+                {items.map((n) => (
                   <button
-                    key={`${h.filePath}:${h.line}:${i}`}
-                    onClick={() => void handleOpen(h.filePath)}
-                    className="w-full text-left px-3 py-2 hover:bg-muted/50"
+                    key={n.id}
+                    onClick={() => void handleOpen(n.id)}
+                    className={`w-full text-left px-3 py-2 hover:bg-muted/50 ${
+                      activeId === n.id ? "bg-muted/60" : ""
+                    }`}
                   >
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      {h.filePath}
-                      {h.line > 0 && (
-                        <span className="text-xs text-muted-foreground">:{h.line}</span>
-                      )}
+                      <span className="truncate">{n.title}</span>
                     </div>
-                    {h.snippet && (
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">{h.snippet}</div>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(n.updated_at).toLocaleString()}
+                      </span>
+                      {n.tags?.slice(0, 4).map((t) => (
+                        <Badge key={t} variant="outline" className="text-[10px] px-1 py-0">
+                          #{t}
+                        </Badge>
+                      ))}
+                    </div>
                   </button>
                 ))}
-                {hits.length === 0 && (
+                {items.length === 0 && (
                   <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    {bridgeStatus === "online" ? "No results." : "Start the bridge to load the vault index."}
+                    {busy ? "Loading…" : "No notes yet. Create one above."}
                   </div>
                 )}
               </div>
@@ -149,13 +171,15 @@ export const SovereignVault = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{activePath ?? "Select a note"}</CardTitle>
-            <CardDescription>Read & append. Append never creates new files.</CardDescription>
+            <CardTitle className="text-base truncate">
+              {activeTitle || (activeId ? "(untitled)" : "Select a note")}
+            </CardTitle>
+            <CardDescription>Read & append. Appends are atomic (row-locked).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <ScrollArea className="h-[260px] rounded-md border border-border bg-muted/30 p-3">
               <pre className="whitespace-pre-wrap text-xs leading-relaxed">
-                {activeContent || (activePath ? "(empty)" : "Open a note from the index on the left.")}
+                {activeContent || (activeId ? "(empty)" : "Open a note from the index on the left.")}
               </pre>
             </ScrollArea>
             <Textarea
@@ -163,11 +187,11 @@ export const SovereignVault = () => {
               onChange={(e) => setAppendDraft(e.target.value)}
               placeholder="Append AI-reasoned content to this note…"
               rows={4}
-              disabled={!activePath || bridgeStatus !== "online"}
+              disabled={!activeId}
             />
             <Button
               onClick={() => void handleAppend()}
-              disabled={!activePath || !appendDraft.trim() || busy || bridgeStatus !== "online"}
+              disabled={!activeId || !appendDraft.trim() || busy}
             >
               <Plus className="h-4 w-4 mr-1" />
               Append to note
