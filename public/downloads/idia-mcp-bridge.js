@@ -466,6 +466,114 @@ function handleIncomingMessageFrame(line) {
   logTrace(`[handleIncomingMessageFrame] END method=${method}`);
 }
 
+// ===========================================================================
+// Local HTTP RPC server — browsers (e.g. the Sovereign Vault UI) post
+// JSON-RPC envelopes here for tools tagged `local: true`. The cloud relay
+// rejects those tools with -32004; this transport is the ONLY execution
+// path for vault.* operations. CORS is configurable but defaults to "*"
+// because the listener is bound to 127.0.0.1.
+// ===========================================================================
+function applyCors(req, res) {
+  const origin = req.headers.origin || "*";
+  const allow =
+    LOCAL_RPC_ORIGINS.includes("*") || LOCAL_RPC_ORIGINS.includes(origin) ? origin : "null";
+  res.setHeader("Access-Control-Allow-Origin", allow);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Idia-Trace");
+}
+
+function startLocalRpcServer() {
+  logTrace(`[START] startLocalRpcServer port=${LOCAL_RPC_PORT}`);
+  try {
+    const server = http.createServer((req, res) => {
+      applyCors(req, res);
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      if (req.method !== "POST" || (req.url !== "/rpc" && req.url !== "/")) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "not found" }));
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", async () => {
+        logTrace(`[localRpc] START handle bytes=${body.length}`);
+        let rpc;
+        try {
+          rpc = JSON.parse(body);
+        } catch (err) {
+          logTrace(`[localRpc] ERROR parse ${err.message}`);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32700, message: "Parse error" } }));
+          return;
+        }
+        const id = rpc.id ?? null;
+        const method = rpc.method;
+        const params = rpc.params || {};
+        try {
+          if (method === "tools/list") {
+            const tools = Array.from(enabledToolsMap.values())
+              .filter((t) => LOCAL_VAULT_TOOLS.has(t.name))
+              .map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ jsonrpc: "2.0", id, result: { tools } }));
+            logTrace(`[localRpc] END tools/list count=${tools.length}`);
+            return;
+          }
+          if (method !== "tools/call") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32601, message: `Unsupported method: ${method}` } }),
+            );
+            return;
+          }
+          const toolName = params.name;
+          if (!LOCAL_VAULT_TOOLS.has(toolName)) {
+            logTrace(`[localRpc] REJECT non-local tool over local transport: ${toolName}`);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id,
+                error: { code: -32004, message: "Tool not eligible for local execution" },
+              }),
+            );
+            return;
+          }
+          const result = await dispatchVaultTool(toolName, params.arguments || {});
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id,
+              result: { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result },
+            }),
+          );
+          logTrace(`[localRpc] END tools/call ${toolName} OK`);
+        } catch (err) {
+          logTrace(`[localRpc] ERROR ${err.message}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32010, message: err.message } }),
+          );
+        }
+      });
+    });
+    server.listen(LOCAL_RPC_PORT, "127.0.0.1", () => {
+      logTrace(`[END] startLocalRpcServer listening http://127.0.0.1:${LOCAL_RPC_PORT}/rpc`);
+    });
+    server.on("error", (err) => {
+      logTrace(`[ERROR] startLocalRpcServer ${err.message}`);
+    });
+  } catch (err) {
+    logTrace(`[ERROR] startLocalRpcServer init failed: ${err.message}`);
+  }
+}
+
 async function main() {
   logTrace("[main] START");
   await fetchManifestAndSync();
