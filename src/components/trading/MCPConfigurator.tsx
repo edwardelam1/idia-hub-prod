@@ -16,11 +16,19 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Copy, Download, Plug, Code2, ShieldCheck, Globe, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { useMcpToolSchemas, type McpToolSchema } from "@/hooks/useMcpToolSchemas";
+import { getBridgeUrl, setBridgeUrl, pingBridge } from "@/lib/mcpBridgeSocket";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
   const [drawerTool, setDrawerTool] = useState<McpToolSchema | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [bridgeUrl, setBridgeUrlLocal] = useState<string>(getBridgeUrl());
+  const [vaultRoot, setVaultRoot] = useState<string>(
+    typeof window !== "undefined" ? localStorage.getItem("idia.vault.root") ?? "" : "",
+  );
+  const [pingState, setPingState] = useState<"idle" | "ok" | "fail">("idle");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
@@ -110,6 +118,21 @@ export const MCPConfigurator = () => {
     console.log("[MCPConfigurator] END handleDownloadBridge");
   };
 
+  const handleSaveBridgeUrl = async () => {
+    console.log("[MCPConfigurator] START handleSaveBridgeUrl", bridgeUrl);
+    setBridgeUrl(bridgeUrl);
+    try {
+      localStorage.setItem("idia.vault.root", vaultRoot);
+    } catch (err) {
+      console.error("[MCPConfigurator] ERROR persist vaultRoot", err);
+    }
+    const r = await pingBridge();
+    setPingState(r.ok ? "ok" : "fail");
+    if (r.ok) toast.success("Local bridge reachable");
+    else toast.error(`Bridge unreachable: ${(r as { message: string }).message}`);
+    console.log("[MCPConfigurator] END handleSaveBridgeUrl", { ok: r.ok });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -135,6 +158,49 @@ export const MCPConfigurator = () => {
             <Download className="h-4 w-4 mr-2" />
             Download mcp.json
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Local Bridge Transport</CardTitle>
+          <CardDescription>
+            Required for the Sovereign Vault. The browser posts JSON-RPC directly to the local bridge for any
+            tool flagged <code>local: true</code>; the cloud relay rejects those tools with −32004.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="bridge-url">Local bridge URL</Label>
+            <Input
+              id="bridge-url"
+              value={bridgeUrl}
+              onChange={(e) => setBridgeUrlLocal(e.target.value)}
+              placeholder="http://127.0.0.1:47615/rpc"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="vault-root">IDIA_VAULT_ROOT (set on bridge env)</Label>
+            <Input
+              id="vault-root"
+              value={vaultRoot}
+              onChange={(e) => setVaultRoot(e.target.value)}
+              placeholder="/Users/you/Documents/IDIA_Vault"
+            />
+          </div>
+          <div className="md:col-span-2 flex items-center gap-3">
+            <Button onClick={() => void handleSaveBridgeUrl()}>Save & probe</Button>
+            {pingState === "ok" && (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                Bridge reachable
+              </Badge>
+            )}
+            {pingState === "fail" && (
+              <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30">
+                Bridge unreachable
+              </Badge>
+            )}
+          </div>
         </CardContent>
       </Card>
 
