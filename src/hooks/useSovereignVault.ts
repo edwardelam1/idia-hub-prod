@@ -59,12 +59,12 @@ export function useSovereignVault() {
     setLastError(null);
     const r = await invokeVault<{ notes: VaultNoteSummary[] }>("vault.note.list", { limit });
     setBusy(false);
-    if (!r.ok) {
-      setLastError(r.error);
-      return [];
+    if (r.ok === true) {
+      setNotes(r.data.notes ?? []);
+      return r.data.notes ?? [];
     }
-    setNotes(r.data.notes ?? []);
-    return r.data.notes ?? [];
+    setLastError(r.error);
+    return [];
   }, []);
 
   const search = useCallback(async (query: string, limit = 50): Promise<VaultNoteSummary[]> => {
@@ -72,11 +72,9 @@ export function useSovereignVault() {
     setLastError(null);
     const r = await invokeVault<{ hits: VaultNoteSummary[] }>("vault.search", { query, limit });
     setBusy(false);
-    if (!r.ok) {
-      setLastError(r.error);
-      return [];
-    }
-    return r.data.hits ?? [];
+    if (r.ok === true) return r.data.hits ?? [];
+    setLastError(r.error);
+    return [];
   }, []);
 
   const readNote = useCallback(async (id: string): Promise<VaultNote | null> => {
@@ -84,11 +82,9 @@ export function useSovereignVault() {
     setLastError(null);
     const r = await invokeVault<{ note: VaultNote }>("vault.note.read", { id });
     setBusy(false);
-    if (!r.ok) {
-      setLastError(r.error);
-      return null;
-    }
-    return r.data.note;
+    if (r.ok === true) return r.data.note;
+    setLastError(r.error);
+    return null;
   }, []);
 
   const createNote = useCallback(
@@ -101,12 +97,12 @@ export function useSovereignVault() {
         tags,
       });
       setBusy(false);
-      if (!r.ok) {
-        setLastError(r.error);
-        return null;
+      if (r.ok === true) {
+        setNotes((prev) => [r.data.note, ...prev]);
+        return r.data.note;
       }
-      setNotes((prev) => [r.data.note, ...prev]);
-      return r.data.note;
+      setLastError(r.error);
+      return null;
     },
     [],
   );
@@ -116,11 +112,9 @@ export function useSovereignVault() {
     setLastError(null);
     const r = await invokeVault<{ appended: boolean }>("vault.note.append", { id, content });
     setBusy(false);
-    if (!r.ok) {
-      setLastError(r.error);
-      return false;
-    }
-    return r.data.appended === true;
+    if (r.ok === true) return r.data.appended === true;
+    setLastError(r.error);
+    return false;
   }, []);
 
   useEffect(() => {
