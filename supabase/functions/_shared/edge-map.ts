@@ -20,6 +20,10 @@ export const EDGE_MAP: Record<string, string> = {
 export interface ToolRoute {
   fn: string;
   premium: boolean;
+  /** Local-only tools (e.g. Sovereign Vault) MUST execute on the user's
+   * machine via idia-mcp-bridge. The cloud relay advertises them but
+   * refuses to route them downstream. */
+  local?: boolean;
 }
 
 export const TOOL_ROUTES: Record<string, ToolRoute> = {
@@ -27,6 +31,10 @@ export const TOOL_ROUTES: Record<string, ToolRoute> = {
   "settlement.circular.post": { fn: "idia-circular-settlement", premium: true },
   "billing.withdraw.crypto": { fn: "withdraw-to-crypto", premium: true },
   "best_friend.chat": { fn: "best-friend-ai", premium: false },
+  // ---- Sovereign Vault — local filesystem only, no cloud route ----
+  "vault.note.read": { fn: "__local__", premium: false, local: true },
+  "vault.search": { fn: "__local__", premium: false, local: true },
+  "vault.note.append": { fn: "__local__", premium: false, local: true },
 };
 
 /** Back-compat flat map. Existing callers depend on this name. */
