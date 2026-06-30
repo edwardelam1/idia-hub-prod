@@ -43,8 +43,9 @@ async function invokeLocalVault<T>(
   const span = LOG.begin("invokeLocalVault", { toolName });
   const validated = validateVaultArgs(toolName, rawArgs);
   if (!validated.ok) {
-    LOG.error("invokeLocalVault:validate", validated.error, { toolName });
-    return { ok: false, code: -32602, message: validated.error };
+    const msg = validated.error;
+    LOG.error("invokeLocalVault:validate", msg, { toolName });
+    return { ok: false, code: -32602, message: msg };
   }
   LOG.exec("invokeLocalVault:dispatch", { toolName, keys: Object.keys(validated.value) });
   const outcome = await callBridge<T>(toolName, validated.value);
