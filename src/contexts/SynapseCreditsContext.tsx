@@ -10,16 +10,19 @@ import { useWalletBalance } from "@/hooks/useWalletBalance";
 // ========================================================================
 interface ProtocolState {
   // RAIL 1: FIAT OPERATING CAPITAL (USD)
-  hub_operating_cash: number;
+  hub_operating_cash: number | null;
 
   // RAIL 2: COMPUTATIONAL GAS (CREDITS)
   synapse_gas_credits: number;
 
   // RAIL 3: USDC
-  usdc_balance: number;
+  usdc_balance: number | null;
 
   // SILO 3: LIFE YIELD RESERVOIR (FIAT ROYALTIES)
-  fbo_royalty_balance: number;
+  fbo_royalty_balance: number | null;
+
+  // IDIA TOKEN (DB-backed)
+  idia_token_balance: number | null;
 
   wallet_address: string;
 }
@@ -27,9 +30,10 @@ interface ProtocolState {
 interface BalanceData {
   // Legacy mappings for backward compatibility
   available_credits: number;
-  hub_operating_cash: number;
-  fbo_balance: number;
-  usdc_balance: number;
+  hub_operating_cash: number | null;
+  fbo_balance: number | null;
+  usdc_balance: number | null;
+  idia_token_balance: number | null;
   wallet_address: string;
   currency: string;
   last_updated: string;
@@ -80,7 +84,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       // 1. VAULT DISCOVERY: Accessing physical silos
       const { data: vault, error: vaultError } = await (supabase
         .from("wallets")
-        .select("hub_cash_balance, cash_balance, wallet_address")
+        .select("hub_cash_balance, cash_balance, wallet_address, idia_token_balance")
         .eq("user_id", activeId)
         .maybeSingle() as any);
 
@@ -110,17 +114,22 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
       const dailyAvg = totalDeductions / 30;
 
       // 4. PROTOCOL RECONCILIATION: Straight-Through Rail Mapping
-      const fiatOperating = Number(vault?.hub_cash_balance ?? 0);
-      const fiatRoyalty = Number(vault?.cash_balance ?? 0);
+      // Wallet-sourced silos are null when the row is missing (do NOT coerce to 0).
+      const hasVault = !!vault;
+      const fiatOperating = hasVault && vault?.hub_cash_balance != null ? Number(vault.hub_cash_balance) : null;
+      const fiatRoyalty = hasVault && vault?.cash_balance != null ? Number(vault.cash_balance) : null;
+      const idiaToken = hasVault && vault?.idia_token_balance != null ? Number(vault.idia_token_balance) : null;
       const computationalGas = Number(gasBalance ?? 0);
       // USDC = on-chain truth, read live from Base contract via useWalletBalance.
-      const usdcOnChain = Number(onChainBalance?.usdc_balance ?? 0);
+      const usdcOnChain =
+        onChainBalance?.usdc_balance == null ? null : Number(onChainBalance.usdc_balance);
 
       const newState: ProtocolState = {
         hub_operating_cash: fiatOperating,
         synapse_gas_credits: computationalGas,
         usdc_balance: usdcOnChain,
         fbo_royalty_balance: fiatRoyalty,
+        idia_token_balance: idiaToken,
         wallet_address: vault?.wallet_address || "",
       };
 
@@ -129,6 +138,7 @@ export const SynapseCreditsProvider = ({ children }: { children: React.ReactNode
         hub_operating_cash: fiatOperating,
         fbo_balance: fiatRoyalty,
         usdc_balance: usdcOnChain,
+        idia_token_balance: idiaToken,
         wallet_address: vault?.wallet_address || "",
         currency: "USD",
         last_updated: new Date().toISOString(),

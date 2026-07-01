@@ -3,7 +3,7 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
 const FBOReservoirGauge = () => {
   const { balanceData } = useSynapseCredits();
-  const fbo = balanceData?.fbo_balance ?? 0;
+  const fbo = balanceData?.fbo_balance ?? null;
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -16,7 +16,9 @@ const FBOReservoirGauge = () => {
       <div className="mt-1">
         <div className="flex items-baseline gap-1.5">
           <span className="text-lg font-bold font-mono">
-            ${fbo.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {fbo == null
+              ? "--"
+              : `$${fbo.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
           <span className="text-[10px] text-muted-foreground">USD</span>
         </div>
