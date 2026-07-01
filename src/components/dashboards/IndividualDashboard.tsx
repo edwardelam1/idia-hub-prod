@@ -50,11 +50,16 @@ const IndividualDashboard = () => {
 
   // ========================================================================
   // TRIPLE-RAIL FINALITY: Straight-Through Flow Mapping
+  // Values are `null` when the wallets row / on-chain address is missing.
+  // Render as "--" instead of $0 so real zero balances stay distinguishable.
   // ========================================================================
   const rail2_Gas = protocolState?.synapse_gas_credits ?? 0;
-  const rail3_USDC = protocolState?.usdc_balance ?? 0;
-  const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? 0;
-  const rail1_Eth = walletBalance?.eth_balance ?? 0;
+  const rail3_USDC = protocolState?.usdc_balance ?? null;
+  const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? null;
+  const rail1_Eth = walletBalance?.eth_balance ?? null;
+
+  const formatSilo = (value: number | null | undefined, formatter: (n: number) => string): string =>
+    value == null ? "--" : formatter(value);
 
   useEffect(() => {
     if (protocolState) {
@@ -129,7 +134,9 @@ const IndividualDashboard = () => {
             <Wallet className="h-3 w-3" /> ETH
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-xl font-mono font-bold text-sky-300">{rail1_Eth.toFixed(4)}</span>
+            <span className="text-xl font-mono font-bold text-sky-300">
+              {formatSilo(rail1_Eth, (n) => n.toFixed(4))}
+            </span>
             <span className="text-[8px] font-bold text-sky-400/70 uppercase">ETH (Base)</span>
           </div>
           <Progress value={100} className="h-0.5 mt-2 bg-sky-500/20" />
@@ -154,7 +161,10 @@ const IndividualDashboard = () => {
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-amber-500">
-              ${rail3_USDC.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatSilo(
+                rail3_USDC,
+                (n) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              )}
             </span>
             <span className="text-[8px] font-bold text-amber-500/70 uppercase">On-Chain (Base)</span>
           </div>
@@ -168,7 +178,10 @@ const IndividualDashboard = () => {
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-emerald-500">
-              ${silo3_LifeYield.toLocaleString(undefined, { minimumFractionDigits: 4 })}
+              {formatSilo(
+                silo3_LifeYield,
+                (n) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 4 })}`,
+              )}
             </span>
             <span className="text-[8px] font-bold text-emerald-500/70 uppercase">USD</span>
           </div>

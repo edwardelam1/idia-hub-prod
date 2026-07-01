@@ -1,6 +1,10 @@
 import { CircleDollarSign } from "lucide-react";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
 const StablecoinPanel = () => {
+  const { balanceData } = useSynapseCredits();
+  const usdc = balanceData?.usdc_balance ?? null;
+
   return (
     <div className="flex flex-col justify-between h-full">
       <div className="flex items-center justify-between">
@@ -9,7 +13,11 @@ const StablecoinPanel = () => {
       </div>
       <div className="mt-1">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-lg font-bold font-mono">$0.0000</span>
+          <span className="text-lg font-bold font-mono">
+            {usdc == null
+              ? "--"
+              : `$${usdc.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`}
+          </span>
           <span className="text-[10px] text-muted-foreground">USDC</span>
         </div>
         <p className="text-[10px] text-muted-foreground">BASE Network</p>

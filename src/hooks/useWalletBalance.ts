@@ -18,8 +18,8 @@ const USDC_ABI = [
 ] as const;
 
 interface WalletBalance {
-  usdc_balance: number;
-  eth_balance: number;
+  usdc_balance: number | null;
+  eth_balance: number | null;
 }
 
 /**
@@ -30,7 +30,7 @@ interface WalletBalance {
 export const useWalletBalance = (isYielding: boolean = false) => {
   console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
 
-  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: 0, eth_balance: 0 });
+  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: null, eth_balance: null });
   const [loading, setLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -64,7 +64,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (!session?.user) {
         console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session.");
-        setBalance({ usdc_balance: 0, eth_balance: 0 });
+        setBalance({ usdc_balance: null, eth_balance: null });
         return;
       }
       console.log(
@@ -105,7 +105,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (profileError || !profile?.wallet_address) {
         console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing from profile.");
-        setBalance({ usdc_balance: 0, eth_balance: 0 });
+        setBalance({ usdc_balance: null, eth_balance: null });
         return;
       }
       const walletAddress = profile.wallet_address;
