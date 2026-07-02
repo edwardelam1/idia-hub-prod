@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import { usePipelineActivity } from "@/hooks/usePipelineActivity";
 import { cn } from "@/lib/utils";
 
 const SynapseVisualizer = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<any>(null);
-  const rendererRef = useRef<any>(null);
+  const sceneRef = useRef<{
+    camera: THREE.PerspectiveCamera;
+    renderer: THREE.WebGLRenderer;
+    particleSystem: THREE.Points;
+  } | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const animationRef = useRef<number>(0);
+  const isActiveRef = useRef(false);
   const [showLabel, setShowLabel] = useState(true);
 
   // Connect to real pipeline activity using the IDIA Protocol schema
   const { activities, isActive, activityCount } = usePipelineActivity();
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
 
   useEffect(() => {
     // Label animation cycle: show for 10s, hide for 50s (1min total cycle)
@@ -31,33 +41,26 @@ const SynapseVisualizer = () => {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const initVisualizer = async () => {
-      if (!window.THREE) {
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-        script.async = true;
-        document.head.appendChild(script);
-
-        await new Promise((resolve) => {
-          script.onload = resolve;
-        });
-      }
-
-      const THREE = window.THREE;
-      if (!THREE) return;
+    const container = containerRef.current;
+    const width = container.clientWidth || 640;
+    const height = container.clientHeight || 256;
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(
         75,
-        containerRef.current!.clientWidth / containerRef.current!.clientHeight,
+        width / height,
         0.1,
         1000,
       );
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
-      renderer.setSize(containerRef.current!.clientWidth, containerRef.current!.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height);
       renderer.setClearColor(0x000000, 0);
-      containerRef.current!.appendChild(renderer.domElement);
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      renderer.domElement.style.display = "block";
+      container.appendChild(renderer.domElement);
 
       // Particle system with protocol activity influence
       const particleCount = 5000;
@@ -95,15 +98,27 @@ const SynapseVisualizer = () => {
       scene.add(particleSystem);
 
       camera.position.z = 200;
-      sceneRef.current = { scene, camera, renderer, particleSystem };
+      sceneRef.current = { camera, renderer, particleSystem };
       rendererRef.current = renderer;
+
+      const resizeObserver = new ResizeObserver(([entry]) => {
+        const { width: nextWidth, height: nextHeight } = entry.contentRect;
+        if (!nextWidth || !nextHeight) return;
+
+        camera.aspect = nextWidth / nextHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(nextWidth, nextHeight);
+      });
+
+      resizeObserver.observe(container);
 
       const animate = () => {
         animationRef.current = requestAnimationFrame(animate);
         const time = Date.now() * 0.0005;
 
         // Visual momentum tied to actual pipeline throughput
-        const activityMultiplier = isActive ? 2.5 : 1.0;
+        const active = isActiveRef.current;
+        const activityMultiplier = active ? 2.5 : 1.0;
         particleSystem.rotation.x += 0.001 * activityMultiplier;
         particleSystem.rotation.y += 0.002 * activityMultiplier;
 
@@ -116,15 +131,15 @@ const SynapseVisualizer = () => {
           const hue = (time * 0.1 + pIndex * 0.01) % 1;
 
           // Protocol-active colors (higher saturation/intensity during data flow)
-          const intensity = isActive ? 0.95 : 0.6;
-          const saturation = isActive ? 1.0 : 0.7;
+          const intensity = active ? 0.95 : 0.6;
+          const saturation = active ? 1.0 : 0.7;
 
           color.setHSL(hue, saturation, intensity);
           colorsAttr[i] = color.r;
           colorsAttr[i + 1] = color.g;
           colorsAttr[i + 2] = color.b;
 
-          if (isActive) {
+          if (active) {
             sizesAttr[pIndex] = Math.sin(time * 3 + pIndex) * 2 + 4;
           } else {
             sizesAttr[pIndex] = (pIndex % 3) + 1;
@@ -137,17 +152,20 @@ const SynapseVisualizer = () => {
       };
 
       animate();
-    };
-
-    initVisualizer();
 
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (containerRef.current && rendererRef.current) {
-        containerRef.current.removeChild(rendererRef.current.domElement);
+      resizeObserver.disconnect();
+      particles.dispose();
+      particleMaterial.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
       }
+      renderer.dispose();
+      sceneRef.current = null;
+      rendererRef.current = null;
     };
-  }, [isActive]);
+  }, []);
 
   return (
     <div className="relative w-full h-64 bg-gray-950 rounded-xl overflow-hidden border border-white/5 shadow-2xl">
