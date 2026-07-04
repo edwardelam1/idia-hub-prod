@@ -13,6 +13,7 @@
   "dependencies": {
     "@11labs/react": "^0.1.4",
     "@hookform/resolvers": "^3.9.0",
+    "@lovable.dev/mcp-js": "^0.20.0",
     "@metamask/sdk": "^0.34.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -65,7 +66,7 @@
     "three": "0.168.0",
     "vaul": "^0.9.3",
     "viem": "^2.48.4",
-    "zod": "^3.23.8",
+    "zod": "^3.25.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
