@@ -1,3 +1,24 @@
+
+## Agent integrations (MCP)
+
+The IDIA Hub exposes a Model Context Protocol server at
+`https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/mcp`.
+
+Tools:
+- `echo` — public. Connectivity/health probe. No auth required.
+- `whoami` — protected. Requires OAuth 2.1 (Supabase). Returns the calling
+  user's `user_id`, `email`, and `client_id`.
+
+Protected tools verify the caller's Supabase-issued JWT inside the edge
+function (`@lovable.dev/mcp-js` resource-server auth, issuer
+`https://<project-ref>.supabase.co/auth/v1`, audience `authenticated`). Any DB
+access in a protected tool should build a per-request Supabase client with
+`Authorization: Bearer ${ctx.getToken()}` so queries run under the caller's
+Row Level Security (`auth.uid()`).
+
+To add another protected tool, copy `src/lib/mcp/tools/whoami.ts`, register it
+in `src/lib/mcp/index.ts`, run the MCP manifest extractor, and redeploy the
+`mcp` edge function.
 # Welcome to your Lovable project
 
 ## Project info
