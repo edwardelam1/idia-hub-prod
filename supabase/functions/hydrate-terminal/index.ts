@@ -38,7 +38,7 @@ serve(async (req) => {
     console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Querying idia_schema_manifest_vault for code: ${pairing_code}`);
     const { data, error } = await supabaseAdmin
       .from('idia_schema_manifest_vault')
-      .select('schema_payload')
+      .select('*')
       .eq('pairing_code', pairing_code)
       .single();
 
@@ -54,10 +54,21 @@ serve(async (req) => {
 
     // 5. Successful Handshake
     console.info("⚙️ [EDGE: hydrate-terminal] END: Blueprint located. Dispatching to Sovereign Node.");
+
+    // Dynamically hunt for the table's primary relational identifier
+    const relationalBusinessId =
+      (data as any).business_id ||
+      (data as any).organization_id ||
+      (data as any).merchant_id ||
+      (data as any).id;
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        payload: data.schema_payload 
+        payload: {
+          ...(data.schema_payload as Record<string, unknown>),
+          businessId: relationalBusinessId,
+        }
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
