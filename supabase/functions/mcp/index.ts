@@ -3,7 +3,7 @@
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
 // src/lib/mcp/index.ts
-import { defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.20.0";
 
 // src/lib/mcp/tools/echo.ts
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.20.0";
@@ -17,13 +17,56 @@ var echo_default = defineTool({
   handler: ({ text }) => ({ content: [{ type: "text", text }] })
 });
 
+// src/lib/mcp/tools/whoami.ts
+import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.20.0";
+import { z as z2 } from "npm:zod@^3.25.0";
+var whoami_default = defineTool2({
+  name: "whoami",
+  title: "Who am I",
+  description: "Return the signed-in Supabase user's id, email, and client_id. Requires OAuth authentication.",
+  inputSchema: {
+    _noop: z2.string().optional().describe("Ignored. Reserved for future use.")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (_input, ctx) => {
+    if (!ctx.isAuthenticated()) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "Authentication required. Please sign in via OAuth." }],
+        _meta: {
+          "mcp/www_authenticate": {
+            realm: "hub.thebigidia.com"
+          }
+        }
+      };
+    }
+    const user_id = ctx.getUserId();
+    const email = ctx.getUserEmail() ?? null;
+    const client_id = ctx.getClientId?.() ?? null;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `user_id=${user_id}${email ? ` email=${email}` : ""}${client_id ? ` client_id=${client_id}` : ""}`
+        }
+      ],
+      structuredContent: { user_id, email, client_id }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
+var projectRef = "zxyngqciipcvveigrzqt";
 var mcp_default = defineMcp({
   name: "idia-hub-mcp",
   title: "IDIA Hub MCP",
-  version: "0.1.0",
-  instructions: "Agent integration surface for the IDIA Hub. Use `echo` to verify connectivity. Additional tools can be added over time.",
-  tools: [echo_default]
+  version: "0.2.0",
+  instructions: "Agent integration surface for the IDIA Hub. Public tools: `echo` (connectivity). Protected tools (require OAuth): `whoami`. Protected tool calls run under the signed-in Supabase user's Row Level Security.",
+  auth: auth.oauth.issuer({
+    issuer: `https://${projectRef}.supabase.co/auth/v1`,
+    acceptedAudiences: "authenticated"
+  }),
+  tools: [echo_default, whoami_default]
 });
 
 // lovable-mcp-supabase-entry.ts

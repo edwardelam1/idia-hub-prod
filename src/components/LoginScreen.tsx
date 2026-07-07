@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,20 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // Same-origin relative path only — used to bounce OAuth-consent visitors
+  // back to /.lovable/oauth/consent after they sign in.
+  const rawNext = searchParams.get("next");
+  const nextPath =
+    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const consumeNext = () => {
+    if (nextPath) {
+      window.location.href = nextPath;
+      return true;
+    }
+    return false;
+  };
 
   const handleRealLogin = async () => {
     if (!email || !password) {
@@ -53,6 +68,8 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
 
       if (data.session) {
         toast.success("Signed in successfully");
+        // Honor OAuth-consent bounce-back before the default post-login flow.
+        if (consumeNext()) return;
         // Surgical Fix: Call the login trigger immediately to avoid landing on Site URL
         onRealLogin?.();
       }
@@ -67,11 +84,14 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
     const setLoading = provider === "apple" ? setIsAppleLoading : setIsGoogleLoading;
     setLoading(true);
     try {
+      const redirectTo = nextPath
+        ? `${window.location.origin}${nextPath}`
+        : `${window.location.origin}/dashboard`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          // Surgical Fix: Explicitly redirect to /dashboard for OAuth success
-          redirectTo: `${window.location.origin}/dashboard`,
+          // Honor ?next= so MCP OAuth-consent visitors return to the consent screen.
+          redirectTo,
           ...(provider === "google" && {
             queryParams: { access_type: "offline", prompt: "select_account" },
           }),
