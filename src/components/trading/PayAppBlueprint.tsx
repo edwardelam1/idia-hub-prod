@@ -1211,22 +1211,52 @@ export const PayAppBlueprint = () => {
   const handleLoadSchema = (row: SchemaRow) => {
     const p = row.payload || {};
     const customMods = (p.modules?.custom || []).map((m: any) => {
-      const vert = verticalCategories.find((v) => v.id === m.parentId || v.name === m.vertical);
+      // Resolve vertical by (1) explicit parentId, (2) canonical vertical id, (3) legacy display name.
+      const vert =
+        verticalCategories.find((v) => v.id === m.parentId) ||
+        verticalCategories.find((v) => v.id === m.vertical) ||
+        verticalCategories.find((v) => v.name === m.vertical) ||
+        verticalCategories.find((v) => v.name === m.parentName);
       return {
         id: m.id,
         name: m.name,
-        parentId: vert?.id ?? m.parentId,
-        parentName: vert?.name ?? m.vertical ?? m.parentName,
+        parentId: vert?.id ?? m.parentId ?? m.vertical ?? null,
+        parentName: vert?.name ?? m.parentName ?? m.vertical ?? null,
         icon: vert?.icon,
         color: vert?.color,
       };
     });
     setSelectedModules([...defaultModules, ...customMods]);
-    setSelectedSubModules(new Set());
+    // Rebuild the sub-module selection set so the drawer reflects the loaded blueprint.
+    setSelectedSubModules(new Set(customMods.map((m: any) => m.id)));
     setProvisioningCode(row.code);
     setLoadedSchemaId(row.id);
+
     const biteIds: string[] = p.taxonomy?.nanoBites || [];
-    taxonomy.setClassification((prev) => ({ ...prev, selectedNanoBiteIds: biteIds }));
+    // Derive industryId from payload; fall back to first mapped custom module's route.
+    let industryId: string | null = p.taxonomy?.industryId ?? null;
+    if (!industryId) {
+      for (const m of customMods) {
+        const r = getRoute(m.id);
+        if (r?.industryId) { industryId = r.industryId; break; }
+      }
+    }
+    taxonomy.setClassification((prev) => ({
+      ...prev,
+      selectedNanoBiteIds: biteIds,
+      industryId: industryId ?? prev.industryId,
+    }));
+
+    // Re-open the first vertical with a mapped custom module so the Nano-Bite panel populates.
+    const firstVertical = customMods.find((m: any) => m.parentId)?.parentId ?? null;
+    if (firstVertical) setExpandedVertical(firstVertical);
+
+    // Mirror to the manifest vault so terminals hydrating this code can locate the schema
+    // even if the operator only loaded (didn't re-deploy).
+    mirrorToManifestVault(row.code, p).catch((err) =>
+      console.warn("[PayAppBlueprint.handleLoadSchema] vault mirror failed", err),
+    );
+
     toast.success(`Loaded schema: ${row.label}`);
   };
 
