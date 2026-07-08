@@ -1089,6 +1089,15 @@ export const PayAppBlueprint = () => {
       // 1. Generate the dynamic payload
       const blueprintPayload = generateBlueprintJSON();
 
+      // Pre-flight: never overwrite the vault with an empty manifest.
+      const bundleCount = Array.isArray((blueprintPayload as any)?.modules?.bundles)
+        ? (blueprintPayload as any).modules.bundles.length
+        : 0;
+      if (bundleCount === 0) {
+        toast.error("Blueprint is empty — add sub-modules or nano-bites before deploying.");
+        return;
+      }
+
       // 2. Transmit to the edge provisioning table
       const { error } = await supabase.from("device_provisioning_blueprints" as any).upsert(
         {
