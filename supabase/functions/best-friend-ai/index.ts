@@ -931,6 +931,7 @@ serve(async (req) => {
     const isDataScientistMode = context?.isMarketplaceMode === true;
     const detectedAgent = routeIntent(message);
     const agentPrompt = getAgentPrompt(detectedAgent);
+    let marketplaceReceiptIds: string[] = [];
 
     console.info(
       `[STATUS: BestFriendAI.Routing] Mode: ${isDataScientistMode ? "MARKETPLACE" : "NAVIGATION"}, Agent: ${detectedAgent}`,
@@ -949,11 +950,14 @@ serve(async (req) => {
         fetchOmniAggregates(supabase, operatorId),
         isDataScientistMode
           ? fetchMarketplaceRecords(supabase)
-          : Promise.resolve({ success: true, health: [], lifestyle: [] } as {
-              success: boolean;
-              health: any[];
-              lifestyle: any[];
-            }),
+          : Promise.resolve({
+              success: true,
+              health: [],
+              lifestyle: [],
+              receiptIds: [],
+              contributorCount: 0,
+              unresolvedHashCount: 0,
+            } as MarketplaceFetchResult),
       ]);
       aggregates = aggResult;
       // In marketplace mode, prefer cross-owner sample so receipts fan out to
@@ -961,8 +965,9 @@ serve(async (req) => {
       if (isDataScientistMode && marketplaceAudit.success && (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0)) {
         sourceHealth = marketplaceAudit.health;
         sourceLifestyle = marketplaceAudit.lifestyle;
+        marketplaceReceiptIds = marketplaceAudit.receiptIds;
         console.info(
-          `[STATUS: BestFriendAI.MarketplaceSample] Cross-owner rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle.`,
+          `[STATUS: BestFriendAI.MarketplaceSample] Balanced rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle; receipt contributors=${marketplaceAudit.contributorCount}; unresolved_hashes=${marketplaceAudit.unresolvedHashCount}.`,
         );
       } else if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
@@ -1179,17 +1184,11 @@ serve(async (req) => {
         // MARKETPLACE_RESEARCH: one representative aca_hash_key per unique
         // contributing owner, so idia-circular-settlement pays every real
         // contributor (not just the buyer).
-        const perOwner = new Map<string, string>();
-        const pick = (r: any) => {
-          const owner = r.user_id || r.entity_id || r.pseudo_user_id;
-          const hash = r.aca_hash_key || r.id;
-          if (owner && hash && !perOwner.has(String(owner))) perOwner.set(String(owner), String(hash));
-        };
-        healthMetrics.forEach(pick);
-        lifestyleEvents.forEach(pick);
-        consumedReceipt = Array.from(perOwner.values());
+        consumedReceipt = marketplaceReceiptIds.length > 0
+          ? marketplaceReceiptIds
+          : uniqueStrings([...healthMetrics, ...lifestyleEvents].map((r: any) => r.aca_hash_key || r.id));
         console.info(
-          `[STATUS: BestFriendAI.Receipt] Marketplace fan-out: ${perOwner.size} unique contributors.`,
+          `[STATUS: BestFriendAI.Receipt] Marketplace lineage receipt hashes=${consumedReceipt.length}.`,
         );
       } else {
         // BEST_FRIEND_AI_CHAT: personal chat, self-only receipt.
