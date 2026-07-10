@@ -1088,7 +1088,7 @@ serve(async (req) => {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
       const [audit, aggResult, marketplaceAudit] = await Promise.all([
         fetchOmniRecords(supabase, operatorId),
-        fetchOmniAggregates(supabase, operatorId),
+        isDataScientistMode ? fetchMarketplaceAggregates(supabase) : fetchOmniAggregates(supabase, operatorId),
         isDataScientistMode
           ? fetchMarketplaceRecords(supabase)
           : Promise.resolve({
