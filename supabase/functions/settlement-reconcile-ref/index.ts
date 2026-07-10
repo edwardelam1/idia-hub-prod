@@ -164,7 +164,7 @@ serve(async (req: Request) => {
       const value: number = Number(t.value ?? 0);
       const asset: string = t.asset ?? "";
       const isUsdc = String(t.rawContract?.address ?? "").toLowerCase() === USDC_ADDRESS.toLowerCase();
-      const transaction_type = isUsdc ? "data_sale_payout" : "IDIA_ROYALTY_YIELD";
+      const transaction_type = isUsdc ? "data_sale_payout" : "idia_royalty_yield";
 
       // Idempotency check
       const { data: existing } = await supabase
