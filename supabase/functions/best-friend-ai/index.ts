@@ -778,14 +778,19 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    let aggregates: OmniAggregates | null = null;
     if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
-      const audit = await fetchOmniRecords(supabase, operatorId);
+      const [audit, aggResult] = await Promise.all([
+        fetchOmniRecords(supabase, operatorId),
+        fetchOmniAggregates(supabase, operatorId),
+      ]);
+      aggregates = aggResult;
       if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
         console.info(
-          `[STATUS: BestFriendAI.OmniFetchExecution] DB override for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records.`,
+          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows fetched for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"}.`,
         );
       } else {
         console.info(`[BEGIN: BestFriendAI.OmniFetchExecution.Warning] Handling OmniFetch failure condition.`);
@@ -806,18 +811,34 @@ serve(async (req) => {
     );
 
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
-    const marketplaceSummary = isDataScientistMode ? summarizeMarketplaceData(healthMetrics, lifestyleEvents) : null;
+    const marketplaceSummary = isDataScientistMode
+      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents)
+      : null;
+
+    const totalsGuidance =
+      "\n\nIMPORTANT: When reporting counts, sums, averages, or ranges, use the TRUE_TOTALS block. " +
+      "The SAMPLE_ROWS block is a small preview of individual records for context and is NOT representative of totals. " +
+      "Never count SAMPLE_ROWS to answer 'how many' or 'how much' questions.";
 
     let systemPrompt: string;
     if (isDataScientistMode) {
-      systemPrompt = buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents);
+      systemPrompt =
+        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents) +
+        totalsGuidance;
     } else {
-      let navSummary = "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
-      if (healthMetrics.length || lifestyleEvents.length) {
-        navSummary =
-          "\n\nLIBRARY SNAPSHOT:\n" + JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents));
-      }
-      systemPrompt = STORE_CLERK_PERSONA + navSummary;
+      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents);
+      const hasAnyData =
+        (trueTotals.health_records ?? 0) > 0 ||
+        (trueTotals.lifestyle_records ?? 0) > 0 ||
+        healthMetrics.length > 0 ||
+        lifestyleEvents.length > 0;
+      const navSummary = hasAnyData
+        ? "\n\nTRUE_TOTALS (from database, authoritative):\n" +
+          JSON.stringify(trueTotals) +
+          "\n\nSAMPLE_ROWS (preview only, NOT representative of totals): " +
+          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle records shown.`
+        : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
+      systemPrompt = STORE_CLERK_PERSONA + navSummary + totalsGuidance;
     }
 
     // ── ACA file inspector: detect intent and inject signal-only context ──
