@@ -1,30 +1,39 @@
-# Fix: Deterministic serial nonce for Phase 3 contributor payouts
+## Fix: Concurrency-safe nonce retry for Phase 3 payouts
 
-## Problem
-The Phase 3 batch loop in `supabase/functions/idia-circular-settlement/index.ts` already awaits each `writeContract` + `waitForTransactionReceipt` sequentially, but it lets viem auto-derive the nonce on every call. Under Alchemy/Base pending-pool churn (and after a reverted or slow-propagating tx), viem can either reuse a nonce or pull a stale `pending` value, tripping the "in-flight transaction limit reached for delegated accounts" rejection. Each contributor also fires two writes (USDC yield + escrow proposal) with no shared nonce baseline.
+The current serial-nonce implementation still collides when the Edge Function is invoked concurrently (independent containers each read the same `pending` nonce → `replacement transaction underpriced` / `in-flight transaction limit reached`). Manual `currentNonce++` in isolated containers can't coordinate across invocations.
 
-## Fix scope
-Only Phase 3 (`Phase_3_Contributor.BatchExecution`, lines ~478–575). Phases 1, 2, corporate/regional transfers, ledger writes, and repair-queue logic stay unchanged.
+### Change scope
+Only Phase 3 loop in `supabase/functions/idia-circular-settlement/index.ts` (lines ~478–610). No schema changes, no other function changes, no new secrets.
 
-## Changes to `idia-circular-settlement/index.ts`
+### What changes
 
-1. **Before the loop:** fetch a single starting pending nonce for the relayer directly from Base RPC and hold it in `let currentNonce`. Log the baseline.
-2. **Inside the loop, per contributor:**
-   - Pass `nonce: currentNonce` explicitly to the USDC `writeContract` call, then `waitForTransactionReceipt({ confirmations: 1 })`. On broadcast success (hash returned), `currentNonce++` immediately so the next tx is pre-slotted even if the receipt is slow.
-   - Pass `nonce: currentNonce` to the escrow `proposeDistribution` `writeContract`, await its receipt, then `currentNonce++`.
-   - Keep the existing 500 ms sequencer buffer and ledger insert.
-3. **Error path (existing `catch (txError)`):** after logging and pushing to `skippedContributors`, re-sync from chain: `currentNonce = await client.getTransactionCount({ address: account.address, blockTag: "pending" })` so a rejected/dropped tx doesn't leave a permanent nonce gap that stalls every following contributor. Also route the failure through `insertLedgerWithRepair` (already imported) so the repair queue captures it, matching the pattern from the user's snippet.
-4. Keep all existing `[BEGIN/END]` Planck-style logs and add one `[PROCESS: Batch.Sequencer]` line with the resolved starting nonce.
+Replace the pre-loop `currentNonce` fetch and per-tx `nonce: currentNonce` / `currentNonce++` pattern with a per-transaction retry-with-backoff helper. Each broadcast attempt re-reads the freshest `pending` nonce from Base RPC, so a nonce stolen by a sibling container triggers a wait-and-retry rather than a permanent skip.
 
-## Why this clears the stall
-- Only one in-flight tx per relayer at any moment (unchanged) **plus** an authoritative nonce counter means viem can't silently duplicate or skip a slot.
-- On a hard failure, re-reading `pending` heals from dropped/reorged txs instead of propagating a bad `currentNonce` for the rest of the batch.
-- Phases 1 & 2 already funnel through `executePlanckScaleTransaction`, which reads a fresh nonce per call — safe because they run one-shot, not in a tight loop.
+1. **Add a local helper** `sendWithNonceRetry(txFn, label)` inside Phase 3 that:
+   - Reads `client.getTransactionCount({ address: account.address, blockTag: "pending" })` at the start of every attempt.
+   - Calls `txFn(nonce)` (the caller passes a closure that runs `writeContract` with that nonce and returns the hash).
+   - Awaits `waitForTransactionReceipt({ hash, confirmations: 1 })`.
+   - On error: if the message matches `nonce` / `underpriced` / `in-flight transaction limit` / `already known`, backs off `2^attempt * 500ms` (500ms, 1s, 2s, 4s, 8s) up to 5 attempts and retries. Any other error rethrows immediately.
+   - Returns `{ hash, receipt }` on success; throws on exhaustion with a `Max retries exhausted…` message.
 
-## Out of scope
-- No schema changes.
-- No changes to `settlement-reconcile-ref`, corporate/regional transfers, or the BigInt JSON polyfill.
-- No new secrets.
+2. **Rewrite the loop body** for each contributor:
+   - Remove the pre-loop `let currentNonce = ...` fetch and all `nonce: currentNonce` / `currentNonce++` lines.
+   - Yield transfer: `sendWithNonceRetry((nonce) => client.writeContract({ ...USDC transfer args, account, nonce }), "yield")`.
+   - Proposal: `sendWithNonceRetry((nonce) => client.writeContract({ ...proposeDistribution args, account, nonce }), "proposal")`.
+   - Keep the 500ms inter-contributor buffer, ledger insert, and `contributorPayouts.push`.
 
-## Verification
-After edit: redeploy `idia-circular-settlement`, then re-run one of the previously stuck references (e.g. `SYN-D9DDFDD1`) and check function logs for the `[PROCESS: Batch.Sequencer]` baseline nonce line and sequential per-contributor `[END: Batch.Item]` block numbers with no "in-flight transaction limit" errors.
+3. **Error handling stays the same shape**: the existing `catch (txError)` block still pushes to `skippedContributors` and routes through `insertLedgerWithRepair` — it now catches both hard errors (revert, insufficient funds) and "retries exhausted" from the helper.
+
+4. **Logging**: keep all `[BEGIN/END/STATUS: Batch.Item]` lines. Add per-attempt `[PROCESS: Batch.Sequencer] Verified nonce: N (attempt K)` and `[WARN: Batch.Item.Collision] … yielding {ms}ms` lines. Drop the now-stale `[PROCESS: Batch.Sequencer] starting nonce` line.
+
+### Why this clears the stall
+- Every attempt asks Base RPC for the current `pending` nonce, so parallel containers stealing a slot no longer poison later txs in this loop.
+- Backoff gives the sibling tx time to mine, so retry sees an advanced nonce and succeeds.
+- Non-nonce errors (revert, insufficient funds) still fail fast and land in the repair queue — no silent hiding.
+
+### Out of scope
+- Cross-invocation locking (would need Redis or a DB advisory lock — noted for follow-up if concurrency is heavy).
+- Any changes to Phases 1, 2, corporate/regional transfers, `settlement-reconcile-ref`, or the BigInt polyfill.
+
+### Verification
+Redeploy `idia-circular-settlement`, re-run a previously stuck reference, and confirm function logs show `[WARN: Batch.Item.Collision]` followed by a successful retry rather than a `[FATAL STALL]`, and all contributor `[END: Batch.Item]` lines have block numbers.
