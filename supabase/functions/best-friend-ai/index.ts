@@ -607,25 +607,36 @@ function buildResearchPlan(
   };
 }
 
-function summarizeMarketplaceData(healthRecords: any[], lifestyleRecords: any[]) {
-  const hrValues = healthRecords.map((r: any) => r.average_heartrate).filter((v: any) => typeof v === "number");
+function summarizeMarketplaceData(
+  aggregates: OmniAggregates | null,
+  sampleHealth: any[],
+  sampleLifestyle: any[],
+) {
+  const h = aggregates?.health;
+  const l = aggregates?.lifestyle;
+  const healthCount = h?.count ?? sampleHealth.length;
+  const lifestyleCount = l?.count ?? sampleLifestyle.length;
   return {
-    health_records: healthRecords.length,
-    lifestyle_records: lifestyleRecords.length,
-    total_samples: healthRecords.length + lifestyleRecords.length,
-    step_volume: healthRecords.reduce((acc: number, row: any) => acc + Number(row.steps_count || 0), 0),
-    average_quality: healthRecords.length
-      ? Number(
-          (
-            healthRecords.reduce((acc: number, row: any) => acc + Number(row.data_quality_score || 0), 0) /
-            healthRecords.length
-          ).toFixed(3),
-        )
-      : null,
-    baseline_hr: hrValues.length
-      ? Math.round(hrValues.reduce((acc: number, value: number) => acc + value, 0) / hrValues.length)
-      : null,
-    max_hr: hrValues.length ? Math.max(...hrValues) : null,
+    health_records: healthCount,
+    lifestyle_records: lifestyleCount,
+    total_samples: healthCount + lifestyleCount,
+    step_volume: h?.totals?.steps ?? null,
+    active_energy_kcal: h?.totals?.active_energy_kcal ?? null,
+    basal_energy_kcal: h?.totals?.basal_energy_kcal ?? null,
+    duration_seconds: h?.totals?.duration_seconds ?? null,
+    average_quality: h?.totals?.avg_quality ?? null,
+    baseline_hr: h?.totals?.avg_heart_rate ?? null,
+    resting_hr: h?.totals?.avg_resting_hr ?? null,
+    max_hr: h?.totals?.max_heart_rate ?? null,
+    min_hr: h?.totals?.min_heart_rate ?? null,
+    avg_blood_oxygen: h?.totals?.avg_blood_oxygen ?? null,
+    avg_vo2_max: h?.totals?.avg_vo2_max ?? null,
+    lifestyle_event_types: l?.totals?.event_types ?? null,
+    lifestyle_event_categories: l?.totals?.event_categories ?? null,
+    date_range_health: h?.range ?? null,
+    date_range_lifestyle: l?.range ?? null,
+    sample_size: sampleHealth.length + sampleLifestyle.length,
+    aggregates_source: aggregates ? "database" : "sample_fallback",
   };
 }
 
