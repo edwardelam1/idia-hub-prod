@@ -11,6 +11,7 @@
 // ══════════════════════════════════════════════════════════════════════
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
+import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,11 +71,23 @@ serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL");
   const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const rpcUrl = Deno.env.get("ALCHEMY_BASE_RPC_URL");
-  const relayer = Deno.env.get("LIFE_RELAYER_ADDRESS");
+  let relayer = Deno.env.get("LIFE_RELAYER_ADDRESS");
+  if (!relayer) {
+    // Derive from RELAYER_PRIVATE_KEY if the address secret isn't set explicitly.
+    const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
+    if (rawKey) {
+      const formattedKey = rawKey.trim().startsWith("0x") ? rawKey.trim() : `0x${rawKey.trim()}`;
+      try {
+        relayer = privateKeyToAccount(formattedKey as `0x${string}`).address;
+      } catch (e: any) {
+        return json(500, { error: `Cannot derive relayer address: ${e.message}` });
+      }
+    }
+  }
 
   if (!url || !svc) return json(500, { error: "Missing Supabase env" });
   if (!rpcUrl) return json(500, { error: "Missing ALCHEMY_BASE_RPC_URL" });
-  if (!relayer) return json(500, { error: "Missing LIFE_RELAYER_ADDRESS secret" });
+  if (!relayer) return json(500, { error: "Missing LIFE_RELAYER_ADDRESS or RELAYER_PRIVATE_KEY" });
 
   let body: any;
   try {
