@@ -650,13 +650,13 @@ function buildOrchestratorPrompt(
   let compactData = "No marketplace dataset is attached to this request.";
   if (marketplaceSummary) {
     compactData =
-      "DATA SUMMARY:\n" +
+      "TRUE_TOTALS (from database, authoritative — use these for all counts/sums/averages):\n" +
       JSON.stringify(marketplaceSummary) +
       "\n\n" +
-      "HEALTH DATA (compact JSON):\n" +
+      "SAMPLE_ROWS — HEALTH (preview only, NOT representative of totals):\n" +
       JSON.stringify(healthRecords) +
       "\n\n" +
-      "LIFESTYLE DATA (compact JSON):\n" +
+      "SAMPLE_ROWS — LIFESTYLE (preview only, NOT representative of totals):\n" +
       JSON.stringify(lifestyleRecords);
   }
 
