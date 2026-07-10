@@ -7,7 +7,39 @@ const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const MAX_OMNI_ROWS = 5000;
+const MAX_OMNI_ROWS = 500;
+
+// Aggregates computed server-side (see get_omni_aggregates RPC) so we never
+// derive totals from the truncated LLM sample. Truncation is only for row
+// examples, not for counts/sums/averages.
+export type OmniAggregates = {
+  health: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
+  lifestyle: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
+};
+
+async function fetchOmniAggregates(
+  supabase: ReturnType<typeof createClient>,
+  pseudoId: string,
+): Promise<OmniAggregates> {
+  try {
+    const { data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId });
+    if (error) {
+      console.error("[ERROR: OmniAggregates] RPC failed:", error.message);
+      return { health: null, lifestyle: null };
+    }
+    const parsed = (data ?? {}) as any;
+    console.info(
+      `[STATUS: OmniAggregates] health.count=${parsed?.health?.count ?? 0} lifestyle.count=${parsed?.lifestyle?.count ?? 0}`,
+    );
+    return {
+      health: parsed?.health ?? null,
+      lifestyle: parsed?.lifestyle ?? null,
+    };
+  } catch (err) {
+    console.error("[CRITICAL FAILURE: OmniAggregates] Exception:", err);
+    return { health: null, lifestyle: null };
+  }
+}
 
 // Pulls every relevant staged record for a user across BOTH staging tables.
 async function fetchOmniRecords(
