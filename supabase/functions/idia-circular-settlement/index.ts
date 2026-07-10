@@ -174,6 +174,11 @@ async function forceSequencerDelay(ms = 3500): Promise<void> {
 // nothing must escape this function or it can crash the Edge isolate.
 async function executeSettlement(payoutData: any, runCorrelationId: string): Promise<void> {
   let currentStep = "INIT";
+  let queueSupabase: any = null;
+  let queueRefId: string | null = null;
+  const skippedContributors: Array<{ user_id: string; reason: string }> = [];
+  let queueFinalStatus: "completed" | "partial" | "failed" = "completed";
+  let queueFinalError: string | null = null;
   try {
     console.info(`[BEGIN: circular-settlement] Pulse detected. runId=${runCorrelationId} ts=${Date.now()}`);
 
@@ -192,7 +197,8 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
 
     let supabase;
     try {
-      supabase = createClient(supabaseUrl, supabaseKey);
+      supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+      queueSupabase = supabase;
       console.info(`[END: ${currentStep}] Supabase client instantiated successfully.`);
     } catch (clientErr: any) {
       console.error(`[FATAL STALL: ${currentStep}] Failed to initialize Supabase client: ${clientErr.message}`);
@@ -208,6 +214,27 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     const hasLocation = typeof location_string === "string" && location_string.trim().length > 0;
     const executionLocation = hasLocation ? location_string.trim() : null;
     const ingestionReference = payment_reference || `SYN-${crypto.randomUUID().slice(0, 8)}`;
+    queueRefId = ingestionReference;
+
+    // Stamp attempt counter on the settlement_queue row BEFORE any chain work.
+    try {
+      const { data: existing } = await supabase
+        .from("settlement_queue")
+        .select("attempts")
+        .eq("reference_id", ingestionReference)
+        .maybeSingle();
+      const nextAttempts = ((existing?.attempts as number | undefined) ?? 0) + 1;
+      await supabase
+        .from("settlement_queue")
+        .update({
+          attempts: nextAttempts,
+          last_attempt_at: new Date().toISOString(),
+          status: "processing",
+        })
+        .eq("reference_id", ingestionReference);
+    } catch (stampErr: any) {
+      console.error(`[WARNING: QueueStamp] Could not stamp queue row for ${ingestionReference}: ${stampErr?.message}`);
+    }
 
     currentStep = "CONFIGURING_BLOCKCHAIN";
     const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
