@@ -166,6 +166,52 @@ async function forceSequencerDelay(ms = 3500): Promise<void> {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// LEDGER INSERT WITH BOUNDED RETRY + REPAIR-QUEUE FALLBACK
+// After a successful on-chain transfer, the ledger row MUST land or be
+// deferred to the repair queue. Silent swallowing = missing balances.
+// ══════════════════════════════════════════════════════════════════════
+async function insertLedgerWithRepair(
+  supabase: any,
+  opts: {
+    reference_id: string;
+    user_id: string;
+    phase: string;
+    blockchain_tx_hash: string | null;
+    row: Record<string, unknown>;
+  },
+): Promise<void> {
+  const maxAttempts = 3;
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const { error } = await supabase.from("synapse_credit_ledger").insert(opts.row);
+      if (!error) return;
+      lastError = error;
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 250 * Math.pow(2, attempt - 1)));
+    }
+  }
+  console.error(
+    `[LEDGER FAILURE] ref=${opts.reference_id} user=${opts.user_id} phase=${opts.phase} tx=${opts.blockchain_tx_hash} :: ${lastError?.message ?? String(lastError)}`,
+  );
+  try {
+    await supabase.from("settlement_ledger_repair_queue").insert({
+      reference_id: opts.reference_id,
+      user_id: opts.user_id,
+      phase: opts.phase,
+      blockchain_tx_hash: opts.blockchain_tx_hash,
+      error: lastError?.message ?? String(lastError),
+      payload: opts.row,
+    });
+  } catch (repairErr: any) {
+    console.error(`[REPAIR QUEUE FAILURE] Unable to queue ledger repair: ${repairErr?.message ?? repairErr}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // 3. MAIN EXECUTION HANDLER
 // ══════════════════════════════════════════════════════════════════════
 
