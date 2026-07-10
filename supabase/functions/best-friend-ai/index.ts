@@ -92,6 +92,41 @@ async function fetchOmniRecords(
   }
 }
 
+// Marketplace mode: pull rows across ALL contributing owners so payouts fan out.
+// We select owner + aca_hash_key explicitly so the receipt can be built per-owner.
+async function fetchMarketplaceRecords(
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+  try {
+    console.info(`[BEGIN: MarketplaceFetch] Cross-owner retrieval initiated.`);
+    const [healthRes, lifestyleRes] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("*")
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("*")
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+    ]);
+    if (healthRes.error) console.error("[ERROR: MarketplaceFetch.Health]", healthRes.error.message);
+    if (lifestyleRes.error) console.error("[ERROR: MarketplaceFetch.Lifestyle]", lifestyleRes.error.message);
+    const health = healthRes.data ?? [];
+    const lifestyle = lifestyleRes.data ?? [];
+    const ownersH = new Set(health.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
+    const ownersL = new Set(lifestyle.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
+    console.info(
+      `[END: MarketplaceFetch] health=${health.length} (owners=${ownersH.size}) lifestyle=${lifestyle.length} (owners=${ownersL.size})`,
+    );
+    return { success: !healthRes.error && !lifestyleRes.error, health, lifestyle };
+  } catch (err) {
+    console.error("[CRITICAL FAILURE: MarketplaceFetch]", err);
+    return { success: false, health: [], lifestyle: [], error: String(err) };
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -781,12 +816,27 @@ serve(async (req) => {
     let aggregates: OmniAggregates | null = null;
     if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
-      const [audit, aggResult] = await Promise.all([
+      const [audit, aggResult, marketplaceAudit] = await Promise.all([
         fetchOmniRecords(supabase, operatorId),
         fetchOmniAggregates(supabase, operatorId),
+        isDataScientistMode
+          ? fetchMarketplaceRecords(supabase)
+          : Promise.resolve({ success: true, health: [], lifestyle: [] } as {
+              success: boolean;
+              health: any[];
+              lifestyle: any[];
+            }),
       ]);
       aggregates = aggResult;
-      if (audit.success) {
+      // In marketplace mode, prefer cross-owner sample so receipts fan out to
+      // every contributing owner. Fall back to caller-scoped rows otherwise.
+      if (isDataScientistMode && marketplaceAudit.success && (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0)) {
+        sourceHealth = marketplaceAudit.health;
+        sourceLifestyle = marketplaceAudit.lifestyle;
+        console.info(
+          `[STATUS: BestFriendAI.MarketplaceSample] Cross-owner rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle.`,
+        );
+      } else if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
         console.info(
@@ -997,9 +1047,28 @@ serve(async (req) => {
     // produce a Synapse consumption receipt.
     const touchedData = healthMetrics.length > 0 || lifestyleEvents.length > 0;
     if (touchedData) {
-      const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-      const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-      consumedReceipt = [...healthIds, ...lifeIds];
+      if (isDataScientistMode) {
+        // MARKETPLACE_RESEARCH: one representative aca_hash_key per unique
+        // contributing owner, so idia-circular-settlement pays every real
+        // contributor (not just the buyer).
+        const perOwner = new Map<string, string>();
+        const pick = (r: any) => {
+          const owner = r.user_id || r.entity_id || r.pseudo_user_id;
+          const hash = r.aca_hash_key || r.id;
+          if (owner && hash && !perOwner.has(String(owner))) perOwner.set(String(owner), String(hash));
+        };
+        healthMetrics.forEach(pick);
+        lifestyleEvents.forEach(pick);
+        consumedReceipt = Array.from(perOwner.values());
+        console.info(
+          `[STATUS: BestFriendAI.Receipt] Marketplace fan-out: ${perOwner.size} unique contributors.`,
+        );
+      } else {
+        // BEST_FRIEND_AI_CHAT: personal chat, self-only receipt.
+        const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+        const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+        consumedReceipt = [...healthIds, ...lifeIds];
+      }
 
       // THE MISSING WIRE: Actually send the receipt to Synapse!
       if (consumedReceipt.length > 0 && operatorId) {

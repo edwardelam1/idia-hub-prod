@@ -1,71 +1,42 @@
-## Diagnosis
+## Diagnosis — no, no other contributors were paid
 
-The DB has **19,358 staged_health_data rows** (14,234 for the logged-in user, ~1,048,924 steps). Best Friend AI reports "30 rows / 202 steps" because it derives totals from a **post-truncation slice**, not from the database.
+I traced your last query (`SYN-5923023A`, 2026-07-10 20:37:40 UTC):
 
-Flow in `supabase/functions/best-friend-ai/index.ts`:
+- **egress_logs** carried 37 `aca_record_references` — but every one is the **same hash** (`2964510b…5dbb4`).
+- That hash resolves in `user_aca_records` to a single `platform_guid`: **you** (`217c6224-…-267536`).
+- **settlement_queue** shows the payload had `contributing_users: [1]` and `total_fiat_amount: 0.75`.
+- `idia-circular-settlement` therefore ran Phase 1 (60% corporate), Phase 2 (regional war chest), and Phase 3 with a **single contributor payout that went back to you** (~$0.22 after the corporate/regional splits).
 
-1. `fetchOmniRecords` (line 13) hard-caps rows at `MAX_OMNI_ROWS = 5000` — already less than one user's row count.
-2. `truncateRecords` (line 512) slices to `MAX_RECORDS_PER_TABLE = 150`, then **iteratively halves** until JSON < 80 KB. With 42 columns per row on `staged_health_data`, this collapses to ~30 rows.
-3. `summarizeMarketplaceData` (line 578) then sums `steps_count` **over those ~30 surviving rows** — producing the "202 steps" figure — and the LLM parrots it.
+So there was no missed payout — the system faithfully paid the only contributor it was told about. The bug is upstream: **the receipt never fanned out to the real owners of the 37 sampled rows.**
 
-Every other data-consumption path that shows counts to the user does it correctly (`useDashboardStats` uses `count: "exact"`; `marketplace-bundle-access` doesn't summarize row counts; `execute-vault-query` returns whatever the terminal SQL asks for). The problem is scoped to Best Friend AI.
+## Root cause
 
-## Fix
+In `supabase/functions/best-friend-ai/index.ts` around line 1000, the receipt is built from the rows the AI actually saw:
 
-Compute the ground-truth aggregates against the database directly, then hand the LLM a **small sample of rows + the true totals**. The LLM must be told to report totals from the aggregates block, never by counting the sample.
-
-### 1. Add an aggregate fetch in `supabase/functions/best-friend-ai/index.ts`
-
-New helper `fetchOmniAggregates(supabase, pseudoId)` that runs, for both `staged_health_data` and `staged_lifestyle_data` scoped to the same `user_id/entity_id/pseudo_user_id` filter used today:
-
-- Row count via `.select("id", { count: "exact", head: true })`
-- Sum/avg/min/max for numeric fields relevant to the AI (steps, average_heartrate, data_quality_score, distance, calories) via a lightweight RPC `get_omni_aggregates(pseudo_id uuid)` that returns one JSON row. Prefer an RPC because PostgREST cannot sum columns in a single round-trip. Add it via the migration tool with:
-  - `SECURITY DEFINER` (Best Friend AI runs with service role anyway, but the RPC is safer/simpler than N head-count round-trips).
-  - `GRANT EXECUTE ... TO service_role` only.
-- Date range (min/max `processed_at`).
-
-Return `{ health: {count, totals, range}, lifestyle: {count, totals, range} }`.
-
-### 2. Rewire `Deno.serve` handler (around line 738)
-
-Call `fetchOmniAggregates` in parallel with `fetchOmniRecords`. Keep the row fetch for sampling only — reduce `MAX_OMNI_ROWS` to 500 since the LLM never needed 5000 rows and it was just fueling truncation waste.
-
-### 3. Rewrite `summarizeMarketplaceData` (line 578)
-
-Change signature to `summarizeMarketplaceData(aggregates, sampleHealth, sampleLifestyle)`. Return:
-
-```
-{
-  health_records: aggregates.health.count,       // TRUE total
-  lifestyle_records: aggregates.lifestyle.count, // TRUE total
-  step_volume: aggregates.health.totals.steps,   // TRUE total
-  average_quality: aggregates.health.totals.avg_quality,
-  baseline_hr, max_hr,                            // from aggregates
-  sample_size: sampleHealth.length + sampleLifestyle.length,
-  date_range: aggregates.health.range,
-}
+```ts
+const healthIds = healthMetrics.map((r) => r.aca_hash_key || r.id).filter(Boolean);
 ```
 
-### 4. Update `buildOrchestratorPrompt` and the navigation branch (lines 766–777)
+Two problems compound:
 
-Include a `TRUE_TOTALS` block sourced from aggregates and a separate `SAMPLE_ROWS` block sourced from the truncated slice. Add one line to both `STORE_CLERK_PERSONA` and the orchestrator prompt:
+1. `healthMetrics` / `lifestyleEvents` for Best-Friend-AI are pulled scoped to the caller's own `pseudo_user_id`, so every row's `aca_hash_key` belongs to the caller. In `MARKETPLACE_RESEARCH` mode this should be a **cross-user** sample.
+2. Even when rows do span owners, they often carry the same `aca_hash_key` per user (one record per user, repeated), which then collapses in `resolveContributors` via `Array.from(new Set(...))`.
 
-> "When reporting counts, sums, averages, or ranges, use the TRUE_TOTALS block. The SAMPLE_ROWS block is a preview of individual records and is NOT representative of totals."
+Net effect: the marketplace pipeline can never pay more than one contributor per query.
 
-### 5. Keep `truncateRecords` for the sample block only
+## Plan
 
-No change to its behavior — it still exists to keep the LLM payload under the token limit for the sample preview. It just no longer feeds the totals.
-
-## Files touched
-
-- `supabase/functions/best-friend-ai/index.ts` — new `fetchOmniAggregates`, rewired handler, rewritten `summarizeMarketplaceData`, prompt tweaks.
-- New migration: `create function public.get_omni_aggregates(pseudo_id uuid) returns json ...` with `SECURITY DEFINER`, `set search_path = public`, and `GRANT EXECUTE ... TO service_role`.
+1. **Marketplace fetchers must span owners.** In `best-friend-ai/index.ts`, when `isDataScientistMode` (MARKETPLACE_RESEARCH), fetch `staged_health_data` / `staged_lifestyle_data` **without the `pseudo_user_id` filter** (respecting bundle scope only), and select `pseudo_user_id, aca_hash_key` explicitly for every row.
+2. **Build a per-owner receipt.** Before firing the synapse-controller POST, group the sampled rows by `pseudo_user_id` and emit one representative `aca_hash_key` per unique owner (preserve repeats only where they represent distinct records — the goal is one entry per contributor so `resolveContributors` returns the true set).
+3. **Guard the store-clerk path.** `BEST_FRIEND_AI_CHAT` should keep behaving as today (self-only), so keep that branch scoped to `operatorId` and don't fan out payouts on personal chats.
+4. **Verification.** After deploy, run a marketplace query and confirm:
+   - `egress_logs.aca_record_references` contains ≥2 distinct hashes,
+   - `settlement_queue.payload->'contributing_users'` length > 1,
+   - `idia-circular-settlement` logs `payouts=N` where N matches the unique-owner count,
+   - each contributor sees a `data_sale_payout` row in `synapse_credit_ledger`.
+5. **No schema changes.** Everything is edge-function-side; existing tables, RLS, and grants stay as-is.
 
 ## Out of scope
 
-- `useHealthMetrics.tsx` calls a non-existent `/api/v1/health/metrics` endpoint (falls back to `VITE_API_BASE_URL` which isn't set). That's a separate broken hook, not the "30 rows" bug — flag but do not fix here unless you want it included.
-- Marketplace bundle purchase, execute-hub-query, execute-vault-query — verified they don't produce the wrong totals reported.
-
-## Verification
-
-After deploy, ask Best Friend AI "how many records do I have and what's my total step count?" — it should report ~14,234 records and ~1,048,924 steps for the logged-in user, sourced from the aggregates block.
+- The empty `/egress-logs` view for other accounts (all 203 rows belong to `217c6224-…`). That's expected under the current RLS (`user_id = auth.uid()`) — no other user has ever run an egress. Flag if you'd like a follow-up.
+- Retro-paying the past `SYN-*` settlements — those already closed on-chain.
