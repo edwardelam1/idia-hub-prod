@@ -419,9 +419,16 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           .from("profiles")
           .select("wallet_address")
           .eq("id", contributor.user_id)
-          .single();
+          .maybeSingle();
 
-        const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+        const lifeWallet = profile?.wallet_address;
+        if (!lifeWallet) {
+          console.warn(
+            `[SKIP: Batch.Item] contributor ${contributor.user_id} has no wallet_address — skipping payout to avoid misroute.`,
+          );
+          skippedContributors.push({ user_id: contributor.user_id, reason: "missing_wallet" });
+          continue;
+        }
         console.info(`[BEGIN: Batch.Item] Processing transfer ${i + 1}/${contributing_users.length} to ${lifeWallet}`);
 
         try {
@@ -467,16 +474,22 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
 
           // 3. Ledger insert
           const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
-          await supabase.from("synapse_credit_ledger").insert({
+          await insertLedgerWithRepair(supabase, {
+            reference_id: ingestionReference,
             user_id: contributor.user_id,
-            amount: perContributorYield,
-            entry_type: "deposit",
-            transaction_type: "data_sale_payout",
-            status: yieldStatus,
+            phase: "contributor_yield",
             blockchain_tx_hash: yieldHash,
-            is_settled: true,
-            settled_at: new Date().toISOString(),
-            description: `Pro-rata yield for Ref: ${ingestionReference}`,
+            row: {
+              user_id: contributor.user_id,
+              amount: perContributorYield,
+              entry_type: "deposit",
+              transaction_type: "data_sale_payout",
+              status: yieldStatus,
+              blockchain_tx_hash: yieldHash,
+              is_settled: true,
+              settled_at: new Date().toISOString(),
+              description: `Pro-rata yield for Ref: ${ingestionReference}`,
+            },
           });
 
           contributorPayouts.push({
@@ -491,21 +504,49 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           console.info(`[BEGIN: Batch.Item.Error]`);
           console.error(`[FATAL STALL: Batch.Item] Failed executing transfer for ${lifeWallet}: ${txError.message}`);
           console.info(`[END: Batch.Item.Error]`);
+          skippedContributors.push({ user_id: contributor.user_id, reason: `tx_error: ${txError?.message ?? "unknown"}` });
           continue;
         }
       }
       console.info("[END: Phase_3_Contributor.BatchExecution] Pipeline cleared.");
     } catch (globalError: any) {
       console.error(`[FATAL STALL: Phase_3_Contributor.Global] ${globalError.message}`);
+      queueFinalError = globalError?.message ?? String(globalError);
     }
 
     console.info(
       `[COMPLETE: circular-settlement] runId=${runCorrelationId} corporateHash=${corporateHash} regionalHash=${regionalHash} regionalTarget=${finalRegionalAddress} mode=${routingMode} payouts=${contributorPayouts.length}`,
     );
+
+    if (contributorPayouts.length === 0 && contributing_users.length > 0) {
+      queueFinalStatus = "failed";
+    } else if (skippedContributors.length > 0) {
+      queueFinalStatus = "partial";
+    } else {
+      queueFinalStatus = "completed";
+    }
   } catch (error: any) {
     // Containment: never let an exception escape the background worker.
     console.error(`🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`);
     if (error?.stack) console.error(`[STACK] ${error.stack}`);
+    queueFinalStatus = "failed";
+    queueFinalError = error?.message ?? String(error);
+  } finally {
+    if (queueSupabase && queueRefId) {
+      try {
+        await queueSupabase
+          .from("settlement_queue")
+          .update({
+            status: queueFinalStatus,
+            completed_at: new Date().toISOString(),
+            last_error: queueFinalError,
+            skipped_contributors: skippedContributors.length > 0 ? skippedContributors : null,
+          })
+          .eq("reference_id", queueRefId);
+      } catch (writeBackErr: any) {
+        console.error(`[WARNING: QueueWriteBack] ${writeBackErr?.message ?? writeBackErr}`);
+      }
+    }
   }
 }
 
