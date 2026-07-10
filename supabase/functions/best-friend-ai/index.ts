@@ -92,6 +92,41 @@ async function fetchOmniRecords(
   }
 }
 
+// Marketplace mode: pull rows across ALL contributing owners so payouts fan out.
+// We select owner + aca_hash_key explicitly so the receipt can be built per-owner.
+async function fetchMarketplaceRecords(
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+  try {
+    console.info(`[BEGIN: MarketplaceFetch] Cross-owner retrieval initiated.`);
+    const [healthRes, lifestyleRes] = await Promise.all([
+      supabase
+        .from("staged_health_data")
+        .select("*")
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_lifestyle_data")
+        .select("*")
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+    ]);
+    if (healthRes.error) console.error("[ERROR: MarketplaceFetch.Health]", healthRes.error.message);
+    if (lifestyleRes.error) console.error("[ERROR: MarketplaceFetch.Lifestyle]", lifestyleRes.error.message);
+    const health = healthRes.data ?? [];
+    const lifestyle = lifestyleRes.data ?? [];
+    const ownersH = new Set(health.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
+    const ownersL = new Set(lifestyle.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
+    console.info(
+      `[END: MarketplaceFetch] health=${health.length} (owners=${ownersH.size}) lifestyle=${lifestyle.length} (owners=${ownersL.size})`,
+    );
+    return { success: !healthRes.error && !lifestyleRes.error, health, lifestyle };
+  } catch (err) {
+    console.error("[CRITICAL FAILURE: MarketplaceFetch]", err);
+    return { success: false, health: [], lifestyle: [], error: String(err) };
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
