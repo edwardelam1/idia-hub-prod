@@ -424,29 +424,41 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
       console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
     }
 
-    // LEDGER HYDRATION
+    // LEDGER HYDRATION (with retry + repair-queue fallback)
     await Promise.all([
-      supabase.from("synapse_credit_ledger").insert({
+      insertLedgerWithRepair(supabase, {
+        reference_id: ingestionReference,
         user_id: buyer_id,
-        amount: corporateRevenue,
-        entry_type: "revenue",
-        transaction_type: "HUB_PROTOCOL_FEE",
-        status: "completed",
+        phase: "corporate_fee",
         blockchain_tx_hash: corporateHash,
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        description: `60% Corporate Revenue: ${ingestionReference}`,
+        row: {
+          user_id: buyer_id,
+          amount: corporateRevenue,
+          entry_type: "revenue",
+          transaction_type: "HUB_PROTOCOL_FEE",
+          status: "completed",
+          blockchain_tx_hash: corporateHash,
+          is_settled: true,
+          settled_at: new Date().toISOString(),
+          description: `60% Corporate Revenue: ${ingestionReference}`,
+        },
       }),
-      supabase.from("synapse_credit_ledger").insert({
+      insertLedgerWithRepair(supabase, {
+        reference_id: ingestionReference,
         user_id: buyer_id,
-        amount: regionalRevenue,
-        entry_type: "escrow",
-        transaction_type: "ECOSYSTEM_WAR_CHEST",
-        status: "completed",
+        phase: "regional_war_chest",
         blockchain_tx_hash: regionalHash,
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        description: `10% Regional/War Chest [${routingMode} → ${finalRegionalAddress}]: ${ingestionReference}`,
+        row: {
+          user_id: buyer_id,
+          amount: regionalRevenue,
+          entry_type: "escrow",
+          transaction_type: "ECOSYSTEM_WAR_CHEST",
+          status: "completed",
+          blockchain_tx_hash: regionalHash,
+          is_settled: true,
+          settled_at: new Date().toISOString(),
+          description: `10% Regional/War Chest [${routingMode} → ${finalRegionalAddress}]: ${ingestionReference}`,
+        },
       }),
     ]);
 
