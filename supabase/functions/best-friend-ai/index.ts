@@ -816,12 +816,27 @@ serve(async (req) => {
     let aggregates: OmniAggregates | null = null;
     if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
-      const [audit, aggResult] = await Promise.all([
+      const [audit, aggResult, marketplaceAudit] = await Promise.all([
         fetchOmniRecords(supabase, operatorId),
         fetchOmniAggregates(supabase, operatorId),
+        isDataScientistMode
+          ? fetchMarketplaceRecords(supabase)
+          : Promise.resolve({ success: true, health: [], lifestyle: [] } as {
+              success: boolean;
+              health: any[];
+              lifestyle: any[];
+            }),
       ]);
       aggregates = aggResult;
-      if (audit.success) {
+      // In marketplace mode, prefer cross-owner sample so receipts fan out to
+      // every contributing owner. Fall back to caller-scoped rows otherwise.
+      if (isDataScientistMode && marketplaceAudit.success && (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0)) {
+        sourceHealth = marketplaceAudit.health;
+        sourceLifestyle = marketplaceAudit.lifestyle;
+        console.info(
+          `[STATUS: BestFriendAI.MarketplaceSample] Cross-owner rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle.`,
+        );
+      } else if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
         console.info(
