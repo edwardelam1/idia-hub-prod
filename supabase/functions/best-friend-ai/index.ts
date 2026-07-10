@@ -1047,9 +1047,28 @@ serve(async (req) => {
     // produce a Synapse consumption receipt.
     const touchedData = healthMetrics.length > 0 || lifestyleEvents.length > 0;
     if (touchedData) {
-      const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-      const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-      consumedReceipt = [...healthIds, ...lifeIds];
+      if (isDataScientistMode) {
+        // MARKETPLACE_RESEARCH: one representative aca_hash_key per unique
+        // contributing owner, so idia-circular-settlement pays every real
+        // contributor (not just the buyer).
+        const perOwner = new Map<string, string>();
+        const pick = (r: any) => {
+          const owner = r.user_id || r.entity_id || r.pseudo_user_id;
+          const hash = r.aca_hash_key || r.id;
+          if (owner && hash && !perOwner.has(String(owner))) perOwner.set(String(owner), String(hash));
+        };
+        healthMetrics.forEach(pick);
+        lifestyleEvents.forEach(pick);
+        consumedReceipt = Array.from(perOwner.values());
+        console.info(
+          `[STATUS: BestFriendAI.Receipt] Marketplace fan-out: ${perOwner.size} unique contributors.`,
+        );
+      } else {
+        // BEST_FRIEND_AI_CHAT: personal chat, self-only receipt.
+        const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+        const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
+        consumedReceipt = [...healthIds, ...lifeIds];
+      }
 
       // THE MISSING WIRE: Actually send the receipt to Synapse!
       if (consumedReceipt.length > 0 && operatorId) {
