@@ -1,0 +1,1 @@
+ALTER TYPE public.idia_transaction_type ADD VALUE IF NOT EXISTS 'idia_royalty_yield';
