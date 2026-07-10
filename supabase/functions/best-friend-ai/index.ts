@@ -8,6 +8,19 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const MAX_OMNI_ROWS = 500;
+const MARKETPLACE_HASH_PAGE_SIZE = 1_000;
+const MARKETPLACE_MAX_HASH_PAGES = 75;
+const MARKETPLACE_SAMPLE_ROW_BUDGET = 150;
+
+type MarketplaceFetchResult = {
+  success: boolean;
+  health: any[];
+  lifestyle: any[];
+  receiptIds: string[];
+  contributorCount: number;
+  unresolvedHashCount: number;
+  error?: string;
+};
 
 // Aggregates computed server-side (see get_omni_aggregates RPC) so we never
 // derive totals from the truncated LLM sample. Truncation is only for row
@@ -92,38 +105,153 @@ async function fetchOmniRecords(
   }
 }
 
-// Marketplace mode: pull rows across ALL contributing owners so payouts fan out.
-// We select owner + aca_hash_key explicitly so the receipt can be built per-owner.
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.filter((v): v is string => typeof v === "string" && v.trim().length > 0)));
+}
+
+function chunkArray<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < values.length; i += size) chunks.push(values.slice(i, i + size));
+  return chunks;
+}
+
+async function collectStagedAcaHashes(
+  supabase: ReturnType<typeof createClient>,
+  table: "staged_health_data" | "staged_lifestyle_data",
+): Promise<string[]> {
+  const hashes = new Set<string>();
+  let offset = 0;
+
+  for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, aca_hash_key")
+      .not("aca_hash_key", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
+
+    if (error) throw new Error(`${table} hash scan failed: ${error.message}`);
+    for (const row of data ?? []) {
+      if ((row as any).aca_hash_key) hashes.add(String((row as any).aca_hash_key));
+    }
+    if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
+    offset += MARKETPLACE_HASH_PAGE_SIZE;
+  }
+
+  return Array.from(hashes);
+}
+
+async function resolveHashOwners(
+  supabase: ReturnType<typeof createClient>,
+  hashes: string[],
+): Promise<Map<string, string>> {
+  const hashToOwner = new Map<string, string>();
+  for (const chunk of chunkArray(hashes, 100)) {
+    const { data, error } = await supabase
+      .from("user_aca_records")
+      .select("aca_hash_key, platform_guid")
+      .in("aca_hash_key", chunk);
+    if (error) throw new Error(`ACA owner resolution failed: ${error.message}`);
+    for (const row of data ?? []) {
+      const hash = (row as any).aca_hash_key;
+      const owner = (row as any).platform_guid;
+      if (hash && owner) hashToOwner.set(String(hash), String(owner));
+    }
+  }
+  return hashToOwner;
+}
+
+async function fetchBalancedRowsForReceipt(
+  supabase: ReturnType<typeof createClient>,
+  table: "staged_health_data" | "staged_lifestyle_data",
+  hashes: string[],
+  rowsPerContributor: number,
+): Promise<any[]> {
+  const responses = await Promise.all(
+    hashes.map((hash) =>
+      supabase
+        .from(table)
+        .select("*")
+        .eq("aca_hash_key", hash)
+        .order("processed_at", { ascending: false })
+        .limit(rowsPerContributor),
+    ),
+  );
+
+  const rows: any[] = [];
+  for (const res of responses) {
+    if (res.error) {
+      console.error(`[ERROR: MarketplaceFetch.SampleRows.${table}]`, res.error.message);
+      continue;
+    }
+    rows.push(...(res.data ?? []));
+  }
+  return rows;
+}
+
+// Marketplace mode: scan staged ACA lineage across ALL contributing owners so
+// payouts do not depend on the newest 500 rows belonging to a single user.
 async function fetchMarketplaceRecords(
   supabase: ReturnType<typeof createClient>,
-): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+): Promise<MarketplaceFetchResult> {
   try {
     console.info(`[BEGIN: MarketplaceFetch] Cross-owner retrieval initiated.`);
-    const [healthRes, lifestyleRes] = await Promise.all([
-      supabase
-        .from("staged_health_data")
-        .select("*")
-        .order("processed_at", { ascending: false })
-        .limit(MAX_OMNI_ROWS),
-      supabase
-        .from("staged_lifestyle_data")
-        .select("*")
-        .order("processed_at", { ascending: false })
-        .limit(MAX_OMNI_ROWS),
+
+    const [healthHashes, lifestyleHashes] = await Promise.all([
+      collectStagedAcaHashes(supabase, "staged_health_data"),
+      collectStagedAcaHashes(supabase, "staged_lifestyle_data"),
     ]);
-    if (healthRes.error) console.error("[ERROR: MarketplaceFetch.Health]", healthRes.error.message);
-    if (lifestyleRes.error) console.error("[ERROR: MarketplaceFetch.Lifestyle]", lifestyleRes.error.message);
-    const health = healthRes.data ?? [];
-    const lifestyle = lifestyleRes.data ?? [];
-    const ownersH = new Set(health.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
-    const ownersL = new Set(lifestyle.map((r: any) => r.user_id || r.entity_id || r.pseudo_user_id).filter(Boolean));
-    console.info(
-      `[END: MarketplaceFetch] health=${health.length} (owners=${ownersH.size}) lifestyle=${lifestyle.length} (owners=${ownersL.size})`,
+    const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes]);
+    const hashToOwner = await resolveHashOwners(supabase, allHashes);
+
+    const perContributor = new Map<string, { hash: string; table: "staged_health_data" | "staged_lifestyle_data" }>();
+    const registerHash = (hash: string, table: "staged_health_data" | "staged_lifestyle_data") => {
+      const owner = hashToOwner.get(hash);
+      if (owner && !perContributor.has(owner)) perContributor.set(owner, { hash, table });
+    };
+    healthHashes.forEach((hash) => registerHash(hash, "staged_health_data"));
+    lifestyleHashes.forEach((hash) => registerHash(hash, "staged_lifestyle_data"));
+
+    const healthReceiptHashes = Array.from(perContributor.values())
+      .filter((entry) => entry.table === "staged_health_data")
+      .map((entry) => entry.hash);
+    const lifestyleReceiptHashes = Array.from(perContributor.values())
+      .filter((entry) => entry.table === "staged_lifestyle_data")
+      .map((entry) => entry.hash);
+    const receiptIds = Array.from(perContributor.values()).map((entry) => entry.hash);
+    const rowsPerContributor = Math.max(
+      1,
+      Math.floor(MARKETPLACE_SAMPLE_ROW_BUDGET / Math.max(1, receiptIds.length)),
     );
-    return { success: !healthRes.error && !lifestyleRes.error, health, lifestyle };
+
+    const [health, lifestyle] = await Promise.all([
+      fetchBalancedRowsForReceipt(supabase, "staged_health_data", healthReceiptHashes, rowsPerContributor),
+      fetchBalancedRowsForReceipt(supabase, "staged_lifestyle_data", lifestyleReceiptHashes, rowsPerContributor),
+    ]);
+
+    const unresolvedHashCount = allHashes.filter((hash) => !hashToOwner.has(hash)).length;
+    console.info(
+      `[END: MarketplaceFetch] candidate_hashes=${allHashes.length} resolved_contributors=${perContributor.size} receipt_ids=${receiptIds.length} unresolved_hashes=${unresolvedHashCount} sample_health=${health.length} sample_lifestyle=${lifestyle.length}`,
+    );
+    return {
+      success: true,
+      health,
+      lifestyle,
+      receiptIds,
+      contributorCount: perContributor.size,
+      unresolvedHashCount,
+    };
   } catch (err) {
     console.error("[CRITICAL FAILURE: MarketplaceFetch]", err);
-    return { success: false, health: [], lifestyle: [], error: String(err) };
+    return {
+      success: false,
+      health: [],
+      lifestyle: [],
+      receiptIds: [],
+      contributorCount: 0,
+      unresolvedHashCount: 0,
+      error: String(err),
+    };
   }
 }
 
