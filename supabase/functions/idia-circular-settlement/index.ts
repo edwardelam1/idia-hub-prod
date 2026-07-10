@@ -166,6 +166,52 @@ async function forceSequencerDelay(ms = 3500): Promise<void> {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// LEDGER INSERT WITH BOUNDED RETRY + REPAIR-QUEUE FALLBACK
+// After a successful on-chain transfer, the ledger row MUST land or be
+// deferred to the repair queue. Silent swallowing = missing balances.
+// ══════════════════════════════════════════════════════════════════════
+async function insertLedgerWithRepair(
+  supabase: any,
+  opts: {
+    reference_id: string;
+    user_id: string;
+    phase: string;
+    blockchain_tx_hash: string | null;
+    row: Record<string, unknown>;
+  },
+): Promise<void> {
+  const maxAttempts = 3;
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const { error } = await supabase.from("synapse_credit_ledger").insert(opts.row);
+      if (!error) return;
+      lastError = error;
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 250 * Math.pow(2, attempt - 1)));
+    }
+  }
+  console.error(
+    `[LEDGER FAILURE] ref=${opts.reference_id} user=${opts.user_id} phase=${opts.phase} tx=${opts.blockchain_tx_hash} :: ${lastError?.message ?? String(lastError)}`,
+  );
+  try {
+    await supabase.from("settlement_ledger_repair_queue").insert({
+      reference_id: opts.reference_id,
+      user_id: opts.user_id,
+      phase: opts.phase,
+      blockchain_tx_hash: opts.blockchain_tx_hash,
+      error: lastError?.message ?? String(lastError),
+      payload: opts.row,
+    });
+  } catch (repairErr: any) {
+    console.error(`[REPAIR QUEUE FAILURE] Unable to queue ledger repair: ${repairErr?.message ?? repairErr}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // 3. MAIN EXECUTION HANDLER
 // ══════════════════════════════════════════════════════════════════════
 
@@ -174,6 +220,11 @@ async function forceSequencerDelay(ms = 3500): Promise<void> {
 // nothing must escape this function or it can crash the Edge isolate.
 async function executeSettlement(payoutData: any, runCorrelationId: string): Promise<void> {
   let currentStep = "INIT";
+  let queueSupabase: any = null;
+  let queueRefId: string | null = null;
+  const skippedContributors: Array<{ user_id: string; reason: string }> = [];
+  let queueFinalStatus: "completed" | "partial" | "failed" = "completed";
+  let queueFinalError: string | null = null;
   try {
     console.info(`[BEGIN: circular-settlement] Pulse detected. runId=${runCorrelationId} ts=${Date.now()}`);
 
@@ -192,7 +243,8 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
 
     let supabase;
     try {
-      supabase = createClient(supabaseUrl, supabaseKey);
+      supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+      queueSupabase = supabase;
       console.info(`[END: ${currentStep}] Supabase client instantiated successfully.`);
     } catch (clientErr: any) {
       console.error(`[FATAL STALL: ${currentStep}] Failed to initialize Supabase client: ${clientErr.message}`);
@@ -208,6 +260,27 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     const hasLocation = typeof location_string === "string" && location_string.trim().length > 0;
     const executionLocation = hasLocation ? location_string.trim() : null;
     const ingestionReference = payment_reference || `SYN-${crypto.randomUUID().slice(0, 8)}`;
+    queueRefId = ingestionReference;
+
+    // Stamp attempt counter on the settlement_queue row BEFORE any chain work.
+    try {
+      const { data: existing } = await supabase
+        .from("settlement_queue")
+        .select("attempts")
+        .eq("reference_id", ingestionReference)
+        .maybeSingle();
+      const nextAttempts = ((existing?.attempts as number | undefined) ?? 0) + 1;
+      await supabase
+        .from("settlement_queue")
+        .update({
+          attempts: nextAttempts,
+          last_attempt_at: new Date().toISOString(),
+          status: "processing",
+        })
+        .eq("reference_id", ingestionReference);
+    } catch (stampErr: any) {
+      console.error(`[WARNING: QueueStamp] Could not stamp queue row for ${ingestionReference}: ${stampErr?.message}`);
+    }
 
     currentStep = "CONFIGURING_BLOCKCHAIN";
     const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
@@ -351,29 +424,41 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
       console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
     }
 
-    // LEDGER HYDRATION
+    // LEDGER HYDRATION (with retry + repair-queue fallback)
     await Promise.all([
-      supabase.from("synapse_credit_ledger").insert({
+      insertLedgerWithRepair(supabase, {
+        reference_id: ingestionReference,
         user_id: buyer_id,
-        amount: corporateRevenue,
-        entry_type: "revenue",
-        transaction_type: "HUB_PROTOCOL_FEE",
-        status: "completed",
+        phase: "corporate_fee",
         blockchain_tx_hash: corporateHash,
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        description: `60% Corporate Revenue: ${ingestionReference}`,
+        row: {
+          user_id: buyer_id,
+          amount: corporateRevenue,
+          entry_type: "revenue",
+          transaction_type: "HUB_PROTOCOL_FEE",
+          status: "completed",
+          blockchain_tx_hash: corporateHash,
+          is_settled: true,
+          settled_at: new Date().toISOString(),
+          description: `60% Corporate Revenue: ${ingestionReference}`,
+        },
       }),
-      supabase.from("synapse_credit_ledger").insert({
+      insertLedgerWithRepair(supabase, {
+        reference_id: ingestionReference,
         user_id: buyer_id,
-        amount: regionalRevenue,
-        entry_type: "escrow",
-        transaction_type: "ECOSYSTEM_WAR_CHEST",
-        status: "completed",
+        phase: "regional_war_chest",
         blockchain_tx_hash: regionalHash,
-        is_settled: true,
-        settled_at: new Date().toISOString(),
-        description: `10% Regional/War Chest [${routingMode} → ${finalRegionalAddress}]: ${ingestionReference}`,
+        row: {
+          user_id: buyer_id,
+          amount: regionalRevenue,
+          entry_type: "escrow",
+          transaction_type: "ECOSYSTEM_WAR_CHEST",
+          status: "completed",
+          blockchain_tx_hash: regionalHash,
+          is_settled: true,
+          settled_at: new Date().toISOString(),
+          description: `10% Regional/War Chest [${routingMode} → ${finalRegionalAddress}]: ${ingestionReference}`,
+        },
       }),
     ]);
 
@@ -392,9 +477,16 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           .from("profiles")
           .select("wallet_address")
           .eq("id", contributor.user_id)
-          .single();
+          .maybeSingle();
 
-        const lifeWallet = profile?.wallet_address || "0xc490695880992ec99885e5cdd03aafb5c63b8c33";
+        const lifeWallet = profile?.wallet_address;
+        if (!lifeWallet) {
+          console.warn(
+            `[SKIP: Batch.Item] contributor ${contributor.user_id} has no wallet_address — skipping payout to avoid misroute.`,
+          );
+          skippedContributors.push({ user_id: contributor.user_id, reason: "missing_wallet" });
+          continue;
+        }
         console.info(`[BEGIN: Batch.Item] Processing transfer ${i + 1}/${contributing_users.length} to ${lifeWallet}`);
 
         try {
@@ -440,16 +532,22 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
 
           // 3. Ledger insert
           const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
-          await supabase.from("synapse_credit_ledger").insert({
+          await insertLedgerWithRepair(supabase, {
+            reference_id: ingestionReference,
             user_id: contributor.user_id,
-            amount: perContributorYield,
-            entry_type: "deposit",
-            transaction_type: "data_sale_payout",
-            status: yieldStatus,
+            phase: "contributor_yield",
             blockchain_tx_hash: yieldHash,
-            is_settled: true,
-            settled_at: new Date().toISOString(),
-            description: `Pro-rata yield for Ref: ${ingestionReference}`,
+            row: {
+              user_id: contributor.user_id,
+              amount: perContributorYield,
+              entry_type: "deposit",
+              transaction_type: "data_sale_payout",
+              status: yieldStatus,
+              blockchain_tx_hash: yieldHash,
+              is_settled: true,
+              settled_at: new Date().toISOString(),
+              description: `Pro-rata yield for Ref: ${ingestionReference}`,
+            },
           });
 
           contributorPayouts.push({
@@ -464,21 +562,49 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           console.info(`[BEGIN: Batch.Item.Error]`);
           console.error(`[FATAL STALL: Batch.Item] Failed executing transfer for ${lifeWallet}: ${txError.message}`);
           console.info(`[END: Batch.Item.Error]`);
+          skippedContributors.push({ user_id: contributor.user_id, reason: `tx_error: ${txError?.message ?? "unknown"}` });
           continue;
         }
       }
       console.info("[END: Phase_3_Contributor.BatchExecution] Pipeline cleared.");
     } catch (globalError: any) {
       console.error(`[FATAL STALL: Phase_3_Contributor.Global] ${globalError.message}`);
+      queueFinalError = globalError?.message ?? String(globalError);
     }
 
     console.info(
       `[COMPLETE: circular-settlement] runId=${runCorrelationId} corporateHash=${corporateHash} regionalHash=${regionalHash} regionalTarget=${finalRegionalAddress} mode=${routingMode} payouts=${contributorPayouts.length}`,
     );
+
+    if (contributorPayouts.length === 0 && contributing_users.length > 0) {
+      queueFinalStatus = "failed";
+    } else if (skippedContributors.length > 0) {
+      queueFinalStatus = "partial";
+    } else {
+      queueFinalStatus = "completed";
+    }
   } catch (error: any) {
     // Containment: never let an exception escape the background worker.
     console.error(`🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`);
     if (error?.stack) console.error(`[STACK] ${error.stack}`);
+    queueFinalStatus = "failed";
+    queueFinalError = error?.message ?? String(error);
+  } finally {
+    if (queueSupabase && queueRefId) {
+      try {
+        await queueSupabase
+          .from("settlement_queue")
+          .update({
+            status: queueFinalStatus,
+            completed_at: new Date().toISOString(),
+            last_error: queueFinalError,
+            skipped_contributors: skippedContributors.length > 0 ? skippedContributors : null,
+          })
+          .eq("reference_id", queueRefId);
+      } catch (writeBackErr: any) {
+        console.error(`[WARNING: QueueWriteBack] ${writeBackErr?.message ?? writeBackErr}`);
+      }
+    }
   }
 }
 
