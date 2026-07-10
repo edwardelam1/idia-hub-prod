@@ -7,7 +7,39 @@ const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const MAX_OMNI_ROWS = 5000;
+const MAX_OMNI_ROWS = 500;
+
+// Aggregates computed server-side (see get_omni_aggregates RPC) so we never
+// derive totals from the truncated LLM sample. Truncation is only for row
+// examples, not for counts/sums/averages.
+export type OmniAggregates = {
+  health: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
+  lifestyle: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
+};
+
+async function fetchOmniAggregates(
+  supabase: ReturnType<typeof createClient>,
+  pseudoId: string,
+): Promise<OmniAggregates> {
+  try {
+    const { data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId });
+    if (error) {
+      console.error("[ERROR: OmniAggregates] RPC failed:", error.message);
+      return { health: null, lifestyle: null };
+    }
+    const parsed = (data ?? {}) as any;
+    console.info(
+      `[STATUS: OmniAggregates] health.count=${parsed?.health?.count ?? 0} lifestyle.count=${parsed?.lifestyle?.count ?? 0}`,
+    );
+    return {
+      health: parsed?.health ?? null,
+      lifestyle: parsed?.lifestyle ?? null,
+    };
+  } catch (err) {
+    console.error("[CRITICAL FAILURE: OmniAggregates] Exception:", err);
+    return { health: null, lifestyle: null };
+  }
+}
 
 // Pulls every relevant staged record for a user across BOTH staging tables.
 async function fetchOmniRecords(
@@ -575,25 +607,36 @@ function buildResearchPlan(
   };
 }
 
-function summarizeMarketplaceData(healthRecords: any[], lifestyleRecords: any[]) {
-  const hrValues = healthRecords.map((r: any) => r.average_heartrate).filter((v: any) => typeof v === "number");
+function summarizeMarketplaceData(
+  aggregates: OmniAggregates | null,
+  sampleHealth: any[],
+  sampleLifestyle: any[],
+) {
+  const h = aggregates?.health;
+  const l = aggregates?.lifestyle;
+  const healthCount = h?.count ?? sampleHealth.length;
+  const lifestyleCount = l?.count ?? sampleLifestyle.length;
   return {
-    health_records: healthRecords.length,
-    lifestyle_records: lifestyleRecords.length,
-    total_samples: healthRecords.length + lifestyleRecords.length,
-    step_volume: healthRecords.reduce((acc: number, row: any) => acc + Number(row.steps_count || 0), 0),
-    average_quality: healthRecords.length
-      ? Number(
-          (
-            healthRecords.reduce((acc: number, row: any) => acc + Number(row.data_quality_score || 0), 0) /
-            healthRecords.length
-          ).toFixed(3),
-        )
-      : null,
-    baseline_hr: hrValues.length
-      ? Math.round(hrValues.reduce((acc: number, value: number) => acc + value, 0) / hrValues.length)
-      : null,
-    max_hr: hrValues.length ? Math.max(...hrValues) : null,
+    health_records: healthCount,
+    lifestyle_records: lifestyleCount,
+    total_samples: healthCount + lifestyleCount,
+    step_volume: h?.totals?.steps ?? null,
+    active_energy_kcal: h?.totals?.active_energy_kcal ?? null,
+    basal_energy_kcal: h?.totals?.basal_energy_kcal ?? null,
+    duration_seconds: h?.totals?.duration_seconds ?? null,
+    average_quality: h?.totals?.avg_quality ?? null,
+    baseline_hr: h?.totals?.avg_heart_rate ?? null,
+    resting_hr: h?.totals?.avg_resting_hr ?? null,
+    max_hr: h?.totals?.max_heart_rate ?? null,
+    min_hr: h?.totals?.min_heart_rate ?? null,
+    avg_blood_oxygen: h?.totals?.avg_blood_oxygen ?? null,
+    avg_vo2_max: h?.totals?.avg_vo2_max ?? null,
+    lifestyle_event_types: l?.totals?.event_types ?? null,
+    lifestyle_event_categories: l?.totals?.event_categories ?? null,
+    date_range_health: h?.range ?? null,
+    date_range_lifestyle: l?.range ?? null,
+    sample_size: sampleHealth.length + sampleLifestyle.length,
+    aggregates_source: aggregates ? "database" : "sample_fallback",
   };
 }
 
@@ -607,13 +650,13 @@ function buildOrchestratorPrompt(
   let compactData = "No marketplace dataset is attached to this request.";
   if (marketplaceSummary) {
     compactData =
-      "DATA SUMMARY:\n" +
+      "TRUE_TOTALS (from database, authoritative — use these for all counts/sums/averages):\n" +
       JSON.stringify(marketplaceSummary) +
       "\n\n" +
-      "HEALTH DATA (compact JSON):\n" +
+      "SAMPLE_ROWS — HEALTH (preview only, NOT representative of totals):\n" +
       JSON.stringify(healthRecords) +
       "\n\n" +
-      "LIFESTYLE DATA (compact JSON):\n" +
+      "SAMPLE_ROWS — LIFESTYLE (preview only, NOT representative of totals):\n" +
       JSON.stringify(lifestyleRecords);
   }
 
@@ -735,14 +778,19 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    let aggregates: OmniAggregates | null = null;
     if (operatorId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       console.info(`[BEGIN: BestFriendAI.OmniFetchExecution] Invoking OmniFetch for ID: ${operatorId}`);
-      const audit = await fetchOmniRecords(supabase, operatorId);
+      const [audit, aggResult] = await Promise.all([
+        fetchOmniRecords(supabase, operatorId),
+        fetchOmniAggregates(supabase, operatorId),
+      ]);
+      aggregates = aggResult;
       if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
         console.info(
-          `[STATUS: BestFriendAI.OmniFetchExecution] DB override for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle records.`,
+          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows fetched for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"}.`,
         );
       } else {
         console.info(`[BEGIN: BestFriendAI.OmniFetchExecution.Warning] Handling OmniFetch failure condition.`);
@@ -763,18 +811,34 @@ serve(async (req) => {
     );
 
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
-    const marketplaceSummary = isDataScientistMode ? summarizeMarketplaceData(healthMetrics, lifestyleEvents) : null;
+    const marketplaceSummary = isDataScientistMode
+      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents)
+      : null;
+
+    const totalsGuidance =
+      "\n\nIMPORTANT: When reporting counts, sums, averages, or ranges, use the TRUE_TOTALS block. " +
+      "The SAMPLE_ROWS block is a small preview of individual records for context and is NOT representative of totals. " +
+      "Never count SAMPLE_ROWS to answer 'how many' or 'how much' questions.";
 
     let systemPrompt: string;
     if (isDataScientistMode) {
-      systemPrompt = buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents);
+      systemPrompt =
+        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents) +
+        totalsGuidance;
     } else {
-      let navSummary = "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
-      if (healthMetrics.length || lifestyleEvents.length) {
-        navSummary =
-          "\n\nLIBRARY SNAPSHOT:\n" + JSON.stringify(summarizeMarketplaceData(healthMetrics, lifestyleEvents));
-      }
-      systemPrompt = STORE_CLERK_PERSONA + navSummary;
+      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents);
+      const hasAnyData =
+        (trueTotals.health_records ?? 0) > 0 ||
+        (trueTotals.lifestyle_records ?? 0) > 0 ||
+        healthMetrics.length > 0 ||
+        lifestyleEvents.length > 0;
+      const navSummary = hasAnyData
+        ? "\n\nTRUE_TOTALS (from database, authoritative):\n" +
+          JSON.stringify(trueTotals) +
+          "\n\nSAMPLE_ROWS (preview only, NOT representative of totals): " +
+          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle records shown.`
+        : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
+      systemPrompt = STORE_CLERK_PERSONA + navSummary + totalsGuidance;
     }
 
     // ── ACA file inspector: detect intent and inject signal-only context ──
