@@ -54,6 +54,147 @@ async function fetchOmniAggregates(
   }
 }
 
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function roundNullable(value: number | null, places: number): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
+
+function addMetric(
+  bucket: Record<string, { sum: number; count: number }>,
+  key: string,
+  value: unknown,
+) {
+  const parsed = numberOrNull(value);
+  if (parsed === null) return;
+  if (!bucket[key]) bucket[key] = { sum: 0, count: 0 };
+  bucket[key].sum += parsed;
+  bucket[key].count += 1;
+}
+
+function updateRange(range: { min: string | null; max: string | null }, value: unknown) {
+  if (typeof value !== "string" || value.length === 0) return;
+  if (!range.min || value < range.min) range.min = value;
+  if (!range.max || value > range.max) range.max = value;
+}
+
+async function fetchMarketplaceAggregates(supabase: ReturnType<typeof createClient>): Promise<OmniAggregates> {
+  try {
+    console.info("[BEGIN: MarketplaceAggregates] Calculating all-staged marketplace totals.");
+    const healthTotals: Record<string, { sum: number; count: number }> = {};
+    const lifestyleTotals: Record<string, { sum: number; count: number }> = {};
+    const healthRange = { min: null as string | null, max: null as string | null };
+    const lifestyleRange = { min: null as string | null, max: null as string | null };
+    const eventTypes = new Set<string>();
+    const eventCategories = new Set<string>();
+    let healthCount = 0;
+    let lifestyleCount = 0;
+
+    for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
+      const offset = page * MARKETPLACE_HASH_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("staged_health_data")
+        .select(
+          "id, steps_count, duration_seconds, active_energy_kcal, basal_energy_kcal, data_quality_score, heart_rate, resting_heart_rate, blood_oxygen_percentage, vo2_max, processed_at",
+        )
+        .order("id", { ascending: true })
+        .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
+      if (error) throw new Error(`Marketplace health aggregate scan failed: ${error.message}`);
+      for (const row of data ?? []) {
+        healthCount += 1;
+        addMetric(healthTotals, "steps", (row as any).steps_count);
+        addMetric(healthTotals, "duration_seconds", (row as any).duration_seconds);
+        addMetric(healthTotals, "active_energy_kcal", (row as any).active_energy_kcal);
+        addMetric(healthTotals, "basal_energy_kcal", (row as any).basal_energy_kcal);
+        addMetric(healthTotals, "quality", (row as any).data_quality_score);
+        addMetric(healthTotals, "heart_rate", (row as any).heart_rate);
+        addMetric(healthTotals, "resting_heart_rate", (row as any).resting_heart_rate);
+        addMetric(healthTotals, "blood_oxygen", (row as any).blood_oxygen_percentage);
+        addMetric(healthTotals, "vo2_max", (row as any).vo2_max);
+        updateRange(healthRange, (row as any).processed_at);
+      }
+      if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
+    }
+
+    for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
+      const offset = page * MARKETPLACE_HASH_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("staged_lifestyle_data")
+        .select("id, session_duration, data_quality_score, event_type, event_category, processed_at")
+        .order("id", { ascending: true })
+        .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
+      if (error) throw new Error(`Marketplace lifestyle aggregate scan failed: ${error.message}`);
+      for (const row of data ?? []) {
+        lifestyleCount += 1;
+        addMetric(lifestyleTotals, "session_duration", (row as any).session_duration);
+        addMetric(lifestyleTotals, "quality", (row as any).data_quality_score);
+        if ((row as any).event_type) eventTypes.add(String((row as any).event_type));
+        if ((row as any).event_category) eventCategories.add(String((row as any).event_category));
+        updateRange(lifestyleRange, (row as any).processed_at);
+      }
+      if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
+    }
+
+    const avg = (bucket: Record<string, { sum: number; count: number }>, key: string, places: number) => {
+      const metric = bucket[key];
+      return metric?.count ? roundNullable(metric.sum / metric.count, places) : null;
+    };
+    const sum = (bucket: Record<string, { sum: number; count: number }>, key: string) => bucket[key]?.sum ?? 0;
+
+    console.info(
+      `[END: MarketplaceAggregates] health.count=${healthCount} lifestyle.count=${lifestyleCount}`,
+    );
+
+    return {
+      health: {
+        count: healthCount,
+        totals: {
+          steps: sum(healthTotals, "steps"),
+          duration_seconds: sum(healthTotals, "duration_seconds"),
+          active_energy_kcal: sum(healthTotals, "active_energy_kcal"),
+          basal_energy_kcal: sum(healthTotals, "basal_energy_kcal"),
+          avg_quality: avg(healthTotals, "quality", 4),
+          avg_heart_rate: avg(healthTotals, "heart_rate", 2),
+          avg_resting_hr: avg(healthTotals, "resting_heart_rate", 2),
+          max_heart_rate: null,
+          min_heart_rate: null,
+          avg_blood_oxygen: avg(healthTotals, "blood_oxygen", 2),
+          avg_vo2_max: avg(healthTotals, "vo2_max", 2),
+        },
+        range: {
+          min_processed_at: healthRange.min,
+          max_processed_at: healthRange.max,
+        },
+      },
+      lifestyle: {
+        count: lifestyleCount,
+        totals: {
+          session_duration: sum(lifestyleTotals, "session_duration"),
+          avg_quality: avg(lifestyleTotals, "quality", 4),
+          event_types: eventTypes.size,
+          event_categories: eventCategories.size,
+        },
+        range: {
+          min_processed_at: lifestyleRange.min,
+          max_processed_at: lifestyleRange.max,
+        },
+      },
+    };
+  } catch (err) {
+    console.error("[CRITICAL FAILURE: MarketplaceAggregates] Exception:", err);
+    return { health: null, lifestyle: null };
+  }
+}
+
 // Pulls every relevant staged record for a user across BOTH staging tables.
 async function fetchOmniRecords(
   supabase: ReturnType<typeof createClient>,
