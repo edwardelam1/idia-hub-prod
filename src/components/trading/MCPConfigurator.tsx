@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,9 @@ const TT = ({
   side = "top",
   children,
 }: {
-  tip: React.ReactNode;
+  tip: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
-  children: React.ReactNode;
+  children: ReactNode;
 }) => (
   <Tooltip>
     <TooltipTrigger asChild>
