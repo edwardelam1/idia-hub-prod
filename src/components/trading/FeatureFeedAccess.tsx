@@ -99,6 +99,7 @@ export default function FeatureFeedAccess() {
   };
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-6">
         <Database className="w-6 h-6 text-primary" />
@@ -108,6 +109,21 @@ export default function FeatureFeedAccess() {
         </div>
       </div>
 
+      {loading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[0,1,2,3].map(i => <Skeleton key={i} className="h-56 w-full" />)}
+        </div>
+      ) : error ? (
+        <Card><CardContent className="p-6 text-sm text-destructive">
+          Failed to load feeds: {error}
+        </CardContent></Card>
+      ) : feeds.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-muted-foreground">
+          <Radio className="w-8 h-8 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">No vault feeds published yet.</p>
+          <p className="text-xs mt-1">Feeds appear here once the Synapse engine registers them in <code>feature_feeds</code>.</p>
+        </CardContent></Card>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {feeds.map(feed => {
           const isActive = activeFeeds.has(feed.topic);
@@ -119,24 +135,56 @@ export default function FeatureFeedAccess() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-lg">
-                      <Radio className={`w-5 h-5 ${isActive ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={0} className="inline-flex">
+                            <Radio className={`w-5 h-5 ${isActive ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isActive ? 'Live: subscribed to Supabase Realtime channel' : 'Idle: not subscribed to this vault channel'}
+                        </TooltipContent>
+                      </Tooltip>
                       {feed.name}
                     </CardTitle>
                     <CardDescription className="mt-1">{feed.description}</CardDescription>
                   </div>
-                  <Button 
-                    variant={isActive ? "destructive" : "default"} 
-                    size="sm"
-                    onClick={() => toggleFeed(feed.topic)}
-                  >
-                    {isActive ? <><Square className="w-4 h-4 mr-2 fill-current" /> Stop</> : <><Play className="w-4 h-4 mr-2 fill-current" /> Connect</>}
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={isActive ? "destructive" : "default"}
+                        size="sm"
+                        onClick={() => toggleFeed(feed.topic)}
+                      >
+                        {isActive ? <><Square className="w-4 h-4 mr-2 fill-current" /> Stop</> : <><Play className="w-4 h-4 mr-2 fill-current" /> Connect</>}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isActive
+                        ? 'Disconnect from this realtime channel'
+                        : 'Open a Supabase Realtime broadcast subscription to this vault topic. Fires a Synapse consumption receipt on connect.'}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4 mb-4 text-sm">
-                  <Badge variant="outline" className="bg-muted">Topic: <code className="ml-1 text-primary">{feed.topic}</code></Badge>
-                  <span className="text-muted-foreground flex items-center gap-1"><Activity className="w-3 h-3"/> {feed.latency} latency</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0}>
+                        <Badge variant="outline" className="bg-muted">Topic: <code className="ml-1 text-primary">{feed.topic}</code></Badge>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Realtime broadcast channel name published by the Synapse engine.</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0} className="text-muted-foreground flex items-center gap-1">
+                        <Activity className="w-3 h-3"/> {feed.latency ?? '—'} latency
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Publisher's declared end-to-end delivery latency for this feed.</TooltipContent>
+                  </Tooltip>
                 </div>
                 
                 <div className="bg-slate-950 rounded-lg p-3 h-[140px] overflow-y-auto font-mono text-xs">
@@ -163,6 +211,8 @@ export default function FeatureFeedAccess() {
           );
         })}
       </div>
+      )}
     </div>
+    </TooltipProvider>
   );
 }
