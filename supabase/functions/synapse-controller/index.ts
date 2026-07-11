@@ -25,24 +25,52 @@ async function sha256(input: string) {
     .join("");
 }
 
-async function resolveContributors(adminClient: any, ids: string[]) {
+async function resolveAcaLineage(adminClient: any, ids: string[]) {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const validUuids = ids.filter((id) => uuidRegex.test(id));
   const stringHashes = ids.filter((id) => !uuidRegex.test(id));
 
   let records: any[] = [];
   if (validUuids.length > 0) {
-    const { data } = await adminClient.from("user_aca_records").select("platform_guid").in("id", validUuids);
+    const { data, error } = await adminClient
+      .from("user_aca_records")
+      .select("id, aca_hash_key, platform_guid")
+      .in("id", validUuids);
+    if (error) throw new Error(`ACA lineage lookup failed: ${error.message}`);
     if (data) records.push(...data);
   }
   if (stringHashes.length > 0) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
       .from("user_aca_records")
-      .select("platform_guid")
+      .select("id, aca_hash_key, platform_guid")
       .in("aca_hash_key", stringHashes);
+    if (error) throw new Error(`ACA hash lookup failed: ${error.message}`);
     if (data) records.push(...data);
   }
-  return Array.from(new Set(records.map((r) => r.platform_guid))).map((id) => ({ user_id: id }));
+
+  const uniqueRecords = Array.from(
+    new Map(records.map((record) => [record.aca_hash_key, record])).values(),
+  ).filter((record) => typeof record.aca_hash_key === "string" && record.aca_hash_key.length > 0);
+
+  if (uniqueRecords.length === 0) {
+    throw new Error("No valid auditable lineage found for the provided ACA references");
+  }
+
+  const lineageHashes = uniqueRecords.map((record) => record.aca_hash_key);
+  const { data: stagedRows, error: stagedError } = await adminClient
+    .from("staged_health_data")
+    .select("aca_hash_key")
+    .in("aca_hash_key", lineageHashes);
+  if (stagedError) throw new Error(`ACA vault verification failed: ${stagedError.message}`);
+
+  const stagedHashes = new Set((stagedRows ?? []).map((row: { aca_hash_key: string }) => row.aca_hash_key));
+  const verifiedHashes = lineageHashes.filter((hash) => stagedHashes.has(hash));
+  if (verifiedHashes.length === 0) {
+    throw new Error("PROTOCOL_INTEGRITY_VIOLATION: Provided ACA references do not map to verified vault data");
+  }
+
+  const contributingUsers = Array.from(new Set(uniqueRecords.map((r) => r.platform_guid))).map((id) => ({ user_id: id }));
+  return { contributingUsers, verifiedHashes };
 }
 
 async function calculateDynamicFee(
@@ -74,8 +102,8 @@ async function calculateDynamicFee(
     const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
 
     return { feeCR, sectorLabel };
-  } catch (e) {
-    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e.message}`);
+  } catch (e: any) {
+    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e?.message ?? String(e)}`);
     return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
   }
 }
@@ -139,11 +167,11 @@ Deno.serve(async (req) => {
     const fiatEquivalentValue = feeCR * 0.75;
 
     // 2. DATA OWNER RESOLUTION
-    const uniqueContributors = await resolveContributors(adminClient, aca_record_ids);
+    const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
 
     // 3. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
-    const sortedIds = [...aca_record_ids].sort();
+    const sortedIds = [...verifiedHashes].sort();
     const batchChecksum = await sha256(sortedIds.join("|"));
     const liabilityTokenHash = await sha256(`${client_id}|${timestamp}|${batchChecksum}`);
     const digiRampAnchorId = "0x" + (await sha256(`${liabilityTokenHash}|${timestamp}`));
@@ -172,7 +200,7 @@ Deno.serve(async (req) => {
           client_id: client_id,
           liability_token_hash: liabilityTokenHash,
           batch_checksum: batchChecksum,
-          aca_record_references: aca_record_ids,
+          aca_record_references: verifiedHashes,
           country_of_origin,
           digiramp_anchor_id: digiRampAnchorId,
           egress_type: intent_type,
@@ -186,7 +214,7 @@ Deno.serve(async (req) => {
     if (egressResult.error) throw new Error(`Egress failure: ${egressResult.error.message}`);
 
     // Update global consumedReceipt
-    consumedReceipt = aca_record_ids;
+    consumedReceipt = verifiedHashes;
 
     // 5. POSTGRES FIREWALL HANDOFF — insert into settlement_queue and exit.
     // Postgres fires the database webhook to idia-circular-settlement, fully
@@ -196,7 +224,7 @@ Deno.serve(async (req) => {
       total_fiat_amount: fiatEquivalentValue,
       buyer_id: user_id,
       payment_reference: referenceId,
-      contributing_users: uniqueContributors,
+          contributing_users: contributingUsers,
       location_string: normalizedLocationString,
       intent_metadata: { intent_type, sector: sectorLabel },
     };
