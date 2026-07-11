@@ -1,22 +1,43 @@
-# Add hover legend to Live MCP Telemetry status
+# Fix MCPLiveTelemetry tooltip + add tooltips across the MCP tab
 
-## Problem
+## Why the current tooltip doesn't fire
 
-The **Live MCP Telemetry** card (Trading desk) shows a `Radio` icon + an `Idle` / `Streaming` badge, but nothing explains what those states mean or why the stream is disconnected. When idle (no API key stored, or SSE reconnecting), the UI just sits there with no cue.
+`TooltipTrigger asChild` uses Radix `Slot`, which requires the child to forward its `ref`. The shadcn `Badge` in this repo is a plain `<div>` with no `forwardRef`, so Radix silently can't attach the trigger. Same issue on the `<span>` inside the events row when it's the only child. Fix: wrap the trigger child in a `<span tabIndex={0}>` (keyboard-focusable, forwards ref natively) instead of `asChild`-ing straight onto `Badge`/`span`.
 
-## Fix (presentation-only, `src/components/trading/MCPLiveTelemetry.tsx`)
+## Scope — the whole "MCP" tab
 
-Wrap the status badge + `Radio` icon in a shadcn `Tooltip` (already available via `@/components/ui/tooltip`) whose content renders a small legend:
+Both cards live in `TradingDeskDashboard.tsx` → tab `mcp`:
+- `src/components/trading/MCPConfigurator.tsx`
+- `src/components/trading/MCPLiveTelemetry.tsx`
 
-- **Streaming (green)** — SSE channel open to `mcp-telemetry-stream`; relay events appear below in real time.
-- **Idle (grey)** — no live channel. Common causes:
-  - No trading-desk API key entered below.
-  - Key rejected by the relay (rotate or re-issue in API Key Management).
-  - Transient network/backoff — reconnect retries automatically.
+Hoist a single `<TooltipProvider delayDuration={150}>` to wrap both cards in `TradingDeskDashboard.tsx` (tab panel level), remove the per-card providers, and add tooltips using the reliable `<span>` wrapper pattern.
 
-Also swap the raw `title=""` on the trace-ID span for the same tooltip primitive so trace IDs get a consistent hover treatment.
+## Tooltips to add
+
+### MCPLiveTelemetry
+- **Status badge** (Streaming / Idle) — legend already drafted; re-wrap trigger in a `<span tabIndex={0}>` so it actually fires.
+- **`Radio` icon** — same legend, so users hovering the icon get it too.
+- **Trace-ID cell** — full trace ID (replaces broken `title=""`).
+- **API key input label** — "Stored in browser localStorage only. Passed as `?apiKey=` query param because EventSource can't send Authorization headers."
+
+### MCPConfigurator
+- **Manifest URL box** — "Canonical MCP Streamable-HTTP endpoint. Paste into any MCP client (Claude Desktop, Ollama, Cursor) that supports remote HTTP transport."
+- **Copy Manifest button** — "Copies the enabled-tools manifest JSON to clipboard."
+- **Download mcp.json button** — "Downloads a local mcp.json file with only your enabled tools."
+- **Local bridge URL input** — "URL of a locally running `idia-mcp-bridge.js` process. Default `http://127.0.0.1:47615/rpc`."
+- **Save & probe button** — "Persists the bridge URL and sends a `tools/list` RPC to confirm the local process answers."
+- **Bridge reachable / unreachable badges** — brief explanation of each state.
+- **Tool row — Public Access badge** — "Callable without a premium plan. Uses the anon RLS surface."
+- **Tool row — Premium Gated badge** — "Requires an Ed25519 signed-challenge handshake and an active premium subscription."
+- **Tool row — Endpoint code** — full path (`title` currently absent).
+- **View schema button** — "Open the JSON-Schema drawer for this tool's input contract."
+- **Enabled switch** — "Toggle whether this tool is advertised in your manifest to connected MCP clients."
+- **Claude Desktop / Ollama config copy buttons** — "Copies a ready-to-paste `mcpServers` block."
+- **Download `idia-mcp-bridge.js` button** — "Zero-dep Node script. Run with `node idia-mcp-bridge.js` next to your MCP client."
+- **Liability Shield badge** — "Every tools/call is sanitized, billed, and provenance-anchored server-side."
+- **Manifest URL / JSON-RPC Relay URL code blocks** — repeat the endpoint text for copy-paste clarity.
 
 ## Out of scope
 
-- No changes to `useMcpTelemetryStream`, the edge function, or reconnection logic.
-- No new state exposed from the hook (the legend is static; it doesn't try to diagnose *which* cause is active).
+- No new state, no hook changes, no logic changes to the bridge or the SSE hook.
+- No design-token changes; use existing shadcn `Tooltip` primitives.
