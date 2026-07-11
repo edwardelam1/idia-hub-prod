@@ -41,11 +41,27 @@ const UniversalPurchaseScreen = () => {
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isAuthorizingRelayer, setIsAuthorizingRelayer] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
+  const [linkedWallet, setLinkedWallet] = useState<string | null>(null);
 
   const plan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
   const availableUSDC = walletBalance?.usdc_balance ?? 0;
   const shortfall = Math.max(0, plan.price - availableUSDC);
   const hasEnoughBalance = shortfall <= 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (!cancelled) setLinkedWallet((data?.wallet_address as string | null) ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!isSuccessReturn) return;
@@ -97,6 +113,7 @@ const UniversalPurchaseScreen = () => {
         if (error) console.warn("[UniversalPurchaseScreen] persist wallet failed:", error.message);
       }
       await refreshWalletBalance();
+      setLinkedWallet(connected);
       toast.success("Wallet connected");
     } catch (err: any) {
       toast.error(err?.message || "MetaMask onboarding interrupted");
@@ -118,6 +135,7 @@ const UniversalPurchaseScreen = () => {
       if (!owner) throw new Error("No wallet linked. Connect MetaMask first.");
       const r = await ensureUsdcApproval({ owner });
       if (!r.ok) throw new Error(r.reason || "Approval failed");
+      // narrow: r is now { ok: true; hash: string }
       setNeedsApproval(false);
       toast.success("Relayer authorized. Retry your purchase.");
     } catch (err: any) {
@@ -400,7 +418,7 @@ const UniversalPurchaseScreen = () => {
                 <span className="text-muted-foreground">Required</span>
                 <span className="text-foreground font-mono">${plan.price.toLocaleString()}</span>
               </div>
-              {!walletBalance?.wallet_address && (
+              {!linkedWallet && (
                 <Button
                   className="w-full gap-2"
                   variant="outline"
@@ -411,7 +429,7 @@ const UniversalPurchaseScreen = () => {
                   Connect MetaMask
                 </Button>
               )}
-              {walletBalance?.wallet_address && !hasEnoughBalance && (
+              {linkedWallet && !hasEnoughBalance && (
                 <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
@@ -475,7 +493,7 @@ const UniversalPurchaseScreen = () => {
         onClick={handlePurchase}
         disabled={
           isProcessing ||
-          (paymentRail === "usdc" && (!walletBalance?.wallet_address || !hasEnoughBalance))
+          (paymentRail === "usdc" && (!linkedWallet || !hasEnoughBalance))
         }
       >
         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
