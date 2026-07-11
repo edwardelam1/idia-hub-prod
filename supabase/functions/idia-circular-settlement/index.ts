@@ -288,6 +288,35 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
       console.error(`[WARNING: QueueStamp] Could not stamp queue row for ${ingestionReference}: ${stampErr?.message}`);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // RELAYER SINGLE-WRITER MUTEX
+    // Serializes concurrent settlement invocations so they cannot race on
+    // the relayer wallet's pending nonce. Row-based lock is REST-safe
+    // across stateless Edge invocations; auto-expires after 3 min if a
+    // run dies mid-broadcast.
+    // ═══════════════════════════════════════════════════════════════════
+    currentStep = "ACQUIRING_RELAYER_LOCK";
+    let lockAcquired = false;
+    console.info(`[LOCK] Attempting single-writer lock for relayer... runId=${runCorrelationId}`);
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const { data: acquired, error: lockErr } = await supabase.rpc("acquire_relayer_lock", {
+        run_id: runCorrelationId,
+        timeout_seconds: 180,
+      });
+      if (lockErr) console.warn(`[LOCK WARN] ${lockErr.message}`);
+      if (acquired) {
+        lockAcquired = true;
+        console.info(`✅ [LOCK] Acquired. Entering exclusive sequencer mode. runId=${runCorrelationId}`);
+        break;
+      }
+      console.info(`⏳ [LOCK] Relayer busy. Yielding 2000ms... runId=${runCorrelationId}`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!lockAcquired) {
+      throw new Error("Timeout waiting for relayer lock. Another settlement is occupying the sequencer.");
+    }
+
+    try {
     currentStep = "CONFIGURING_BLOCKCHAIN";
     const rawKey = Deno.env.get("RELAYER_PRIVATE_KEY");
     if (!rawKey) throw new Error("RELAYER_PRIVATE_KEY missing.");
@@ -650,6 +679,15 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
       queueFinalStatus = "partial";
     } else {
       queueFinalStatus = "completed";
+    }
+    } finally {
+      // 🚨 CRITICAL: Always release the relayer mutex, even on revert or throw.
+      console.info(`[LOCK] Releasing relayer lock. runId=${runCorrelationId}`);
+      try {
+        await supabase.rpc("release_relayer_lock", { run_id: runCorrelationId });
+      } catch (relErr: any) {
+        console.error(`[LOCK] Release failed (auto-expire will recover): ${relErr?.message ?? relErr}`);
+      }
     }
   } catch (error: any) {
     // Containment: never let an exception escape the background worker.
