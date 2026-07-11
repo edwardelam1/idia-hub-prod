@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Radio, Play, Square, Activity, Database } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface FeatureFeed {
   id: string;
@@ -19,6 +21,8 @@ interface FeatureFeed {
 
 export default function FeatureFeedAccess() {
   const [feeds, setFeeds] = useState<FeatureFeed[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeFeeds, setActiveFeeds] = useState<Set<string>>(new Set());
   const [liveData, setLiveData] = useState<Record<string, any[]>>({});
   const { toast } = useToast();
@@ -29,8 +33,15 @@ export default function FeatureFeedAccess() {
   }, []);
 
   const fetchFeeds = async () => {
-    const { data } = await supabase.from('feature_feeds').select('*').order('name');
-    if (data) setFeeds(data);
+    setLoading(true);
+    const { data, error } = await supabase.from('feature_feeds').select('*').order('name');
+    if (error) {
+      setError(error.message);
+    } else {
+      setFeeds(data ?? []);
+      setError(null);
+    }
+    setLoading(false);
   };
 
   const toggleFeed = async (topic: string) => {
