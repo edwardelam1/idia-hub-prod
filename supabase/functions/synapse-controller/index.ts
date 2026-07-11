@@ -63,7 +63,7 @@ async function resolveAcaLineage(adminClient: any, ids: string[]) {
     .in("aca_hash_key", lineageHashes);
   if (stagedError) throw new Error(`ACA vault verification failed: ${stagedError.message}`);
 
-  const stagedHashes = new Set((stagedRows ?? []).map((row) => row.aca_hash_key));
+  const stagedHashes = new Set((stagedRows ?? []).map((row: { aca_hash_key: string }) => row.aca_hash_key));
   const verifiedHashes = lineageHashes.filter((hash) => stagedHashes.has(hash));
   if (verifiedHashes.length === 0) {
     throw new Error("PROTOCOL_INTEGRITY_VIOLATION: Provided ACA references do not map to verified vault data");
@@ -102,8 +102,8 @@ async function calculateDynamicFee(
     const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
 
     return { feeCR, sectorLabel };
-  } catch (e) {
-    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e.message}`);
+  } catch (e: any) {
+    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e?.message ?? String(e)}`);
     return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
   }
 }
