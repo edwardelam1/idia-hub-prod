@@ -412,7 +412,11 @@ export function useMcpToolSchemas() {
 
   const manifestUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
-    return `${window.location.origin}/.well-known/mcp.json`;
+    // Canonical MCP Streamable-HTTP endpoint served by the SDK-generated
+    // Supabase edge function (see supabase/functions/mcp/index.ts). The
+    // previous `/.well-known/mcp.json` path was never served (404) and broke
+    // any Claude / Ollama client that consumed the copied snippets.
+    return "https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/mcp";
   }, []);
 
   const exportManifest = useCallback((): string => {
