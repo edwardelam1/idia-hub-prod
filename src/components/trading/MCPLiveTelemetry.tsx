@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Activity, Radio } from "lucide-react";
 import { useMcpTelemetryStream } from "@/hooks/useMcpTelemetryStream";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const STORAGE_KEY = "mcp.telemetry.apiKey";
 
@@ -27,6 +28,7 @@ export const MCPLiveTelemetry = () => {
   };
 
   return (
+    <TooltipProvider delayDuration={150}>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -39,9 +41,30 @@ export const MCPLiveTelemetry = () => {
               </CardDescription>
             </div>
           </div>
-          <Badge variant={connected ? "default" : "outline"}>
-            {connected ? "Streaming" : "Idle"}
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant={connected ? "default" : "outline"} className="cursor-help">
+                {connected ? "Streaming" : "Idle"}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs text-xs leading-relaxed">
+              <div className="space-y-2">
+                <div>
+                  <span className="font-semibold text-emerald-500">Streaming</span> — SSE channel
+                  open to <code className="font-mono">mcp-telemetry-stream</code>; relay events
+                  appear below in real time.
+                </div>
+                <div>
+                  <span className="font-semibold">Idle</span> — no live channel. Common causes:
+                  <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                    <li>No trading-desk API key entered below.</li>
+                    <li>Key rejected by the relay — rotate or re-issue it in API Key Management.</li>
+                    <li>Transient network / backoff — reconnect retries automatically.</li>
+                  </ul>
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -75,15 +98,23 @@ export const MCPLiveTelemetry = () => {
                 </Badge>
                 <span className="font-mono truncate flex-1">{ev.tool_name}</span>
                 <span className="text-muted-foreground tabular-nums">{ev.duration_ms ?? 0}ms</span>
-                <span className="text-muted-foreground font-mono text-[10px]" title={ev.trace_id ?? ""}>
-                  {ev.trace_id ? ev.trace_id.slice(0, 8) : "—"}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-muted-foreground font-mono text-[10px] cursor-help">
+                      {ev.trace_id ? ev.trace_id.slice(0, 8) : "—"}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="font-mono text-[10px]">
+                    {ev.trace_id || "no trace id"}
+                  </TooltipContent>
+                </Tooltip>
               </div>
             ))}
           </div>
         </div>
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 };
 
