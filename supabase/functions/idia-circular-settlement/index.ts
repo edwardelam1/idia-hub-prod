@@ -680,6 +680,15 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     } else {
       queueFinalStatus = "completed";
     }
+    } finally {
+      // 🚨 CRITICAL: Always release the relayer mutex, even on revert or throw.
+      console.info(`[LOCK] Releasing relayer lock. runId=${runCorrelationId}`);
+      try {
+        await supabase.rpc("release_relayer_lock", { run_id: runCorrelationId });
+      } catch (relErr: any) {
+        console.error(`[LOCK] Release failed (auto-expire will recover): ${relErr?.message ?? relErr}`);
+      }
+    }
   } catch (error: any) {
     // Containment: never let an exception escape the background worker.
     console.error(`🚨 [FATAL STALL: ${currentStep}] runId=${runCorrelationId} :: ${error?.message ?? String(error)}`);
