@@ -43,9 +43,11 @@ export const MCPLiveTelemetry = () => {
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant={connected ? "default" : "outline"} className="cursor-help">
-                {connected ? "Streaming" : "Idle"}
-              </Badge>
+              <span tabIndex={0} className="cursor-help outline-none">
+                <Badge variant={connected ? "default" : "outline"}>
+                  {connected ? "Streaming" : "Idle"}
+                </Badge>
+              </span>
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-xs text-xs leading-relaxed">
               <div className="space-y-2">
@@ -100,7 +102,10 @@ export const MCPLiveTelemetry = () => {
                 <span className="text-muted-foreground tabular-nums">{ev.duration_ms ?? 0}ms</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-muted-foreground font-mono text-[10px] cursor-help">
+                    <span
+                      tabIndex={0}
+                      className="text-muted-foreground font-mono text-[10px] cursor-help outline-none"
+                    >
                       {ev.trace_id ? ev.trace_id.slice(0, 8) : "—"}
                     </span>
                   </TooltipTrigger>
