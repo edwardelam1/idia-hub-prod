@@ -134,8 +134,9 @@ const UniversalPurchaseScreen = () => {
       const owner = profile?.wallet_address as string | undefined;
       if (!owner) throw new Error("No wallet linked. Connect MetaMask first.");
       const r = await ensureUsdcApproval({ owner });
-      if (!r.ok) throw new Error(r.reason || "Approval failed");
-      // narrow: r is now { ok: true; hash: string }
+      if (!r.ok) {
+        throw new Error(("reason" in r && r.reason) || "Approval failed");
+      }
       setNeedsApproval(false);
       toast.success("Relayer authorized. Retry your purchase.");
     } catch (err: any) {
