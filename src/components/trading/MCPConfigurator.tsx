@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,31 @@ import { useMcpToolSchemas, type McpToolSchema } from "@/hooks/useMcpToolSchemas
 import { getBridgeUrl, setBridgeUrl, pingBridge } from "@/lib/mcpBridgeSocket";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Small helper: wraps any child in a keyboard-focusable span so Radix's
+// asChild Slot has something with a forwardable ref (shadcn Badge/Button
+// composition sometimes drops the ref, silently disabling the tooltip).
+const TT = ({
+  tip,
+  side = "top",
+  children,
+}: {
+  tip: ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+  children: ReactNode;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span tabIndex={0} className="inline-flex cursor-help outline-none">
+        {children}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side={side} className="max-w-xs text-xs leading-relaxed">
+      {tip}
+    </TooltipContent>
+  </Tooltip>
+);
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
@@ -126,6 +151,7 @@ export const MCPConfigurator = () => {
   };
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="space-y-6">
       <Card>
         <CardHeader>
@@ -139,17 +165,26 @@ export const MCPConfigurator = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground truncate">
-            {manifestUrl || "Manifest URL pending"}
-          </div>
-          <Button variant="outline" size="sm" onClick={handleCopyManifest}>
-            <Copy className="h-4 w-4 mr-2" />
-            Copy Manifest
-          </Button>
-          <Button size="sm" onClick={handleDownload}>
-            <Download className="h-4 w-4 mr-2" />
-            Download mcp.json
-          </Button>
+          <TT
+            side="bottom"
+            tip="Canonical MCP Streamable-HTTP endpoint. Paste into any MCP client (Claude Desktop, Ollama, Cursor) that supports remote HTTP transport."
+          >
+            <div className="flex-1 min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground truncate">
+              {manifestUrl || "Manifest URL pending"}
+            </div>
+          </TT>
+          <TT side="bottom" tip="Copies the enabled-tools manifest JSON to your clipboard.">
+            <Button variant="outline" size="sm" onClick={handleCopyManifest}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Manifest
+            </Button>
+          </TT>
+          <TT side="bottom" tip="Downloads a local mcp.json file containing only your currently enabled tools.">
+            <Button size="sm" onClick={handleDownload}>
+              <Download className="h-4 w-4 mr-2" />
+              Download mcp.json
+            </Button>
+          </TT>
         </CardContent>
       </Card>
 
@@ -163,7 +198,12 @@ export const MCPConfigurator = () => {
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="bridge-url">Local bridge URL</Label>
+            <TT
+              side="right"
+              tip="URL of a locally running idia-mcp-bridge.js process. Default http://127.0.0.1:47615/rpc."
+            >
+              <Label htmlFor="bridge-url">Local bridge URL</Label>
+            </TT>
             <Input
               id="bridge-url"
               value={bridgeUrl}
@@ -172,16 +212,22 @@ export const MCPConfigurator = () => {
             />
           </div>
           <div className="md:col-span-2 flex items-center gap-3">
-            <Button onClick={() => void handleSaveBridgeUrl()}>Save & probe</Button>
+            <TT tip="Persists the bridge URL to localStorage and sends a tools/list JSON-RPC to confirm the local process answers.">
+              <Button onClick={() => void handleSaveBridgeUrl()}>Save & probe</Button>
+            </TT>
             {pingState === "ok" && (
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
-                Bridge reachable
-              </Badge>
+              <TT tip="tools/list succeeded — the local bridge is running and responding.">
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                  Bridge reachable
+                </Badge>
+              </TT>
             )}
             {pingState === "fail" && (
-              <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30">
-                Bridge unreachable
-              </Badge>
+              <TT tip="No response from the bridge URL. Start idia-mcp-bridge.js locally or verify the port.">
+                <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30">
+                  Bridge unreachable
+                </Badge>
+              </TT>
             )}
           </div>
         </CardContent>
@@ -215,32 +261,42 @@ export const MCPConfigurator = () => {
                   </TableCell>
                   <TableCell>
                     {tool.scope === "public" ? (
-                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                        <Globe className="h-3 w-3 mr-1" />
-                        Public Access
-                      </Badge>
+                      <TT tip="Callable without a premium plan. Runs against the anon RLS surface of the edge function.">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                          <Globe className="h-3 w-3 mr-1" />
+                          Public Access
+                        </Badge>
+                      </TT>
                     ) : (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                        <ShieldCheck className="h-3 w-3 mr-1" />
-                        Premium Gated
-                      </Badge>
+                      <TT tip="Requires an Ed25519 signed-challenge handshake and an active premium subscription.">
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                          <ShieldCheck className="h-3 w-3 mr-1" />
+                          Premium Gated
+                        </Badge>
+                      </TT>
                     )}
                   </TableCell>
                   <TableCell>
-                    <code className="text-xs text-muted-foreground">{tool.endpoint}</code>
+                    <TT tip={tool.endpoint}>
+                      <code className="text-xs text-muted-foreground">{tool.endpoint}</code>
+                    </TT>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => setDrawerTool(tool)}>
-                      <Code2 className="h-4 w-4 mr-1" />
-                      View
-                    </Button>
+                    <TT tip="Open the JSON-Schema drawer showing this tool's input contract.">
+                      <Button variant="ghost" size="sm" onClick={() => setDrawerTool(tool)}>
+                        <Code2 className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                    </TT>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Switch
-                      checked={tool.enabled}
-                      onCheckedChange={(v) => toggleTool(tool.name, v)}
-                      aria-label={`Toggle ${tool.name}`}
-                    />
+                    <TT tip="Toggle whether this tool is advertised in your manifest to connected MCP clients.">
+                      <Switch
+                        checked={tool.enabled}
+                        onCheckedChange={(v) => toggleTool(tool.name, v)}
+                        aria-label={`Toggle ${tool.name}`}
+                      />
+                    </TT>
                   </TableCell>
                 </TableRow>
               ))}
@@ -271,16 +327,18 @@ export const MCPConfigurator = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold">Claude Desktop</h4>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  navigator.clipboard.writeText(claudeSnippet);
-                  toast.success("Claude config copied");
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
+              <TT tip="Copy this claude_desktop_config.json mcpServers block to your clipboard.">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(claudeSnippet);
+                    toast.success("Claude config copied");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </TT>
             </div>
             <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
               {claudeSnippet}
@@ -289,16 +347,18 @@ export const MCPConfigurator = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold">Ollama</h4>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  navigator.clipboard.writeText(ollamaSnippet);
-                  toast.success("Ollama config copied");
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
+              <TT tip="Copy this ~/.ollama/mcp.json entry to your clipboard.">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(ollamaSnippet);
+                    toast.success("Ollama config copied");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </TT>
             </div>
             <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
               {ollamaSnippet}
@@ -322,42 +382,52 @@ export const MCPConfigurator = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={handleDownloadBridge}>
-              <Download className="h-4 w-4 mr-2" />
-              Download idia-mcp-bridge.js
-            </Button>
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-              <ShieldCheck className="h-3 w-3 mr-1" />
-              Liability Shield enforced
-            </Badge>
+            <TT tip="Zero-dependency Node script. Run with `node idia-mcp-bridge.js` next to your MCP client.">
+              <Button size="sm" onClick={handleDownloadBridge}>
+                <Download className="h-4 w-4 mr-2" />
+                Download idia-mcp-bridge.js
+              </Button>
+            </TT>
+            <TT tip="Every tools/call is sanitized, billed, and provenance-anchored server-side before reaching downstream edge functions.">
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <ShieldCheck className="h-3 w-3 mr-1" />
+                Liability Shield enforced
+              </Badge>
+            </TT>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 text-xs">
             <div className="space-y-1">
               <div className="font-semibold text-muted-foreground">Manifest URL</div>
-              <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">
-                {remoteManifestUrl}
-              </code>
+              <TT tip="Per-user manifest served by the mcp-manifest edge function. The bridge polls this on startup to learn which tools you have enabled.">
+                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">
+                  {remoteManifestUrl}
+                </code>
+              </TT>
             </div>
             <div className="space-y-1">
               <div className="font-semibold text-muted-foreground">JSON-RPC Relay URL</div>
-              <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
+              <TT tip="The bridge forwards every tools/call JSON-RPC envelope to this endpoint; the relay applies auth, sanitization, and billing before dispatching downstream.">
+                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
+              </TT>
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold">Claude Desktop config (bridge mode)</h4>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  navigator.clipboard.writeText(bridgeConfigSnippet);
-                  toast.success("Bridge config copied");
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
+              <TT tip="Copy the stdio-bridge mcpServers block to your clipboard.">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(bridgeConfigSnippet);
+                    toast.success("Bridge config copied");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </TT>
             </div>
             <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
               {bridgeConfigSnippet}
@@ -392,6 +462,7 @@ export const MCPConfigurator = () => {
         </SheetContent>
       </Sheet>
     </div>
+    </TooltipProvider>
   );
 };
 
