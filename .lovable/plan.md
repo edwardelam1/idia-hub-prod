@@ -1,22 +1,32 @@
-## Fix: add `idia_royalty_yield` enum label + lowercase reconcile-ref string
+# Fix incorrect MCP manifest URL
 
-### Migration
-Extend the existing `public.idia_transaction_type` enum with a new label:
+## Problem
 
-```sql
-ALTER TYPE public.idia_transaction_type ADD VALUE IF NOT EXISTS 'idia_royalty_yield';
+The Trading → **MCP Server Configurator** card advertises the server's manifest URL as:
+
+```
+https://<host>/.well-known/mcp.json
 ```
 
-No table, RLS, or grant changes. `ADD VALUE` cannot run inside a transaction with other DDL that references the new value in the same statement — this migration only issues the ALTER TYPE and nothing else, so it's safe.
+That path is a **404** on every environment (preview, `idia-hub-prod.lovable.app`, and `hub.thebigidia.com`) — nothing serves it. It's a fabricated URL baked into `src/hooks/useMcpToolSchemas.ts` (line 415) and re-used by the Claude Desktop and Ollama config snippets in `src/components/trading/MCPConfigurator.tsx`. Any user copy-pasting those snippets ends up with a broken MCP client.
 
-### Code change
-`supabase/functions/settlement-reconcile-ref/index.ts` line 167:
-- `isUsdc ? "data_sale_payout" : "IDIA_ROYALTY_YIELD"` → `isUsdc ? "data_sale_payout" : "idia_royalty_yield"`
+The real, deployed MCP server for this app is the SDK-generated Supabase edge function:
 
-Deploy `settlement-reconcile-ref` after the migration lands.
+```
+https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/mcp
+```
 
-### Recovery
-Re-invoke `settlement-reconcile-ref` for each stuck `reference_id`. It re-reads Base RPC, sees on-chain IDIA transfers, and inserts ledger rows under the new lowercase enum. Idempotency `(blockchain_tx_hash, user_id, transaction_type)` prevents duplicates.
+(OAuth-protected, per `supabase/functions/mcp/index.ts` and `README.md`.) Per-user tool manifests are additionally served at `.../functions/v1/mcp-manifest?user_id=…` for the local bridge.
 
-### Out of scope
-No changes to `idia-circular-settlement` (already fixed and deployed), no repair-queue backfill SQL, no Phase 3 nonce logic.
+## Fix (UI/presentation only)
+
+1. **`src/hooks/useMcpToolSchemas.ts`** — replace the `manifestUrl` memo:
+   - Remove the `${window.location.origin}/.well-known/mcp.json` string.
+   - Return the canonical MCP endpoint `https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/mcp` (mirror the `SUPABASE_PROJECT_REF` constant already used in `MCPConfigurator.tsx`).
+2. **`src/components/trading/MCPConfigurator.tsx`** — no logic changes; the Claude/Ollama snippets (`claudeSnippet`, `ollamaSnippet`) already interpolate `manifestUrl`, so they'll auto-correct. The "Download mcp.json" button still exports a local file from `exportManifest()` — leave as-is.
+
+## Out of scope
+
+- No changes to `defineMcp`, tool files, or the edge function itself.
+- No new route/redirect for `/.well-known/mcp.json` — that path is not part of the MCP spec for this SDK and isn't needed.
+- No changes to the `mcp-manifest` endpoint or the bridge config snippet (those already use the correct `functions.supabase.co/mcp-manifest?user_id=…` URL).
