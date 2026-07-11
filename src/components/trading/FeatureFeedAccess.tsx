@@ -25,7 +25,6 @@ export default function FeatureFeedAccess() {
   const [activeFeeds, setActiveFeeds] = useState<Set<string>>(new Set());
   const [liveData, setLiveData] = useState<Record<string, any[]>>({});
   const { toast } = useToast();
-  const { refreshBalance } = useSynapseCredits();
 
   useEffect(() => {
     fetchFeeds();
