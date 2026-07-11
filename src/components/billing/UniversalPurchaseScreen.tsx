@@ -3,12 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard, ShoppingCart } from "lucide-react";
+import { ShieldCheck, ArrowLeft, CheckCircle2, Loader2, CreditCard, ShoppingCart, Wallet, CircleDollarSign, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useBillingData } from "@/hooks/useBillingData";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { unpackEdgeError } from "@/lib/unpack-edge-error";
 import { toast } from "sonner";
 
 const PLANS = [
@@ -25,20 +26,26 @@ const UniversalPurchaseScreen = () => {
   const isSuccessReturn = searchParams.get("success") === "true";
   
   const { user } = useAuth();
-  const { paymentMethods } = useBillingData();
+  const { balance: walletBalance, refreshBalance: refreshWalletBalance } = useWalletBalance();
   const queryClient = useQueryClient();
   const paymentId = searchParams.get("paymentId");
 
   const [selectedPlan, setSelectedPlan] = useState(preselectedPlan);
-  const [selectedPM, setSelectedPM] = useState("");
   const [step, setStep] = useState<"review" | "processing" | "success">(isSuccessReturn ? "success" : "review");
   const [isProcessing, setIsProcessing] = useState(false);
   const [verifyState, setVerifyState] = useState<"idle" | "verifying" | "verified" | "failed">(
     isSuccessReturn ? "verifying" : "idle",
   );
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [paymentRail, setPaymentRail] = useState<"usdc" | "wix">("usdc");
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const [isAuthorizingRelayer, setIsAuthorizingRelayer] = useState(false);
+  const [needsApproval, setNeedsApproval] = useState(false);
 
   const plan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
+  const availableUSDC = walletBalance?.usdc_balance ?? 0;
+  const shortfall = Math.max(0, plan.price - availableUSDC);
+  const hasEnoughBalance = shortfall <= 0;
 
   useEffect(() => {
     if (!isSuccessReturn) return;
@@ -75,18 +82,139 @@ const UniversalPurchaseScreen = () => {
     }
   };
 
+  const handleConnectMetaMask = async () => {
+    setIsConnectingWallet(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      const connected = accounts?.[0];
+      if (!connected) throw new Error("No accounts were returned from MetaMask.");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ wallet_address: connected })
+          .eq("id", session.user.id);
+        if (error) console.warn("[UniversalPurchaseScreen] persist wallet failed:", error.message);
+      }
+      await refreshWalletBalance();
+      toast.success("Wallet connected");
+    } catch (err: any) {
+      toast.error(err?.message || "MetaMask onboarding interrupted");
+    } finally {
+      setIsConnectingWallet(false);
+    }
+  };
+
+  const handleAuthorizeRelayer = async () => {
+    setIsAuthorizingRelayer(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("wallet_address")
+        .eq("id", session?.user?.id ?? "")
+        .maybeSingle();
+      const owner = profile?.wallet_address as string | undefined;
+      if (!owner) throw new Error("No wallet linked. Connect MetaMask first.");
+      const r = await ensureUsdcApproval({ owner });
+      if (!r.ok) throw new Error(r.reason || "Approval failed");
+      setNeedsApproval(false);
+      toast.success("Relayer authorized. Retry your purchase.");
+    } catch (err: any) {
+      toast.error(err?.message || "Authorization failed");
+    } finally {
+      setIsAuthorizingRelayer(false);
+    }
+  };
+
   const handlePurchase = async () => {
     console.log("[UniversalPurchaseScreen][handlePurchase] [START] Initiating checkout protocol.");
-    setStep("processing");
     const userId = user?.user_id;
 
     if (!userId) {
       console.error("[UniversalPurchaseScreen][handlePurchase] [AUTH_CHECK] [FAILED] User ID missing.");
       toast.error("Authentication error. Please log in again.");
-      setStep("review");
       return;
     }
 
+    // ============================================
+    // RAIL 1: INTERNAL USDC (MetaMask / on-chain)
+    // ============================================
+    if (paymentRail === "usdc") {
+      if (availableUSDC < plan.price) {
+        toast.error(`Insufficient USDC balance ($${availableUSDC.toFixed(2)}). Please fund your wallet.`);
+        return;
+      }
+      setIsProcessing(true);
+      setStep("processing");
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Session expired. Please sign in again.");
+
+        const { data: profile, error: profileErr } = await supabase
+          .from("profiles")
+          .select("wallet_address")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        if (profileErr) throw new Error(`Profile lookup failed: ${profileErr.message}`);
+        const buyerWallet = profile?.wallet_address as string | undefined;
+        if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
+          throw new Error("No IDIA Life wallet linked. Connect MetaMask first.");
+        }
+
+        const txReference = `PLAN-${plan.id.toUpperCase()}-${crypto.randomUUID().slice(0, 8)}`;
+        const payload = {
+          user_id: session.user.id,
+          usd_amount: Number(plan.price.toFixed(2)),
+          credit_amount: plan.credits,
+          payment_reference: txReference,
+          payment_method: "internal_usdc",
+          routing: "on-chain",
+          user_wallet: buyerWallet,
+          idempotency_key: txReference,
+          plan_id: plan.id,
+        };
+
+        console.log("[UniversalPurchaseScreen][USDC_FLOW] Invoking top-up-credits", payload);
+        const { data, error } = await supabase.functions.invoke("top-up-credits", {
+          body: payload,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+
+        if (error) {
+          const detail = await unpackEdgeError(error);
+          if (/APPROVAL_REQUIRED/i.test(detail)) {
+            setNeedsApproval(true);
+            setStep("review");
+            setIsProcessing(false);
+            toast.warning("Relayer authorization required.");
+            return;
+          }
+          throw new Error(detail);
+        }
+
+        console.log("[UniversalPurchaseScreen][USDC_FLOW] success hash=", (data as any)?.hash);
+        toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
+        await refreshWalletBalance();
+        queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
+        queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
+        setStep("success");
+        setVerifyState("verified");
+      } catch (err: any) {
+        console.error("[UniversalPurchaseScreen][USDC_FLOW] failed", err);
+        toast.error(err?.message || "On-chain settlement failed");
+        setStep("review");
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // ============================================
+    // RAIL 2: WIX FIAT REDIRECT (fallback)
+    // ============================================
+    setIsProcessing(true);
+    setStep("processing");
     try {
       console.log(`[UniversalPurchaseScreen][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId directly for ${plan.name} ($${plan.price}).`);
 
@@ -124,6 +252,7 @@ const UniversalPurchaseScreen = () => {
       console.error("[UniversalPurchaseScreen][handlePurchase] [END_WITH_ERROR] Transaction stalled.", err);
       toast.error(err.message || "Purchase initialization failed");
       setStep("review");
+      setIsProcessing(false);
     }
   };
 
@@ -131,8 +260,14 @@ const UniversalPurchaseScreen = () => {
     return (
       <div className="max-w-lg mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <Loader2 className="w-12 h-12 text-primary animate-spin" />
-        <p className="text-foreground font-semibold">Connecting to Secure Gateway...</p>
-        <p className="text-muted-foreground text-sm">Preparing your dynamic Wix checkout session.</p>
+        <p className="text-foreground font-semibold">
+          {paymentRail === "usdc" ? "Executing on-chain settlement…" : "Connecting to Secure Gateway…"}
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {paymentRail === "usdc"
+            ? "Relayer pulling USDC from your wallet on Base."
+            : "Preparing your dynamic Wix checkout session."}
+        </p>
       </div>
     );
   }
@@ -216,22 +351,106 @@ const UniversalPurchaseScreen = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-            Secure Payment Gateway
+            Payment Method
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="min-h-[120px] border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center bg-muted/30 p-6 text-center">
-            <ShoppingCart className="mx-auto h-8 w-8 text-primary mb-3" />
-            <p className="text-sm font-medium text-foreground">Checkout via Wix Processing</p>
-            <p className="text-xs text-muted-foreground mt-2 max-w-md">
-              You will be redirected to our unified, secure Wix checkout portal to complete your transaction. Fiat processing is separated strictly from on-chain logic.
-            </p>
+          {/* Rail selector */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setPaymentRail("usdc")}
+              className={`p-3 rounded-lg border-2 text-left transition-all ${
+                paymentRail === "usdc"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-muted-foreground/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">On-Chain USDC</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">MetaMask / IDIA Life wallet on Base</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentRail("wix")}
+              className={`p-3 rounded-lg border-2 text-left transition-all ${
+                paymentRail === "wix"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-muted-foreground/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">Fiat (Wix)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Card / bank via Wix checkout</p>
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center">
-            <ShieldCheck className="h-3 w-3" />
-            <span>Encryption & Settlement provided by Wix (PCI-DSS Level 1)</span>
-          </div>
+          {/* USDC rail panel */}
+          {paymentRail === "usdc" && (
+            <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">USDC Balance (On-Chain)</span>
+                <span className="text-primary font-bold font-mono">${availableUSDC.toFixed(2)} USDC</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Required</span>
+                <span className="text-foreground font-mono">${plan.price.toLocaleString()}</span>
+              </div>
+              {!walletBalance?.wallet_address && (
+                <Button
+                  className="w-full gap-2"
+                  variant="outline"
+                  onClick={handleConnectMetaMask}
+                  disabled={isConnectingWallet}
+                >
+                  {isConnectingWallet ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                  Connect MetaMask
+                </Button>
+              )}
+              {walletBalance?.wallet_address && !hasEnoughBalance && (
+                <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Shortfall of ${shortfall.toFixed(2)}. Fund your wallet with USDC on Base to continue.
+                  </span>
+                </div>
+              )}
+              {needsApproval && (
+                <Button
+                  className="w-full gap-2"
+                  variant="outline"
+                  onClick={handleAuthorizeRelayer}
+                  disabled={isAuthorizingRelayer}
+                >
+                  {isAuthorizingRelayer ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  Authorize Relayer (one-time)
+                </Button>
+              )}
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center pt-1">
+                <ShieldCheck className="h-3 w-3" />
+                <span>Settlement executed by IDIA Relayer on Base (gasless for buyer)</span>
+              </div>
+            </div>
+          )}
+
+          {/* Wix rail panel */}
+          {paymentRail === "wix" && (
+            <div className="min-h-[120px] border border-border rounded-lg flex flex-col items-center justify-center bg-muted/30 p-6 text-center">
+              <ShoppingCart className="mx-auto h-8 w-8 text-primary mb-3" />
+              <p className="text-sm font-medium text-foreground">Checkout via Wix Processing</p>
+              <p className="text-xs text-muted-foreground mt-2 max-w-md">
+                You will be redirected to our unified, secure Wix checkout portal. Fiat processing is separated strictly from on-chain logic.
+              </p>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center mt-3">
+                <ShieldCheck className="h-3 w-3" />
+                <span>Encryption & Settlement provided by Wix (PCI-DSS Level 1)</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -250,9 +469,21 @@ const UniversalPurchaseScreen = () => {
         </CardContent>
       </Card>
 
-      <Button className="w-full gap-2" size="lg" onClick={handlePurchase} disabled={isProcessing}>
+      <Button
+        className="w-full gap-2"
+        size="lg"
+        onClick={handlePurchase}
+        disabled={
+          isProcessing ||
+          (paymentRail === "usdc" && (!walletBalance?.wallet_address || !hasEnoughBalance))
+        }
+      >
         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-        {isProcessing ? "Connecting to Wix..." : "Proceed to Wix Checkout"}
+        {isProcessing
+          ? paymentRail === "usdc" ? "Settling on-chain…" : "Connecting to Wix…"
+          : paymentRail === "usdc"
+            ? `Pay $${plan.price.toLocaleString()} with USDC`
+            : "Proceed to Wix Checkout"}
       </Button>
     </div>
   );
