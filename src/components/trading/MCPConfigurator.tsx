@@ -19,6 +19,31 @@ import { useMcpToolSchemas, type McpToolSchema } from "@/hooks/useMcpToolSchemas
 import { getBridgeUrl, setBridgeUrl, pingBridge } from "@/lib/mcpBridgeSocket";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Small helper: wraps any child in a keyboard-focusable span so Radix's
+// asChild Slot has something with a forwardable ref (shadcn Badge/Button
+// composition sometimes drops the ref, silently disabling the tooltip).
+const TT = ({
+  tip,
+  side = "top",
+  children,
+}: {
+  tip: React.ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+  children: React.ReactNode;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span tabIndex={0} className="inline-flex cursor-help outline-none">
+        {children}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side={side} className="max-w-xs text-xs leading-relaxed">
+      {tip}
+    </TooltipContent>
+  </Tooltip>
+);
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
