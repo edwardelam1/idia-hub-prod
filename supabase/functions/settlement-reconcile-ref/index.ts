@@ -181,14 +181,20 @@ serve(async (req: Request) => {
 
       const { error: insErr } = await supabase.from("synapse_credit_ledger").insert({
         user_id: c.user_id,
-        amount: value,
-        entry_type: "deposit",
+        amount: 0,
+        entry_type: "onchain_payout",
         transaction_type,
         status: "completed",
         blockchain_tx_hash: txHash,
         is_settled: true,
         settled_at: new Date().toISOString(),
         description: `Reconciled ${asset} for Ref: ${reference_id}`,
+        metadata: {
+          onchain_amount: value,
+          asset,
+          wallet,
+          reference_id,
+        },
       });
       if (insErr) {
         missing.push({ user_id: c.user_id, wallet, tx: txHash, reason: `insert_error: ${insErr.message}` });
