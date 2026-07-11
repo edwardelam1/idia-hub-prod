@@ -33,7 +33,18 @@ export const MCPLiveTelemetry = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Radio className={`h-5 w-5 ${connected ? "text-emerald-500" : "text-muted-foreground"}`} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0} className="cursor-help outline-none">
+                  <Radio className={`h-5 w-5 ${connected ? "text-emerald-500" : "text-muted-foreground"}`} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs text-xs">
+                {connected
+                  ? "Live: receiving MCP relay events over SSE."
+                  : "Offline: no active SSE channel. Enter a valid trading-desk API key to start streaming."}
+              </TooltipContent>
+            </Tooltip>
             <div>
               <CardTitle className="text-base">Live MCP Telemetry</CardTitle>
               <CardDescription>
@@ -71,7 +82,17 @@ export const MCPLiveTelemetry = () => {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
-          <Label htmlFor="telemetry-key" className="text-xs">Trading desk API key</Label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Label htmlFor="telemetry-key" className="text-xs cursor-help">
+                Trading desk API key
+              </Label>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs text-xs">
+              Stored in browser localStorage only. Passed as a <code>?apiKey=</code> query
+              parameter because the EventSource API cannot send Authorization headers.
+            </TooltipContent>
+          </Tooltip>
           <Input
             id="telemetry-key"
             type="password"
