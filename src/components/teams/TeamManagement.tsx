@@ -38,6 +38,7 @@ import {
   UserCircle2,
   Loader2,
   Trash2,
+  KeyRound,
 } from "lucide-react";
 import {
   DropdownMenu,
