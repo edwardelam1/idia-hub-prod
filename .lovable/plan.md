@@ -1,51 +1,76 @@
-## Status of your three tasks
+## Fix — IDIA transfer must move tokens
 
-I verified the current state before planning. Not everything you listed needs to be built — most of it is already in place from the earlier mutex work. Here's the honest breakdown:
+`Escrow.automatedDistribute` is executing on-chain but not moving IDIA (phantom state-update). The Relayer already has an ERC-20 allowance from the Ecosystem Escrow, so bypass the Escrow contract and call `transferFrom` directly on the IDIA token contract.
 
-### Task 1 — REST-safe table mutex: **already exists, no migration needed**
-Verified in the live database:
-- `public.relayer_mutex` table exists with the exact 4 columns you specified.
-- The `primary-relayer` seed row is present (currently unlocked).
-- `acquire_relayer_lock(run_id text, timeout_seconds integer DEFAULT 180) RETURNS boolean` — body matches your spec verbatim, uses `FOUND`, `SECURITY DEFINER`, `search_path = public`.
-- `release_relayer_lock(run_id text) RETURNS void` — clears `locked_by`/`locked_at`/`expires_at` scoped to `locked_by = run_id`.
+### Change 1 — Extend ERC-20 ABI (top of file, ~line 52)
 
-No advisory locks anywhere. No PgBouncer risk. I will not regenerate this.
+Add `transferFrom` to `ERC20_ABI`:
 
-### Task 2 — polling wrapper: **already wired correctly**
-In `supabase/functions/idia-circular-settlement/index.ts`:
-- `runCorrelationId` is generated per invocation.
-- 30-iteration acquire loop with `await new Promise(res => setTimeout(res, 2000))` between attempts (lines 309–328).
-- `throw new Error("Timeout waiting for relayer lock...")` on exhaustion.
-- Phase 1/2/3 are wrapped in `try { ... } finally { release_relayer_lock }` (lines 330–729).
+```ts
+{
+  name: "transferFrom",
+  type: "function",
+  stateMutability: "nonpayable",
+  inputs: [
+    { name: "from",  type: "address" },
+    { name: "to",    type: "address" },
+    { name: "value", type: "uint256" },
+  ],
+  outputs: [{ name: "", type: "bool" }],
+}
+```
 
-No changes required.
+### Change 2 — Add IDIA token constant (~line 43)
 
-### Task 3 — this is where the real bugs are, and they explain the double-payout
-Two defects to fix in `supabase/functions/idia-circular-settlement/index.ts`:
+```ts
+const IDIA_TOKEN_ADDRESS = "0x6526F939D257E67896821c25B6C24Daa404a01FB";
+```
 
-**Bug A — invalid ENUM string (Phase 3 IDIA row).**  
-The `idia_transaction_type` enum in this database contains `idia_royalty_yield` but does NOT contain `data_sale_idia_award`. Line 653 writes `transaction_type: "data_sale_idia_award"`, which the DB rejects. Fix: change to `"idia_royalty_yield"` and change the `phase` label passed to `insertLedgerWithRepair` from `"contributor_idia_award"` to `"idia_royalty_yield"` so the repair queue is phase-accurate.
+### Change 3 — Rewrite the IDIA transaction block (lines ~628–651)
 
-**Bug B — the ledger bleed (catch block at lines 670–702).**  
-Root cause of the doubled USDC payout: the `try` wraps both the yield (USDC) transfer AND the IDIA `automatedDistribute` call AND both ledger inserts. When the IDIA leg throws (which it did, thanks to Bug A upstream propagating during earlier runs, or any future IDIA revert), control lands in the shared catch — which unconditionally writes a `transaction_type: "data_sale_payout"` failed row. So a run where the USDC yield already succeeded (and its `data_sale_payout` row was inserted at line 627) also gets a second `data_sale_payout` row from the catch. That's the double-post you saw.
+Replace the Escrow `automatedDistribute` call with a strict ERC-20 `transferFrom`. Keep `sendWithNonceRetry` and all surrounding logic (`idiaSettled`, ledger insert, catch/finally) untouched.
 
-Fix: track per-phase progress with two booleans (`yieldSettled`, `idiaSettled`) inside the loop. In the catch:
-- If `!yieldSettled`, write ONE failed row typed `data_sale_payout` (phase `contributor_yield`).
-- Else if `!idiaSettled`, write ONE failed row typed `idia_royalty_yield` (phase `idia_royalty_yield`) — never `data_sale_payout`.
-- Never write both. Never re-write a phase that already succeeded.
+```ts
+// 2. IDIA royalty award — direct ERC-20 transferFrom
+//    From: Ecosystem Escrow (allowance already granted to relayer)
+//    To:   Contributor wallet
+//    Amount: idiaAwardAmount (wei)
+const { hash: idiaHash, receipt: idiaReceipt } = await sendWithNonceRetry(
+  (nonce) =>
+    client.writeContract({
+      address: IDIA_TOKEN_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: "transferFrom",
+      args: [
+        ESCROW_ECOSYSTEM as `0x${string}`,
+        lifeWallet as `0x${string}`,
+        idiaAwardAmount,
+      ],
+      account,
+      nonce,
+    }),
+  "idia_award",
+);
+console.info(`[STATUS: Batch.Item] IDIA transferFrom Broadcasted. Hash: ${idiaHash}.`);
+if (idiaReceipt.status === "success") {
+  console.info(`[END: Batch.Item] IDIA transferFrom successful. Block: ${idiaReceipt.blockNumber}`);
+} else {
+  console.error(`[ERROR: Batch.Item] IDIA transferFrom reverted. Hash: ${idiaHash}`);
+}
+```
 
-## Files touched
+### Preserved
+- Serial nonce-retry loop (`sendWithNonceRetry`).
+- `yieldSettled` / `idiaSettled` per-phase booleans and catch-block phase routing (double-payout fix from prior turn).
+- USDC yield phase, ledger inserts, mutex, polling loop, Phase 1/2 flow.
+- `ESCROW_ABI` stays in place (still referenced elsewhere/harmless).
 
-1. `supabase/functions/idia-circular-settlement/index.ts`
-   - Line ~653: `transaction_type: "data_sale_idia_award"` → `"idia_royalty_yield"`, and `phase: "contributor_idia_award"` → `"idia_royalty_yield"`.
-   - Line ~658 description text updated to reference royalty yield.
-   - Loop body (lines ~578–702): introduce `let yieldSettled = false; let idiaSettled = false;` set to true only after each corresponding `insertLedgerWithRepair` returns. Rewrite the catch block so it emits exactly one failed-row insert, mapped to the phase that failed (`data_sale_payout` for yield, `idia_royalty_yield` for IDIA).
+### Verification
+1. Redeploy `idia-circular-settlement`.
+2. Trigger a synthetic settlement with one contributor.
+3. On BaseScan, confirm the IDIA tx is a `Transfer` event from `ESCROW_ECOSYSTEM` → contributor wallet on `0x6526…01FB` with non-zero `value`.
+4. Confirm contributor IDIA balance actually increases.
+5. Ledger shows one `data_sale_payout` completed + one `idia_royalty_yield` completed, no duplicates.
 
-Nothing else changes: mutex logic, polling loop, finally-release, Phase 1/2 flow, and background write-back all stay as-is.
-
-## Verification
-
-- Redeploy `idia-circular-settlement`.
-- Trigger a synthetic settlement with one contributor whose wallet is valid; confirm ledger has exactly one `data_sale_payout` row and one `idia_royalty_yield` row (both `completed`).
-- Force an IDIA revert (temporarily use a bad amount or invalid recipient in a sandbox run); confirm ledger has one `data_sale_payout` completed row and one `idia_royalty_yield` failed row — no duplicated USDC row.
-- Confirm relayer_mutex acquire/release still cycles cleanly (row returns to `locked_by IS NULL` after each run).
+### Files touched
+- `supabase/functions/idia-circular-settlement/index.ts` (ABI + constant + IDIA block only).
