@@ -62,12 +62,88 @@ serve(async (req) => {
       (data as any).merchant_id ||
       (data as any).id;
 
+    // 6. Resolve blueprint assignment (best-effort — never fails the hydrate)
+    let assignment: Record<string, unknown> | null = null;
+    let blueprintStatus: string | null = null;
+    try {
+      console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Looking up blueprint assignment for code: ${pairing_code}`);
+      const { data: bp, error: bpErr } = await supabaseAdmin
+        .from('device_provisioning_blueprints')
+        .select('assigned_employee_id, assigned_at, status')
+        .eq('code', pairing_code)
+        .maybeSingle();
+
+      if (bpErr) {
+        console.warn(`⚙️ [EDGE: hydrate-terminal] BLUEPRINT_LOOKUP_WARN: ${bpErr.message}`);
+      } else if (bp) {
+        blueprintStatus = bp.status ?? null;
+        console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Blueprint row found. status=${bp.status} assigned_employee_id=${bp.assigned_employee_id ?? 'none'}`);
+
+        if (bp.assigned_employee_id) {
+          let employee_name: string | null = null;
+          let employee_email: string | null = null;
+          try {
+            console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Resolving employee ${bp.assigned_employee_id}`);
+            const { data: emp, error: empErr } = await supabaseAdmin
+              .from('employees')
+              .select('name, email, user_id')
+              .eq('id', bp.assigned_employee_id)
+              .maybeSingle();
+
+            if (empErr) {
+              console.warn(`⚙️ [EDGE: hydrate-terminal] EMPLOYEE_LOOKUP_WARN: ${empErr.message}`);
+            } else if (emp) {
+              employee_name = emp.name ?? null;
+              employee_email = emp.email ?? null;
+
+              // Fall back to auth user_metadata.full_name (PII bridge parity)
+              if (!employee_name && emp.user_id) {
+                try {
+                  const { data: authRes } = await supabaseAdmin.auth.admin.getUserById(emp.user_id);
+                  const meta = (authRes?.user?.user_metadata ?? {}) as Record<string, unknown>;
+                  employee_name =
+                    (meta.full_name as string) ||
+                    (meta.name as string) ||
+                    null;
+                  if (!employee_email) {
+                    employee_email = authRes?.user?.email ?? null;
+                  }
+                } catch (authErr: any) {
+                  console.warn(`⚙️ [EDGE: hydrate-terminal] AUTH_LOOKUP_WARN: ${authErr?.message ?? authErr}`);
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn(`⚙️ [EDGE: hydrate-terminal] EMPLOYEE_RESOLVE_WARN: ${e?.message ?? e}`);
+          }
+
+          assignment = {
+            employee_id: bp.assigned_employee_id,
+            employee_name,
+            employee_email,
+            assigned_at: bp.assigned_at ?? null,
+            status: bp.status ?? null,
+          };
+          console.info(`⚙️ [EDGE: hydrate-terminal] PROGRESS: Assignment resolved. employee_name=${employee_name ?? '(unknown)'}`);
+        } else {
+          console.info("⚙️ [EDGE: hydrate-terminal] PROGRESS: Blueprint row is unassigned.");
+        }
+      } else {
+        console.info("⚙️ [EDGE: hydrate-terminal] PROGRESS: No blueprint row for code (legacy vault-only entry).");
+      }
+    } catch (e: any) {
+      console.warn(`⚙️ [EDGE: hydrate-terminal] BLUEPRINT_RESOLVE_WARN: ${e?.message ?? e}`);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
+        status: blueprintStatus,
+        assignment,
         payload: {
           ...(data.schema_payload as Record<string, unknown>),
           businessId: relationalBusinessId,
+          assignment,
         }
       }),
       { 
