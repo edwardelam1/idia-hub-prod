@@ -1,35 +1,53 @@
-# Add USDC / MetaMask payment rail to Complete Your Purchase screen
+## 1. Onboard the user (data change, no code)
 
-## Where
+Insert a `public.employees` row for `heggibear429@gmail.com` under **IDIA Data Inc.** (`df9d2157-e202-4623-b811-b094836d5eeb`):
 
-`src/components/billing/UniversalPurchaseScreen.tsx` — the `/purchase` route reached after selecting an Analyst / Professional / Enterprise plan. Today it only offers a Wix redirect ("Checkout via Wix Processing" → "Proceed to Wix Checkout").
+- `user_id`: `f42515c7-5483-4be0-8899-e44c095bf4d5`
+- `name`: "Heggi Bear" (placeholder — user can rename in edit dialog)
+- `email`: heggibear429@gmail.com
+- `role`: `manager`, `platform_role`: `team_lead`
+- `status`: `active`
+- `hire_date`: today
 
-## What's changing
+Also insert a `public.business_users` row (business_id + user_id, role `team_lead`, is_active true) so business-scoped access resolves through `get_user_business_access`.
 
-Mirror the two-rail pattern already used in `SynapsePurchaseModal.tsx`:
+## 2. Provisioning-code assignment — schema
 
-1. **Payment rail selector** — a segmented control with two options:
-   - **On‑Chain USDC (MetaMask)** — default when the user has enough USDC in their linked wallet
-   - **Fiat (Wix Checkout)** — the current flow, kept as fallback
-2. **USDC rail panel** (reused pattern from SynapsePurchaseModal):
-   - Show USDC balance from `useWalletBalance`
-   - If wallet not linked → "Connect MetaMask" button using `connectEmbeddedWallet` + persist `wallet_address` to `profiles`
-   - If linked but insufficient balance → show shortfall + inline "Approve USDC" via `ensureUsdcApproval`
-   - On submit → `supabase.functions.invoke("top-up-credits", { body: { user_id, usd_amount: plan.price, payment_method: "internal_usdc", plan_id: plan.id } })`, then navigate to `/billing?success=true`
-3. **Wix rail panel** — keep existing UI and `handlePurchase` fetch to `/_functions/checkout`; only render when this rail is selected.
-4. Auto-select the USDC rail when `availableUSDC >= plan.price`, otherwise default to Wix (same heuristic as the Synapse modal).
+Add two nullable columns to `public.device_provisioning_blueprints`:
 
-## Technical notes (dev only)
+- `assigned_employee_id uuid REFERENCES public.employees(id) ON DELETE SET NULL`
+- `assigned_at timestamptz`
 
-- Reuse: `useWalletBalance`, `connectEmbeddedWallet` from `@/lib/metamask-sdk`, `ensureUsdcApproval` from `@/lib/usdc-approval`, `supabase` client.
-- `top-up-credits` already supports `internal_usdc` per the Synapse modal — no edge-function changes needed unless we discover it hard-codes the credit-tier amount. If it does, extend it to accept the plan's `usd_amount` and `plan_id` and credit the matching CRD (5000 / 20000 / 50000) accordingly. This will be verified in build mode; if changes are needed I'll flag them before touching the function.
-- No schema changes.
+Assignment rule (enforced in the assign RPC): only rows with `status='active'` AND `assigned_employee_id IS NULL` are eligible. Once applied, we set `assigned_employee_id` + `assigned_at` and leave status active. Employees can be reassigned by clearing.
 
-## Out of scope
+New security-definer RPC `public.assign_provisioning_code(_employee_id uuid, _code text)`:
+- Validates the code exists, is active, unassigned, and belongs to the same `business_id` as the employee.
+- Stamps the assignment and returns the updated row.
 
-- No changes to `SynapsePurchaseModal`, `confirm-wix-payment`, or the settlement pipeline.
-- No new payment provider — this uses the same on-chain USDC rail already live for credit top-ups.
+## 3. Team Management UI — new "Apply Provision Code" action
 
-## Question before I build
+In `src/components/modules/team/TeamMemberCard.tsx` (and the parent `TeamManagement.tsx` action menu), add a new action next to Edit/Toggle Status: **"Apply Provision Code"**.
 
-Should the Wix option stay as a fallback (recommended, matches the Synapse modal), or do you want Wix removed entirely so USDC is the only option on this screen?
+Behavior:
+- Opens a new dialog `ApplyProvisionCodeDialog.tsx`.
+- Fetches `device_provisioning_blueprints` filtered by the member's `business_id`, `status='active'`, `assigned_employee_id IS NULL` — sorted newest first.
+- Renders a Select of `{code} — {label}` options; shows an empty state with a link to the Provisioning code log when none are free.
+- Submit calls `supabase.rpc('assign_provisioning_code', { _employee_id, _code })`.
+- On success: toast "Provision code {code} applied to {name}" and refresh.
+
+Also show the currently assigned code (if any) as a small badge on `TeamMemberCard` so admins can see who is provisioned. Provide an "Unassign" affordance in the same dialog when a code is already bound.
+
+## 4. Out of scope (per your instruction)
+
+- No self-generation of codes by the employee. Codes are only issued by admins via the existing Provisioning code log; this feature just binds an existing ACTIVE code to a team member.
+
+## Technical notes
+
+- `useTeamData` already reads `employees` scoped by `business_id`; the new columns are additive and won't break existing selects.
+- The dialog reads blueprints directly with the anon client (RLS on `device_provisioning_blueprints` already restricts to business admins). The assign action goes through the RPC to keep the eligibility check server-side.
+- Files touched:
+  - migration: add columns + `assign_provisioning_code` function + grants
+  - `src/components/modules/team/ApplyProvisionCodeDialog.tsx` (new)
+  - `src/components/modules/team/TeamMemberCard.tsx` (add action button + badge)
+  - `src/components/modules/TeamManagement.tsx` (wire dialog open state)
+  - two `supabase--insert` calls for the employee + business_users rows
