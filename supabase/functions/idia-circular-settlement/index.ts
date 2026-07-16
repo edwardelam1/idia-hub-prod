@@ -42,6 +42,11 @@ const GLOBAL_WAR_CHEST = "0x0910EF34C9F59A90d90FF505B1036DEed4a25d59";
 // USDC on Base Mainnet
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
+// IDIA token on Base Mainnet — direct ERC-20 transferFrom target
+// (bypasses phantom Escrow.automatedDistribute; relayer holds allowance
+// from ESCROW_ECOSYSTEM already).
+const IDIA_TOKEN_ADDRESS = "0x6526F939D257E67896821c25B6C24Daa404a01FB";
+
 // System wallets
 const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
 
