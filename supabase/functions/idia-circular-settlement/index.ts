@@ -641,29 +641,31 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
             });
             yieldSettled = true;
 
-            // 2. IDIA royalty award — 1:1 vs USDC yield via automatedDistribute
-            //    (immediately safeTransfers IDIA to contributor; no manual approval).
+            // 2. IDIA royalty award — direct ERC-20 transferFrom on IDIA token.
+            //    Bypasses Escrow.automatedDistribute (phantom state-update that
+            //    did not move tokens). Relayer already holds allowance from
+            //    ESCROW_ECOSYSTEM, so pull tokens: FROM escrow → TO contributor.
             const { hash: idiaHash, receipt: idiaReceipt } = await sendWithNonceRetry(
               (nonce) =>
                 client.writeContract({
-                  address: ESCROW_ECOSYSTEM,
-                  abi: ESCROW_ABI,
-                  functionName: "automatedDistribute",
+                  address: IDIA_TOKEN_ADDRESS,
+                  abi: ERC20_ABI,
+                  functionName: "transferFrom",
                   args: [
+                    ESCROW_ECOSYSTEM as `0x${string}`,
                     lifeWallet as `0x${string}`,
                     idiaAwardAmount,
-                    `1:1 IDIA royalty award · Ref ${ingestionReference}`,
                   ],
                   account,
                   nonce,
                 }),
               "idia_award",
             );
-            console.info(`[STATUS: Batch.Item] IDIA automatedDistribute Broadcasted. Hash: ${idiaHash}. Confirmed.`);
+            console.info(`[STATUS: Batch.Item] IDIA transferFrom Broadcasted. Hash: ${idiaHash}.`);
             if (idiaReceipt.status === "success") {
-              console.info(`[END: Batch.Item] IDIA automatedDistribute successful. Block: ${idiaReceipt.blockNumber}`);
+              console.info(`[END: Batch.Item] IDIA transferFrom successful. Block: ${idiaReceipt.blockNumber}`);
             } else {
-              console.error(`[ERROR: Batch.Item] IDIA automatedDistribute reverted. Hash: ${idiaHash}`);
+              console.error(`[ERROR: Batch.Item] IDIA transferFrom reverted. Hash: ${idiaHash}`);
             }
 
             // 3. Ledger insert — IDIA royalty yield row (enum: idia_royalty_yield).
