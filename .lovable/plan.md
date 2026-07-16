@@ -1,48 +1,38 @@
-# Fix: `hydrate-terminal` must surface the blueprint assignment
+## Goal
+Make Pay's deep-search find Cristina's identity inside the hydrate-terminal response by embedding assignment fields with the exact key names Pay looks for (`assigned_employee_id`, `assigned_employee_name`, `assigned_employee_email`) directly into `schema_payload`.
 
-## What's actually broken
+## Current State
+`hydrate-terminal` already returns:
+- `status` (top-level)
+- `assignment: { employee_id, employee_name, employee_email, assigned_at, status }` (top-level AND nested in `payload.assignment`)
 
-Pay now routes both pairing paths through `ProvisioningEngine.hydrateFromHub` → `hydrate-terminal`. Good. But that edge function reads **only** `idia_schema_manifest_vault`, which has no assignment columns. The assignment (`assigned_employee_id`, `assigned_at`) lives on `device_provisioning_blueprints` — a separate table that `hydrate-terminal` never touches.
+Pay's team reports its deep-search scans for `assigned_employee_id` / `assigned_employee_name`-style keys — the nested `assignment.employee_*` shape isn't matching.
 
-Confirmed in DB: `IDIA-FRWD-NEUL` is `status=active`, `assigned_employee_id=b998343a…` (Cristina), `assigned_at=2026-07-16 01:32`. Pay can't see any of it because the edge function doesn't return it.
-
-## Plan
-
-### 1. Extend `supabase/functions/hydrate-terminal/index.ts`
-
-After the successful vault lookup, do a second read (service-role) on `device_provisioning_blueprints` by `code = pairing_code`. If a row exists, resolve the employee's display name from `employees` (name/email). Merge into the response as:
+## Change
+Edit `supabase/functions/hydrate-terminal/index.ts` only. In the response `payload` object, add flat aliases alongside the existing `assignment` object:
 
 ```text
-assignment: {
-  employee_id, employee_name, employee_email,
-  assigned_at, status
+payload: {
+  ...schema_payload,
+  businessId,
+  assignment,                            // keep (nested, existing)
+  assigned_employee_id,                  // NEW flat alias
+  assigned_employee_name,                // NEW flat alias
+  assigned_employee_email,               // NEW flat alias
+  assigned_at,                           // NEW flat alias
+  assignment_status,                     // NEW flat alias (blueprint status)
 }
 ```
 
-Also promote `status` to the top level so Pay can gate on it (`active` vs `inactive`).
+All values come from the already-resolved `assignment` variable — no new DB calls, no schema changes. When unassigned, these fields are `null`.
 
-Behaviour:
-- No matching blueprint row → `assignment: null` (still returns manifest — unchanged behaviour for legacy codes).
-- Blueprint row `status != 'active'` → still return payload, but include `status: 'inactive'` so Pay can reject.
-- Employee lookup fails → return `assignment` with `employee_id` only, no name. Never fail the whole hydrate over a name resolution.
+Also mirror the same flat fields at the top level of the response (next to existing `status` + `assignment`) so consumers that don't unwrap `payload` still find them.
 
-Logging additions: one line each for blueprint lookup start/end and employee resolution start/end, matching the existing `⚙️ [EDGE: hydrate-terminal]` style.
+## Verification
+- `curl` hydrate-terminal with `IDIA-FRWD-NEUL` → response contains `payload.assigned_employee_name = "Cristina Heggison"` and `payload.assigned_employee_id` set.
+- `curl` with an unassigned code → those fields are `null`, hydrate still succeeds.
+- Re-pair Cristina's phone in Pay → deep-search resolves her identity.
 
-### 2. No DB migration
-
-Both tables already exist with the needed columns. No schema change required.
-
-### 3. Verify
-
-- `curl` `hydrate-terminal` with `IDIA-FRWD-NEUL` → response contains `assignment.employee_name = "Cristina Heggison"` and `status = "active"`.
-- `curl` with `IDIA-IJKX-ET0U` (your unassigned code) → response contains `assignment: null` and `status = "active"`.
-- Re-pair Cristina's phone in IDIA Pay → no longer reports "unassigned".
-
-## Files touched
-
-- `supabase/functions/hydrate-terminal/index.ts` (only file)
-
-## Out of scope
-
-- Pay UI changes — you've already routed both paths through `hydrateFromHub`.
-- Locking pairing to the assigned user. Assignment stays informational; hydrate still succeeds for anyone entering the code (matches your earlier direction).
+## Out of Scope
+- Hub UI, DB schema, Pay codebase.
+- Any behavioral change to hydration success/failure — assignment stays informational.

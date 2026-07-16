@@ -140,10 +140,20 @@ serve(async (req) => {
         success: true, 
         status: blueprintStatus,
         assignment,
+        assigned_employee_id: (assignment?.employee_id as string) ?? null,
+        assigned_employee_name: (assignment?.employee_name as string) ?? null,
+        assigned_employee_email: (assignment?.employee_email as string) ?? null,
+        assigned_at: (assignment?.assigned_at as string) ?? null,
+        assignment_status: blueprintStatus,
         payload: {
           ...(data.schema_payload as Record<string, unknown>),
           businessId: relationalBusinessId,
           assignment,
+          assigned_employee_id: (assignment?.employee_id as string) ?? null,
+          assigned_employee_name: (assignment?.employee_name as string) ?? null,
+          assigned_employee_email: (assignment?.employee_email as string) ?? null,
+          assigned_at: (assignment?.assigned_at as string) ?? null,
+          assignment_status: blueprintStatus,
         }
       }),
       { 
