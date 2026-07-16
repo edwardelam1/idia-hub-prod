@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getBusinessId } from "@/lib/business-access";
+import { ApplyProvisionCodeDialog } from "./ApplyProvisionCodeDialog";
 
 type PlatformRole = "Org Admin" | "Team Lead" | "Team Member";
 
@@ -82,6 +83,8 @@ export default function TeamManagement() {
 
   const [deleteOrgOpen, setDeleteOrgOpen] = useState(false);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
+
+  const [provisionCodeTarget, setProvisionCodeTarget] = useState<EmployeeRow | null>(null);
 
   // Resolve active business
   useEffect(() => {
@@ -457,6 +460,9 @@ export default function TeamManagement() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem disabled>Edit Role</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setProvisionCodeTarget(u)}>
+                              <KeyRound className="h-4 w-4 mr-2" /> Apply Provisioning Code
+                            </DropdownMenuItem>
                             <DropdownMenuItem disabled>View Telemetry Log</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem className="text-destructive" onClick={() => handleRevoke(u.id)}>
@@ -497,6 +503,15 @@ export default function TeamManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ApplyProvisionCodeDialog
+        open={!!provisionCodeTarget}
+        onOpenChange={(o) => { if (!o) setProvisionCodeTarget(null); }}
+        employeeId={provisionCodeTarget?.id ?? null}
+        employeeName={provisionCodeTarget?.name ?? ""}
+        businessId={businessId}
+        onApplied={() => businessId && loadRoster(businessId)}
+      />
     </div>
   );
 }
