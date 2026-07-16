@@ -1559,6 +1559,45 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_prep_list: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          item_name: string
+          location: string
+          on_hand: number
+          par_level: number
+          station: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          item_name: string
+          location: string
+          on_hand?: number
+          par_level?: number
+          station?: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          item_name?: string
+          location?: string
+          on_hand?: number
+          par_level?: number
+          station?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       dao_execution_events: {
         Row: {
           actor_id: string | null
