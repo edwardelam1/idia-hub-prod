@@ -1,53 +1,48 @@
-## 1. Onboard the user (data change, no code)
+# Fix: `hydrate-terminal` must surface the blueprint assignment
 
-Insert a `public.employees` row for `heggibear429@gmail.com` under **IDIA Data Inc.** (`df9d2157-e202-4623-b811-b094836d5eeb`):
+## What's actually broken
 
-- `user_id`: `f42515c7-5483-4be0-8899-e44c095bf4d5`
-- `name`: "Heggi Bear" (placeholder — user can rename in edit dialog)
-- `email`: heggibear429@gmail.com
-- `role`: `manager`, `platform_role`: `team_lead`
-- `status`: `active`
-- `hire_date`: today
+Pay now routes both pairing paths through `ProvisioningEngine.hydrateFromHub` → `hydrate-terminal`. Good. But that edge function reads **only** `idia_schema_manifest_vault`, which has no assignment columns. The assignment (`assigned_employee_id`, `assigned_at`) lives on `device_provisioning_blueprints` — a separate table that `hydrate-terminal` never touches.
 
-Also insert a `public.business_users` row (business_id + user_id, role `team_lead`, is_active true) so business-scoped access resolves through `get_user_business_access`.
+Confirmed in DB: `IDIA-FRWD-NEUL` is `status=active`, `assigned_employee_id=b998343a…` (Cristina), `assigned_at=2026-07-16 01:32`. Pay can't see any of it because the edge function doesn't return it.
 
-## 2. Provisioning-code assignment — schema
+## Plan
 
-Add two nullable columns to `public.device_provisioning_blueprints`:
+### 1. Extend `supabase/functions/hydrate-terminal/index.ts`
 
-- `assigned_employee_id uuid REFERENCES public.employees(id) ON DELETE SET NULL`
-- `assigned_at timestamptz`
+After the successful vault lookup, do a second read (service-role) on `device_provisioning_blueprints` by `code = pairing_code`. If a row exists, resolve the employee's display name from `employees` (name/email). Merge into the response as:
 
-Assignment rule (enforced in the assign RPC): only rows with `status='active'` AND `assigned_employee_id IS NULL` are eligible. Once applied, we set `assigned_employee_id` + `assigned_at` and leave status active. Employees can be reassigned by clearing.
+```text
+assignment: {
+  employee_id, employee_name, employee_email,
+  assigned_at, status
+}
+```
 
-New security-definer RPC `public.assign_provisioning_code(_employee_id uuid, _code text)`:
-- Validates the code exists, is active, unassigned, and belongs to the same `business_id` as the employee.
-- Stamps the assignment and returns the updated row.
+Also promote `status` to the top level so Pay can gate on it (`active` vs `inactive`).
 
-## 3. Team Management UI — new "Apply Provision Code" action
+Behaviour:
+- No matching blueprint row → `assignment: null` (still returns manifest — unchanged behaviour for legacy codes).
+- Blueprint row `status != 'active'` → still return payload, but include `status: 'inactive'` so Pay can reject.
+- Employee lookup fails → return `assignment` with `employee_id` only, no name. Never fail the whole hydrate over a name resolution.
 
-In `src/components/modules/team/TeamMemberCard.tsx` (and the parent `TeamManagement.tsx` action menu), add a new action next to Edit/Toggle Status: **"Apply Provision Code"**.
+Logging additions: one line each for blueprint lookup start/end and employee resolution start/end, matching the existing `⚙️ [EDGE: hydrate-terminal]` style.
 
-Behavior:
-- Opens a new dialog `ApplyProvisionCodeDialog.tsx`.
-- Fetches `device_provisioning_blueprints` filtered by the member's `business_id`, `status='active'`, `assigned_employee_id IS NULL` — sorted newest first.
-- Renders a Select of `{code} — {label}` options; shows an empty state with a link to the Provisioning code log when none are free.
-- Submit calls `supabase.rpc('assign_provisioning_code', { _employee_id, _code })`.
-- On success: toast "Provision code {code} applied to {name}" and refresh.
+### 2. No DB migration
 
-Also show the currently assigned code (if any) as a small badge on `TeamMemberCard` so admins can see who is provisioned. Provide an "Unassign" affordance in the same dialog when a code is already bound.
+Both tables already exist with the needed columns. No schema change required.
 
-## 4. Out of scope (per your instruction)
+### 3. Verify
 
-- No self-generation of codes by the employee. Codes are only issued by admins via the existing Provisioning code log; this feature just binds an existing ACTIVE code to a team member.
+- `curl` `hydrate-terminal` with `IDIA-FRWD-NEUL` → response contains `assignment.employee_name = "Cristina Heggison"` and `status = "active"`.
+- `curl` with `IDIA-IJKX-ET0U` (your unassigned code) → response contains `assignment: null` and `status = "active"`.
+- Re-pair Cristina's phone in IDIA Pay → no longer reports "unassigned".
 
-## Technical notes
+## Files touched
 
-- `useTeamData` already reads `employees` scoped by `business_id`; the new columns are additive and won't break existing selects.
-- The dialog reads blueprints directly with the anon client (RLS on `device_provisioning_blueprints` already restricts to business admins). The assign action goes through the RPC to keep the eligibility check server-side.
-- Files touched:
-  - migration: add columns + `assign_provisioning_code` function + grants
-  - `src/components/modules/team/ApplyProvisionCodeDialog.tsx` (new)
-  - `src/components/modules/team/TeamMemberCard.tsx` (add action button + badge)
-  - `src/components/modules/TeamManagement.tsx` (wire dialog open state)
-  - two `supabase--insert` calls for the employee + business_users rows
+- `supabase/functions/hydrate-terminal/index.ts` (only file)
+
+## Out of scope
+
+- Pay UI changes — you've already routed both paths through `hydrateFromHub`.
+- Locking pairing to the assigned user. Assignment stays informational; hydrate still succeeds for anyone entering the code (matches your earlier direction).
