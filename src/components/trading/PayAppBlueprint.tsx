@@ -1017,6 +1017,7 @@ export const PayAppBlueprint = () => {
 
     const finalManifest = {
       version: "2.1.0",
+      businessId: business?.id ?? null,
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
       createdAt: new Date().toISOString(),
