@@ -19,6 +19,8 @@ import { initializeTaxonomy, getNanoBitesFor, getIndustryById, type NanoBite } f
 import { useBusinessTaxonomy } from "@/hooks/useBusinessTaxonomy";
 import { PAY_APP_ROUTING, getRoute, assertPayAppRoutingCoverage } from "@/taxonomy/payAppRouting";
 import { getSubModuleCoverage } from "@/taxonomy/selectors";
+import { NanoBitePicoDialog } from "./NanoBitePicoDialog";
+import { Settings2 } from "lucide-react";
 import {
   Package,
   Send,
