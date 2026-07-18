@@ -19,6 +19,7 @@ import { initializeTaxonomy, getNanoBitesFor, getIndustryById, type NanoBite } f
 import { useBusinessTaxonomy } from "@/hooks/useBusinessTaxonomy";
 import { PAY_APP_ROUTING, getRoute, assertPayAppRoutingCoverage } from "@/taxonomy/payAppRouting";
 import { getSubModuleCoverage } from "@/taxonomy/selectors";
+import { usePayBlueprintCatalog } from "@/hooks/usePayBlueprintCatalog";
 import { NanoBitePicoDialog } from "./NanoBitePicoDialog";
 import { Settings2 } from "lucide-react";
 import {
@@ -653,6 +654,22 @@ export const PayAppBlueprint = () => {
     media: "quaternary.creator.audience_owned",
   };
   const taxonomy = useBusinessTaxonomy("pay-app-builder");
+  // Phase 3b — hydrate the vertical / sub-module / nano-bite catalog from the
+  // taxonomy_* DB tables. Falls back to the static in-memory tables while
+  // loading or on error so the App Builder never renders blank.
+  const catalog = usePayBlueprintCatalog();
+  const verticals: VerticalCategory[] =
+    catalog.verticalCategories.length > 0
+      ? (catalog.verticalCategories as VerticalCategory[])
+      : verticalCategories;
+  const resolveBitesForIndustry = useCallback(
+    (industryId: string): NanoBite[] => {
+      const dbBites = catalog.nanoBitesByIndustry.get(industryId);
+      if (dbBites && dbBites.length > 0) return dbBites;
+      return getNanoBitesFor({ industryId });
+    },
+    [catalog.nanoBitesByIndustry],
+  );
   useEffect(() => {
     initializeTaxonomy();
     // Boot-time smoke assertion — ensures every UI sub-module resolves through PAY_APP_ROUTING.
@@ -879,7 +896,7 @@ export const PayAppBlueprint = () => {
     const industryId = getRoute(moduleId)?.industryId;
     if (industryId) {
       const industryBiteIds = new Set(
-        getNanoBitesFor({ industryId }).map((b) => b.id),
+        resolveBitesForIndustry(industryId).map((b) => b.id),
       );
       taxonomy.setClassification((prev) => {
         const purged = (prev.selectedNanoBiteIds || []).filter(
@@ -892,7 +909,7 @@ export const PayAppBlueprint = () => {
       });
     }
     toast.info("Module removed");
-  }, [taxonomy]);
+  }, [taxonomy, resolveBitesForIndustry]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(provisioningCode);
@@ -942,7 +959,7 @@ export const PayAppBlueprint = () => {
     customSelected.forEach((signal) => {
       console.log(`[EXPLOSION]: Processing node: ${signal.id}`);
       const route = getRoute(signal.id);
-      const industryBites = route?.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
+      const industryBites = route?.industryId ? resolveBitesForIndustry(route.industryId) : [];
       const hasActiveBite = industryBites.some((b) => selectedBiteIds.has(b.id));
       if (signal.fromExplosion && !hasActiveBite) {
         console.log(`[JSON_GEN]: SKIP phantom exploded node [${signal.id}] — no active bites.`);
@@ -979,7 +996,7 @@ export const PayAppBlueprint = () => {
 
       // STRICT 1:1 — only nano-bites the user explicitly selected in the
       // Active Payload ship to JSON. No fallback to "all bites for this industry".
-      const allBites = route.industryId ? getNanoBitesFor({ industryId: route.industryId }) : [];
+      const allBites = route.industryId ? resolveBitesForIndustry(route.industryId) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
       const nanoBites = activeBites.map((b) => ({
@@ -1440,7 +1457,7 @@ export const PayAppBlueprint = () => {
     const seen = new Set<string>();
     const allBites: NanoBite[] = [];
     sourceIds.forEach((iid) => {
-      getNanoBitesFor({ industryId: iid }).forEach((b) => {
+      resolveBitesForIndustry(iid).forEach((b) => {
         if (!seen.has(b.id)) {
           seen.add(b.id);
           allBites.push(b);
