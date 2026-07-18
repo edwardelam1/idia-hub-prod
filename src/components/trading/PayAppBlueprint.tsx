@@ -1381,6 +1381,13 @@ export const PayAppBlueprint = () => {
       industryId: industryId ?? prev.industryId,
     }));
 
+    // Phase 4: restore operator overrides (cadence + pico assignments) so a
+    // reloaded schema reflects exactly the state that was persisted.
+    const cadenceOv = (p.overrides?.cadence ?? {}) as Record<string, string>;
+    const picoOv = (p.overrides?.picoAssignments ?? {}) as Record<string, string[]>;
+    setBiteCadenceOverrides(cadenceOv);
+    setBitePicoAssignments(picoOv);
+
     // Re-open the first vertical with a mapped custom module so the Nano-Bite panel populates.
     const firstVertical = customMods.find((m: any) => m.parentId)?.parentId ?? null;
     if (firstVertical) setExpandedVertical(firstVertical);
