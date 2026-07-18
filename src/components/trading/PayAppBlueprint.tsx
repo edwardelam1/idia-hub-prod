@@ -918,7 +918,7 @@ export const PayAppBlueprint = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const generateBlueprintJSON = () => {
+  const generateBlueprintJSON = async () => {
     console.log("[generateBlueprintJSON] START: Compiling Multi-Expert Manifest.");
     console.log("[JSON_GEN]: START - Evaluating state.");
     console.log("[PROVISIONING]: Syncing payload for code:", provisioningCode);
@@ -977,6 +977,47 @@ export const PayAppBlueprint = () => {
     );
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
+    // Phase 4: Resolve pico-bite assignments from the LIVE relationship graph
+    // (idia_nano_pico_relations) — not hard-coded defaults. User's explicit
+    // assignments (via NanoBitePicoDialog) are unioned on top.
+    const activeBiteIdList: string[] = [];
+    itemizedSidebarManifest.forEach((m) => {
+      const route = getRoute(m.id);
+      if (!route?.industryId) return;
+      const allBites = resolveBitesForIndustry(route.industryId);
+      allBites.forEach((b) => {
+        if (selectedBiteIds.has(b.id)) activeBiteIdList.push(b.id);
+      });
+    });
+
+    const relByBite = new Map<string, Array<{ pico_bite_id: string; relationship_weight: number; is_mandatory: boolean; slot: string | null }>>();
+    const picoMeta = new Map<string, { id: string; tag: string; name: string }>();
+    if (activeBiteIdList.length > 0) {
+      try {
+        const { data: rels } = await supabase
+          .from("idia_nano_pico_relations")
+          .select("nano_bite_id, pico_bite_id, relationship_weight, is_mandatory, slot")
+          .in("nano_bite_id", activeBiteIdList);
+        (rels || []).forEach((r: any) => {
+          const arr = relByBite.get(r.nano_bite_id) || [];
+          arr.push(r);
+          relByBite.set(r.nano_bite_id, arr);
+        });
+        const picoIds = new Set<string>();
+        (rels || []).forEach((r: any) => picoIds.add(r.pico_bite_id));
+        Object.values(bitePicoAssignments).forEach((ids) => (ids || []).forEach((id) => picoIds.add(id)));
+        if (picoIds.size > 0) {
+          const { data: picos } = await supabase
+            .from("idia_pico_bites")
+            .select("id, tag, name")
+            .in("id", Array.from(picoIds));
+          (picos || []).forEach((p: any) => picoMeta.set(p.id, p));
+        }
+      } catch (err) {
+        console.warn("[generateBlueprintJSON] pico relation fetch failed", err);
+      }
+    }
+
     const bundles = itemizedSidebarManifest.map((m) => {
       console.log(`[generateBlueprintJSON] ROUTING: Fetching taxonomy for [${m.id}]`);
       const route = getRoute(m.id);
@@ -999,16 +1040,58 @@ export const PayAppBlueprint = () => {
       const allBites = route.industryId ? resolveBitesForIndustry(route.industryId) : [];
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
-      const nanoBites = activeBites.map((b) => ({
-        id: b.id,
-        task: b.task,
-        microElement: b.microElement,
-        valueChainStage: b.valueChainStage,
-        cadence: biteCadenceOverrides[b.id] ?? b.cadence,
-        automatable: b.automatable,
-        requiresTier: b.requiresTier ?? null,
-        picoBites: bitePicoAssignments[b.id] ?? [],
-      }));
+      const nanoBites = activeBites.map((b) => {
+        const userIds = bitePicoAssignments[b.id] ?? [];
+        const graphRels = relByBite.get(b.id) ?? [];
+        // Union: user assignments first (preserve order), then any graph
+        // relations not already picked. Every entry carries provenance so
+        // downstream terminals can distinguish operator intent from
+        // relationship-graph inheritance.
+        const seen = new Set<string>();
+        const picoBites: Array<{ id: string; tag: string | null; name: string | null; weight: number; mandatory: boolean; slot: string | null; source: "user" | "graph" }> = [];
+        userIds.forEach((id) => {
+          if (seen.has(id)) return;
+          seen.add(id);
+          const rel = graphRels.find((r) => r.pico_bite_id === id);
+          const meta = picoMeta.get(id);
+          picoBites.push({
+            id,
+            tag: meta?.tag ?? null,
+            name: meta?.name ?? null,
+            weight: rel?.relationship_weight ?? 0,
+            mandatory: rel?.is_mandatory ?? false,
+            slot: rel?.slot ?? null,
+            source: "user",
+          });
+        });
+        graphRels
+          .slice()
+          .sort((a, z) => (z.relationship_weight ?? 0) - (a.relationship_weight ?? 0))
+          .forEach((rel) => {
+            if (seen.has(rel.pico_bite_id)) return;
+            seen.add(rel.pico_bite_id);
+            const meta = picoMeta.get(rel.pico_bite_id);
+            picoBites.push({
+              id: rel.pico_bite_id,
+              tag: meta?.tag ?? null,
+              name: meta?.name ?? null,
+              weight: rel.relationship_weight ?? 0,
+              mandatory: rel.is_mandatory ?? false,
+              slot: rel.slot ?? null,
+              source: "graph",
+            });
+          });
+        return {
+          id: b.id,
+          task: b.task,
+          microElement: b.microElement,
+          valueChainStage: b.valueChainStage,
+          cadence: biteCadenceOverrides[b.id] ?? b.cadence,
+          automatable: b.automatable,
+          requiresTier: b.requiresTier ?? null,
+          picoBites,
+        };
+      });
 
       return {
         subModuleId: route.subModuleId,
@@ -1088,6 +1171,12 @@ export const PayAppBlueprint = () => {
         pci_level: 1,
         data_residency: "us",
       },
+      // Operator overrides — persisted so re-loading a schema restores exactly
+      // what the builder emitted (cadence dropdowns + pico dialog selections).
+      overrides: {
+        cadence: biteCadenceOverrides,
+        picoAssignments: bitePicoAssignments,
+      },
     };
 
     console.log(`[generateBlueprintJSON] END: Successfully compiled ${activeSovereignNodes.length} expert nodes.`);
@@ -1097,8 +1186,8 @@ export const PayAppBlueprint = () => {
     return finalManifest;
   };
 
-  const handleDownloadBlueprint = () => {
-    const blueprint = generateBlueprintJSON();
+  const handleDownloadBlueprint = async () => {
+    const blueprint = await generateBlueprintJSON();
     const jsonString = JSON.stringify(blueprint, null, 2);
     const blob = new Blob([jsonString], { type: "text/plain" });
     const url = window.URL.createObjectURL(blob);
@@ -1123,7 +1212,7 @@ export const PayAppBlueprint = () => {
 
     try {
       // 1. Generate the dynamic payload
-      const blueprintPayload = generateBlueprintJSON();
+      const blueprintPayload = await generateBlueprintJSON();
 
       // Pre-flight: never overwrite the vault with an empty manifest.
       const bundleCount = Array.isArray((blueprintPayload as any)?.modules?.bundles)
@@ -1200,7 +1289,7 @@ export const PayAppBlueprint = () => {
     }
 
     try {
-      const payload = generateBlueprintJSON();
+      const payload = await generateBlueprintJSON();
       const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
         {
           business_id: selectedBusiness,
@@ -1292,6 +1381,13 @@ export const PayAppBlueprint = () => {
       industryId: industryId ?? prev.industryId,
     }));
 
+    // Phase 4: restore operator overrides (cadence + pico assignments) so a
+    // reloaded schema reflects exactly the state that was persisted.
+    const cadenceOv = (p.overrides?.cadence ?? {}) as Record<string, string>;
+    const picoOv = (p.overrides?.picoAssignments ?? {}) as Record<string, string[]>;
+    setBiteCadenceOverrides(cadenceOv);
+    setBitePicoAssignments(picoOv);
+
     // Re-open the first vertical with a mapped custom module so the Nano-Bite panel populates.
     const firstVertical = customMods.find((m: any) => m.parentId)?.parentId ?? null;
     if (firstVertical) setExpandedVertical(firstVertical);
@@ -1313,7 +1409,7 @@ export const PayAppBlueprint = () => {
     }
     setSchemaSaving(true);
     try {
-      const payload = generateBlueprintJSON();
+      const payload = await generateBlueprintJSON();
       const targetId = rowId ?? loadedSchemaId;
       if (targetId) {
         const update: any = { payload, updated_at: new Date().toISOString() };
