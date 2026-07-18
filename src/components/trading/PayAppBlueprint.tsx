@@ -1186,8 +1186,8 @@ export const PayAppBlueprint = () => {
     return finalManifest;
   };
 
-  const handleDownloadBlueprint = () => {
-    const blueprint = generateBlueprintJSON();
+  const handleDownloadBlueprint = async () => {
+    const blueprint = await generateBlueprintJSON();
     const jsonString = JSON.stringify(blueprint, null, 2);
     const blob = new Blob([jsonString], { type: "text/plain" });
     const url = window.URL.createObjectURL(blob);
@@ -1212,7 +1212,7 @@ export const PayAppBlueprint = () => {
 
     try {
       // 1. Generate the dynamic payload
-      const blueprintPayload = generateBlueprintJSON();
+      const blueprintPayload = await generateBlueprintJSON();
 
       // Pre-flight: never overwrite the vault with an empty manifest.
       const bundleCount = Array.isArray((blueprintPayload as any)?.modules?.bundles)
@@ -1289,7 +1289,7 @@ export const PayAppBlueprint = () => {
     }
 
     try {
-      const payload = generateBlueprintJSON();
+      const payload = await generateBlueprintJSON();
       const { error } = await supabase.from("idia_schema_manifest_vault" as any).upsert(
         {
           business_id: selectedBusiness,
@@ -1402,7 +1402,7 @@ export const PayAppBlueprint = () => {
     }
     setSchemaSaving(true);
     try {
-      const payload = generateBlueprintJSON();
+      const payload = await generateBlueprintJSON();
       const targetId = rowId ?? loadedSchemaId;
       if (targetId) {
         const update: any = { payload, updated_at: new Date().toISOString() };
