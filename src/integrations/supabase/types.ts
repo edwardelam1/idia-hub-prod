@@ -8555,28 +8555,109 @@ export type Database = {
           },
         ]
       }
+      taxonomy_nano_bites: {
+        Row: {
+          automatable: boolean
+          cadence: string | null
+          created_at: string
+          id: string
+          industry_id: string
+          is_active: boolean
+          meta: Json | null
+          micro_element: string
+          requires_tier: string | null
+          sort_order: number | null
+          task: string
+          updated_at: string
+          value_chain_stage: string
+        }
+        Insert: {
+          automatable?: boolean
+          cadence?: string | null
+          created_at?: string
+          id: string
+          industry_id: string
+          is_active?: boolean
+          meta?: Json | null
+          micro_element: string
+          requires_tier?: string | null
+          sort_order?: number | null
+          task: string
+          updated_at?: string
+          value_chain_stage: string
+        }
+        Update: {
+          automatable?: boolean
+          cadence?: string | null
+          created_at?: string
+          id?: string
+          industry_id?: string
+          is_active?: boolean
+          meta?: Json | null
+          micro_element?: string
+          requires_tier?: string | null
+          sort_order?: number | null
+          task?: string
+          updated_at?: string
+          value_chain_stage?: string
+        }
+        Relationships: []
+      }
       taxonomy_submodules: {
         Row: {
           created_at: string
+          default_archetype: string | null
+          default_production_method: string | null
           description: string | null
+          gics: string | null
           id: string
+          is_active: boolean | null
+          label: string | null
+          meta: Json | null
+          naics: string | null
           name: string
+          parent_id: string | null
+          sector: string | null
+          sort_order: number | null
+          tags: string[] | null
           updated_at: string
           vertical_id: string
         }
         Insert: {
           created_at?: string
+          default_archetype?: string | null
+          default_production_method?: string | null
           description?: string | null
+          gics?: string | null
           id: string
+          is_active?: boolean | null
+          label?: string | null
+          meta?: Json | null
+          naics?: string | null
           name: string
+          parent_id?: string | null
+          sector?: string | null
+          sort_order?: number | null
+          tags?: string[] | null
           updated_at?: string
           vertical_id: string
         }
         Update: {
           created_at?: string
+          default_archetype?: string | null
+          default_production_method?: string | null
           description?: string | null
+          gics?: string | null
           id?: string
+          is_active?: boolean | null
+          label?: string | null
+          meta?: Json | null
+          naics?: string | null
           name?: string
+          parent_id?: string | null
+          sector?: string | null
+          sort_order?: number | null
+          tags?: string[] | null
           updated_at?: string
           vertical_id?: string
         }
@@ -8594,25 +8675,49 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          gics: string | null
           icon: string | null
           id: string
+          is_active: boolean | null
+          label: string | null
+          meta: Json | null
+          naics: string | null
           name: string
+          sector: string | null
+          sort_order: number | null
+          tags: string[] | null
           updated_at: string
         }
         Insert: {
           color?: string | null
           created_at?: string
+          gics?: string | null
           icon?: string | null
           id: string
+          is_active?: boolean | null
+          label?: string | null
+          meta?: Json | null
+          naics?: string | null
           name: string
+          sector?: string | null
+          sort_order?: number | null
+          tags?: string[] | null
           updated_at?: string
         }
         Update: {
           color?: string | null
           created_at?: string
+          gics?: string | null
           icon?: string | null
           id?: string
+          is_active?: boolean | null
+          label?: string | null
+          meta?: Json | null
+          naics?: string | null
           name?: string
+          sector?: string | null
+          sort_order?: number | null
+          tags?: string[] | null
           updated_at?: string
         }
         Relationships: []
