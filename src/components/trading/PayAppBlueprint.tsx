@@ -987,9 +987,10 @@ export const PayAppBlueprint = () => {
         task: b.task,
         microElement: b.microElement,
         valueChainStage: b.valueChainStage,
-        cadence: b.cadence,
+        cadence: biteCadenceOverrides[b.id] ?? b.cadence,
         automatable: b.automatable,
         requiresTier: b.requiresTier ?? null,
+        picoBites: bitePicoAssignments[b.id] ?? [],
       }));
 
       return {
