@@ -2150,6 +2150,16 @@ export const PayAppBlueprint = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Nano-Bite ↔ Pico-Bite assignment dialog */}
+      <NanoBitePicoDialog
+        bite={picoDialogBite}
+        assignments={picoDialogBite ? bitePicoAssignments[picoDialogBite.id] ?? [] : []}
+        onChange={(biteId, picoIds) =>
+          setBitePicoAssignments((prev) => ({ ...prev, [biteId]: picoIds }))
+        }
+        onClose={() => setPicoDialogBite(null)}
+      />
+
       {/* Dev-only Coverage Panel — verifies every sub-module routes to bites + modules */}
       {import.meta.env.DEV && <CoveragePanel />}
     </div>
