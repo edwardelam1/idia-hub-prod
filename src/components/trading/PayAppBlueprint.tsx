@@ -793,7 +793,7 @@ export const PayAppBlueprint = () => {
   const handleAddSelectedModules = useCallback(() => {
     if (!expandedVertical || selectedSubModules.size === 0) return;
 
-    const vertical = verticalCategories.find((v) => v.id === expandedVertical);
+    const vertical = verticals.find((v) => v.id === expandedVertical);
     if (!vertical) return;
 
     const newModules = vertical.subModules
@@ -849,7 +849,7 @@ export const PayAppBlueprint = () => {
       // STRICT 1:1 EXPLOSION: if the drop target is a top-level vertical
       // (the "Carton"), explode it into its sub-modules in the Blueprint Zone
       // so the visible UI matches the JSON exactly. Visual gravity-fall stays.
-      const rootVertical = verticalCategories.find((v) => v.id === dragData.id);
+      const rootVertical = verticals.find((v) => v.id === dragData.id);
       if (rootVertical) {
         const newSubs = rootVertical.subModules
           .filter((s) => !selectedModules.some((m) => m.id === s.id))
@@ -869,7 +869,7 @@ export const PayAppBlueprint = () => {
       } else {
         const exists = selectedModules.some((m) => m.id === dragData.id);
         if (!exists) {
-          const vertical = verticalCategories.find((v) => v.id === dragData.parentId);
+          const vertical = verticals.find((v) => v.id === dragData.parentId);
           setSelectedModules((prev) => [
             ...prev,
             {
@@ -1227,7 +1227,7 @@ export const PayAppBlueprint = () => {
   };
 
   const customModulesCount = selectedModules.filter((m) => !m.isDefault).length;
-  const currentVertical = verticalCategories.find((v) => v.id === expandedVertical);
+  const currentVertical = verticals.find((v) => v.id === expandedVertical);
 
   // ── Provision Code Log: fetch all schemas for the selected business ────────
   const fetchSchemaLog = useCallback(async () => {
@@ -1258,10 +1258,10 @@ export const PayAppBlueprint = () => {
     const customMods = (p.modules?.custom || []).map((m: any) => {
       // Resolve vertical by (1) explicit parentId, (2) canonical vertical id, (3) legacy display name.
       const vert =
-        verticalCategories.find((v) => v.id === m.parentId) ||
-        verticalCategories.find((v) => v.id === m.vertical) ||
-        verticalCategories.find((v) => v.name === m.vertical) ||
-        verticalCategories.find((v) => v.name === m.parentName);
+        verticals.find((v) => v.id === m.parentId) ||
+        verticals.find((v) => v.id === m.vertical) ||
+        verticals.find((v) => v.name === m.vertical) ||
+        verticals.find((v) => v.name === m.parentName);
       return {
         id: m.id,
         name: m.name,
@@ -1712,7 +1712,7 @@ export const PayAppBlueprint = () => {
               <div className="p-4">
                 {!expandedVertical ? (
                   <div className="flex flex-wrap gap-3 content-end min-h-[480px] p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
-                    {verticalCategories.map((vertical, index) => {
+                    {verticals.map((vertical, index) => {
                       const Icon = vertical.icon;
                       const isExploding = animatingModules.has(vertical.id);
 
