@@ -1470,22 +1470,85 @@ export const PayAppBlueprint = () => {
     });
   };
 
-  const renderBiteChip = (b: NanoBite, side: "available" | "active") => (
-    <button
-      key={b.id}
-      type="button"
-      onClick={() => (side === "available" ? moveBiteToActive(b.id) : moveBiteToAvailable(b.id))}
-      className={`text-left text-[11px] rounded-md border px-2 py-1.5 transition-colors ${
-        side === "active"
-          ? "border-primary/50 bg-primary/10 hover:bg-primary/20"
-          : "border-border bg-muted/30 hover:bg-muted/60"
-      }`}
-      title={`${b.task} · ${b.microElement}`}
-    >
-      <span className="font-medium block truncate">{b.task}</span>
-      <span className="text-[9px] text-muted-foreground">{b.cadence}</span>
-    </button>
-  );
+  const renderBiteChip = (b: NanoBite, side: "available" | "active") => {
+    if (side === "available") {
+      return (
+        <button
+          key={b.id}
+          type="button"
+          onClick={() => moveBiteToActive(b.id)}
+          className="text-left text-[11px] rounded-md border px-2 py-1.5 transition-colors border-border bg-muted/30 hover:bg-muted/60"
+          title={`${b.task} · ${b.microElement}`}
+        >
+          <span className="font-medium block truncate">{b.task}</span>
+          <span className="text-[9px] text-muted-foreground">{b.cadence}</span>
+        </button>
+      );
+    }
+
+    // Active side: interactive chip with cadence dropdown + pico assignment + remove.
+    const cadenceValue = biteCadenceOverrides[b.id] ?? b.cadence;
+    const picoCount = (bitePicoAssignments[b.id] ?? []).length;
+    return (
+      <div
+        key={b.id}
+        className="text-left text-[11px] rounded-md border border-primary/50 bg-primary/10 px-2 py-1.5 flex flex-col gap-1"
+        title={`${b.task} · ${b.microElement}`}
+      >
+        <span className="font-medium block truncate">{b.task}</span>
+        <div className="flex items-center gap-1">
+          <Select
+            value={cadenceValue}
+            onValueChange={(v) =>
+              setBiteCadenceOverrides((prev) => ({ ...prev, [b.id]: v }))
+            }
+          >
+            <SelectTrigger
+              className="h-6 text-[9px] px-1.5 py-0 bg-background/60 flex-1"
+              onClick={(e) => e.stopPropagation()}
+              title="Set cadence for this nano-bite"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover">
+              {CADENCE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPicoDialogBite(b);
+            }}
+            className="relative rounded-md p-1 hover:bg-primary/20"
+            title="Assign pico-bites"
+          >
+            <Settings2 className="h-3 w-3" />
+            {picoCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[8px] leading-none rounded-full px-1 py-0.5">
+                {picoCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              moveBiteToAvailable(b.id);
+            }}
+            className="rounded-md p-1 hover:bg-destructive/20"
+            title="Remove bite from payload"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
