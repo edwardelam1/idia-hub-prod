@@ -623,6 +623,21 @@ export const PayAppBlueprint = () => {
   const [loadedSchemaId, setLoadedSchemaId] = useState<string | null>(null);
   const [schemaSaving, setSchemaSaving] = useState(false);
 
+  // ── Nano-Bite runtime overrides ─────────────────────────────────────────────
+  // Per-bite cadence override (dropdown replaces static "daily/weekly" label).
+  const [biteCadenceOverrides, setBiteCadenceOverrides] = useState<Record<string, string>>({});
+  // Per-bite pico-bite assignments (populated via the assignment dialog).
+  const [bitePicoAssignments, setBitePicoAssignments] = useState<Record<string, string[]>>({});
+  // Currently-open pico dialog target.
+  const [picoDialogBite, setPicoDialogBite] = useState<NanoBite | null>(null);
+
+  const CADENCE_OPTIONS: { value: string; label: string }[] = [
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+    { value: "event", label: "Event-Driven" },
+  ];
+
   // ── Business Taxonomy Engine bootstrap ──────────────────────────────────────
   // Maps the App Builder's vertical IDs to formal taxonomy IndustryNode IDs.
   const VERTICAL_TO_INDUSTRY_ID: Record<string, string> = {
