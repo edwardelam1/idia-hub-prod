@@ -1292,6 +1292,39 @@ export type Database = {
         }
         Relationships: []
       }
+      consent_registry: {
+        Row: {
+          aca_hash_key: string | null
+          consent_type: string
+          created_at: string
+          decision: string
+          document_version: string
+          id: string
+          payload: Json
+          user_id: string
+        }
+        Insert: {
+          aca_hash_key?: string | null
+          consent_type: string
+          created_at?: string
+          decision: string
+          document_version: string
+          id?: string
+          payload?: Json
+          user_id: string
+        }
+        Update: {
+          aca_hash_key?: string | null
+          consent_type?: string
+          created_at?: string
+          decision?: string
+          document_version?: string
+          id?: string
+          payload?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       creator_profiles: {
         Row: {
           created_at: string | null
@@ -4088,117 +4121,6 @@ export type Database = {
           severity?: string
           title?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      idia_nano_bites: {
-        Row: {
-          container_file: string
-          created_at: string
-          id: string
-          industry_id: string
-          name: string
-          screen: string | null
-          updated_at: string
-        }
-        Insert: {
-          container_file: string
-          created_at?: string
-          id: string
-          industry_id: string
-          name: string
-          screen?: string | null
-          updated_at?: string
-        }
-        Update: {
-          container_file?: string
-          created_at?: string
-          id?: string
-          industry_id?: string
-          name?: string
-          screen?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      idia_nano_pico_relations: {
-        Row: {
-          config_override: Json | null
-          created_at: string
-          is_mandatory: boolean
-          nano_bite_id: string
-          pico_bite_id: string
-          relationship_weight: number
-          slot: string | null
-          updated_at: string
-        }
-        Insert: {
-          config_override?: Json | null
-          created_at?: string
-          is_mandatory?: boolean
-          nano_bite_id: string
-          pico_bite_id: string
-          relationship_weight?: number
-          slot?: string | null
-          updated_at?: string
-        }
-        Update: {
-          config_override?: Json | null
-          created_at?: string
-          is_mandatory?: boolean
-          nano_bite_id?: string
-          pico_bite_id?: string
-          relationship_weight?: number
-          slot?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "idia_nano_pico_relations_nano_bite_id_fkey"
-            columns: ["nano_bite_id"]
-            isOneToOne: false
-            referencedRelation: "idia_nano_bites"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "idia_nano_pico_relations_pico_bite_id_fkey"
-            columns: ["pico_bite_id"]
-            isOneToOne: false
-            referencedRelation: "idia_pico_bites"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      idia_pico_bites: {
-        Row: {
-          created_at: string
-          default_config: Json
-          gate_policy: string
-          id: string
-          name: string
-          tag: string
-          ui_component: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          default_config?: Json
-          gate_policy?: string
-          id: string
-          name: string
-          tag: string
-          ui_component: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          default_config?: Json
-          gate_policy?: string
-          id?: string
-          name?: string
-          tag?: string
-          ui_component?: string
-          updated_at?: string
         }
         Relationships: []
       }
