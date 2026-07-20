@@ -12,7 +12,7 @@ export interface PicoBite {
   tag: string;
   name: string;
   ui_component: string | null;
-  gate_policy: string | null;
+  gate_policy: unknown;
 }
 
 export interface NanoPicoRelation {
@@ -69,7 +69,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
         if (cancelled) return;
         if (e1) throw e1;
         if (e2) throw e2;
-        setCatalog(picos || []);
+        setCatalog((picos as PicoBite[] | null) || []);
         setRelations((rels as NanoPicoRelation[]) || []);
       } catch (err: any) {
         console.error("[NanoBitePicoDialog] load failed", err);
