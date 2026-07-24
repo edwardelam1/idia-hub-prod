@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { useUniswapPoolStats } from "@/hooks/useUniswapPoolStats";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
@@ -35,6 +36,7 @@ const IndividualDashboard = () => {
   const { currentUsage, subscription } = useBillingData();
   const navigate = useNavigate();
   const { balance: walletBalance } = useWalletBalance();
+  const { data: uniswapPools } = useUniswapPoolStats();
 
   // ========================================================================
   // IDENTITY RECONCILIATION: Resolved GUID Bridge
@@ -55,8 +57,37 @@ const IndividualDashboard = () => {
   // ========================================================================
   const rail2_Gas = protocolState?.synapse_gas_credits ?? 0;
   const rail3_USDC = protocolState?.usdc_balance ?? null;
-  const silo3_LifeYield = protocolState?.fbo_royalty_balance ?? null;
   const rail1_Eth = walletBalance?.eth_balance ?? null;
+  const silo3_IdiaTokens = walletBalance?.idia_balance ?? null;
+
+  // Derive on-chain IDIA→USD price from the live IDIA/USDC Uniswap pool.
+  const idiaUsdPrice: number | null = (() => {
+    if (!uniswapPools || uniswapPools.length === 0) return null;
+    const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
+    const USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+    const pool = uniswapPools.find((p) => {
+      const t0 = p.token0?.id?.toLowerCase();
+      const t1 = p.token1?.id?.toLowerCase();
+      return (t0 === IDIA && t1 === USDC) || (t0 === USDC && t1 === IDIA);
+    });
+    if (!pool?.sqrtPriceX96) return null;
+    try {
+      const sqrt = BigInt(pool.sqrtPriceX96);
+      const num = Number((sqrt * sqrt * 10_000n) >> 192n) / 10_000;
+      const t0IsIdia = pool.token0.id.toLowerCase() === IDIA;
+      const dec0 = Number(pool.token0.decimals);
+      const dec1 = Number(pool.token1.decimals);
+      // price of token0 in token1 = num * 10^(dec0 - dec1)
+      const priceT0inT1 = num * Math.pow(10, dec0 - dec1);
+      const idiaUsd = t0IsIdia ? priceT0inT1 : (priceT0inT1 !== 0 ? 1 / priceT0inT1 : 0);
+      return Number.isFinite(idiaUsd) && idiaUsd > 0 ? idiaUsd : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const silo3_IdiaUsd =
+    silo3_IdiaTokens != null && idiaUsdPrice != null ? silo3_IdiaTokens * idiaUsdPrice : null;
 
   const formatSilo = (value: number | null | undefined, formatter: (n: number) => string): string =>
     value == null ? "--" : formatter(value);
@@ -64,10 +95,10 @@ const IndividualDashboard = () => {
   useEffect(() => {
     if (protocolState) {
       console.info(
-        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1-ETH: ${rail1_Eth} | R2: ${rail2_Gas} | R3-USDC: ${rail3_USDC} | S3: $${silo3_LifeYield}`,
+        `[STATUS: Dashboard.DataSync] Rail State Resolved - R1-ETH: ${rail1_Eth} | R2: ${rail2_Gas} | R3-USDC: ${rail3_USDC} | S3-IDIA: ${silo3_IdiaTokens} ($${silo3_IdiaUsd})`,
       );
     }
-  }, [protocolState, rail1_Eth, rail2_Gas, rail3_USDC, silo3_LifeYield]);
+  }, [protocolState, rail1_Eth, rail2_Gas, rail3_USDC, silo3_IdiaTokens, silo3_IdiaUsd]);
 
   // ─── DYNAMIC LEDGER INTERROGATION ─────────────────────
   const { data: stats } = useQuery({
@@ -102,8 +133,8 @@ const IndividualDashboard = () => {
           <h1 className="text-xl font-bold text-foreground tracking-tight leading-none">
             {piiData?.displayName ? `${piiData.displayName}'s IDIA Hub` : "My IDIA Hub"}
           </h1>
-          <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-            GUID: <span className="text-primary">{activeUserId?.substring(0, 16)}...</span>
+          <p className="text-[10px] text-muted-foreground mt-1 font-mono break-all">
+            GUID: <span className="text-primary">{activeUserId ?? "—"}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -171,19 +202,23 @@ const IndividualDashboard = () => {
           <Progress value={100} className="h-0.5 mt-2 bg-amber-500/20" />
         </Card>
 
-        {/* SILO 3: LIFE YIELD (FIAT EXIT) */}
+        {/* SILO 3: IDIA TOKEN (ON-CHAIN GOVERNANCE) */}
         <Card className="bg-emerald-500/5 border-emerald-500/10 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 flex items-center gap-2">
-            <Sparkles className="h-3 w-3" /> Silo 3: Yield
+            <Sparkles className="h-3 w-3" /> IDIA
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-emerald-500">
-              {formatSilo(
-                silo3_LifeYield,
-                (n) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 4 })}`,
+              {formatSilo(silo3_IdiaTokens, (n) =>
+                n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
               )}
             </span>
-            <span className="text-[8px] font-bold text-emerald-500/70 uppercase">USD</span>
+            <span className="text-[8px] font-bold text-emerald-500/70 uppercase">IDIA (Base)</span>
+          </div>
+          <div className="text-[9px] font-mono text-emerald-500/70 mt-0.5">
+            {silo3_IdiaUsd == null
+              ? "—"
+              : `≈ $${silo3_IdiaUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
           </div>
           <Progress value={100} className="h-0.5 mt-2 bg-emerald-500/20" />
         </Card>
