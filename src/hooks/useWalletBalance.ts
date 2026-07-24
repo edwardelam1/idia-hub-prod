@@ -5,9 +5,11 @@ import { base } from "viem/chains";
 
 // Base Mainnet USDC Contract
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+// Base Mainnet IDIA Token Contract
+const IDIA_ADDRESS = "0x6526F939D257E67896821c25B6C24Daa404a01FB";
 
 // Minimal ABI for read-only operations
-const USDC_ABI = [
+const ERC20_ABI = [
   {
     name: "balanceOf",
     type: "function",
@@ -20,6 +22,7 @@ const USDC_ABI = [
 interface WalletBalance {
   usdc_balance: number | null;
   eth_balance: number | null;
+  idia_balance: number | null;
 }
 
 /**
@@ -30,7 +33,11 @@ interface WalletBalance {
 export const useWalletBalance = (isYielding: boolean = false) => {
   console.log(`[useWalletBalance][Hook] START: Initializing hook. isYielding=${isYielding}`);
 
-  const [balance, setBalance] = useState<WalletBalance>({ usdc_balance: null, eth_balance: null });
+  const [balance, setBalance] = useState<WalletBalance>({
+    usdc_balance: null,
+    eth_balance: null,
+    idia_balance: null,
+  });
   const [loading, setLoading] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -64,7 +71,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (!session?.user) {
         console.warn("[useWalletBalance][fetchBalance][Auth] WARN: No active session.");
-        setBalance({ usdc_balance: null, eth_balance: null });
+        setBalance({ usdc_balance: null, eth_balance: null, idia_balance: null });
         return;
       }
       console.log(
@@ -105,7 +112,7 @@ export const useWalletBalance = (isYielding: boolean = false) => {
 
       if (profileError || !profile?.wallet_address) {
         console.warn("[useWalletBalance][fetchBalance][Profile] WARN: Valid hex address missing from profile.");
-        setBalance({ usdc_balance: null, eth_balance: null });
+        setBalance({ usdc_balance: null, eth_balance: null, idia_balance: null });
         return;
       }
       const walletAddress = profile.wallet_address;
@@ -119,24 +126,31 @@ export const useWalletBalance = (isYielding: boolean = false) => {
       });
 
       console.log(`[useWalletBalance][fetchBalance][Contract] START: Calling balanceOf(address) on-chain.`);
-      const [rawUsdc, rawEth] = await Promise.all([
+      const [rawUsdc, rawEth, rawIdia] = await Promise.all([
         publicClient.readContract({
           address: USDC_ADDRESS,
-          abi: USDC_ABI,
+          abi: ERC20_ABI,
           functionName: "balanceOf",
           args: [walletAddress as `0x${string}`],
         } as any) as Promise<bigint>,
         publicClient.getBalance({ address: walletAddress as `0x${string}` }),
+        publicClient.readContract({
+          address: IDIA_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [walletAddress as `0x${string}`],
+        } as any) as Promise<bigint>,
       ]);
 
       // 5. STATE INJECTION
       const hydratedUsdc = Number(formatUnits(rawUsdc as bigint, 6));
       const hydratedEth = Number(formatUnits(rawEth as bigint, 18));
+      const hydratedIdia = Number(formatUnits(rawIdia as bigint, 18));
       console.log(
-        `[useWalletBalance][fetchBalance][Hydration] SUCCESS: USDC=$${hydratedUsdc} | ETH=${hydratedEth}`,
+        `[useWalletBalance][fetchBalance][Hydration] SUCCESS: USDC=$${hydratedUsdc} | ETH=${hydratedEth} | IDIA=${hydratedIdia}`,
       );
 
-      setBalance({ usdc_balance: hydratedUsdc, eth_balance: hydratedEth });
+      setBalance({ usdc_balance: hydratedUsdc, eth_balance: hydratedEth, idia_balance: hydratedIdia });
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.log("[useWalletBalance][fetchBalance] ABORT: Routine cancelled for transaction yield.");
