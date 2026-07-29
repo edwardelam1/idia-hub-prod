@@ -1019,9 +1019,9 @@ export const PayAppBlueprint = () => {
     );
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
-    // Phase 4: Resolve pico-bite assignments from the LIVE relationship graph
-    // (idia_nano_pico_relations) — not hard-coded defaults. User's explicit
-    // assignments (via NanoBitePicoDialog) are unioned on top.
+    // Phase 5: ONLY the operator's explicit pico-bite assignments ship.
+    // Relationship-graph rows are suggestions in the dialog and are NEVER
+    // auto-applied into the manifest — 0 selected must mean 0 emitted.
     const activeBiteIdList: string[] = [];
     itemizedSidebarManifest.forEach((m) => {
       const route = getRoute(m.id);
@@ -1083,46 +1083,30 @@ export const PayAppBlueprint = () => {
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
       const nanoBites = activeBites.map((b) => {
-        const userIds = bitePicoAssignments[b.id] ?? [];
         const graphRels = relByBite.get(b.id) ?? [];
-        // Union: user assignments first (preserve order), then any graph
-        // relations not already picked. Every entry carries provenance so
-        // downstream terminals can distinguish operator intent from
-        // relationship-graph inheritance.
+        // STRICT: operator selections only, deduped, and only IDs that resolve
+        // to a real pico-bite. Ghost IDs (legacy nano-bite IDs) are dropped.
         const seen = new Set<string>();
-        const picoBites: Array<{ id: string; tag: string | null; name: string | null; weight: number; mandatory: boolean; slot: string | null; source: "user" | "graph" }> = [];
-        userIds.forEach((id) => {
+        const picoBites: Array<{ id: string; tag: string | null; name: string | null; weight: number; mandatory: boolean; slot: string | null; source: "user" }> = [];
+        (bitePicoAssignments[b.id] ?? []).forEach((id) => {
           if (seen.has(id)) return;
+          const meta = picoMeta.get(id);
+          if (!meta) {
+            console.warn(`[generateBlueprintJSON] dropping unresolved pico [${id}] on bite [${b.id}]`);
+            return;
+          }
           seen.add(id);
           const rel = graphRels.find((r) => r.pico_bite_id === id);
-          const meta = picoMeta.get(id);
           picoBites.push({
             id,
-            tag: meta?.tag ?? null,
-            name: meta?.name ?? null,
+            tag: meta.tag ?? null,
+            name: meta.name ?? null,
             weight: rel?.relationship_weight ?? 0,
             mandatory: rel?.is_mandatory ?? false,
             slot: rel?.slot ?? null,
             source: "user",
           });
         });
-        graphRels
-          .slice()
-          .sort((a, z) => (z.relationship_weight ?? 0) - (a.relationship_weight ?? 0))
-          .forEach((rel) => {
-            if (seen.has(rel.pico_bite_id)) return;
-            seen.add(rel.pico_bite_id);
-            const meta = picoMeta.get(rel.pico_bite_id);
-            picoBites.push({
-              id: rel.pico_bite_id,
-              tag: meta?.tag ?? null,
-              name: meta?.name ?? null,
-              weight: rel.relationship_weight ?? 0,
-              mandatory: rel.is_mandatory ?? false,
-              slot: rel.slot ?? null,
-              source: "graph",
-            });
-          });
         return {
           id: b.id,
           task: b.task,
