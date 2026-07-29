@@ -1631,7 +1631,10 @@ export const PayAppBlueprint = () => {
 
     // Active side: interactive chip with cadence dropdown + pico assignment + remove.
     const cadenceValue = biteCadenceOverrides[b.id] ?? b.cadence;
-    const picoCount = (bitePicoAssignments[b.id] ?? []).length;
+    // Count only resolvable picos so the badge can never disagree with the dialog.
+    const picoCount = (bitePicoAssignments[b.id] ?? []).filter((id) =>
+      validPicoIds ? validPicoIds.has(id) : UUID_RE.test(id),
+    ).length;
     return (
       <div
         key={b.id}
