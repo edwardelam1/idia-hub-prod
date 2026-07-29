@@ -631,6 +631,45 @@ export const PayAppBlueprint = () => {
   const [bitePicoAssignments, setBitePicoAssignments] = useState<Record<string, string[]>>({});
   // Currently-open pico dialog target.
   const [picoDialogBite, setPicoDialogBite] = useState<NanoBite | null>(null);
+  // Canonical set of valid pico-bite IDs (from idia_pico_bites). Used to purge
+  // ghost entries (legacy nano-bite IDs) that inflate assignment counts.
+  const [validPicoIds, setValidPicoIds] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.from("idia_pico_bites").select("id");
+      if (cancelled || error || !data) return;
+      setValidPicoIds(new Set(data.map((p: any) => p.id as string)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Keep only IDs that resolve to a real pico-bite; dedupe while preserving order.
+  const sanitizePicoMap = (
+    map: Record<string, string[]>,
+    valid: Set<string> | null,
+  ): { clean: Record<string, string[]>; dropped: number } => {
+    const clean: Record<string, string[]> = {};
+    let dropped = 0;
+    Object.entries(map || {}).forEach(([biteId, ids]) => {
+      const seen = new Set<string>();
+      const kept: string[] = [];
+      (ids || []).forEach((id) => {
+        const ok = valid ? valid.has(id) : UUID_RE.test(id);
+        if (!ok || seen.has(id)) {
+          dropped += 1;
+          return;
+        }
+        seen.add(id);
+        kept.push(id);
+      });
+      if (kept.length > 0) clean[biteId] = kept;
+    });
+    return { clean, dropped };
+  };
 
   const CADENCE_OPTIONS: { value: string; label: string }[] = [
     { value: "daily", label: "Daily" },
