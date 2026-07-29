@@ -1161,6 +1161,9 @@ export const PayAppBlueprint = () => {
 
     const finalManifest = {
       version: "2.1.0",
+      // Monotonic stamp so a terminal can tell a redeployed manifest apart from
+      // the copy it already cached locally.
+      manifestVersion: new Date().toISOString(),
       businessId: business?.id ?? null,
       clientOrganization: businessName,
       provisioningCode: provisioningCode,
