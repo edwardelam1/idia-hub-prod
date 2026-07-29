@@ -10,6 +10,31 @@ const corsHeaders = {
 // Weights are clamped 0.30–0.95; the strongest match per nano-bite is marked mandatory
 // when it lands in a payment / compliance / auth category.
 const KEYWORD_MAP: Array<{ match: RegExp; picos: Array<{ tag: string; weight: number; slot?: string; mandatory?: boolean }> }> = [
+  { match: /\b(pos|sale|sales|order|ordering|cart|ticket|tab|counter|register|terminal|kiosk)\b/i, picos: [
+    { tag: "pico.ui.item_grid", weight: 0.90, slot: "catalog" },
+    { tag: "pico.ui.category_tabs", weight: 0.70, slot: "catalog" },
+    { tag: "pico.ui.modifier_sheet", weight: 0.68, slot: "cart" },
+    { tag: "pico.ui.summary_bar", weight: 0.60, slot: "totals" },
+    { tag: "pico.input.chip_insert", weight: 0.75, slot: "payment" },
+    { tag: "pico.input.nfc_tap", weight: 0.70, slot: "payment" },
+    { tag: "pico.output.receipt_printer", weight: 0.65, slot: "receipt" },
+  ]},
+  { match: /\b(mobile|handheld|tableside|curbside|field)\b/i, picos: [
+    { tag: "pico.input.nfc_tap", weight: 0.72, slot: "payment" },
+    { tag: "pico.fleet.gps_ping", weight: 0.45, slot: "geo" },
+  ]},
+  { match: /\b(fire|expedite|route to|kds_fire)\b/i, picos: [
+    { tag: "pico.output.kds_route", weight: 0.85, slot: "route" },
+  ]},
+  { match: /\b(waste|spoilage|86|comp)\b/i, picos: [
+    { tag: "pico.compliance.void_reason", weight: 0.75, slot: "void" },
+    { tag: "pico.ops.expiration_flag", weight: 0.60, slot: "ops" },
+  ]},
+  { match: /\b(commissary|depletion|deplete|prep list|par level)\b/i, picos: [
+    { tag: "pico.ops.sku_lookup", weight: 0.75, slot: "lookup" },
+    { tag: "pico.ops.par_alert", weight: 0.65, slot: "ops" },
+    { tag: "pico.input.barcode_scan", weight: 0.60, slot: "lookup" },
+  ]},
   { match: /\b(pay|payment|tender|checkout|charge|invoice|settle)\b/i, picos: [
     { tag: "pico.input.chip_insert", weight: 0.90, slot: "payment", mandatory: true },
     { tag: "pico.input.nfc_tap", weight: 0.85, slot: "payment" },
@@ -216,7 +241,12 @@ serve(async (req) => {
     // Build relation rows
     const rows: any[] = [];
     for (const nb of nanos) {
-      const haystack = `${nb.task} ${nb.micro_element} ${nb.value_chain_stage} ${nb.industry_id}`;
+      // The nano-bite ID itself carries strong signals (…pos.item_add, …pay.tip_close,
+      // …inv.receive_stock), so it is part of the match surface. Separators are
+      // normalized to spaces so \b word boundaries can see each segment.
+      const idTokens = String(nb.id ?? "").replace(/[._-]+/g, " ");
+      const haystack = `${nb.task} ${nb.micro_element} ${nb.value_chain_stage} ${nb.industry_id} ${idTokens}`
+        .replace(/[-_/]+/g, " ");
       const picked = new Map<string, { weight: number; slot?: string; mandatory?: boolean }>();
       for (const entry of KEYWORD_MAP) {
         if (!entry.match.test(haystack)) continue;
