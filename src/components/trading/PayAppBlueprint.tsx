@@ -1412,7 +1412,11 @@ export const PayAppBlueprint = () => {
     const cadenceOv = (p.overrides?.cadence ?? {}) as Record<string, string>;
     const picoOv = (p.overrides?.picoAssignments ?? {}) as Record<string, string[]>;
     setBiteCadenceOverrides(cadenceOv);
-    setBitePicoAssignments(picoOv);
+    const { clean, dropped } = sanitizePicoMap(picoOv, validPicoIds);
+    setBitePicoAssignments(clean);
+    if (dropped > 0) {
+      toast.info(`Repaired blueprint: removed ${dropped} stale pico-bite reference${dropped === 1 ? "" : "s"}.`);
+    }
 
     // Re-open the first vertical with a mapped custom module so the Nano-Bite panel populates.
     const firstVertical = customMods.find((m: any) => m.parentId)?.parentId ?? null;
