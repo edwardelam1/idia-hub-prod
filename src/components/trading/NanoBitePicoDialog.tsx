@@ -3,9 +3,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { X, Plus, Sparkles } from "lucide-react";
+import { X, Plus, Sparkles, Search } from "lucide-react";
 
 export interface PicoBite {
   id: string;
@@ -48,6 +49,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
   const [relations, setRelations] = useState<NanoPicoRelation[]>([]);
   const [loading, setLoading] = useState(false);
   const [addPickerValue, setAddPickerValue] = useState<string>("");
+  const [picoQuery, setPicoQuery] = useState("");
 
   const open = !!bite;
 
@@ -107,6 +109,15 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
     [catalog, assignedSet],
   );
 
+  const filteredAvailablePicos = useMemo(() => {
+    const q = picoQuery.trim().toLowerCase();
+    if (!q) return availablePicos;
+    return availablePicos.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(q) || p.tag?.toLowerCase().includes(q),
+    );
+  }, [availablePicos, picoQuery]);
+
   // Assigned IDs with no catalog match (legacy/ghost entries). Surfaced explicitly
   // so the count on the chip badge can never disagree with what's rendered here.
   const unresolvedIds = useMemo(
@@ -119,6 +130,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
     if (assignedSet.has(picoId)) return;
     onChange(bite.id, [...assignments, picoId]);
     setAddPickerValue("");
+    setPicoQuery("");
   };
 
   const handleRemove = (picoId: string) => {
@@ -134,7 +146,15 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setPicoQuery("");
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -268,8 +288,26 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder={loading ? "Loading pico-bites…" : `Choose from ${availablePicos.length} pico-bites…`} />
                 </SelectTrigger>
-                <SelectContent className="max-h-80 bg-popover">
-                  {availablePicos.map((p) => (
+                <SelectContent
+                  className="max-h-80 bg-popover"
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
+                  <div
+                    className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 bg-popover px-2 pb-2 pt-1"
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        autoFocus
+                        value={picoQuery}
+                        onChange={(e) => setPicoQuery(e.target.value)}
+                        placeholder="Search pico-bites…"
+                        className="h-8 pl-7 text-xs"
+                      />
+                    </div>
+                  </div>
+                  {filteredAvailablePicos.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       <span className="font-medium">{p.name}</span>
                       <span className="text-muted-foreground ml-2 text-[10px]">{p.tag}</span>
@@ -278,6 +316,11 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
                   {availablePicos.length === 0 && !loading && (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
                       All pico-bites are already assigned.
+                    </div>
+                  )}
+                  {availablePicos.length > 0 && filteredAvailablePicos.length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      No pico-bites match “{picoQuery}”.
                     </div>
                   )}
                 </SelectContent>
