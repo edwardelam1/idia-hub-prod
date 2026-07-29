@@ -214,7 +214,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
         {/* Logo Section */}
         <div className="p-3 md:p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center space-x-2 md:space-x-3">
-            <img src="/images/hub-logo.png" alt="IDIA Hub" className="w-8 h-8 flex-shrink-0" />
+            <img src="/images/hub-logo.png" alt="The IDIA Hub" className="w-8 h-8 flex-shrink-0" />
             {!isCollapsed && (
               <div className="min-w-0">
                 <h2 className="font-bold text-sm md:text-lg text-foreground truncate">IDIA Hub</h2>
