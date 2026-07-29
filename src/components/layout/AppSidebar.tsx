@@ -217,7 +217,7 @@ const AppSidebar = ({ userRole }: AppSidebarProps) => {
             <img src="/images/hub-logo.png" alt="The IDIA Hub" className="w-8 h-8 flex-shrink-0" />
             {!isCollapsed && (
               <div className="min-w-0">
-                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">IDIA Hub</h2>
+                <h2 className="font-bold text-sm md:text-lg text-foreground truncate">The IDIA Hub</h2>
                 <p className="text-xs text-muted-foreground capitalize truncate">{formatRoleLabel(userRole)}</p>
               </div>
             )}
