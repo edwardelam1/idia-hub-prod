@@ -18,6 +18,8 @@ export interface PayAppBlueprint {
     custom: BlueprintModule[];
   };
   issuedAt: string;
+  /** Stamp emitted by the Hub builder; used to invalidate stale device caches. */
+  manifestVersion?: string | null;
 }
 
 const logTrace = (action: string, detail: string) =>
@@ -103,6 +105,22 @@ export class ProvisioningEngine {
       console.error("[ProvisioningEngine.loadCached] Cache parse failure", err);
       return null;
     }
+  }
+
+  /**
+   * Discards the cached blueprint when the Hub reports a newer manifestVersion.
+   * Returns true when the cache was invalidated (caller should re-hydrate).
+   */
+  static invalidateIfStale(remoteVersion?: string | null): boolean {
+    if (!remoteVersion) return false;
+    const cached = this.loadCached();
+    if (!cached) return false;
+    if ((cached.manifestVersion ?? null) === remoteVersion) return false;
+    console.info(
+      `[ProvisioningEngine.invalidateIfStale] Cache stale (local=${cached.manifestVersion ?? "none"} remote=${remoteVersion}). Purging.`,
+    );
+    localStorage.removeItem(this.STORAGE_KEY);
+    return true;
   }
 
   static wipeDevice(): void {
