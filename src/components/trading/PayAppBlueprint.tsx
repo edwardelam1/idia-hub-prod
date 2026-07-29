@@ -601,6 +601,9 @@ export function generateStrictProvisioningCode(): string {
 // Legacy alias retained for in-file call sites.
 const generateProvisioningCode = generateStrictProvisioningCode;
 
+// Pico-bite IDs are UUIDs. Anything else in an assignment array is legacy junk.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const PayAppBlueprint = () => {
   const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
   const [selectedModules, setSelectedModules] = useState<SelectedModule[]>([...defaultModules]);
