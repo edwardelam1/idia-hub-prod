@@ -107,6 +107,13 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
     [catalog, assignedSet],
   );
 
+  // Assigned IDs with no catalog match (legacy/ghost entries). Surfaced explicitly
+  // so the count on the chip badge can never disagree with what's rendered here.
+  const unresolvedIds = useMemo(
+    () => (loading ? [] : assignments.filter((id) => !catalog.some((p) => p.id === id))),
+    [assignments, catalog, loading],
+  );
+
   const handleAdd = (picoId: string) => {
     if (!bite || !picoId) return;
     if (assignedSet.has(picoId)) return;
@@ -225,6 +232,28 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {unresolvedIds.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {unresolvedIds.map((id) => (
+                  <div
+                    key={id}
+                    className="text-[11px] rounded-md border border-destructive/50 bg-destructive/10 px-2 py-1 flex items-center gap-1.5"
+                    title="This entry does not match any pico-bite and will not ship in the manifest."
+                  >
+                    <span className="font-medium">Unresolved</span>
+                    <span className="text-[9px] text-muted-foreground break-all">{id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(id)}
+                      className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
+                      aria-label={`Remove unresolved entry ${id}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

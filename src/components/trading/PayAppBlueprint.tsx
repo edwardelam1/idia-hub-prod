@@ -601,6 +601,9 @@ export function generateStrictProvisioningCode(): string {
 // Legacy alias retained for in-file call sites.
 const generateProvisioningCode = generateStrictProvisioningCode;
 
+// Pico-bite IDs are UUIDs. Anything else in an assignment array is legacy junk.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const PayAppBlueprint = () => {
   const [expandedVertical, setExpandedVertical] = useState<string | null>(null);
   const [selectedModules, setSelectedModules] = useState<SelectedModule[]>([...defaultModules]);
@@ -631,6 +634,45 @@ export const PayAppBlueprint = () => {
   const [bitePicoAssignments, setBitePicoAssignments] = useState<Record<string, string[]>>({});
   // Currently-open pico dialog target.
   const [picoDialogBite, setPicoDialogBite] = useState<NanoBite | null>(null);
+  // Canonical set of valid pico-bite IDs (from idia_pico_bites). Used to purge
+  // ghost entries (legacy nano-bite IDs) that inflate assignment counts.
+  const [validPicoIds, setValidPicoIds] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.from("idia_pico_bites").select("id");
+      if (cancelled || error || !data) return;
+      setValidPicoIds(new Set(data.map((p: any) => p.id as string)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Keep only IDs that resolve to a real pico-bite; dedupe while preserving order.
+  const sanitizePicoMap = (
+    map: Record<string, string[]>,
+    valid: Set<string> | null,
+  ): { clean: Record<string, string[]>; dropped: number } => {
+    const clean: Record<string, string[]> = {};
+    let dropped = 0;
+    Object.entries(map || {}).forEach(([biteId, ids]) => {
+      const seen = new Set<string>();
+      const kept: string[] = [];
+      (ids || []).forEach((id) => {
+        const ok = valid ? valid.has(id) : UUID_RE.test(id);
+        if (!ok || seen.has(id)) {
+          dropped += 1;
+          return;
+        }
+        seen.add(id);
+        kept.push(id);
+      });
+      if (kept.length > 0) clean[biteId] = kept;
+    });
+    return { clean, dropped };
+  };
 
   const CADENCE_OPTIONS: { value: string; label: string }[] = [
     { value: "daily", label: "Daily" },
@@ -977,9 +1019,9 @@ export const PayAppBlueprint = () => {
     );
 
     // 2. BUNDLE & TAXONOMY PHASE: Route the itemized experts to their Nano-Bites
-    // Phase 4: Resolve pico-bite assignments from the LIVE relationship graph
-    // (idia_nano_pico_relations) — not hard-coded defaults. User's explicit
-    // assignments (via NanoBitePicoDialog) are unioned on top.
+    // Phase 5: ONLY the operator's explicit pico-bite assignments ship.
+    // Relationship-graph rows are suggestions in the dialog and are NEVER
+    // auto-applied into the manifest — 0 selected must mean 0 emitted.
     const activeBiteIdList: string[] = [];
     itemizedSidebarManifest.forEach((m) => {
       const route = getRoute(m.id);
@@ -1041,46 +1083,30 @@ export const PayAppBlueprint = () => {
       const activeBites = allBites.filter((b) => selectedBiteIds.has(b.id));
 
       const nanoBites = activeBites.map((b) => {
-        const userIds = bitePicoAssignments[b.id] ?? [];
         const graphRels = relByBite.get(b.id) ?? [];
-        // Union: user assignments first (preserve order), then any graph
-        // relations not already picked. Every entry carries provenance so
-        // downstream terminals can distinguish operator intent from
-        // relationship-graph inheritance.
+        // STRICT: operator selections only, deduped, and only IDs that resolve
+        // to a real pico-bite. Ghost IDs (legacy nano-bite IDs) are dropped.
         const seen = new Set<string>();
-        const picoBites: Array<{ id: string; tag: string | null; name: string | null; weight: number; mandatory: boolean; slot: string | null; source: "user" | "graph" }> = [];
-        userIds.forEach((id) => {
+        const picoBites: Array<{ id: string; tag: string | null; name: string | null; weight: number; mandatory: boolean; slot: string | null; source: "user" }> = [];
+        (bitePicoAssignments[b.id] ?? []).forEach((id) => {
           if (seen.has(id)) return;
+          const meta = picoMeta.get(id);
+          if (!meta) {
+            console.warn(`[generateBlueprintJSON] dropping unresolved pico [${id}] on bite [${b.id}]`);
+            return;
+          }
           seen.add(id);
           const rel = graphRels.find((r) => r.pico_bite_id === id);
-          const meta = picoMeta.get(id);
           picoBites.push({
             id,
-            tag: meta?.tag ?? null,
-            name: meta?.name ?? null,
+            tag: meta.tag ?? null,
+            name: meta.name ?? null,
             weight: rel?.relationship_weight ?? 0,
             mandatory: rel?.is_mandatory ?? false,
             slot: rel?.slot ?? null,
             source: "user",
           });
         });
-        graphRels
-          .slice()
-          .sort((a, z) => (z.relationship_weight ?? 0) - (a.relationship_weight ?? 0))
-          .forEach((rel) => {
-            if (seen.has(rel.pico_bite_id)) return;
-            seen.add(rel.pico_bite_id);
-            const meta = picoMeta.get(rel.pico_bite_id);
-            picoBites.push({
-              id: rel.pico_bite_id,
-              tag: meta?.tag ?? null,
-              name: meta?.name ?? null,
-              weight: rel.relationship_weight ?? 0,
-              mandatory: rel.is_mandatory ?? false,
-              slot: rel.slot ?? null,
-              source: "graph",
-            });
-          });
         return {
           id: b.id,
           task: b.task,
@@ -1175,7 +1201,7 @@ export const PayAppBlueprint = () => {
       // what the builder emitted (cadence dropdowns + pico dialog selections).
       overrides: {
         cadence: biteCadenceOverrides,
-        picoAssignments: bitePicoAssignments,
+        picoAssignments: sanitizePicoMap(bitePicoAssignments, validPicoIds).clean,
       },
     };
 
@@ -1386,7 +1412,11 @@ export const PayAppBlueprint = () => {
     const cadenceOv = (p.overrides?.cadence ?? {}) as Record<string, string>;
     const picoOv = (p.overrides?.picoAssignments ?? {}) as Record<string, string[]>;
     setBiteCadenceOverrides(cadenceOv);
-    setBitePicoAssignments(picoOv);
+    const { clean, dropped } = sanitizePicoMap(picoOv, validPicoIds);
+    setBitePicoAssignments(clean);
+    if (dropped > 0) {
+      toast.info(`Repaired blueprint: removed ${dropped} stale pico-bite reference${dropped === 1 ? "" : "s"}.`);
+    }
 
     // Re-open the first vertical with a mapped custom module so the Nano-Bite panel populates.
     const firstVertical = customMods.find((m: any) => m.parentId)?.parentId ?? null;
@@ -1601,7 +1631,10 @@ export const PayAppBlueprint = () => {
 
     // Active side: interactive chip with cadence dropdown + pico assignment + remove.
     const cadenceValue = biteCadenceOverrides[b.id] ?? b.cadence;
-    const picoCount = (bitePicoAssignments[b.id] ?? []).length;
+    // Count only resolvable picos so the badge can never disagree with the dialog.
+    const picoCount = (bitePicoAssignments[b.id] ?? []).filter((id) =>
+      validPicoIds ? validPicoIds.has(id) : UUID_RE.test(id),
+    ).length;
     return (
       <div
         key={b.id}
