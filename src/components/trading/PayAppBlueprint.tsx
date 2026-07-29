@@ -1201,7 +1201,7 @@ export const PayAppBlueprint = () => {
       // what the builder emitted (cadence dropdowns + pico dialog selections).
       overrides: {
         cadence: biteCadenceOverrides,
-        picoAssignments: bitePicoAssignments,
+        picoAssignments: sanitizePicoMap(bitePicoAssignments, validPicoIds).clean,
       },
     };
 
