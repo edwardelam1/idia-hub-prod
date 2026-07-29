@@ -139,6 +139,10 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         status: blueprintStatus,
+        manifest_version:
+          ((data.schema_payload as Record<string, unknown>)?.manifestVersion as string) ??
+          (data as any).updated_at ??
+          null,
         assignment,
         assigned_employee_id: (assignment?.employee_id as string) ?? null,
         assigned_employee_name: (assignment?.employee_name as string) ?? null,
@@ -148,6 +152,10 @@ serve(async (req) => {
         payload: {
           ...(data.schema_payload as Record<string, unknown>),
           businessId: relationalBusinessId,
+          manifestVersion:
+            ((data.schema_payload as Record<string, unknown>)?.manifestVersion as string) ??
+            (data as any).updated_at ??
+            null,
           assignment,
           assigned_employee_id: (assignment?.employee_id as string) ?? null,
           assigned_employee_name: (assignment?.employee_name as string) ?? null,
