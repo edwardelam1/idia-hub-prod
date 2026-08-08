@@ -18,6 +18,10 @@ const uniswapAddUrl = (feeTier: number) =>
 const uniswapPoolUrl = (poolAddress: string) =>
   `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
 const basescanUrl = (addr: string) => `https://basescan.org/address/${addr}`;
+// Fallbacks used when live pool data is unavailable, so links never resolve to "#"
+const UNISWAP_ADD_FALLBACK = uniswapAddUrl(3000);
+const UNISWAP_TOKEN_FALLBACK = `https://app.uniswap.org/explore/tokens/base/${IDIA}`;
+const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 
 const formatUSD = (n: number) =>
   n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${n.toFixed(2)}`;
@@ -195,10 +199,9 @@ const LiquidityPools = () => {
             <Button
               asChild
               className="w-full h-8 text-xs"
-              disabled={!selectedPool}
             >
               <a
-                href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : '#'}
+                href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -228,7 +231,7 @@ const LiquidityPools = () => {
           <div className="space-y-2">
             <Button asChild variant="outline" size="sm" className="w-full text-xs">
               <a
-                href={selectedPool ? uniswapPoolUrl(selectedPool.id) : '#'}
+                href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -237,7 +240,7 @@ const LiquidityPools = () => {
             </Button>
             <Button asChild variant="outline" size="sm" className="w-full text-xs">
               <a
-                href={selectedPool ? basescanUrl(selectedPool.id) : '#'}
+                href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
