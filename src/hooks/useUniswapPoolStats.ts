@@ -29,10 +29,14 @@ export function useUniswapPoolStats() {
       const { data, error } = await supabase.functions.invoke('uniswap-pool-stats', {
         body: {},
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        console.warn('[useUniswapPoolStats] edge error, degrading to empty pools', error);
+        return [];
+      }
+      if (data?.warning) console.warn('[useUniswapPoolStats]', data.warning);
       return (data?.pools ?? []) as UniswapPoolStat[];
     },
+    retry: false,
     staleTime: 60_000,
     refetchInterval: 60_000,
   });

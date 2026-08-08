@@ -58,11 +58,13 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get('THEGRAPH_API_KEY');
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'THEGRAPH_API_KEY not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const apiKey = (Deno.env.get('THEGRAPH_API_KEY') ?? '').trim();
+    // The Graph gateway keys are 32-char hex. Anything else -> "malformed API key".
+    if (!/^[a-f0-9]{32}$/i.test(apiKey)) {
+      return new Response(
+        JSON.stringify({ pools: [], warning: 'THEGRAPH_API_KEY missing or malformed (expects 32-char hex key from The Graph Studio)' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     const url = `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${SUBGRAPH_ID}`;
@@ -81,8 +83,11 @@ Deno.serve(async (req) => {
 
     const json = await res.json();
     if (json.errors) {
-      return new Response(JSON.stringify({ error: 'graphql_error', detail: json.errors }), {
-        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      const detail = JSON.stringify(json.errors).slice(0, 300);
+      console.error('[uniswap-pool-stats] graphql_error', detail);
+      // Degrade gracefully so the dashboard renders instead of blanking.
+      return new Response(JSON.stringify({ pools: [], warning: `graphql_error: ${detail}` }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
