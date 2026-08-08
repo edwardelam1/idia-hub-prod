@@ -4052,6 +4052,8 @@ export type Database = {
           created_at: string | null
           hrv_score: number | null
           id: string
+          is_duress: boolean
+          is_fraud: boolean
           is_ghost_protocol: boolean | null
           rt_score: number | null
           sleep_score: number | null
@@ -4064,6 +4066,8 @@ export type Database = {
           created_at?: string | null
           hrv_score?: number | null
           id?: string
+          is_duress?: boolean
+          is_fraud?: boolean
           is_ghost_protocol?: boolean | null
           rt_score?: number | null
           sleep_score?: number | null
@@ -4076,6 +4080,8 @@ export type Database = {
           created_at?: string | null
           hrv_score?: number | null
           id?: string
+          is_duress?: boolean
+          is_fraud?: boolean
           is_ghost_protocol?: boolean | null
           rt_score?: number | null
           sleep_score?: number | null
@@ -6252,6 +6258,36 @@ export type Database = {
           started_at?: string | null
           status?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      pico_dock_layouts: {
+        Row: {
+          business_id: string | null
+          created_at: string
+          id: string
+          nano_bite_id: string
+          tag_order: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_id?: string | null
+          created_at?: string
+          id?: string
+          nano_bite_id: string
+          tag_order?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_id?: string | null
+          created_at?: string
+          id?: string
+          nano_bite_id?: string
+          tag_order?: string[]
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
