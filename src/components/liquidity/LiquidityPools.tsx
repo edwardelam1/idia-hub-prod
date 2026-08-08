@@ -18,6 +18,10 @@ const uniswapAddUrl = (feeTier: number) =>
 const uniswapPoolUrl = (poolAddress: string) =>
   `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
 const basescanUrl = (addr: string) => `https://basescan.org/address/${addr}`;
+// Fallbacks used when live pool data is unavailable, so links never resolve to "#"
+const UNISWAP_ADD_FALLBACK = uniswapAddUrl(3000);
+const UNISWAP_TOKEN_FALLBACK = `https://app.uniswap.org/explore/tokens/base/${IDIA}`;
+const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 
 const formatUSD = (n: number) =>
   n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${n.toFixed(2)}`;
