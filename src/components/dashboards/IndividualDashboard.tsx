@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,6 +25,8 @@ import {
   Wallet,
   Zap,
   TrendingUp,
+  Copy,
+  Check,
 } from "lucide-react";
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
@@ -37,6 +39,7 @@ const IndividualDashboard = () => {
   const navigate = useNavigate();
   const { balance: walletBalance } = useWalletBalance();
   const { data: uniswapPools } = useUniswapPoolStats();
+  const [guidCopied, setGuidCopied] = useState(false);
 
   // ========================================================================
   // IDENTITY RECONCILIATION: Resolved GUID Bridge
@@ -133,8 +136,25 @@ const IndividualDashboard = () => {
           <h1 className="text-xl font-bold text-foreground tracking-tight leading-none">
             {piiData?.displayName ? `${piiData.displayName}'s IDIA Hub` : "My IDIA Hub"}
           </h1>
-          <p className="text-[10px] text-muted-foreground mt-1 font-mono break-all">
-            GUID: <span className="text-primary">{activeUserId ?? "—"}</span>
+          <p className="text-[10px] text-muted-foreground mt-1 font-mono break-all flex items-start gap-1">
+            <span>
+              GUID: <span className="text-primary">{activeUserId ?? "—"}</span>
+            </span>
+            {activeUserId && (
+              <button
+                type="button"
+                aria-label="Copy GUID"
+                title="Copy GUID"
+                onClick={() => {
+                  navigator.clipboard.writeText(activeUserId);
+                  setGuidCopied(true);
+                  setTimeout(() => setGuidCopied(false), 1500);
+                }}
+                className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+              >
+                {guidCopied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
+              </button>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
