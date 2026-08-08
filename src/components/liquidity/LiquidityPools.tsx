@@ -199,10 +199,9 @@ const LiquidityPools = () => {
             <Button
               asChild
               className="w-full h-8 text-xs"
-              disabled={!selectedPool}
             >
               <a
-                href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : '#'}
+                href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -232,7 +231,7 @@ const LiquidityPools = () => {
           <div className="space-y-2">
             <Button asChild variant="outline" size="sm" className="w-full text-xs">
               <a
-                href={selectedPool ? uniswapPoolUrl(selectedPool.id) : '#'}
+                href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -241,7 +240,7 @@ const LiquidityPools = () => {
             </Button>
             <Button asChild variant="outline" size="sm" className="w-full text-xs">
               <a
-                href={selectedPool ? basescanUrl(selectedPool.id) : '#'}
+                href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK}
                 target="_blank"
                 rel="noopener noreferrer"
               >
