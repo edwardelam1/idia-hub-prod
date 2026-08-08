@@ -46,8 +46,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   // Same-origin relative path only — used to bounce OAuth-consent visitors
   // back to /.lovable/oauth/consent after they sign in.
   const rawNext = searchParams.get("next");
-  const nextPath =
-    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const nextPath = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
   const consumeNext = () => {
     if (nextPath) {
       window.location.href = nextPath;
@@ -84,9 +83,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
     const setLoading = provider === "apple" ? setIsAppleLoading : setIsGoogleLoading;
     setLoading(true);
     try {
-      const redirectTo = nextPath
-        ? `${window.location.origin}${nextPath}`
-        : `${window.location.origin}/dashboard`;
+      const redirectTo = nextPath ? `${window.location.origin}${nextPath}` : `${window.location.origin}/dashboard`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -120,7 +117,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
         <Card>
           <CardHeader>
             <CardTitle>Welcome Back</CardTitle>
-            <CardDescription>Sign in to access your IDIA Hub dashboard</CardDescription>
+            <CardDescription>Sign in with your Life by IDIA Credentials</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 mb-6">
