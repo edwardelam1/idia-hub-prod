@@ -134,7 +134,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
                 className="w-full bg-black text-white hover:bg-black/90"
               >
                 <AppleIcon />
-                <span className="ml-2">{isAppleLoading ? "Redirecting..." : "Continue with Apple"}</span>
+                <span className="ml-2">{isAppleLoading ? "Redirecting..." : "Sign-in with Apple"}</span>
               </Button>
               <Button
                 type="button"
@@ -144,7 +144,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
                 className="w-full bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
               >
                 <GoogleIcon />
-                <span className="ml-2">{isGoogleLoading ? "Redirecting..." : "Continue with Google"}</span>
+                <span className="ml-2">{isGoogleLoading ? "Redirecting..." : "Sign-in with Google"}</span>
               </Button>
             </div>
 
@@ -197,7 +197,6 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
                 </Button>
               </TabsContent>
             </Tabs>
-
           </CardContent>
         </Card>
       </div>
