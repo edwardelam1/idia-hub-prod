@@ -110,13 +110,13 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/images/hub-logo.png" alt="IDIA Hub Logo" className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-900">IDIA Hub</h1>
+          <h1 className="text-3xl font-bold text-gray-900">The IDIA Hub</h1>
           <p className="text-gray-600 mt-2">Professional Data Intelligence Platform</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Welcome Back</CardTitle>
+            <CardTitle>Welcome</CardTitle>
             <CardDescription>Sign in with your Life by IDIA Credentials</CardDescription>
           </CardHeader>
           <CardContent>
