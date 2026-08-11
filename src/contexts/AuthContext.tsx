@@ -77,7 +77,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // --- ANTI-PII BRIDGE ---
-  const fetchPiiData = useCallback(async (session: Session): Promise<PiiData> => {
+  const fetchPiiData = useCallback(async (
+    session: Session,
+    profileRow?: { avatar_url?: string | null; platform_guid?: string | null } | null,
+  ): Promise<PiiData> => {
     console.log("[PiiBridge] >>> START: Extracting PII from Auth Metadata");
     const { user: authUser } = session;
 
@@ -85,8 +88,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       displayName: authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || "System Architect",
       fullName: authUser.user_metadata?.full_name || null,
       email: authUser.email || null,
-      avatarUrl: authUser.user_metadata?.avatar_url || null,
-      platformGuid: authUser.user_metadata?.platform_guid || null,
+      // Source of truth for the avatar is profiles.avatar_url
+      avatarUrl: profileRow?.avatar_url || authUser.user_metadata?.avatar_url || null,
+      platformGuid: profileRow?.platform_guid || authUser.user_metadata?.platform_guid || null,
       source: "auth_metadata_stub",
     };
 
@@ -175,7 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         setUser(finalUser);
 
-        const pii = await fetchPiiData(session);
+        const pii = await fetchPiiData(session, profileRow);
         setPiiData(pii);
 
         console.log(`[AuthGate] --- SUCCESS: Identity stabilized. Tier: ${tier}`);
