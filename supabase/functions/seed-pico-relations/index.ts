@@ -12,6 +12,7 @@ const corsHeaders = {
 const KEYWORD_MAP: Array<{ match: RegExp; picos: Array<{ tag: string; weight: number; slot?: string; mandatory?: boolean }> }> = [
   { match: /\b(pos|sale|sales|order|ordering|cart|ticket|tab|counter|register|terminal|kiosk)\b/i, picos: [
     { tag: "pico.ui.item_grid", weight: 0.90, slot: "catalog" },
+    { tag: "pico.input.quick_fire_add", weight: 0.72, slot: "catalog" },
     { tag: "pico.ui.category_tabs", weight: 0.70, slot: "catalog" },
     { tag: "pico.ui.modifier_sheet", weight: 0.68, slot: "cart" },
     { tag: "pico.ui.summary_bar", weight: 0.60, slot: "totals" },
@@ -21,10 +22,16 @@ const KEYWORD_MAP: Array<{ match: RegExp; picos: Array<{ tag: string; weight: nu
   ]},
   { match: /\b(mobile|handheld|tableside|curbside|field)\b/i, picos: [
     { tag: "pico.input.nfc_tap", weight: 0.72, slot: "payment" },
+    { tag: "pico.input.quick_fire_add", weight: 0.70, slot: "catalog" },
     { tag: "pico.fleet.gps_ping", weight: 0.45, slot: "geo" },
   ]},
   { match: /\b(fire|expedite|route to|kds_fire)\b/i, picos: [
     { tag: "pico.output.kds_route", weight: 0.85, slot: "route" },
+    { tag: "pico.input.quick_fire_add", weight: 0.80, slot: "catalog" },
+  ]},
+  { match: /\b(quick fire|fire item|quick add|rapid entry|fast add)\b/i, picos: [
+    { tag: "pico.input.quick_fire_add", weight: 0.92, slot: "catalog" },
+    { tag: "pico.ui.item_grid", weight: 0.65, slot: "catalog" },
   ]},
   { match: /\b(waste|spoilage|86|comp)\b/i, picos: [
     { tag: "pico.compliance.void_reason", weight: 0.75, slot: "void" },
@@ -72,6 +79,7 @@ const KEYWORD_MAP: Array<{ match: RegExp; picos: Array<{ tag: string; weight: nu
   ]},
   { match: /\b(menu|item|catalog|product|recipe)\b/i, picos: [
     { tag: "pico.ui.item_grid", weight: 0.85, slot: "catalog" },
+    { tag: "pico.input.quick_fire_add", weight: 0.62, slot: "catalog" },
     { tag: "pico.ui.category_tabs", weight: 0.60, slot: "catalog" },
     { tag: "pico.ui.modifier_sheet", weight: 0.65, slot: "cart" },
   ]},
