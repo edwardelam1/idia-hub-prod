@@ -115,8 +115,44 @@ export const SettingsProfile = () => {
               />
             </div>
           </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <ScrollText className="h-4 w-4 text-primary" />
+                  Legal &amp; Agreements
+                </h3>
+                <p className="text-xs text-muted-foreground">{TERMS_TITLE}</p>
+              </div>
+              <TermsDownloadButton label="Download Terms (PDF)" />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              {termsAccepted && acceptedDisplay ? (
+                <>
+                  <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary gap-1.5">
+                    <ShieldCheck className="h-3 w-3" />
+                    Accepted
+                  </Badge>
+                  <span className="text-muted-foreground inline-flex items-center gap-1.5">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    {acceptedDisplay}
+                  </span>
+                  <span className="text-muted-foreground font-mono">
+                    v{termsVersion || TERMS_VERSION}
+                  </span>
+                </>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Not accepted
+                </Badge>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
+
   );
 };
