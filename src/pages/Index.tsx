@@ -31,9 +31,11 @@ import UniversalPurchaseScreen from "@/components/billing/UniversalPurchaseScree
 import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
 import { useAuth } from "@/contexts/AuthContext";
+import TermsAcceptanceModal from "@/components/legal/TermsAcceptanceModal";
+import { TERMS_VERSION } from "@/content/terms-cdla";
 
 const Index = () => {
-  const { user, isAuthenticated, isLoading, logout: authLogout, activePerspective } = useAuth();
+  const { user, isAuthenticated, isLoading, logout: authLogout, activePerspective, termsAccepted, termsVersion } = useAuth();
   const [currentView, setCurrentView] = useState<"splash" | "login" | "app">("splash");
   const [userRole, setUserRole] = useState<string>("");
 
@@ -94,8 +96,11 @@ const Index = () => {
     return <LoginScreen onLogin={handleLogin} onRealLogin={handleRealLogin} />;
 
   const effectiveRole = user?.role || userRole || "team-member";
+  const mustAcceptTerms = isAuthenticated && (!termsAccepted || termsVersion !== TERMS_VERSION);
 
   return (
+    <>
+    {mustAcceptTerms && <TermsAcceptanceModal />}
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -139,6 +144,7 @@ const Index = () => {
         <Route path="/purchase" element={<UniversalPurchaseScreen />} />
       </Routes>
     </AppLayout>
+    </>
   );
 };
 
