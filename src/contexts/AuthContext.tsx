@@ -26,6 +26,9 @@ export interface PiiData {
 interface ProfileData {
   avatar_url: string | null;
   account_type: string | null;
+  terms_accepted?: boolean | null;
+  terms_accepted_at?: string | null;
+  terms_version?: string | null;
 }
 
 interface AuthContextType {
@@ -39,6 +42,10 @@ interface AuthContextType {
   subscriptionTier: SubscriptionTier;
   activePerspective: AccountType;
   switchPerspective: (type: AccountType) => void;
+  termsAccepted: boolean;
+  termsAcceptedAt: string | null;
+  termsVersion: string | null;
+  refreshProfile: () => Promise<void>;
   login: (emailOrRole: string, password?: string) => Promise<void>;
   logout: () => void;
 }
@@ -105,7 +112,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         let { data: profileRow, error: profileError } = await supabase
           .from("profiles")
-          .select("avatar_url, account_type, platform_guid")
+          .select("avatar_url, account_type, platform_guid, terms_accepted, terms_accepted_at, terms_version")
           .eq("user_id", session.user.id)
           .maybeSingle();
 
@@ -117,7 +124,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           await new Promise((resolve) => setTimeout(resolve, 1500));
           const { data: retryRow } = await supabase
             .from("profiles")
-            .select("avatar_url, account_type, platform_guid")
+            .select("avatar_url, account_type, platform_guid, terms_accepted, terms_accepted_at, terms_version")
             .eq("user_id", session.user.id)
             .maybeSingle();
           profileRow = retryRow;
@@ -133,6 +140,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const prof: ProfileData = {
           avatar_url: profileRow.avatar_url,
           account_type: profileRow.account_type || "individual",
+          terms_accepted: profileRow.terms_accepted ?? false,
+          terms_accepted_at: profileRow.terms_accepted_at ?? null,
+          terms_version: profileRow.terms_version ?? null,
         };
 
         setProfile(prof);
@@ -240,6 +250,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log("[AuthGate] <<< END: Login Successful");
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    if (!session) return;
+    const { data: row } = await supabase
+      .from("profiles")
+      .select("avatar_url, account_type, terms_accepted, terms_accepted_at, terms_version")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (row) {
+      setProfile({
+        avatar_url: row.avatar_url,
+        account_type: row.account_type || "individual",
+        terms_accepted: row.terms_accepted ?? false,
+        terms_accepted_at: row.terms_accepted_at ?? null,
+        terms_version: row.terms_version ?? null,
+      });
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     console.log("[AuthGate] >>> START: Logout Sequence");
     setUser(null);
@@ -264,6 +294,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         subscriptionTier,
         activePerspective,
         switchPerspective,
+        termsAccepted: !!profile?.terms_accepted,
+        termsAcceptedAt: profile?.terms_accepted_at ?? null,
+        termsVersion: profile?.terms_version ?? null,
+        refreshProfile,
         login,
         logout,
       }}
