@@ -3,11 +3,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ShieldCheck, Lock, Smartphone, Fingerprint } from 'lucide-react';
+import { ShieldCheck, Lock, Smartphone, Fingerprint, ScrollText, CalendarClock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { TermsDownloadButton } from '@/components/legal/TermsDownloadButton';
+import { TERMS_TITLE, TERMS_VERSION } from '@/content/terms-cdla';
 
 export const SettingsProfile = () => {
-  const { user, piiData } = useAuth();
+  const { user, piiData, termsAccepted, termsAcceptedAt, termsVersion } = useAuth();
 
   // PII comes from in-memory bridge (IDIA Life device), never from DB
   const displayName = piiData?.displayName || '—';
@@ -18,6 +20,14 @@ export const SettingsProfile = () => {
 
   const isFromSecureEnclave = piiSource === 'secure_enclave';
   const isPiiAvailable = piiData && piiData.displayName;
+
+  const acceptedDisplay = termsAcceptedAt
+    ? new Date(termsAcceptedAt).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : null;
+
 
   return (
     <div className="space-y-6 mt-4">
