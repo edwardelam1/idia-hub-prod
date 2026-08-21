@@ -1,13 +1,12 @@
-
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Landmark, Building2, ShieldCheck, Save, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Landmark, Building2, ShieldCheck, Save, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface BankingFormData {
   legalBusinessName: string;
@@ -24,17 +23,17 @@ interface BankingFormData {
 }
 
 const initialForm: BankingFormData = {
-  legalBusinessName: 'IDIA Data Inc.',
-  ein: '**-***4821',
-  bankName: 'JPMorgan Chase',
-  routingNumber: '******021',
-  accountNumber: '********9921',
-  confirmAccountNumber: '',
-  accountType: 'checking',
-  swiftBic: 'CHASUS33',
-  bankAddress: '270 Park Avenue, New York, NY 10172',
-  authorizedSignatory: 'John Smith',
-  signatoryTitle: 'CFO',
+  legalBusinessName: "IDIA Data Inc.",
+  ein: "**-***4821",
+  bankName: "JPMorgan Chase",
+  routingNumber: "******021",
+  accountNumber: "********9921",
+  confirmAccountNumber: "",
+  accountType: "checking",
+  swiftBic: "CHASUS33",
+  bankAddress: "270 Park Avenue, New York, NY 10172",
+  authorizedSignatory: "John Smith",
+  signatoryTitle: "CFO",
 };
 
 const UpdateBankingDetails = () => {
@@ -53,15 +52,15 @@ const UpdateBankingDetails = () => {
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof BankingFormData, string>> = {};
 
-    if (!form.legalBusinessName.trim()) newErrors.legalBusinessName = 'Required';
-    if (!form.ein.trim()) newErrors.ein = 'Required';
-    if (!form.bankName.trim()) newErrors.bankName = 'Required';
-    if (!form.routingNumber.trim()) newErrors.routingNumber = 'Required';
-    if (!form.accountNumber.trim()) newErrors.accountNumber = 'Required';
+    if (!form.legalBusinessName.trim()) newErrors.legalBusinessName = "Required";
+    if (!form.ein.trim()) newErrors.ein = "Required";
+    if (!form.bankName.trim()) newErrors.bankName = "Required";
+    if (!form.routingNumber.trim()) newErrors.routingNumber = "Required";
+    if (!form.accountNumber.trim()) newErrors.accountNumber = "Required";
     if (form.confirmAccountNumber && form.confirmAccountNumber !== form.accountNumber) {
-      newErrors.confirmAccountNumber = 'Account numbers do not match';
+      newErrors.confirmAccountNumber = "Account numbers do not match";
     }
-    if (!form.authorizedSignatory.trim()) newErrors.authorizedSignatory = 'Required';
+    if (!form.authorizedSignatory.trim()) newErrors.authorizedSignatory = "Required";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -73,8 +72,8 @@ const UpdateBankingDetails = () => {
     // Simulated save
     await new Promise((r) => setTimeout(r, 1200));
     setIsSaving(false);
-    toast.success('Banking details updated successfully.');
-    navigate('/earnings');
+    toast.success("Banking details updated successfully.");
+    navigate("/earnings");
   };
 
   const Field = ({
@@ -91,16 +90,14 @@ const UpdateBankingDetails = () => {
     className?: string;
   }) => (
     <div className={className}>
-      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">
-        {label}
-      </Label>
+      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">{label}</Label>
       <Input
         value={form[field]}
         onChange={(e) => update(field, e.target.value)}
         placeholder={placeholder}
-        type={masked ? 'password' : 'text'}
+        type={masked ? "password" : "text"}
         maxLength={100}
-        className={`font-mono text-sm ${errors[field] ? 'border-destructive' : ''}`}
+        className={`font-mono text-sm ${errors[field] ? "border-destructive" : ""}`}
       />
       {errors[field] && <p className="text-[10px] text-destructive mt-1">{errors[field]}</p>}
     </div>
@@ -110,7 +107,7 @@ const UpdateBankingDetails = () => {
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/earnings')} className="shrink-0">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/earnings")} className="shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1">
@@ -118,9 +115,7 @@ const UpdateBankingDetails = () => {
             <Landmark className="w-5 h-5 text-primary" />
             Update Banking Details
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Commercial settlement account for Worldpay Egress Rails.
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Commercial settlement account for TradFi Rails.</p>
         </div>
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
@@ -156,7 +151,7 @@ const UpdateBankingDetails = () => {
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">
               Account Type
             </Label>
-            <Select value={form.accountType} onValueChange={(v) => update('accountType', v)}>
+            <Select value={form.accountType} onValueChange={(v) => update("accountType", v)}>
               <SelectTrigger className="font-mono text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -173,7 +168,12 @@ const UpdateBankingDetails = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field label="Account Number" field="accountNumber" placeholder="Account number" masked />
-          <Field label="Confirm Account Number" field="confirmAccountNumber" placeholder="Re-enter account number" masked />
+          <Field
+            label="Confirm Account Number"
+            field="confirmAccountNumber"
+            placeholder="Re-enter account number"
+            masked
+          />
         </div>
 
         <Separator />
@@ -193,7 +193,7 @@ const UpdateBankingDetails = () => {
 
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-end">
-        <Button variant="outline" onClick={() => navigate('/earnings')} className="sm:w-auto">
+        <Button variant="outline" onClick={() => navigate("/earnings")} className="sm:w-auto">
           Cancel
         </Button>
         <Button
@@ -201,11 +201,7 @@ const UpdateBankingDetails = () => {
           disabled={isSaving}
           className="bg-emerald-600 hover:bg-emerald-700 text-white sm:w-auto"
         >
-          {isSaving ? (
-            <Loader2 className="animate-spin w-4 h-4 mr-2" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
+          {isSaving ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
           Save Banking Details
         </Button>
       </div>
