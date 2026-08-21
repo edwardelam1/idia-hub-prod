@@ -265,9 +265,8 @@ const EarningsSettlement = () => {
           <div className="p-4 bg-muted/20 border border-border rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-muted-foreground mt-0.5" />
             <p className="text-[10px] text-muted-foreground leading-relaxed uppercase tracking-tight">
-              IDIA Data Inc. maintains a zero-commingling treasury. These funds are held in a{" "}
-              <strong>For Benefit Of (FBO)</strong> custody account and are legally distinct from IDIA operating
-              revenue.
+              IDIA Indemnity Reserve LLC maintains a zero-commingling treasury. These funds are held in a{" "}
+              <strong>For Benefit Of (FBO)</strong> custody account and are legally distinct from IDIA Data Inc.
             </p>
           </div>
 
