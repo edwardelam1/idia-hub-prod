@@ -25,6 +25,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
   const [walletAddress, setWalletAddress] = useState('');
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'error'>('form');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const parsedAmount = parseFloat(amount) || 0;
   const isValidAmount = parsedAmount >= 1 && parsedAmount <= currentBalance;
@@ -43,9 +44,33 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
     }, 200);
   };
 
+  /** Launches MetaMask (extension or mobile/QR) and pins the returned account as the destination. */
+  const handleConnectMetaMask = async (): Promise<string | null> => {
+    setIsConnecting(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      const account = accounts?.[0];
+      if (!account) throw new Error('No MetaMask account was authorized.');
+      setWalletAddress(account);
+      toast.success('MetaMask connected', {
+        description: `${account.slice(0, 6)}...${account.slice(-4)} set as destination`,
+      });
+      return account;
+    } catch (err: any) {
+      toast.error('MetaMask connection failed', { description: err?.message ?? 'Unable to reach MetaMask.' });
+      return null;
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   const handleWithdraw = async () => {
     if (!canSubmit) return;
+    // Surface the MetaMask interface so the user confirms the destination wallet is live.
+    const connected = await handleConnectMetaMask();
+    if (!connected) return;
     setStep('processing');
+
 
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id;
