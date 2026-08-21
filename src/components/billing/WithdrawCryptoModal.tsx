@@ -109,8 +109,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             Withdraw to Crypto Wallet
           </DialogTitle>
           <DialogDescription>
-            Send USDC to your Web3 wallet via Circle.
+            Send USDC on-chain to your MetaMask wallet.
           </DialogDescription>
+
         </DialogHeader>
 
         {step === 'form' && (
