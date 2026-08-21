@@ -20,8 +20,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import ActivityLedger from "./ActivityLedger";
-import WithdrawCryptoModal from "./WithdrawCryptoModal";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { toast } from "sonner";
 
 const RAIL_STORAGE_KEY = "idia.earnings.rail";
 const basescanAddressUrl = (addr: string) => `https://basescan.org/address/${addr}`;
@@ -32,7 +33,7 @@ const EarningsSettlement = () => {
   const userId = user?.user_id;
   const [isSettling, setIsSettling] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [rail, setRail] = useState<"tradfi" | "defi">(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(RAIL_STORAGE_KEY) : null;
     return stored === "defi" ? "defi" : "tradfi";
@@ -43,6 +44,25 @@ const EarningsSettlement = () => {
   }, [rail]);
 
   const { balance, loading: walletLoading, refreshBalance } = useWalletBalance();
+
+  /** Opens MetaMask (extension or mobile/QR) so the user can move funds from their own wallet UI. */
+  const handleLaunchMetaMask = async () => {
+    setIsConnecting(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      const account = accounts?.[0];
+      if (!account) throw new Error("No MetaMask account was authorized.");
+      toast.success("MetaMask connected", {
+        description: `${account.slice(0, 6)}...${account.slice(-4)} — complete your transfer in MetaMask`,
+      });
+      await refreshBalance();
+    } catch (err: any) {
+      toast.error("MetaMask connection failed", { description: err?.message ?? "Unable to reach MetaMask." });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
 
   const { data: walletAddress } = useQuery({
     queryKey: ["settlement-wallet-address", userId],
@@ -306,15 +326,18 @@ const EarningsSettlement = () => {
 
               <div className="mt-8 pt-8 border-t border-border flex flex-col sm:flex-row gap-4">
                 <button
-                  onClick={() => setShowWithdraw(true)}
-                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
+                  onClick={handleLaunchMetaMask}
+                  disabled={isConnecting}
+                  className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-60 text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
                 >
-                  <Wallet className="w-5 h-5" /> Withdraw to Crypto Wallet
+                  {isConnecting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wallet className="w-5 h-5" />}
+                  Launch MetaMask
                 </button>
                 <Button variant="outline" onClick={() => refreshBalance()} className="sm:w-auto">
                   <RefreshCw className={`w-4 h-4 mr-2 ${walletLoading ? "animate-spin" : ""}`} /> Refresh
                 </Button>
               </div>
+
             </div>
 
             <div className="bg-card border border-border rounded-2xl p-6 flex flex-col justify-between">
@@ -365,8 +388,6 @@ const EarningsSettlement = () => {
           <ActivityLedger rail="defi" />
         </TabsContent>
       </Tabs>
-
-      <WithdrawCryptoModal open={showWithdraw} onOpenChange={setShowWithdraw} />
     </div>
   );
 };
