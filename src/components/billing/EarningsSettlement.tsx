@@ -306,15 +306,18 @@ const EarningsSettlement = () => {
 
               <div className="mt-8 pt-8 border-t border-border flex flex-col sm:flex-row gap-4">
                 <button
-                  onClick={() => setShowWithdraw(true)}
-                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
+                  onClick={handleLaunchMetaMask}
+                  disabled={isConnecting}
+                  className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-60 text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
                 >
-                  <Wallet className="w-5 h-5" /> Withdraw to Crypto Wallet
+                  {isConnecting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wallet className="w-5 h-5" />}
+                  Launch MetaMask
                 </button>
                 <Button variant="outline" onClick={() => refreshBalance()} className="sm:w-auto">
                   <RefreshCw className={`w-4 h-4 mr-2 ${walletLoading ? "animate-spin" : ""}`} /> Refresh
                 </Button>
               </div>
+
             </div>
 
             <div className="bg-card border border-border rounded-2xl p-6 flex flex-col justify-between">
