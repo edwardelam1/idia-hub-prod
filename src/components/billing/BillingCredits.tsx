@@ -306,7 +306,8 @@ const BillingCredits = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="ledger-moved" className="mt-0" />
+
+
 
 
         <TabsContent value="invoices" className="space-y-4 mt-0">
