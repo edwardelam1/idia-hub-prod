@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,19 +15,13 @@ import {
   AlertTriangle,
   FileText,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   History,
-  CreditCard,
-  Coins,
-  Receipt,
-  ArrowDownCircle,
   Loader2,
 } from "lucide-react";
 import { useBillingData } from "@/hooks/useBillingData";
 import { Skeleton } from "@/components/ui/skeleton";
 import AvailablePlansDialog from "./AvailablePlansDialog";
-import { formatCredits } from "@/lib/utils";
+
 import { toast } from "sonner";
 
 const BillingCredits = () => {
