@@ -184,8 +184,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
               </div>
             )}
 
-            <Button className="w-full gap-2" size="lg" onClick={handleWithdraw} disabled={!canSubmit}>
-              Withdraw via Circle <ArrowRight className="w-4 h-4" />
+            <Button className="w-full gap-2" size="lg" onClick={handleWithdraw} disabled={!canSubmit || isConnecting}>
+              {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Withdraw USDC <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         )}
@@ -194,9 +195,10 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="w-12 h-12 text-primary animate-spin" />
             <p className="text-foreground font-semibold">Processing withdrawal...</p>
-            <p className="text-muted-foreground text-sm">Initiating Circle USDC transfer</p>
+            <p className="text-muted-foreground text-sm">Initiating on-chain USDC transfer</p>
           </div>
         )}
+
 
         {step === 'success' && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
