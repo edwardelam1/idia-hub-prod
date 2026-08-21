@@ -17,7 +17,7 @@ export const PipelineActivityMonitor = () => {
       case "library_entry":
         return { icon: <Library className="h-4 w-4 text-purple-500" />, title: "3. University Library Catalog" };
       case "delt_transfer":
-        return { icon: <ShieldCheck className="h-4 w-4 text-orange-500" />, title: "4. Process DELT Transfer" };
+        return { icon: <ShieldCheck className="h-4 w-4 text-orange-500" />, title: "4. Process Liability Shield Transfer" };
       case "royalty_payment":
         return { icon: <Wallet className="h-4 w-4 text-green-500" />, title: "5. Wallet Royalty Payment" };
       default:

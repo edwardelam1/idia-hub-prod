@@ -83,7 +83,7 @@ export const SystemHealthDashboard = () => {
         if (liability_token_hash || egress_type === "PURCHASE" || egress_type === "DATA_SALE") {
           // Delay slightly so the user sees the Amber pulse first as the data moves through the AI
           setTimeout(() => {
-            pulseNode("process-data-sale", `DELT MINTED: ${liability_token_hash?.slice(0, 8)}`);
+            pulseNode("process-data-sale", `LIABILITY SHIELD MINTED: ${liability_token_hash?.slice(0, 8)}`);
           }, 800);
         }
       })

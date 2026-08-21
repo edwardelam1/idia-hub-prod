@@ -79,13 +79,13 @@ const TradingInterface = () => {
 
       // 4. Execute Success Callback & Notify
       toast({
-        title: "DELT Protocol Secured",
+        title: "Liability Shield Secured",
         description: `-${cost} Credits. Data wrapped with ACA: ${acaHash.substring(0, 8)}...`,
       });
       onSuccess();
     } catch (err) {
       console.error("DELT Error", err);
-      toast({ title: "DELT Transfer Failed", variant: "destructive" });
+      toast({ title: "Liability Shield Transfer Failed", variant: "destructive" });
     }
   };
 
@@ -116,7 +116,7 @@ const TradingInterface = () => {
       <Lock className="w-8 h-8 text-muted-foreground mb-3" />
       <h4 className="font-semibold mb-1">{title} Locked</h4>
       <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-        This deep data stream requires DELT wrapping and Synapse credits to access.
+        This deep data stream requires Liability Shield wrapping and Synapse credits to access.
       </p>
       <Button onClick={onUnlock}>
         <ShieldCheck className="w-4 h-4 mr-2" />
@@ -136,7 +136,7 @@ const TradingInterface = () => {
         <div>
           <h1 className="text-2xl font-bold">Trading Interface</h1>
           <p className="text-sm text-muted-foreground">
-            Trade data-backed tokens and manage your portfolio securely via DELT
+            Trade data-backed tokens and manage your portfolio securely via the Liability Shield
           </p>
         </div>
         <Badge variant={totalPnL >= 0 ? "default" : "destructive"}>
