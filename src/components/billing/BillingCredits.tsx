@@ -21,6 +21,8 @@ import {
 import { useBillingData } from "@/hooks/useBillingData";
 import { Skeleton } from "@/components/ui/skeleton";
 import AvailablePlansDialog from "./AvailablePlansDialog";
+import { formatCredits } from "@/lib/utils";
+
 
 import { toast } from "sonner";
 
