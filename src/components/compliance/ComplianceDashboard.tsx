@@ -25,7 +25,7 @@ export default function ComplianceDashboard() {
             Enterprise Compliance Center
           </h1>
           <p className="text-muted-foreground mt-1">
-            Monitor KYB status, user sovereignty bindings, and active DELT agreements.
+            Monitor KYB status, user sovereignty bindings, and active Liability Shield agreements.
           </p>
         </div>
         <Button variant="outline">
@@ -70,14 +70,14 @@ export default function ComplianceDashboard() {
           <CardContent className="pt-6">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm text-muted-foreground font-medium mb-1">Active DELTs</p>
+                <p className="text-sm text-muted-foreground font-medium mb-1">Active Liability Shields</p>
                 <h3 className="text-2xl font-bold">2,405</h3>
               </div>
               <div className="p-2 bg-purple-100 rounded-lg">
                 <FileSignature className="h-5 w-5 text-purple-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-4">Data Escrow Liability Transfers</p>
+            <p className="text-xs text-muted-foreground mt-4">Liability Shield agreements</p>
           </CardContent>
         </Card>
 
@@ -100,7 +100,7 @@ export default function ComplianceDashboard() {
       <Tabs defaultValue="sovereignty" className="space-y-4">
         <TabsList className="bg-muted">
           <TabsTrigger value="sovereignty">Identity & Sovereignty</TabsTrigger>
-          <TabsTrigger value="delt">DELT Protocol</TabsTrigger>
+          <TabsTrigger value="delt">Liability Shield</TabsTrigger>
           <TabsTrigger value="residency">Data Residency</TabsTrigger>
         </TabsList>
 
