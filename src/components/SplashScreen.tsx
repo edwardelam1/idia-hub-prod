@@ -26,7 +26,7 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
         </div>
         <h1 className="text-4xl font-bold text-white mb-4">The IDIA Hub</h1>
         <p className="text-xl text-purple-200 max-w-md mx-auto">
-          Unlock the power of intelligent data with the professional command center for the IDIA ecosystem
+          Unlock the power of the Verified Truth Economy with the professional command center for the IDIA Protocol
         </p>
         <div className="mt-8 flex justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
