@@ -181,7 +181,7 @@ const BillingCredits = () => {
 
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="overview">Network Overview</TabsTrigger>
-          <TabsTrigger value="ledger">Activity Ledger</TabsTrigger>
+          <TabsTrigger value="invoices">Invoice Archive</TabsTrigger>
           <TabsTrigger value="invoices">Invoice Archive</TabsTrigger>
           <TabsTrigger value="subscription">Protocol Tier</TabsTrigger>
         </TabsList>
