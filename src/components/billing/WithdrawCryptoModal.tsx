@@ -80,7 +80,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
         body: {
           user_id: userId,
           amount: parsedAmount,
-          destination_address: walletAddress,
+          destination_address: connected,
         },
       });
 
@@ -89,8 +89,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
 
       setStep('success');
       toast.success('Withdrawal initiated', {
-        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${connected.slice(0, 6)}...${connected.slice(-4)}`,
       });
+
       await refreshBalance();
       setTimeout(handleClose, 2500);
     } catch (err: any) {
