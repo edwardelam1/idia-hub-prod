@@ -21,15 +21,19 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    console.info("[BEGIN: HealthBundle.DB.SelectStagedHealth]");
-    const { data: rows, error } = await supabase
-      .from("staged_health_data")
-      .select("activity_type,faculty,data_quality_score,user_id,pseudo_user_id");
-    console.info(`[END: HealthBundle.DB.SelectStagedHealth] count=${rows?.length ?? 0} error=${error?.message ?? "none"}`);
+    // True aggregates — the previous plain select was capped at 1,000 rows by PostgREST.
+    console.info("[BEGIN: HealthBundle.DB.StagingAggregates]");
+    const { data: aggregates, error } = await supabase.rpc("get_staging_aggregates");
+    console.info(
+      `[END: HealthBundle.DB.StagingAggregates] rows=${aggregates?.length ?? 0} error=${error?.message ?? "none"}`,
+    );
     if (error) throw error;
 
-    const healthRows = rows ?? [];
-    if (healthRows.length === 0) {
+    const groups = (aggregates ?? []).filter(
+      (a: any) => a.source === "staged_health_data" && Number(a.total_records) > 0,
+    );
+
+    if (groups.length === 0) {
       console.info("[END: HealthBundle.Handler] reason=empty_source");
       return new Response(
         JSON.stringify({ seeded: 0, reason: "staged_health_data empty — Golden Rule preserved" }),
@@ -37,22 +41,14 @@ serve(async (req) => {
       );
     }
 
-    const byCategory: Record<string, any[]> = {};
-    for (const r of healthRows) {
-      const cat = `health.${(r as any).faculty ?? (r as any).activity_type ?? "general"}`;
-      (byCategory[cat] ??= []).push(r);
-    }
-
     let seeded = 0;
     const errors: string[] = [];
 
-    for (const [category, group] of Object.entries(byCategory)) {
-      const totalRecords = group.length;
-      const uniqueUsers = new Set(
-        group.map((r: any) => r.pseudo_user_id ?? r.user_id).filter((v) => v != null),
-      ).size;
-      const avgQuality =
-        group.reduce((s, r: any) => s + (r.data_quality_score ?? 0), 0) / totalRecords;
+    for (const group of groups) {
+      const category = group.category as string;
+      const totalRecords = Number(group.total_records);
+      const uniqueUsers = Number(group.distinct_contributors);
+      const avgQuality = Number(group.avg_quality);
 
       for (const { tier, minRecords } of TIERS) {
         if (totalRecords < minRecords) continue;
@@ -62,6 +58,7 @@ serve(async (req) => {
           bundleType: category,
           data: {
             length: totalRecords,
+            record_count: totalRecords,
             participant_count: uniqueUsers,
             unique_users_count: uniqueUsers,
             avg_quality_score: avgQuality,
@@ -69,12 +66,16 @@ serve(async (req) => {
             bundle_category: category,
             tier,
             data_fusion_level: "single_source",
-            data_json: { source: "staged_health_data", record_count: totalRecords, unique_users: uniqueUsers },
+            data_json: {
+              source: "staged_health_data",
+              record_count: totalRecords,
+              unique_users: uniqueUsers,
+            },
             geographic_coverage: "Anonymized zones",
           },
         };
 
-        console.info(`[BEGIN: HealthBundle.FetchCurator] category=${category} tier=${tier}`);
+        console.info(`[BEGIN: HealthBundle.FetchCurator] category=${category} tier=${tier} records=${totalRecords}`);
         try {
           const resp = await fetch(`${supabaseUrl}/functions/v1/ai-data-curator`, {
             method: "POST",
@@ -97,7 +98,7 @@ serve(async (req) => {
 
     console.info(`[END: HealthBundle.Handler] seeded=${seeded} errors=${errors.length}`);
     return new Response(
-      JSON.stringify({ seeded, errors, categories: Object.keys(byCategory) }),
+      JSON.stringify({ seeded, errors, categories: groups.map((g: any) => g.category) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
