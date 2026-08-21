@@ -20,8 +20,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import ActivityLedger from "./ActivityLedger";
-import WithdrawCryptoModal from "./WithdrawCryptoModal";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
+import { toast } from "sonner";
 
 const RAIL_STORAGE_KEY = "idia.earnings.rail";
 const basescanAddressUrl = (addr: string) => `https://basescan.org/address/${addr}`;
