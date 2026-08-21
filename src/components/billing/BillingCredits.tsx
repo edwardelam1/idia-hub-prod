@@ -213,10 +213,15 @@ const BillingCredits = () => {
                 <>
                   <div className="font-medium">Payment recorded on ledger</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Your Synapse Credits are now available. The transaction appears in the Activity Ledger below.
+                    Your Synapse Credits are now available. The transaction appears in the Activity Ledger on the{" "}
+                    <Link to="/earnings" className="text-primary underline underline-offset-2">
+                      Earnings &amp; Settlement
+                    </Link>{" "}
+                    page.
                   </div>
                 </>
               )}
+
               {verifyState === "error" && (
                 <>
                   <div className="font-medium">Payment captured by Wix — ledger sync pending</div>
