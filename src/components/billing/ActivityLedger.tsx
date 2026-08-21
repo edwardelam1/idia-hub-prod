@@ -69,11 +69,6 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
         const credits = Number(r.amount ?? 0);
         const isDebit = credits < 0;
         const usd = r.amount_usdc != null ? Number(r.amount_usdc) : Math.abs(credits) * 0.75;
-        const fundingSource = (r.funding_source ?? "").toString().toLowerCase();
-        const onChain =
-          !!r.blockchain_tx_hash ||
-          !!r.circle_transfer_id ||
-          CRYPTO_SOURCES.some((s) => fundingSource.includes(s));
         return {
           id: r.id,
           reference: r.description || r.transaction_type || "Settlement",
@@ -87,8 +82,9 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
           blockchain_tx_hash: r.blockchain_tx_hash,
           transaction_id: r.transaction_id,
           status: r.status,
-          rail: (onChain ? "defi" : "tradfi") as LedgerRail,
+          rail: classifyRail(r),
         };
+
       });
     },
     enabled: !!userId,
