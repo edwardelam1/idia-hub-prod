@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, TrendingUp, Database, Loader2 } from 'lucide-react';
+import { Coins, Users, Database, Loader2 } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
