@@ -33,7 +33,7 @@ const EarningsSettlement = () => {
   const userId = user?.user_id;
   const [isSettling, setIsSettling] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [rail, setRail] = useState<"tradfi" | "defi">(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(RAIL_STORAGE_KEY) : null;
     return stored === "defi" ? "defi" : "tradfi";
@@ -44,6 +44,25 @@ const EarningsSettlement = () => {
   }, [rail]);
 
   const { balance, loading: walletLoading, refreshBalance } = useWalletBalance();
+
+  /** Opens MetaMask (extension or mobile/QR) so the user can move funds from their own wallet UI. */
+  const handleLaunchMetaMask = async () => {
+    setIsConnecting(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      const account = accounts?.[0];
+      if (!account) throw new Error("No MetaMask account was authorized.");
+      toast.success("MetaMask connected", {
+        description: `${account.slice(0, 6)}...${account.slice(-4)} — complete your transfer in MetaMask`,
+      });
+      await refreshBalance();
+    } catch (err: any) {
+      toast.error("MetaMask connection failed", { description: err?.message ?? "Unable to reach MetaMask." });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
 
   const { data: walletAddress } = useQuery({
     queryKey: ["settlement-wallet-address", userId],
@@ -369,8 +388,6 @@ const EarningsSettlement = () => {
           <ActivityLedger rail="defi" />
         </TabsContent>
       </Tabs>
-
-      <WithdrawCryptoModal open={showWithdraw} onOpenChange={setShowWithdraw} />
     </div>
   );
 };
