@@ -303,13 +303,22 @@ const BillingCredits = () => {
             </Card>
           </div>
 
-          {/* Quick Stats / Visual Chart Placeholder */}
-          <Card className="p-6 flex items-center justify-center border-dashed bg-muted/20">
-            <div className="text-center py-10">
-              <History className="h-10 w-10 mx-auto mb-4 text-primary opacity-20" />
-              <p className="text-sm text-muted-foreground">Detailed usage telemetry visualization coming soon</p>
+          {/* Activity Ledger relocated */}
+          <Card className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-dashed bg-muted/20">
+            <div className="flex items-center gap-4">
+              <History className="h-8 w-8 text-primary opacity-40" />
+              <div>
+                <p className="text-sm font-medium">Activity Ledger has moved</p>
+                <p className="text-xs text-muted-foreground">
+                  Fiat and on-chain settlement history now lives on the Earnings &amp; Settlement page.
+                </p>
+              </div>
             </div>
+            <Button asChild variant="outline">
+              <Link to="/earnings">Open Earnings &amp; Settlement</Link>
+            </Button>
           </Card>
+
         </TabsContent>
 
 
