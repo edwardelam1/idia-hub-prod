@@ -22,9 +22,24 @@ import { formatCredits } from "@/lib/utils";
 export type LedgerRail = "tradfi" | "defi";
 
 const CRYPTO_SOURCES = ["usdc", "metamask", "circle", "on-chain", "onchain", "crypto", "wallet", "base"];
+const FIAT_SOURCES = ["fiat", "fbo", "wix", "card", "ach", "wire", "bank", "stripe", "worldpay"];
+const FIAT_TX_TYPES = ["synapse_purchase", "credit_purchase", "settlement", "bank_settlement"];
+
+/** Returns the rail a ledger row belongs to, or null for internal credit accounting. */
+const classifyRail = (r: any): LedgerRail | null => {
+  const fundingSource = (r.funding_source ?? "").toString().toLowerCase();
+  const txType = (r.transaction_type ?? "").toString().toLowerCase();
+
+  if (FIAT_SOURCES.some((s) => fundingSource.includes(s))) return "tradfi";
+  if (!!r.blockchain_tx_hash || !!r.circle_transfer_id) return "defi";
+  if (CRYPTO_SOURCES.some((s) => fundingSource.includes(s))) return "defi";
+  if (FIAT_TX_TYPES.includes(txType)) return "tradfi";
+  return null;
+};
 
 const basescanTxUrl = (hash: string) => `https://basescan.org/tx/${hash}`;
 const isTxHash = (v?: string | null) => !!v && /^0x[a-fA-F0-9]{64}$/.test(v);
+
 
 interface ActivityLedgerProps {
   rail: LedgerRail;
@@ -54,11 +69,6 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
         const credits = Number(r.amount ?? 0);
         const isDebit = credits < 0;
         const usd = r.amount_usdc != null ? Number(r.amount_usdc) : Math.abs(credits) * 0.75;
-        const fundingSource = (r.funding_source ?? "").toString().toLowerCase();
-        const onChain =
-          !!r.blockchain_tx_hash ||
-          !!r.circle_transfer_id ||
-          CRYPTO_SOURCES.some((s) => fundingSource.includes(s));
         return {
           id: r.id,
           reference: r.description || r.transaction_type || "Settlement",
@@ -72,8 +82,9 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
           blockchain_tx_hash: r.blockchain_tx_hash,
           transaction_id: r.transaction_id,
           status: r.status,
-          rail: (onChain ? "defi" : "tradfi") as LedgerRail,
+          rail: classifyRail(r),
         };
+
       });
     },
     enabled: !!userId,
