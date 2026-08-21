@@ -141,7 +141,20 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             </div>
 
             <div className="space-y-2">
-              <Label>Destination Wallet Address</Label>
+              <div className="flex items-center justify-between">
+                <Label>Destination Wallet Address</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[10px] uppercase tracking-widest gap-1"
+                  onClick={handleConnectMetaMask}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wallet className="w-3 h-3" />}
+                  Connect MetaMask
+                </Button>
+              </div>
               <Input
                 className="font-mono text-sm"
                 placeholder="0x71C7656EC7ab88b098defB751B7401B5f6d89A34"
@@ -152,6 +165,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
                 <p className="text-xs text-destructive">Must be a valid 0x Ethereum address (42 characters)</p>
               )}
             </div>
+
 
             {isValidAmount && isValidWallet && (
               <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-2 text-sm">
