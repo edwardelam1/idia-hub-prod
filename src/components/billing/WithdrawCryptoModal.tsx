@@ -7,8 +7,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Wallet, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { supabase } from '@/integrations/supabase/client';
+import { connectEmbeddedWallet } from '@/lib/metamask-sdk';
 import { toast } from 'sonner';
 import { formatIdiaUsd } from '@/lib/utils';
+
 
 interface WithdrawCryptoModalProps {
   open: boolean;
@@ -23,6 +25,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
   const [walletAddress, setWalletAddress] = useState('');
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'error'>('form');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const parsedAmount = parseFloat(amount) || 0;
   const isValidAmount = parsedAmount >= 1 && parsedAmount <= currentBalance;
@@ -41,9 +44,33 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
     }, 200);
   };
 
+  /** Launches MetaMask (extension or mobile/QR) and pins the returned account as the destination. */
+  const handleConnectMetaMask = async (): Promise<string | null> => {
+    setIsConnecting(true);
+    try {
+      const accounts = await connectEmbeddedWallet();
+      const account = accounts?.[0];
+      if (!account) throw new Error('No MetaMask account was authorized.');
+      setWalletAddress(account);
+      toast.success('MetaMask connected', {
+        description: `${account.slice(0, 6)}...${account.slice(-4)} set as destination`,
+      });
+      return account;
+    } catch (err: any) {
+      toast.error('MetaMask connection failed', { description: err?.message ?? 'Unable to reach MetaMask.' });
+      return null;
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   const handleWithdraw = async () => {
     if (!canSubmit) return;
+    // Surface the MetaMask interface so the user confirms the destination wallet is live.
+    const connected = await handleConnectMetaMask();
+    if (!connected) return;
     setStep('processing');
+
 
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id;
@@ -53,7 +80,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
         body: {
           user_id: userId,
           amount: parsedAmount,
-          destination_address: walletAddress,
+          destination_address: connected,
         },
       });
 
@@ -62,8 +89,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
 
       setStep('success');
       toast.success('Withdrawal initiated', {
-        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+        description: `${formatIdiaUsd(parsedAmount)} USDC sent to ${connected.slice(0, 6)}...${connected.slice(-4)}`,
       });
+
       await refreshBalance();
       setTimeout(handleClose, 2500);
     } catch (err: any) {
@@ -81,8 +109,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             Withdraw to Crypto Wallet
           </DialogTitle>
           <DialogDescription>
-            Send USDC to your Web3 wallet via Circle.
+            Send USDC on-chain to your MetaMask wallet.
           </DialogDescription>
+
         </DialogHeader>
 
         {step === 'form' && (
@@ -112,7 +141,20 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
             </div>
 
             <div className="space-y-2">
-              <Label>Destination Wallet Address</Label>
+              <div className="flex items-center justify-between">
+                <Label>Destination Wallet Address</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[10px] uppercase tracking-widest gap-1"
+                  onClick={handleConnectMetaMask}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wallet className="w-3 h-3" />}
+                  Connect MetaMask
+                </Button>
+              </div>
               <Input
                 className="font-mono text-sm"
                 placeholder="0x71C7656EC7ab88b098defB751B7401B5f6d89A34"
@@ -123,6 +165,7 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
                 <p className="text-xs text-destructive">Must be a valid 0x Ethereum address (42 characters)</p>
               )}
             </div>
+
 
             {isValidAmount && isValidWallet && (
               <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-2 text-sm">
@@ -141,8 +184,9 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
               </div>
             )}
 
-            <Button className="w-full gap-2" size="lg" onClick={handleWithdraw} disabled={!canSubmit}>
-              Withdraw via Circle <ArrowRight className="w-4 h-4" />
+            <Button className="w-full gap-2" size="lg" onClick={handleWithdraw} disabled={!canSubmit || isConnecting}>
+              {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Withdraw USDC <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         )}
@@ -151,9 +195,10 @@ const WithdrawCryptoModal = ({ open, onOpenChange }: WithdrawCryptoModalProps) =
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="w-12 h-12 text-primary animate-spin" />
             <p className="text-foreground font-semibold">Processing withdrawal...</p>
-            <p className="text-muted-foreground text-sm">Initiating Circle USDC transfer</p>
+            <p className="text-muted-foreground text-sm">Initiating on-chain USDC transfer</p>
           </div>
         )}
+
 
         {step === 'success' && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
