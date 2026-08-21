@@ -148,7 +148,7 @@ const SynapsePurchaseModal = ({
         await refreshWalletBalance();
 
         toast.success("Wallet Connected", {
-          description: "Your IDIA Life wallet is now actively bridged.",
+          description: "Your Life by IDIA wallet is now actively bridged.",
         });
       } else {
         toast.error("Connection Cancelled", {
@@ -215,9 +215,7 @@ const SynapsePurchaseModal = ({
         });
 
         if (!wixResponse.ok) {
-          console.error(
-            `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`,
-          );
+          console.error(`[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
           throw new Error(`Wix checkout failed: ${wixResponse.status}`);
         }
 
@@ -260,11 +258,11 @@ const SynapsePurchaseModal = ({
       if (profileError) throw new Error(`Profile lookup failed: ${profileError.message}`);
       const buyerWallet = profile?.wallet_address as string | undefined;
       if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
-        throw new Error("No IDIA Life wallet linked to this account. Connect MetaMask first.");
+        throw new Error("No Life by IDIA wallet linked to this account. Connect MetaMask first.");
       }
       setBuyerWalletForRecovery(buyerWallet);
       console.log(
-        "[SynapsePurchaseModal][handlePurchase] [GASLESS_PATH] IDIA Life wallet covers amount; skipping MetaMask approval. Relayer pre-authorized at provisioning.",
+        "[SynapsePurchaseModal][handlePurchase] [GASLESS_PATH] Life by IDIA wallet covers amount; skipping MetaMask approval. Relayer pre-authorized at provisioning.",
       );
 
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
@@ -309,10 +307,7 @@ const SynapsePurchaseModal = ({
         throw new Error(backendErrorString);
       }
 
-      console.log(
-        "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] hash=",
-        (topUpData as any)?.hash,
-      );
+      console.log("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] hash=", (topUpData as any)?.hash);
 
       setStep("success");
       setNeedsApproval(false);
@@ -492,7 +487,7 @@ const SynapsePurchaseModal = ({
                   <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-emerald-500 font-semibold">
                       <CircleDollarSign className="h-4 w-4" />
-                      Funded from IDIA Life Wallet
+                      Funded from Life by IDIA Wallet
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Available Balance</span>
@@ -504,15 +499,11 @@ const SynapsePurchaseModal = ({
                     </div>
                     <div className="pt-3 border-t border-emerald-500/20 flex justify-between text-sm">
                       <span className="text-muted-foreground">Remaining Balance</span>
-                      <span className="font-mono font-semibold">
-                        ${(availableUSDC - usdAmount).toFixed(2)}
-                      </span>
+                      <span className="font-mono font-semibold">${(availableUSDC - usdAmount).toFixed(2)}</span>
                     </div>
                     <div className="pt-2 flex justify-between text-sm">
                       <span className="text-muted-foreground">Credits to Add</span>
-                      <span className="font-mono text-emerald-500">
-                        +{formatCredits(displayCredits)} CR
-                      </span>
+                      <span className="font-mono text-emerald-500">+{formatCredits(displayCredits)} CR</span>
                     </div>
                   </div>
 
@@ -540,7 +531,11 @@ const SynapsePurchaseModal = ({
                         }
                       }}
                     >
-                      {isAuthorizingRelayer ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      {isAuthorizingRelayer ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4" />
+                      )}
                       Authorize Relayer (one-time)
                     </Button>
                   )}
@@ -573,23 +568,21 @@ const SynapsePurchaseModal = ({
                       <span className="font-mono">${usdAmount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Available in IDIA Life</span>
+                      <span className="text-muted-foreground">Available in Life by IDIA</span>
                       <span className="font-mono">${availableUSDC.toFixed(2)}</span>
                     </div>
                     <div className="pt-3 border-t border-destructive/20 flex justify-between text-base">
                       <span className="font-semibold">Amount to Fund</span>
-                      <span className="font-mono font-bold text-destructive">
-                        ${shortfall.toFixed(2)}
-                      </span>
+                      <span className="font-mono font-bold text-destructive">${shortfall.toFixed(2)}</span>
                     </div>
                   </div>
 
                   <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 flex gap-3">
                     <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      To find your recovery phrase, open IDIA Life, visit the Wallet page, tap
-                      Security, and press Reveal Recovery Phrase. Ensure no one is around you when
-                      you do this and do not do this on a device that is not your own.
+                      To find your recovery phrase, open Life by IDIA, visit the Wallet page, tap Security, and press
+                      Reveal Recovery Phrase. Ensure no one is around you when you do this and do not do this on a
+                      device that is not your own.
                     </p>
                   </div>
 
