@@ -21,7 +21,7 @@ import { formatCredits } from "@/lib/utils";
 
 export type LedgerRail = "tradfi" | "defi";
 
-const CRYPTO_SOURCES = ["usdc", "metamask", "circle", "on-chain", "onchain", "crypto", "wallet", "base"];
+const CRYPTO_SOURCES = ["usdc", "metamask", "on-chain", "onchain", "crypto", "wallet", "base"];
 const FIAT_SOURCES = ["fiat", "fbo", "wix", "card", "ach", "wire", "bank", "stripe", "worldpay"];
 const FIAT_TX_TYPES = ["synapse_purchase", "credit_purchase", "settlement", "bank_settlement"];
 
