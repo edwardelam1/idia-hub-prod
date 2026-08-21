@@ -18,8 +18,8 @@ In `create-health-data-bundle`, `create-lifestyle-bundles`, and `create-business
 - Preferred: add a Postgres aggregate function (e.g. `public.get_staging_aggregates()`) returning per-category `total_records`, `distinct_contributors`, `avg_quality` in one pass — one round trip, no 1,000-row ceiling.
 - Pass the true totals into the curator payload so `data_json.record_count` and `participant_count` are honest.
 
-### 2. Stop the duplicate explosion
-- Add a deterministic bundle key (category + tier) and **upsert** instead of insert in `ai-data-curator`'s publish path, so a re-seed refreshes the existing bundle's counts rather than creating a new one.
+### 2. Stop the duplicate explosion (no upserts)
+- In `ai-data-curator`'s publish path, look up the existing active bundle for that (category, tier) first. If one exists, issue an explicit `UPDATE` of its counts, copy and price. If none exists, issue an `INSERT`. Two distinct statements — no upsert, no `ON CONFLICT`.
 - Deactivate the existing 345 duplicates: keep the newest bundle per (category, tier) and set `is_active = false` on the rest, via migration.
 - Remove the auto-seed-on-empty side effect in `useMarketplaceBundles` (or keep it gated to admins only) so browsing the Marketplace never mutates the catalog.
 
