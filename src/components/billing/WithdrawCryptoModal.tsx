@@ -7,8 +7,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Wallet, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
 import { supabase } from '@/integrations/supabase/client';
+import { connectEmbeddedWallet } from '@/lib/metamask-sdk';
 import { toast } from 'sonner';
 import { formatIdiaUsd } from '@/lib/utils';
+
 
 interface WithdrawCryptoModalProps {
   open: boolean;
