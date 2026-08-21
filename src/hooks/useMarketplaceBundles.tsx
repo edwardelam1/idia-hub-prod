@@ -36,23 +36,11 @@ export const useMarketplaceBundles = () => {
         throw error;
       }
 
-      const mapped = (data ?? []).map((row: any) => ({
+      // Read-only: browsing the Marketplace must never mutate the catalog.
+      return (data ?? []).map((row: any) => ({
         ...row,
         contacts_count: row.participant_count ?? 0,
       })) as MarketplaceBundle[];
-
-      // Auto-seed once per session if catalog is empty.
-      if (mapped.length === 0 && !(globalThis as any).__hubAutoSeedFired) {
-        (globalThis as any).__hubAutoSeedFired = true;
-        console.info('[BEGIN: Marketplace.AutoSeed.Invoke]');
-        supabase.functions
-          .invoke('seed-marketplace-catalog', { body: {} })
-          .then(({ data, error }) => {
-            console.info(`[END: Marketplace.AutoSeed.Invoke] seeded=${data?.seeded ?? 0} error=${error?.message ?? 'none'}`);
-          })
-          .catch((e) => console.error(`[CATCH: Marketplace.AutoSeed.Invoke] ${e?.message}`));
-      }
-      return mapped;
     },
     refetchInterval: 30 * 1000,
   });

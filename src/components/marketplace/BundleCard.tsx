@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, TrendingUp, Database, Loader2 } from 'lucide-react';
+import { Coins, Users, Database, Loader2 } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -130,12 +130,12 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
           {/* Stats */}
           <div className={`flex items-center justify-between ${isTablet ? 'text-[10px]' : 'text-xs'} text-gray-500`}>
             <div className="flex items-center">
-              <Users className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
-              {bundle.contacts.toLocaleString()} records
+              <Database className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
+              {Number(bundle.records ?? 0).toLocaleString()} records
             </div>
-            <div className="flex items-center text-green-600">
-              <TrendingUp className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
-              {bundle.match}% relevance
+            <div className="flex items-center">
+              <Users className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
+              {Number(bundle.contributors ?? 0).toLocaleString()} contributors
             </div>
           </div>
 

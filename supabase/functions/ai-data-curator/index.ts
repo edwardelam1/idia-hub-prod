@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { calculateBundlePrice } from '../_shared/bundle-pricing.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const AI_MODEL = 'openai/gpt-5-mini';
@@ -324,43 +325,89 @@ function calculateActivityDistribution(data: any[]) {
 }
 
 // Persist a curated bundle row into marketplace_bundles.
+// Explicit lookup -> UPDATE or INSERT. No upserts, no ON CONFLICT.
 async function publishBundle(supabaseClient: any, bundle: any) {
-  const row = {
+  const category = bundle.category ?? 'general';
+  const tier = bundle.tier ?? 'Analyst';
+  const recordCount = Number(
+    bundle.record_count ?? bundle.data_json?.record_count ?? 0,
+  );
+
+  // Deterministic price — AI copy never sets money.
+  const pricing = calculateBundlePrice({
+    recordCount,
+    category,
+    tier,
+    avgQualityScore: bundle.avg_quality_score,
+  });
+
+  const row: Record<string, unknown> = {
     title: bundle.title,
     description: bundle.description,
-    data_json: bundle.data_json ?? {},
+    data_json: { ...(bundle.data_json ?? {}), record_count: recordCount, pricing_model: pricing },
     key_insights: bundle.key_insights ?? [],
     data_points: bundle.data_points ?? [],
     suggested_filters: bundle.suggested_filters ?? [],
-    price: bundle.price ?? bundle.recommended_price ?? 500,
-    tier: bundle.tier ?? 'Analyst',
-    category: bundle.category ?? 'general',
+    price: pricing.price,
+    tier,
+    category,
     participant_count: bundle.participant_count ?? 0,
     match_percentage: bundle.match_percentage ?? 85,
     features: bundle.features ?? [],
-    bundle_version: 1,
     is_active: true,
-    bundle_category: bundle.bundle_category ?? bundle.category ?? 'general',
+    bundle_category: bundle.bundle_category ?? category,
     data_fusion_level: bundle.data_fusion_level ?? 'single_source',
     cross_platform_insights: bundle.cross_platform_insights ?? {},
     predictive_analytics: bundle.predictive_analytics ?? {},
   };
 
+  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} tier=${tier}`);
+  const { data: existing, error: lookupError } = await supabaseClient
+    .from('marketplace_bundles')
+    .select('bundle_id, bundle_version')
+    .eq('category', category)
+    .eq('tier', tier)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  console.info(`[END: Curator.DB.LookupBundle] found=${!!existing} error=${lookupError?.message ?? 'none'}`);
+
+  if (lookupError) throw new Error(`publish_bundle lookup failed: ${lookupError.message}`);
+
+  if (existing) {
+    row.bundle_version = Number(existing.bundle_version ?? 1) + 1;
+    console.info(`[BEGIN: Curator.DB.UpdateBundle] bundle_id=${existing.bundle_id}`);
+    const { data, error } = await supabaseClient
+      .from('marketplace_bundles')
+      .update(row)
+      .eq('bundle_id', existing.bundle_id)
+      .select()
+      .single();
+    console.info(`[END: Curator.DB.UpdateBundle] error=${error?.message ?? 'none'}`);
+    if (error) throw new Error(`publish_bundle update failed: ${error.message}`);
+    return { published: true, mode: 'update', bundle: data };
+  }
+
+  row.bundle_version = 1;
+  console.info('[BEGIN: Curator.DB.InsertBundle]');
   const { data, error } = await supabaseClient
     .from('marketplace_bundles')
     .insert(row)
     .select()
     .single();
-
-  if (error) throw new Error(`publish_bundle failed: ${error.message}`);
-  return { published: true, bundle: data };
+  console.info(`[END: Curator.DB.InsertBundle] error=${error?.message ?? 'none'}`);
+  if (error) throw new Error(`publish_bundle insert failed: ${error.message}`);
+  return { published: true, mode: 'insert', bundle: data };
 }
 
-// One-shot: curate metadata, recommend pricing, then persist.
+// One-shot: curate metadata, then persist with deterministic pricing.
 // `data` is the underlying source (real aggregates only — no synthetic records).
 async function curateAndPublish(supabaseClient: any, data: any, bundleType: string) {
   const metadata = await curateBundleMetadata(data, bundleType);
-  const pricing = await recommendPricing(data);
+
+  const recordCount = Number(data.record_count ?? data.length ?? 0);
+  const category = data.category ?? bundleType;
 
   const merged = {
     title: metadata.title,
@@ -369,13 +416,14 @@ async function curateAndPublish(supabaseClient: any, data: any, bundleType: stri
     features: metadata.features,
     suggested_filters: metadata.suggested_filters,
     data_points: data.data_points ?? metadata.suggested_filters ?? [],
-    tier: pricing.tier,
-    price: pricing.recommended_price,
-    category: data.category ?? bundleType,
+    tier: data.tier ?? 'Analyst',
+    category,
     bundle_category: data.bundle_category ?? bundleType,
-    participant_count: data.participant_count ?? data.unique_users_count ?? data.length ?? 0,
+    record_count: recordCount,
+    avg_quality_score: data.avg_quality_score,
+    participant_count: data.participant_count ?? data.unique_users_count ?? 0,
     match_percentage: Math.round(((data.avg_quality_score ?? 0.85) * 100)),
-    data_fusion_level: data.data_fusion_level ?? 'multi_source',
+    data_fusion_level: data.data_fusion_level ?? 'single_source',
     data_json: data.data_json ?? data.bundle_metadata ?? {},
   };
 

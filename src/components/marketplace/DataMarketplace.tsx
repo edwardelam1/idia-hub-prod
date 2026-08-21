@@ -48,7 +48,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     name: bundle.title,
     description: bundle.description,
     tier: bundle.tier,
-    contacts: bundle.contacts_count,
+    contributors: bundle.contacts_count ?? 0,
+    records: Number(bundle.data_json?.record_count ?? 0),
     features: bundle.features,
     category: bundle.category,
     price: bundle.price || 1, // Defaulting to 1 CR ($0.75)
