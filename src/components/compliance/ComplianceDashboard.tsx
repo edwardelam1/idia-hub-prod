@@ -62,7 +62,7 @@ export default function ComplianceDashboard() {
                 <Users className="h-5 w-5 text-blue-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-4">All active users linked to IDIA Life</p>
+            <p className="text-xs text-muted-foreground mt-4">All active users linked to Life by IDIA</p>
           </CardContent>
         </Card>
 
@@ -120,7 +120,7 @@ export default function ComplianceDashboard() {
                 </div>
                 <Progress value={100} className="h-2 bg-muted [&>div]:bg-green-500" />
                 <p className="text-xs text-muted-foreground">
-                  The enterprise record is securely anchored to an IDIA Life verified owner.
+                  The enterprise record is securely anchored to an Life by IDIA verified owner.
                 </p>
               </div>
 
