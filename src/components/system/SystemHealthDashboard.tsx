@@ -47,28 +47,47 @@ export const SystemHealthDashboard = () => {
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
 
   useEffect(() => {
-    // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() so the
-    // indicators fire for ANY user's activity (RLS-scoped postgres_changes only
-    // ever showed the signed-in user's own rows).
-    const channel = supabase
-      .channel("protocol-stream", { config: { broadcast: { self: true } } })
-      .on("broadcast", { event: "pulse" }, (msg) => {
-        const p = (msg.payload as any)?.payload ?? msg.payload ?? {};
-        const stage = p.stage as string | undefined;
-        if (!stage) return;
-        if (stage === "process-data-sale") {
-          // let the Amber (AI) pulse land first
-          setTimeout(() => pulseNode(stage, p.label || "LIABILITY SHIELD MINTED"), 800);
-          return;
-        }
-        pulseNode(stage, p.label || stage.toUpperCase());
-      })
-      .subscribe();
+    // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() on a
+    // private broadcast channel, so the indicators fire for ANY user's activity
+    // (RLS-scoped postgres_changes only ever showed the signed-in user's rows).
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    const start = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token);
+      }
+      if (cancelled) return;
+
+      channel = supabase
+        .channel("protocol-stream", { config: { private: true, broadcast: { self: true } } })
+        .on("broadcast", { event: "pulse" }, (msg) => {
+          const raw = msg as any;
+          const p = raw?.payload?.payload ?? raw?.payload ?? {};
+          const stage = p.stage as string | undefined;
+          if (!stage) return;
+          if (stage === "process-data-sale") {
+            // let the Amber (AI) pulse land first
+            setTimeout(() => pulseNode(stage, p.label || "LIABILITY SHIELD MINTED"), 800);
+            return;
+          }
+          pulseNode(stage, p.label || String(stage).toUpperCase());
+        })
+        .subscribe();
+    };
+
+    start();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
+
 
 
   const pulseNode = (nodeId: string, status: string) => {
