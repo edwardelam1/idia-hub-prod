@@ -27,15 +27,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const TT = ({
   tip,
   side = "top",
+  className = "",
   children,
 }: {
   tip: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
+  className?: string;
   children: ReactNode;
 }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <span tabIndex={0} className="inline-flex cursor-help outline-none">
+      <span tabIndex={0} className={`inline-flex cursor-help outline-none ${className}`}>
         {children}
       </span>
     </TooltipTrigger>
@@ -44,6 +46,7 @@ const TT = ({
     </TooltipContent>
   </Tooltip>
 );
+
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
@@ -152,7 +155,7 @@ export const MCPConfigurator = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -164,28 +167,33 @@ export const MCPConfigurator = () => {
             Toggles below control which JSON-RPC tools are advertised. {enabledCount} of {tools.length} enabled.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
+        <CardContent className="space-y-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:space-y-0">
           <TT
             side="bottom"
+            className="w-full sm:flex-1 sm:min-w-[260px]"
             tip="Canonical MCP Streamable-HTTP endpoint. Paste into any MCP client (Claude Desktop, Ollama, Cursor) that supports remote HTTP transport."
           >
-            <div className="flex-1 min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground truncate">
+            <div className="w-full rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] sm:text-xs text-muted-foreground break-all sm:truncate">
               {manifestUrl || "Manifest URL pending"}
             </div>
           </TT>
-          <TT side="bottom" tip="Copies the enabled-tools manifest JSON to your clipboard.">
-            <Button variant="outline" size="sm" onClick={handleCopyManifest}>
-              <Copy className="h-4 w-4 mr-2" />
-              Copy Manifest
-            </Button>
-          </TT>
-          <TT side="bottom" tip="Downloads a local mcp.json file containing only your currently enabled tools.">
-            <Button size="sm" onClick={handleDownload}>
-              <Download className="h-4 w-4 mr-2" />
-              Download mcp.json
-            </Button>
-          </TT>
+          <div className="flex flex-wrap gap-2">
+            <TT side="bottom" className="flex-1 sm:flex-none" tip="Copies the enabled-tools manifest JSON to your clipboard.">
+              <Button variant="outline" size="sm" onClick={handleCopyManifest} className="w-full sm:w-auto">
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Manifest
+              </Button>
+            </TT>
+            <TT side="bottom" className="flex-1 sm:flex-none" tip="Downloads a local mcp.json file containing only your currently enabled tools.">
+              <Button size="sm" onClick={handleDownload} className="w-full sm:w-auto">
+                <Download className="h-4 w-4 mr-2" />
+                Download mcp.json
+              </Button>
+            </TT>
+          </div>
+
         </CardContent>
+
       </Card>
 
       <Card>
@@ -242,6 +250,48 @@ export const MCPConfigurator = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Mobile: stacked cards */}
+          <div className="space-y-3 md:hidden">
+            {tools.map((tool) => (
+              <div key={tool.name} className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground break-words">{tool.name}</div>
+                    <div className="text-xs text-muted-foreground break-words">{tool.description}</div>
+                  </div>
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={(v) => toggleTool(tool.name, v)}
+                    aria-label={`Toggle ${tool.name}`}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {tool.scope === "public" ? (
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                      <Globe className="h-3 w-3 mr-1" />
+                      Public Access
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      Premium Gated
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setDrawerTool(tool)}>
+                    <Code2 className="h-4 w-4 mr-1" />
+                    Schema
+                  </Button>
+                </div>
+                <code className="block text-[11px] text-muted-foreground break-all">{tool.endpoint}</code>
+              </div>
+            ))}
+            {tools.length === 0 && (
+              <div className="text-center text-muted-foreground py-6 text-sm">No tools available.</div>
+            )}
+          </div>
+
+          {/* Tablet and up: full table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -309,6 +359,8 @@ export const MCPConfigurator = () => {
               )}
             </TableBody>
           </Table>
+          </div>
+
 
           {enabledCount === 0 && tools.length > 0 && (
             <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
@@ -324,8 +376,8 @@ export const MCPConfigurator = () => {
           <CardDescription>Copy these snippets into your local MCP client config.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Claude Desktop</h4>
               <TT tip="Copy this claude_desktop_config.json mcpServers block to your clipboard.">
                 <Button
@@ -340,12 +392,12 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {claudeSnippet}
             </pre>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Ollama</h4>
               <TT tip="Copy this ~/.ollama/mcp.json entry to your clipboard.">
                 <Button
@@ -360,7 +412,7 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {ollamaSnippet}
             </pre>
           </div>
@@ -397,24 +449,24 @@ export const MCPConfigurator = () => {
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 text-xs">
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="font-semibold text-muted-foreground">Manifest URL</div>
-              <TT tip="Per-user manifest served by the mcp-manifest edge function. The bridge polls this on startup to learn which tools you have enabled.">
-                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">
+              <TT className="w-full min-w-0" tip="Per-user manifest served by the mcp-manifest edge function. The bridge polls this on startup to learn which tools you have enabled.">
+                <code className="block w-full bg-muted/60 border border-border rounded-md p-2 break-all">
                   {remoteManifestUrl}
                 </code>
               </TT>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="font-semibold text-muted-foreground">JSON-RPC Relay URL</div>
-              <TT tip="The bridge forwards every tools/call JSON-RPC envelope to this endpoint; the relay applies auth, sanitization, and billing before dispatching downstream.">
-                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
+              <TT className="w-full min-w-0" tip="The bridge forwards every tools/call JSON-RPC envelope to this endpoint; the relay applies auth, sanitization, and billing before dispatching downstream.">
+                <code className="block w-full bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
               </TT>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Claude Desktop config (bridge mode)</h4>
               <TT tip="Copy the stdio-bridge mcpServers block to your clipboard.">
                 <Button
@@ -429,7 +481,7 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {bridgeConfigSnippet}
             </pre>
             <p className="text-xs text-muted-foreground">
@@ -447,7 +499,7 @@ export const MCPConfigurator = () => {
             <SheetDescription>{drawerTool?.description}</SheetDescription>
           </SheetHeader>
           {drawerTool && (
-            <pre className="mt-4 text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="mt-4 text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {JSON.stringify(
                 {
                   name: drawerTool.name,

@@ -31,8 +31,8 @@ export const MCPLiveTelemetry = () => {
     <TooltipProvider delayDuration={150}>
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex items-start gap-2 min-w-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span tabIndex={0} className="cursor-help outline-none">
@@ -115,11 +115,11 @@ export const MCPLiveTelemetry = () => {
                 Waiting for MCP relay activity…
               </div>
             ) : events.map((ev) => (
-              <div key={ev.id} className="px-3 py-2 text-xs flex items-center gap-2">
+              <div key={ev.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Badge variant={ev.status === "ok" ? "default" : "destructive"} className="text-[10px]">
                   {ev.status}
                 </Badge>
-                <span className="font-mono truncate flex-1">{ev.tool_name}</span>
+                <span className="font-mono truncate flex-1 min-w-[6rem]">{ev.tool_name}</span>
                 <span className="text-muted-foreground tabular-nums">{ev.duration_ms ?? 0}ms</span>
                 <Tooltip>
                   <TooltipTrigger asChild>

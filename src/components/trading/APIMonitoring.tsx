@@ -75,11 +75,11 @@ export default function APIMonitoring() {
 
   return (
     <TooltipProvider delayDuration={150}>
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="space-y-6 min-w-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex justify-between items-start gap-3">
               <div>
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                   Live Vault Requests (24h)
@@ -90,21 +90,21 @@ export default function APIMonitoring() {
                     <TooltipContent>Total rows recorded in <code>api_metrics</code> over the last 24 hours. Updates live via Postgres change stream.</TooltipContent>
                   </UiTooltip>
                 </p>
-                <h3 className="text-3xl font-bold mt-2">{metrics.totalRequests.toLocaleString()}</h3>
+                <h3 className="text-2xl sm:text-3xl font-bold mt-2">{metrics.totalRequests.toLocaleString()}</h3>
               </div>
-              <div className="p-3 bg-blue-100 rounded-xl">
+              <div className="p-2.5 sm:p-3 shrink-0 bg-blue-100 rounded-xl">
                 <Activity className="w-5 h-5 text-blue-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 font-medium">
+            <p className="text-[11px] sm:text-xs text-muted-foreground mt-3 sm:mt-4 font-medium">
               Sourced from <code>public.api_metrics</code>
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex justify-between items-start gap-3">
               <div>
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                   Average Latency
@@ -115,19 +115,19 @@ export default function APIMonitoring() {
                     <TooltipContent>Mean of <code>latency_ms</code> across every request in the 24h window.</TooltipContent>
                   </UiTooltip>
                 </p>
-                <h3 className="text-3xl font-bold mt-2">{metrics.avgLatency}ms</h3>
+                <h3 className="text-2xl sm:text-3xl font-bold mt-2">{metrics.avgLatency}ms</h3>
               </div>
-              <div className="p-3 bg-green-100 rounded-xl">
+              <div className="p-2.5 sm:p-3 shrink-0 bg-green-100 rounded-xl">
                 <Clock className="w-5 h-5 text-green-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 font-medium">Round-trip time as recorded by the gateway</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground mt-3 sm:mt-4 font-medium">Round-trip time as recorded by the gateway</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex justify-between items-start gap-3">
               <div>
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                   Error Rate
@@ -138,20 +138,20 @@ export default function APIMonitoring() {
                     <TooltipContent>Share of requests where <code>status_code &gt;= 400</code> in the 24h window.</TooltipContent>
                   </UiTooltip>
                 </p>
-                <h3 className="text-3xl font-bold mt-2">{metrics.errorRate}%</h3>
+                <h3 className="text-2xl sm:text-3xl font-bold mt-2">{metrics.errorRate}%</h3>
               </div>
-              <div className="p-3 bg-red-100 rounded-xl">
+              <div className="p-2.5 sm:p-3 shrink-0 bg-red-100 rounded-xl">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 font-medium">Across all vault queries</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground mt-3 sm:mt-4 font-medium">Across all vault queries</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
             Vault Throughput Telemetry
             <UiTooltip>
               <TooltipTrigger asChild>
@@ -162,7 +162,7 @@ export default function APIMonitoring() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] w-full">
+          <div className="h-[220px] sm:h-[300px] w-full">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>

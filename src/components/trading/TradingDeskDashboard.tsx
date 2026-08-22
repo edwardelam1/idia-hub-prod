@@ -33,14 +33,15 @@ export const TradingDeskDashboard = () => {
   const { pipelineHealth, activeBundlesCount, stagedDataCount, isLoading } = useDashboardStats();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6 min-w-0 overflow-x-hidden">
       {/* Header Section */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Trading Desk API Access</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Trading Desk API Access</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Professional-grade API gateway for quantitative analysis and algorithmic trading
         </p>
       </div>
+
 
       {/* Key Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -113,32 +114,35 @@ export const TradingDeskDashboard = () => {
 
       {/* Main Tabs Interface */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto gap-1 p-1">
-          <TabsTrigger value="overview">
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="keys">
-            <Key className="h-4 w-4 mr-2" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="endpoints">
-            <FileCode className="h-4 w-4 mr-2" />
-            Endpoints
-          </TabsTrigger>
-          <TabsTrigger value="mcp">
-            <Plug className="h-4 w-4 mr-2" />
-            MCP
-          </TabsTrigger>
-          <TabsTrigger value="monitoring">
-            <Activity className="h-4 w-4 mr-2" />
-            Monitoring
-          </TabsTrigger>
-          <TabsTrigger value="feeds">
-            <Database className="h-4 w-4 mr-2" />
-            Feature Feeds
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
+          <TabsList className="inline-flex w-max lg:grid lg:w-full lg:grid-cols-6 h-auto gap-1 p-1">
+            <TabsTrigger value="overview" className="whitespace-nowrap text-xs sm:text-sm">
+              <BarChart3 className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="keys" className="whitespace-nowrap text-xs sm:text-sm">
+              <Key className="h-4 w-4 mr-1.5 sm:mr-2" />
+              API Keys
+            </TabsTrigger>
+            <TabsTrigger value="endpoints" className="whitespace-nowrap text-xs sm:text-sm">
+              <FileCode className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Endpoints
+            </TabsTrigger>
+            <TabsTrigger value="mcp" className="whitespace-nowrap text-xs sm:text-sm">
+              <Plug className="h-4 w-4 mr-1.5 sm:mr-2" />
+              MCP
+            </TabsTrigger>
+            <TabsTrigger value="monitoring" className="whitespace-nowrap text-xs sm:text-sm">
+              <Activity className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Monitoring
+            </TabsTrigger>
+            <TabsTrigger value="feeds" className="whitespace-nowrap text-xs sm:text-sm">
+              <Database className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Feature Feeds
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
