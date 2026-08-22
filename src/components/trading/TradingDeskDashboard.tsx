@@ -33,14 +33,15 @@ export const TradingDeskDashboard = () => {
   const { pipelineHealth, activeBundlesCount, stagedDataCount, isLoading } = useDashboardStats();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6 min-w-0 overflow-x-hidden">
       {/* Header Section */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Trading Desk API Access</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Trading Desk API Access</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Professional-grade API gateway for quantitative analysis and algorithmic trading
         </p>
       </div>
+
 
       {/* Key Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
