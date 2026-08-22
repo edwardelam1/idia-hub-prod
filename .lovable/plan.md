@@ -1,16 +1,30 @@
-# Remove "Circle" from crypto withdrawal wording
+# Fix two dead indicators on the Protocol Stream dashboard
 
-## What changes
+Two of the five pipeline lights never fire. Confirmed causes from the live database:
 
-The only place "Circle" appears in user-facing copy is the Withdraw to Crypto Wallet dialog (reached from the DeFi tab of Earnings & Settlement). Three labels get rewritten to reference the MetaMask / on-chain rail instead:
+## 1. Apple Health Sync (never fires)
 
-- Dialog subtitle: "Send USDC to your Web3 wallet via Circle." becomes wording describing a direct on-chain USDC transfer to the connected MetaMask wallet address.
-- Primary button: "Withdraw via Circle" becomes "Withdraw USDC".
-- Processing state: "Initiating Circle USDC transfer" becomes "Initiating on-chain USDC transfer".
+The dashboard listens to inserts on `raw_health_data`. That table has **0 rows** — ingestion actually writes to `staged_health_data` (30,843 rows, newest 2026-08-22 03:34 UTC). `staged_health_data` is also **not** in the `supabase_realtime` publication, so nothing is broadcast today.
 
-No other screen mentions Circle — the purchase/top-up flows already use MetaMask only.
+Fix:
+- Migration: add `public.staged_health_data` to the `supabase_realtime` publication and set `REPLICA IDENTITY FULL` on it.
+- Point the Apple Health listener at `staged_health_data` (keep the existing `raw_health_data` listener as a harmless fallback).
 
-## Technical notes
+## 2. Royalty Payment (never fires)
 
-- Single file: `src/components/billing/WithdrawCryptoModal.tsx` (copy only; the withdrawal call itself is unchanged).
-- The Activity Ledger's internal rail heuristic also drops the `circle` keyword from its crypto funding-source list; the `circle_transfer_id` database column stays as-is since it is legacy data, never shown as a brand name.
+The dashboard checks `entry_type === "ROYALTY"`. No such value exists in `synapse_credit_ledger`. Royalty rows are stored as `entry_type = 'deposit'`, `transaction_type = 'idia_royalty_yield'` (91 rows). Payout rows use `transaction_type = 'data_sale_payout'`.
+
+Fix:
+- Match on `transaction_type` in (`idia_royalty_yield`, `data_sale_payout`) case-insensitively for the Royalty light.
+- Make the Synapse Engine check case-insensitive too (`USAGE`/`usage` both exist in the data).
+
+## Also worth knowing (no code change unless you want it)
+
+Realtime respects RLS: both tables only expose rows where `user_id = auth.uid()` to a signed-in user. So the dashboard lights up for **your own** activity only. `staged_health_data` additionally has an authenticated-read-all policy, so health ingest from any user will pulse. If you want the ledger lights to reflect ecosystem-wide activity, that needs a separate decision (broadcast channel or a non-PII aggregate feed) — not part of this fix.
+
+## Technical detail
+
+Files touched:
+- new migration — publication + replica identity for `staged_health_data`
+- `src/components/system/SystemHealthDashboard.tsx` — listener table + normalized matching
+- `src/hooks/usePipelineActivity.tsx` — same two corrections so the pipeline monitor agrees (it currently keys off `transaction_type === "FEE"`, which also never matches; real value is lowercase `fee`)
