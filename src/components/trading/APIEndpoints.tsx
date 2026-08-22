@@ -428,7 +428,7 @@ axios.get('${origin}/v1/features/market-data', config)
       : [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-muted-foreground">Live Context:</span>
         <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
@@ -474,7 +474,7 @@ axios.get('${origin}/v1/features/market-data', config)
             <div className="space-y-2">
               <h4 className="text-sm font-semibold">Desktop Configuration</h4>
               <div className="relative">
-                <pre className="bg-background border border-border p-3 rounded-lg overflow-x-auto text-xs text-muted-foreground">
+                <pre className="bg-background border border-border p-3 rounded-lg overflow-x-auto max-w-full text-[11px] sm:text-xs text-muted-foreground">
                   <code>{mcpConfigExample}</code>
                 </pre>
                 <Button
@@ -513,8 +513,8 @@ axios.get('${origin}/v1/features/market-data', config)
             {visibleEndpoints.map((endpoint, index) => (
               <div key={index} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge
                         variant="outline"
                         className={
@@ -528,12 +528,12 @@ axios.get('${origin}/v1/features/market-data', config)
                       <button
                         type="button"
                         onClick={() => executeLiveCall(endpoint)}
-                        className="text-sm font-mono text-foreground hover:text-primary underline-offset-4 hover:underline transition-colors"
+                        className="text-left text-xs sm:text-sm font-mono text-foreground hover:text-primary underline-offset-4 hover:underline transition-colors break-all"
                       >
                         {endpoint.path}
                       </button>
                     </div>
-                    <p className="text-sm text-muted-foreground">{endpoint.description}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground break-words">{endpoint.description}</p>
                   </div>
                 </div>
 
@@ -575,7 +575,7 @@ axios.get('${origin}/v1/features/market-data', config)
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="curl">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-3 text-xs sm:text-sm">
               <TabsTrigger value="curl">cURL</TabsTrigger>
               <TabsTrigger value="python">Python</TabsTrigger>
               <TabsTrigger value="nodejs">Node.js</TabsTrigger>
@@ -583,7 +583,7 @@ axios.get('${origin}/v1/features/market-data', config)
 
             <TabsContent value="curl" className="space-y-2">
               <div className="relative">
-                <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                <pre className="bg-muted p-3 sm:p-4 rounded-lg overflow-x-auto max-w-full text-[11px] sm:text-sm">
                   <code>{curlExample}</code>
                 </pre>
                 <Button
@@ -599,7 +599,7 @@ axios.get('${origin}/v1/features/market-data', config)
 
             <TabsContent value="python" className="space-y-2">
               <div className="relative">
-                <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                <pre className="bg-muted p-3 sm:p-4 rounded-lg overflow-x-auto max-w-full text-[11px] sm:text-sm">
                   <code>{pythonExample}</code>
                 </pre>
                 <Button
@@ -615,7 +615,7 @@ axios.get('${origin}/v1/features/market-data', config)
 
             <TabsContent value="nodejs" className="space-y-2">
               <div className="relative">
-                <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
+                <pre className="bg-muted p-3 sm:p-4 rounded-lg overflow-x-auto max-w-full text-[11px] sm:text-sm">
                   <code>{nodejsExample}</code>
                 </pre>
                 <Button
@@ -641,7 +641,7 @@ axios.get('${origin}/v1/features/market-data', config)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm text-muted-foreground">
+          <pre className="bg-muted p-3 sm:p-4 rounded-lg overflow-x-auto max-w-full text-[11px] sm:text-sm text-muted-foreground">
             <code>{responseExample}</code>
           </pre>
         </CardContent>
