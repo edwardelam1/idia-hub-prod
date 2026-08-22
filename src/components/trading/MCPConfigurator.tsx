@@ -27,15 +27,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const TT = ({
   tip,
   side = "top",
+  className = "",
   children,
 }: {
   tip: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
+  className?: string;
   children: ReactNode;
 }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <span tabIndex={0} className="inline-flex cursor-help outline-none">
+      <span tabIndex={0} className={`inline-flex cursor-help outline-none ${className}`}>
         {children}
       </span>
     </TooltipTrigger>
@@ -44,6 +46,7 @@ const TT = ({
     </TooltipContent>
   </Tooltip>
 );
+
 
 export const MCPConfigurator = () => {
   const { tools, toggleTool, manifestUrl, exportManifest } = useMcpToolSchemas();
