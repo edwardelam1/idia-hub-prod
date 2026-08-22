@@ -155,7 +155,7 @@ export const MCPConfigurator = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -376,8 +376,8 @@ export const MCPConfigurator = () => {
           <CardDescription>Copy these snippets into your local MCP client config.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Claude Desktop</h4>
               <TT tip="Copy this claude_desktop_config.json mcpServers block to your clipboard.">
                 <Button
@@ -392,12 +392,12 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {claudeSnippet}
             </pre>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Ollama</h4>
               <TT tip="Copy this ~/.ollama/mcp.json entry to your clipboard.">
                 <Button
@@ -412,7 +412,7 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {ollamaSnippet}
             </pre>
           </div>
@@ -449,24 +449,24 @@ export const MCPConfigurator = () => {
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 text-xs">
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="font-semibold text-muted-foreground">Manifest URL</div>
-              <TT tip="Per-user manifest served by the mcp-manifest edge function. The bridge polls this on startup to learn which tools you have enabled.">
-                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">
+              <TT className="w-full min-w-0" tip="Per-user manifest served by the mcp-manifest edge function. The bridge polls this on startup to learn which tools you have enabled.">
+                <code className="block w-full bg-muted/60 border border-border rounded-md p-2 break-all">
                   {remoteManifestUrl}
                 </code>
               </TT>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="font-semibold text-muted-foreground">JSON-RPC Relay URL</div>
-              <TT tip="The bridge forwards every tools/call JSON-RPC envelope to this endpoint; the relay applies auth, sanitization, and billing before dispatching downstream.">
-                <code className="block bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
+              <TT className="w-full min-w-0" tip="The bridge forwards every tools/call JSON-RPC envelope to this endpoint; the relay applies auth, sanitization, and billing before dispatching downstream.">
+                <code className="block w-full bg-muted/60 border border-border rounded-md p-2 break-all">{relayUrl}</code>
               </TT>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <h4 className="text-sm font-semibold">Claude Desktop config (bridge mode)</h4>
               <TT tip="Copy the stdio-bridge mcpServers block to your clipboard.">
                 <Button
@@ -481,7 +481,7 @@ export const MCPConfigurator = () => {
                 </Button>
               </TT>
             </div>
-            <pre className="text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {bridgeConfigSnippet}
             </pre>
             <p className="text-xs text-muted-foreground">
@@ -499,7 +499,7 @@ export const MCPConfigurator = () => {
             <SheetDescription>{drawerTool?.description}</SheetDescription>
           </SheetHeader>
           {drawerTool && (
-            <pre className="mt-4 text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto">
+            <pre className="mt-4 text-[11px] sm:text-xs bg-muted/60 border border-border rounded-md p-3 overflow-x-auto max-w-full">
               {JSON.stringify(
                 {
                   name: drawerTool.name,
