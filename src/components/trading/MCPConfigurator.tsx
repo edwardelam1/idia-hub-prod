@@ -164,28 +164,31 @@ export const MCPConfigurator = () => {
             Toggles below control which JSON-RPC tools are advertised. {enabledCount} of {tools.length} enabled.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
+        <CardContent className="space-y-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:space-y-0">
           <TT
             side="bottom"
             tip="Canonical MCP Streamable-HTTP endpoint. Paste into any MCP client (Claude Desktop, Ollama, Cursor) that supports remote HTTP transport."
           >
-            <div className="flex-1 min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground truncate">
+            <div className="w-full sm:flex-1 sm:min-w-[260px] rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] sm:text-xs text-muted-foreground break-all sm:truncate">
               {manifestUrl || "Manifest URL pending"}
             </div>
           </TT>
-          <TT side="bottom" tip="Copies the enabled-tools manifest JSON to your clipboard.">
-            <Button variant="outline" size="sm" onClick={handleCopyManifest}>
-              <Copy className="h-4 w-4 mr-2" />
-              Copy Manifest
-            </Button>
-          </TT>
-          <TT side="bottom" tip="Downloads a local mcp.json file containing only your currently enabled tools.">
-            <Button size="sm" onClick={handleDownload}>
-              <Download className="h-4 w-4 mr-2" />
-              Download mcp.json
-            </Button>
-          </TT>
+          <div className="flex flex-wrap gap-2">
+            <TT side="bottom" tip="Copies the enabled-tools manifest JSON to your clipboard.">
+              <Button variant="outline" size="sm" onClick={handleCopyManifest} className="flex-1 sm:flex-none">
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Manifest
+              </Button>
+            </TT>
+            <TT side="bottom" tip="Downloads a local mcp.json file containing only your currently enabled tools.">
+              <Button size="sm" onClick={handleDownload} className="flex-1 sm:flex-none">
+                <Download className="h-4 w-4 mr-2" />
+                Download mcp.json
+              </Button>
+            </TT>
+          </div>
         </CardContent>
+
       </Card>
 
       <Card>
