@@ -250,6 +250,48 @@ export const MCPConfigurator = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Mobile: stacked cards */}
+          <div className="space-y-3 md:hidden">
+            {tools.map((tool) => (
+              <div key={tool.name} className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground break-words">{tool.name}</div>
+                    <div className="text-xs text-muted-foreground break-words">{tool.description}</div>
+                  </div>
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={(v) => toggleTool(tool.name, v)}
+                    aria-label={`Toggle ${tool.name}`}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {tool.scope === "public" ? (
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                      <Globe className="h-3 w-3 mr-1" />
+                      Public Access
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      Premium Gated
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setDrawerTool(tool)}>
+                    <Code2 className="h-4 w-4 mr-1" />
+                    Schema
+                  </Button>
+                </div>
+                <code className="block text-[11px] text-muted-foreground break-all">{tool.endpoint}</code>
+              </div>
+            ))}
+            {tools.length === 0 && (
+              <div className="text-center text-muted-foreground py-6 text-sm">No tools available.</div>
+            )}
+          </div>
+
+          {/* Tablet and up: full table */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -317,6 +359,8 @@ export const MCPConfigurator = () => {
               )}
             </TableBody>
           </Table>
+          </div>
+
 
           {enabledCount === 0 && tools.length > 0 && (
             <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
