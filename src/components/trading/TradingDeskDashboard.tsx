@@ -114,32 +114,35 @@ export const TradingDeskDashboard = () => {
 
       {/* Main Tabs Interface */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto gap-1 p-1">
-          <TabsTrigger value="overview">
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="keys">
-            <Key className="h-4 w-4 mr-2" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="endpoints">
-            <FileCode className="h-4 w-4 mr-2" />
-            Endpoints
-          </TabsTrigger>
-          <TabsTrigger value="mcp">
-            <Plug className="h-4 w-4 mr-2" />
-            MCP
-          </TabsTrigger>
-          <TabsTrigger value="monitoring">
-            <Activity className="h-4 w-4 mr-2" />
-            Monitoring
-          </TabsTrigger>
-          <TabsTrigger value="feeds">
-            <Database className="h-4 w-4 mr-2" />
-            Feature Feeds
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-4 sm:mx-0 overflow-x-auto px-4 sm:px-0 pb-1">
+          <TabsList className="inline-flex w-max lg:grid lg:w-full lg:grid-cols-6 h-auto gap-1 p-1">
+            <TabsTrigger value="overview" className="whitespace-nowrap text-xs sm:text-sm">
+              <BarChart3 className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="keys" className="whitespace-nowrap text-xs sm:text-sm">
+              <Key className="h-4 w-4 mr-1.5 sm:mr-2" />
+              API Keys
+            </TabsTrigger>
+            <TabsTrigger value="endpoints" className="whitespace-nowrap text-xs sm:text-sm">
+              <FileCode className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Endpoints
+            </TabsTrigger>
+            <TabsTrigger value="mcp" className="whitespace-nowrap text-xs sm:text-sm">
+              <Plug className="h-4 w-4 mr-1.5 sm:mr-2" />
+              MCP
+            </TabsTrigger>
+            <TabsTrigger value="monitoring" className="whitespace-nowrap text-xs sm:text-sm">
+              <Activity className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Monitoring
+            </TabsTrigger>
+            <TabsTrigger value="feeds" className="whitespace-nowrap text-xs sm:text-sm">
+              <Database className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Feature Feeds
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
