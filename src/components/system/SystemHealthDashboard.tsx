@@ -47,45 +47,21 @@ export const SystemHealthDashboard = () => {
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
 
   useEffect(() => {
+    // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() so the
+    // indicators fire for ANY user's activity (RLS-scoped postgres_changes only
+    // ever showed the signed-in user's own rows).
     const channel = supabase
-      .channel("protocol-realtime-v5")
-
-      // STAGE 1: Ingestion Heartbeat (Rose)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_health_data" }, () => {
-        pulseNode("apple-health-sync", "INGESTION_STAGED");
-      })
-
-      // STAGES 2 & 5: The Economic Ledger (Indigo & Emerald)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "synapse_credit_ledger" }, (payload) => {
-        const { entry_type, description } = payload.new;
-
-        if (entry_type === "USAGE") {
-          pulseNode("synapse-controller", "GAS_BURN_EXECUTED");
+      .channel("protocol-stream", { config: { broadcast: { self: true } } })
+      .on("broadcast", { event: "pulse" }, (msg) => {
+        const p = (msg.payload as any)?.payload ?? msg.payload ?? {};
+        const stage = p.stage as string | undefined;
+        if (!stage) return;
+        if (stage === "process-data-sale") {
+          // let the Amber (AI) pulse land first
+          setTimeout(() => pulseNode(stage, p.label || "LIABILITY SHIELD MINTED"), 800);
+          return;
         }
-
-        if (entry_type === "ROYALTY") {
-          pulseNode("royalty-distribution", "ROYALTY_DISTRIBUTED");
-        }
-
-        setActiveLog(description || `LEDGER: ${entry_type}`);
-      })
-
-      // STAGES 3 & 4: Egress & DELT (Amber & Cyan Handshake)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "egress_logs" }, (payload) => {
-        const { egress_type, liability_token_hash, aca_record_references } = payload.new;
-
-        // 1. If it has ACA references or an Egress type, the AI did work (Amber)
-        if (egress_type || aca_record_references) {
-          pulseNode("best-friend-ai", "AI_OMNI_FETCH_COMPLETE");
-        }
-
-        // 2. If it has a Liability Token or is a Purchase, the Shielding is active (Cyan)
-        if (liability_token_hash || egress_type === "PURCHASE" || egress_type === "DATA_SALE") {
-          // Delay slightly so the user sees the Amber pulse first as the data moves through the AI
-          setTimeout(() => {
-            pulseNode("process-data-sale", `LIABILITY SHIELD MINTED: ${liability_token_hash?.slice(0, 8)}`);
-          }, 800);
-        }
+        pulseNode(stage, p.label || stage.toUpperCase());
       })
       .subscribe();
 
@@ -93,6 +69,7 @@ export const SystemHealthDashboard = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
 
   const pulseNode = (nodeId: string, status: string) => {
     setActiveLog(status);
