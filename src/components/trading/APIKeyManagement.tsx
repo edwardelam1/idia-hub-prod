@@ -156,16 +156,16 @@ export const APIKeyManagement = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {justCreatedKey && (
         <Card className="border-primary bg-primary/5">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1 flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="space-y-1 flex-1 min-w-0">
                 <p className="text-sm font-semibold text-primary">🔑 New API Key — Copy Now (shown only once)</p>
                 <code className="text-xs bg-background p-2 rounded block break-all">{justCreatedKey}</code>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => copyToClipboard(justCreatedKey, "API Key")}>
                   <Copy className="h-4 w-4 mr-1" /> Copy
                 </Button>
@@ -180,8 +180,8 @@ export const APIKeyManagement = () => {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <CardTitle className="flex items-center gap-2">
                 <Key className="h-5 w-5 text-primary" />
                 API Key Management
@@ -190,7 +190,7 @@ export const APIKeyManagement = () => {
             </div>
             <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2 w-full sm:w-auto">
                   <Plus className="h-4 w-4" /> Generate New Key
                 </Button>
               </DialogTrigger>
@@ -234,10 +234,10 @@ export const APIKeyManagement = () => {
                 const isVisible = visibleKeys[keyData.id] ?? false;
                 return (
                   <div key={keyData.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold text-foreground">{keyData.name}</h4>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-foreground break-words">{keyData.name}</h4>
+                        <p className="text-xs sm:text-sm text-muted-foreground break-words">
                           Created: {new Date(keyData.created_at).toLocaleDateString()} • Last used:{" "}
                           {keyData.last_used_at ? new Date(keyData.last_used_at).toLocaleString() : "Never"}
                         </p>
@@ -254,16 +254,17 @@ export const APIKeyManagement = () => {
                       </Badge>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <Input
                         type={isVisible ? "text" : "password"}
                         value={keyData.key_prefix + "•••••••••••••••••••••••"}
                         readOnly
-                        className="font-mono text-sm"
+                        className="font-mono text-xs sm:text-sm min-w-0"
                       />
                       <Button
                         variant="outline"
                         size="icon"
+                        className="flex-shrink-0"
                         onClick={() => setVisibleKeys((v) => ({ ...v, [keyData.id]: !isVisible }))}
                       >
                         {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -271,13 +272,14 @@ export const APIKeyManagement = () => {
                       <Button
                         variant="outline"
                         size="icon"
+                        className="flex-shrink-0"
                         onClick={() => copyToClipboard(keyData.key_prefix, keyData.name)}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
                       <div className="text-sm text-muted-foreground">
                         <span className="font-semibold text-foreground">API Status:</span> {keyData.status}
                       </div>
