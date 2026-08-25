@@ -89,8 +89,10 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
     const setLoading = provider === "apple" ? setIsAppleLoading : setIsGoogleLoading;
     setLoading(true);
     try {
-      const redirectTo = nextPath ? `${window.location.origin}${nextPath}` : `${window.location.origin}/dashboard`;
+      // Native shells (iOS / Android / macOS) return via idialife://auth-callback.
+      const redirectTo = resolveOAuthRedirect(nextPath);
       const { error } = await supabase.auth.signInWithOAuth({
+
         provider,
         options: {
           // Honor ?next= so MCP OAuth-consent visitors return to the consent screen.
