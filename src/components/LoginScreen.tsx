@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveOAuthRedirect, isNativeShell } from "@/lib/auth-redirect";
+import { resolveOAuthRedirect } from "@/lib/auth-redirect";
 
 
 interface LoginScreenProps {
