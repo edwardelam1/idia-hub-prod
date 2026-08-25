@@ -36,11 +36,13 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
-          </TooltipProvider>
+      </TooltipProvider>
         </PurchaseHistoryProvider>
       </SynapseCreditsProvider>
     </AuthProvider>
   </QueryClientProvider>
-);
+  );
+};
+
 
 export default App;
