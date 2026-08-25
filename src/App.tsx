@@ -10,10 +10,17 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import OAuthConsent from "./pages/OAuthConsent";
 
+import { useNativeAuthDeepLink } from "./hooks/useNativeAuthDeepLink";
+
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Handles idialife://auth-callback returns on iOS, Android and macOS.
+  useNativeAuthDeepLink();
+
+  return (
   <QueryClientProvider client={queryClient}>
+
     <AuthProvider>
       <SynapseCreditsProvider>
         <PurchaseHistoryProvider>
