@@ -28,6 +28,7 @@ const App = () => {
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <AnalyticsTracker />
               <Routes>
                 {/* Supabase OAuth 2.1 consent screen for MCP client authorization */}
                 <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
