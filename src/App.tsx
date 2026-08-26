@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import OAuthConsent from "./pages/OAuthConsent";
 
 import { useNativeAuthDeepLink } from "./hooks/useNativeAuthDeepLink";
+import AnalyticsTracker from "./components/analytics/AnalyticsTracker";
 
 const queryClient = new QueryClient();
 
