@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { getSuggestedPicosForNano, type SuggestedPicoRelation } from "@/hooks/usePayBlueprintCatalog";
 import { toast } from "sonner";
 import { X, Plus, Sparkles, Search } from "lucide-react";
+
 
 export interface PicoBite {
   id: string;
