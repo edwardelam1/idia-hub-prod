@@ -72,6 +72,17 @@ const Section = ({ title, items }: { title: string; items?: string[] }) => {
 
 const BundleDetailSheet = ({ bundle }: BundleDetailSheetProps) => {
   const freshness = getFreshness(bundle.sourceLatestAt);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildBundleText(bundle, freshness));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable
+    }
+  };
 
   return (
     <Sheet>
