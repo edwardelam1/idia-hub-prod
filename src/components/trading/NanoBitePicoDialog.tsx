@@ -186,10 +186,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
                 Suggested by relationship graph
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {relations
-                  .slice()
-                  .sort((a, b) => (b.relationship_weight ?? 0) - (a.relationship_weight ?? 0))
-                  .map((rel) => {
+                {relations.map((rel) => {
                     const pico = catalog.find((p) => p.id === rel.pico_bite_id);
                     if (!pico) return null;
                     const isAssigned = assignedSet.has(pico.id);
