@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, Database, Loader2 } from 'lucide-react';
+import { Coins, Users, Database, Loader2, Clock } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
+import BundleDetailSheet from './BundleDetailSheet';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useSynapseCredits } from '@/contexts/SynapseCreditsContext';
+import { getFreshness, relativeTime, windowLabel, windowShort } from '@/lib/bundle-freshness';
 
 interface BundleCardProps {
   bundle: any;
@@ -18,24 +20,34 @@ interface BundleCardProps {
   onAddToCart?: (items: any[]) => void;
 }
 
-const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAddToCart }: BundleCardProps) => {
+const COLLAPSED_INSIGHTS = 3;
+const COLLAPSED_CHIPS = 4;
+
+const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
   const navigate = useNavigate();
   const { refreshBalance } = useSynapseCredits();
   const [isAccessing, setIsAccessing] = useState(false);
+  const [showFullText, setShowFullText] = useState(false);
+  const [showAllPoints, setShowAllPoints] = useState(false);
+  const [showAllFeatures, setShowAllFeatures] = useState(false);
+
+  const freshness = getFreshness(bundle.sourceLatestAt);
 
   const getTierColor = (tier: string) => {
     switch (tier) {
-      case 'Enterprise': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Professional': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Analyst': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Enterprise':
+        return 'bg-purple-500/15 text-purple-700 border-purple-500/30';
+      case 'Professional':
+        return 'bg-blue-500/15 text-blue-700 border-blue-500/30';
+      case 'Analyst':
+        return 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30';
+      default:
+        return 'bg-muted text-muted-foreground border-border';
     }
   };
 
   const handleAddToCart = (items: any[]) => {
-    if (onAddToCart) {
-      onAddToCart(items);
-    }
+    if (onAddToCart) onAddToCart(items);
   };
 
   const handleFullDatasetAccess = async () => {
@@ -58,130 +70,162 @@ const BundleCard = ({ bundle, isMobile, isTablet, userCredits, onDownload, onAdd
     }
   };
 
-  // Responsive sizing
-  const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-4' : 'p-6';
-  const titleSize = isMobile ? 'text-sm' : isTablet ? 'text-sm' : 'text-base';
-  const descSize = isMobile ? 'text-xs' : isTablet ? 'text-xs' : 'text-sm';
-  const maxDataPoints = isMobile ? 2 : isTablet ? 3 : 4;
-  const maxFeatures = isMobile ? 2 : isTablet ? 2 : 3;
+  const dataPoints: string[] = bundle.dataPoints ?? [];
+  const features: string[] = bundle.features ?? [];
+  const insights: string[] = bundle.keyInsights ?? [];
+
+  const visiblePoints = showAllPoints ? dataPoints : dataPoints.slice(0, COLLAPSED_CHIPS);
+  const visibleFeatures = showAllFeatures ? features : features.slice(0, COLLAPSED_CHIPS);
+  const visibleInsights = showFullText ? insights : insights.slice(0, COLLAPSED_INSIGHTS);
 
   return (
-    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className={cardPadding}>
-        <div className={`space-y-3`}>
+    <Card className="border-0 shadow-sm transition-shadow hover:shadow-md">
+      <CardContent className="p-4 sm:p-5">
+        <div className="space-y-3">
           {/* Header */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 space-y-1.5 min-w-0">
-              <h3 className={`font-medium text-gray-900 ${titleSize} line-clamp-2`}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1 space-y-2">
+              <h3 className="text-sm font-semibold leading-snug text-foreground break-words sm:text-base">
                 {bundle.name}
               </h3>
-              <div className="flex items-center flex-wrap gap-1">
-                <Badge className={`${getTierColor(bundle.tier)} ${isTablet ? 'text-[10px] px-1.5' : 'text-xs'}`} variant="outline">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge className={`${getTierColor(bundle.tier)} text-[11px]`} variant="outline">
                   {bundle.tier}
                 </Badge>
-                <Badge variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs'}`}>
+                <Badge variant="secondary" className="max-w-full break-all text-[11px]">
                   {bundle.category}
+                </Badge>
+                <Badge variant="outline" className="text-[11px]">
+                  {windowShort(bundle.windowKey)}
+                </Badge>
+                <Badge variant="outline" className={`${freshness.className} text-[11px]`}>
+                  {freshness.label}
                 </Badge>
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <div className={`flex items-center text-purple-600 font-semibold ${isMobile || isTablet ? 'text-sm' : ''}`}>
-                <Coins className="mr-1 h-3 w-3" />
-                {bundle.price}
-              </div>
+            <div className="flex shrink-0 items-center font-semibold text-purple-600 tabular-nums">
+              <Coins className="mr-1 h-3.5 w-3.5" />
+              {bundle.price}
             </div>
+          </div>
+
+          {/* Freshness line */}
+          <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Clock className="mt-0.5 h-3 w-3 shrink-0" />
+            <span className="break-words">
+              Pulled {windowLabel(bundle.windowKey)} · newest record {relativeTime(bundle.sourceLatestAt)} · snapshot{' '}
+              {relativeTime(bundle.generatedAt ?? bundle.updatedAt)}
+            </span>
           </div>
 
           {/* Description */}
-          <p className={`text-gray-600 ${descSize} line-clamp-2`}>
-            {bundle.description}
-          </p>
+          <div className="space-y-1">
+            <p className={`text-xs text-muted-foreground sm:text-sm ${showFullText ? '' : 'line-clamp-3'}`}>
+              {bundle.description}
+            </p>
+          </div>
 
           {/* Key Insights */}
-          <div className={`bg-blue-50 ${isTablet ? 'p-2' : 'p-3'} rounded-lg`}>
-            <h4 className={`font-medium text-blue-900 ${isTablet ? 'text-[10px]' : 'text-xs'} mb-1.5`}>Key Insights</h4>
-            <ul className="space-y-0.5">
-              {bundle.keyInsights?.slice(0, isTablet ? 2 : 3).map((insight: string, index: number) => (
-                <li key={index} className={`text-blue-700 ${isTablet ? 'text-[10px]' : 'text-xs'} flex items-center`}>
-                  <div className="w-1 h-1 bg-blue-400 rounded-full mr-1.5 shrink-0"></div>
-                  <span className="line-clamp-1">{insight}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {insights.length > 0 && (
+            <div className="rounded-lg bg-blue-500/10 p-3">
+              <h4 className="mb-1.5 text-xs font-medium text-blue-900">Key Insights</h4>
+              <ul className="space-y-1">
+                {visibleInsights.map((insight, index) => (
+                  <li key={index} className="flex gap-1.5 text-xs text-blue-800">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-blue-500" />
+                    <span className="break-words">{insight}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(insights.length > COLLAPSED_INSIGHTS || (bundle.description?.length ?? 0) > 140) && (
+            <button
+              type="button"
+              onClick={() => setShowFullText((v) => !v)}
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {showFullText ? 'Show less' : 'Show more'}
+            </button>
+          )}
 
           {/* Data Points */}
-          <div className={`bg-gray-50 ${isTablet ? 'p-2' : 'p-3'} rounded-lg`}>
-            <h4 className={`font-medium text-gray-900 ${isTablet ? 'text-[10px]' : 'text-xs'} mb-1.5`}>Data Points</h4>
-            <div className="flex flex-wrap gap-1">
-              {bundle.dataPoints?.slice(0, maxDataPoints).map((point: string, index: number) => (
-                <Badge key={index} variant="outline" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
-                  {point}
-                </Badge>
-              ))}
-              {bundle.dataPoints && bundle.dataPoints.length > maxDataPoints && (
-                <Badge variant="outline" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
-                  +{bundle.dataPoints.length - maxDataPoints}
-                </Badge>
-              )}
+          {dataPoints.length > 0 && (
+            <div className="rounded-lg bg-muted/60 p-3">
+              <h4 className="mb-1.5 text-xs font-medium text-foreground">Data Points</h4>
+              <div className="flex flex-wrap gap-1">
+                {visiblePoints.map((point, index) => (
+                  <Badge key={index} variant="outline" className="max-w-full break-words text-[11px]">
+                    {point}
+                  </Badge>
+                ))}
+                {dataPoints.length > COLLAPSED_CHIPS && (
+                  <button type="button" onClick={() => setShowAllPoints((v) => !v)}>
+                    <Badge variant="outline" className="cursor-pointer text-[11px] hover:bg-accent">
+                      {showAllPoints ? 'Show less' : `+${dataPoints.length - COLLAPSED_CHIPS} more`}
+                    </Badge>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Stats */}
-          <div className={`flex items-center justify-between ${isTablet ? 'text-[10px]' : 'text-xs'} text-gray-500`}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <div className="flex items-center">
-              <Database className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
-              {Number(bundle.records ?? 0).toLocaleString()} records
+              <Database className="mr-1 h-3 w-3" />
+              <span className="tabular-nums">{Number(bundle.records ?? 0).toLocaleString()} records</span>
             </div>
             <div className="flex items-center">
-              <Users className={`mr-1 ${isTablet ? 'h-2.5 w-2.5' : 'h-3 w-3'}`} />
-              {Number(bundle.contributors ?? 0).toLocaleString()} contributors
+              <Users className="mr-1 h-3 w-3" />
+              <span className="tabular-nums">{Number(bundle.contributors ?? 0).toLocaleString()} contributors</span>
             </div>
           </div>
 
           {/* Features */}
-          <div className="flex flex-wrap gap-1">
-            {bundle.features.slice(0, maxFeatures).map((feature: string, index: number) => (
-              <Badge key={index} variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
-                {feature}
-              </Badge>
-            ))}
-            {bundle.features.length > maxFeatures && (
-              <Badge variant="secondary" className={`${isTablet ? 'text-[10px] px-1.5' : 'text-xs px-2'} py-0`}>
-                +{bundle.features.length - maxFeatures}
-              </Badge>
-            )}
-          </div>
+          {features.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {visibleFeatures.map((feature, index) => (
+                <Badge key={index} variant="secondary" className="max-w-full break-words text-[11px]">
+                  {feature}
+                </Badge>
+              ))}
+              {features.length > COLLAPSED_CHIPS && (
+                <button type="button" onClick={() => setShowAllFeatures((v) => !v)}>
+                  <Badge variant="secondary" className="cursor-pointer text-[11px] hover:bg-accent">
+                    {showAllFeatures ? 'Show less' : `+${features.length - COLLAPSED_CHIPS} more`}
+                  </Badge>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
-          <div className={`space-y-1.5 ${isTablet ? 'pt-1' : ''}`}>
-            <Button 
-              className={`w-full ${isMobile || isTablet ? 'text-xs py-1.5 h-8' : ''}`}
+          <div className="space-y-1.5 pt-1">
+            <Button
+              className="min-h-11 w-full"
               onClick={handleFullDatasetAccess}
               disabled={userCredits < bundle.price || isAccessing}
             >
               {isAccessing ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Issuing Liability Shield…
                 </>
               ) : userCredits < bundle.price ? (
                 'Insufficient Credits'
               ) : (
                 <>
-                  <Database className="h-4 w-4 mr-2" />
+                  <Database className="mr-2 h-4 w-4" />
                   Access Full Dataset
                 </>
               )}
             </Button>
-            
-            {/* À La Carte Option */}
-            <div className="flex items-center justify-center">
-              <AlaCarteModal
-                bundle={bundle}
-                onAddToCart={handleAddToCart}
-                userCredits={userCredits}
-              />
+
+            <div className="flex flex-col gap-1.5">
+              <AlaCarteModal bundle={bundle} onAddToCart={handleAddToCart} userCredits={userCredits} />
+              <BundleDetailSheet bundle={bundle} />
             </div>
           </div>
         </div>

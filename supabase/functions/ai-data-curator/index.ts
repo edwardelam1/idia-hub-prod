@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { calculateBundlePrice } from '../_shared/bundle-pricing.ts';
+import { isMaterialChange, windowLabel } from '../_shared/bundle-freshness.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const AI_MODEL = 'openai/gpt-5-mini';
@@ -153,10 +154,14 @@ async function curateBundleMetadata(data: any, bundleType: string) {
 Curate compelling metadata for this ${bundleType} data bundle:
 
 Data Summary:
-- Records: ${data.length}
+- Records: ${data.record_count ?? data.length}
+- Time window: ${windowLabel(data.window_key ?? 'all')}${data.source_latest_at ? ` (newest record ${data.source_latest_at})` : ''}
+- Contributors: ${data.participant_count ?? data.unique_users_count ?? 'unknown'}
 - Coverage: ${data.geographic_coverage || 'Multiple regions'}
 - Quality: ${data.avg_quality_score || 0.8}/1.0
-- Activity Types: ${data.activity_types?.join(', ') || 'Various health activities'}
+- Activity Types: ${data.activity_types?.join(', ') || Object.keys(data.stat_fingerprint?.activity_mix ?? {}).join(', ') || 'Various health activities'}
+
+The title MUST make the time window explicit (e.g. "Last 24 Hours", "Last 7 Days", "Last 30 Days", "All Time") so buyers can tell real-time slices from historical ones.
 
 Create enterprise-grade bundle metadata in this JSON format:
 {
@@ -329,6 +334,7 @@ function calculateActivityDistribution(data: any[]) {
 async function publishBundle(supabaseClient: any, bundle: any) {
   const category = bundle.category ?? 'general';
   const tier = bundle.tier ?? 'Analyst';
+  const windowKey = bundle.window_key ?? 'all';
   const recordCount = Number(
     bundle.record_count ?? bundle.data_json?.record_count ?? 0,
   );
@@ -359,25 +365,19 @@ async function publishBundle(supabaseClient: any, bundle: any) {
     data_fusion_level: bundle.data_fusion_level ?? 'single_source',
     cross_platform_insights: bundle.cross_platform_insights ?? {},
     predictive_analytics: bundle.predictive_analytics ?? {},
+    window_key: windowKey,
+    window_start: bundle.window_start ?? null,
+    window_end: bundle.window_end ?? null,
+    source_latest_at: bundle.source_latest_at ?? null,
+    generated_at: new Date().toISOString(),
+    stat_fingerprint: bundle.stat_fingerprint ?? {},
   };
 
-  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} tier=${tier}`);
-  const { data: existing, error: lookupError } = await supabaseClient
-    .from('marketplace_bundles')
-    .select('bundle_id, bundle_version')
-    .eq('category', category)
-    .eq('tier', tier)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  console.info(`[END: Curator.DB.LookupBundle] found=${!!existing} error=${lookupError?.message ?? 'none'}`);
-
-  if (lookupError) throw new Error(`publish_bundle lookup failed: ${lookupError.message}`);
+  const existing = bundle.__existing ?? (await lookupBundle(supabaseClient, category, tier, windowKey));
 
   if (existing) {
     row.bundle_version = Number(existing.bundle_version ?? 1) + 1;
-    console.info(`[BEGIN: Curator.DB.UpdateBundle] bundle_id=${existing.bundle_id}`);
+    console.info(`[BEGIN: Curator.DB.UpdateBundle] bundle_id=${existing.bundle_id} window=${windowKey}`);
     const { data, error } = await supabaseClient
       .from('marketplace_bundles')
       .update(row)
@@ -390,7 +390,7 @@ async function publishBundle(supabaseClient: any, bundle: any) {
   }
 
   row.bundle_version = 1;
-  console.info('[BEGIN: Curator.DB.InsertBundle]');
+  console.info(`[BEGIN: Curator.DB.InsertBundle] window=${windowKey}`);
   const { data, error } = await supabaseClient
     .from('marketplace_bundles')
     .insert(row)
@@ -401,13 +401,58 @@ async function publishBundle(supabaseClient: any, bundle: any) {
   return { published: true, mode: 'insert', bundle: data };
 }
 
+async function lookupBundle(supabaseClient: any, category: string, tier: string, windowKey: string) {
+  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} tier=${tier} window=${windowKey}`);
+  const { data, error } = await supabaseClient
+    .from('marketplace_bundles')
+    .select('bundle_id, bundle_version, stat_fingerprint')
+    .eq('category', category)
+    .eq('tier', tier)
+    .eq('window_key', windowKey)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  console.info(`[END: Curator.DB.LookupBundle] found=${!!data} error=${error?.message ?? 'none'}`);
+  if (error) throw new Error(`publish_bundle lookup failed: ${error.message}`);
+  return data;
+}
+
 // One-shot: curate metadata, then persist with deterministic pricing.
 // `data` is the underlying source (real aggregates only — no synthetic records).
 async function curateAndPublish(supabaseClient: any, data: any, bundleType: string) {
-  const metadata = await curateBundleMetadata(data, bundleType);
-
   const recordCount = Number(data.record_count ?? data.length ?? 0);
   const category = data.category ?? bundleType;
+  const tier = data.tier ?? 'Analyst';
+  const windowKey = data.window_key ?? 'all';
+  const fingerprint = data.stat_fingerprint ?? null;
+
+  const existing = await lookupBundle(supabaseClient, category, tier, windowKey);
+
+  // Volatility gate: if the underlying data has not materially moved, do not
+  // burn AI tokens, do not bump the version, do not fake an "updated" signal.
+  if (existing && fingerprint) {
+    const verdict = isMaterialChange(existing.stat_fingerprint as any, fingerprint);
+    if (!verdict.changed) {
+      console.info(`[Curator.VolatilityGate] unchanged category=${category} tier=${tier} window=${windowKey}`);
+      const { data: refreshed, error } = await supabaseClient
+        .from('marketplace_bundles')
+        .update({
+          generated_at: new Date().toISOString(),
+          source_latest_at: data.source_latest_at ?? null,
+          window_start: data.window_start ?? null,
+          window_end: data.window_end ?? null,
+          is_active: recordCount > 0,
+        })
+        .eq('bundle_id', existing.bundle_id)
+        .select()
+        .single();
+      if (error) throw new Error(`publish_bundle refresh failed: ${error.message}`);
+      return { published: false, mode: 'unchanged', bundle: refreshed };
+    }
+    console.info(`[Curator.VolatilityGate] changed reasons=${verdict.reasons.join('|')}`);
+  }
+
+  const metadata = await curateBundleMetadata(data, bundleType);
 
   const merged = {
     title: metadata.title,
@@ -416,7 +461,7 @@ async function curateAndPublish(supabaseClient: any, data: any, bundleType: stri
     features: metadata.features,
     suggested_filters: metadata.suggested_filters,
     data_points: data.data_points ?? metadata.suggested_filters ?? [],
-    tier: data.tier ?? 'Analyst',
+    tier,
     category,
     bundle_category: data.bundle_category ?? bundleType,
     record_count: recordCount,
@@ -425,6 +470,12 @@ async function curateAndPublish(supabaseClient: any, data: any, bundleType: stri
     match_percentage: Math.round(((data.avg_quality_score ?? 0.85) * 100)),
     data_fusion_level: data.data_fusion_level ?? 'single_source',
     data_json: data.data_json ?? data.bundle_metadata ?? {},
+    window_key: windowKey,
+    window_start: data.window_start ?? null,
+    window_end: data.window_end ?? null,
+    source_latest_at: data.source_latest_at ?? null,
+    stat_fingerprint: fingerprint ?? {},
+    __existing: existing,
   };
 
   return await publishBundle(supabaseClient, merged);
