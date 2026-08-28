@@ -7,7 +7,7 @@ export const WINDOW_OPTIONS: { key: WindowKey; label: string; short: string }[] 
   { key: "24h", label: "Last 24 Hours", short: "24H" },
   { key: "7d", label: "Last 7 Days", short: "7D" },
   { key: "30d", label: "Last 30 Days", short: "30D" },
-  { key: "all", label: "All Time", short: "ALL" },
+  { key: "all", label: "All Time", short: "ALL TIME" },
 ];
 
 export function windowLabel(key?: string | null): string {
@@ -15,7 +15,7 @@ export function windowLabel(key?: string | null): string {
 }
 
 export function windowShort(key?: string | null): string {
-  return WINDOW_OPTIONS.find((w) => w.key === key)?.short ?? "ALL";
+  return WINDOW_OPTIONS.find((w) => w.key === key)?.short ?? "ALL TIME";
 }
 
 export type FreshnessLevel = "live" | "fresh" | "recent" | "stale" | "unknown";
