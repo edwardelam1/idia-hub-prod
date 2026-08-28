@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { getSuggestedPicosForNano, type SuggestedPicoRelation } from "@/hooks/usePayBlueprintCatalog";
 import { toast } from "sonner";
 import { X, Plus, Sparkles, Search } from "lucide-react";
+
 
 export interface PicoBite {
   id: string;
@@ -59,20 +61,24 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
     const load = async () => {
       setLoading(true);
       try {
-        const [{ data: picos, error: e1 }, { data: rels, error: e2 }] = await Promise.all([
+        const [{ data: picos, error: e1 }, rels] = await Promise.all([
           supabase.from("idia_pico_bites").select("id, tag, name, ui_component, gate_policy").order("tag"),
-          bite
-            ? supabase
-                .from("idia_nano_pico_relations")
-                .select("pico_bite_id, relationship_weight, is_mandatory, slot")
-                .eq("nano_bite_id", bite.id)
-            : Promise.resolve({ data: [], error: null } as any),
+          bite ? getSuggestedPicosForNano(bite.id) : Promise.resolve([] as SuggestedPicoRelation[]),
         ]);
         if (cancelled) return;
         if (e1) throw e1;
-        if (e2) throw e2;
         setCatalog((picos as PicoBite[] | null) || []);
-        setRelations((rels as NanoPicoRelation[]) || []);
+        // DB-ranked order is preserved exactly as returned; no client-side sorting.
+        setRelations(
+          (rels || [])
+            .filter((r) => !!r.pico_bite)
+            .map((r) => ({
+              pico_bite_id: r.pico_bite!.id,
+              relationship_weight: Number(r.relationship_weight ?? 0),
+              is_mandatory: !!r.is_mandatory,
+              slot: r.slot ?? null,
+            })),
+        );
       } catch (err: any) {
         console.error("[NanoBitePicoDialog] load failed", err);
         toast.error("Failed to load pico-bite catalog");
@@ -96,6 +102,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
     () => relations.reduce((mx, r) => Math.max(mx, r.relationship_weight ?? 0), 0),
     [relations],
   );
+
 
   const assignedSet = useMemo(() => new Set(assignments), [assignments]);
 
@@ -179,10 +186,7 @@ export const NanoBitePicoDialog = ({ bite, assignments, onChange, onClose }: Pro
                 Suggested by relationship graph
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {relations
-                  .slice()
-                  .sort((a, b) => (b.relationship_weight ?? 0) - (a.relationship_weight ?? 0))
-                  .map((rel) => {
+                {relations.map((rel) => {
                     const pico = catalog.find((p) => p.id === rel.pico_bite_id);
                     if (!pico) return null;
                     const isAssigned = assignedSet.has(pico.id);

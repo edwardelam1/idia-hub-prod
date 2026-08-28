@@ -212,3 +212,53 @@ export function usePayBlueprintCatalog(): PayBlueprintCatalog {
 
   return state;
 }
+
+export interface SuggestedPicoRelation {
+  relationship_weight: number;
+  is_mandatory: boolean;
+  slot: string | null;
+  pico_bite: {
+    id: string;
+    tag: string;
+    name: string;
+    description: string | null;
+    category: string | null;
+    ui_component: string | null;
+    default_slot: string | null;
+    gate_policy: unknown;
+  } | null;
+}
+
+/**
+ * Single, server-ordered query contract for pico-bite suggestions.
+ * The UI is a pure display layer over these rows — no client-side keyword
+ * matching, regex scoring, or heuristic ranking is permitted.
+ */
+export async function getSuggestedPicosForNano(
+  nanoBiteId: string,
+): Promise<SuggestedPicoRelation[]> {
+  const { data, error } = await (supabase as any)
+    .from("idia_nano_pico_relations")
+    .select(
+      `
+      relationship_weight,
+      is_mandatory,
+      slot,
+      pico_bite:idia_pico_bites (
+        id,
+        tag,
+        name,
+        description,
+        category,
+        ui_component,
+        default_slot,
+        gate_policy
+      )
+    `,
+    )
+    .eq("nano_bite_id", nanoBiteId)
+    .order("relationship_weight", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as SuggestedPicoRelation[];
+}

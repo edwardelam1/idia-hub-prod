@@ -85,9 +85,16 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-2">
-              <h3 className="text-sm font-semibold leading-snug text-foreground break-words sm:text-base">
-                {bundle.name}
-              </h3>
+              <button
+                type="button"
+                aria-expanded={showFullText}
+                onClick={() => setShowFullText((v) => !v)}
+                className="block w-full text-left"
+              >
+                <h3 className="text-sm font-semibold leading-snug text-foreground break-words sm:text-base">
+                  {bundle.name}
+                </h3>
+              </button>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge className={`${getTierColor(bundle.tier)} text-[11px]`} variant="outline">
                   {bundle.tier}
@@ -118,16 +125,30 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
             </span>
           </div>
 
-          {/* Description */}
-          <div className="space-y-1">
-            <p className={`text-xs text-muted-foreground sm:text-sm ${showFullText ? '' : 'line-clamp-3'}`}>
+          {/* Description — tap to expand */}
+          <button
+            type="button"
+            aria-expanded={showFullText}
+            onClick={() => setShowFullText((v) => !v)}
+            className="block w-full text-left"
+          >
+            <p
+              className={`text-xs text-muted-foreground sm:text-sm break-words ${
+                showFullText ? '' : 'line-clamp-3'
+              }`}
+            >
               {bundle.description}
             </p>
-          </div>
+          </button>
 
-          {/* Key Insights */}
+          {/* Key Insights — tap to expand */}
           {insights.length > 0 && (
-            <div className="rounded-lg bg-blue-500/10 p-3">
+            <button
+              type="button"
+              aria-expanded={showFullText}
+              onClick={() => setShowFullText((v) => !v)}
+              className="block w-full rounded-lg bg-blue-500/10 p-3 text-left"
+            >
               <h4 className="mb-1.5 text-xs font-medium text-blue-900">Key Insights</h4>
               <ul className="space-y-1">
                 {visibleInsights.map((insight, index) => (
@@ -137,18 +158,18 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-
-          {(insights.length > COLLAPSED_INSIGHTS || (bundle.description?.length ?? 0) > 140) && (
-            <button
-              type="button"
-              onClick={() => setShowFullText((v) => !v)}
-              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-            >
-              {showFullText ? 'Show less' : 'Show more'}
             </button>
           )}
+
+          <button
+            type="button"
+            aria-expanded={showFullText}
+            onClick={() => setShowFullText((v) => !v)}
+            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {showFullText ? 'Show less' : 'Show more'}
+          </button>
+
 
           {/* Data Points */}
           {dataPoints.length > 0 && (
