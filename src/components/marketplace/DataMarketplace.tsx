@@ -15,6 +15,7 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { WINDOW_OPTIONS } from "@/lib/bundle-freshness";
 
 interface DataMarketplaceProps {
   userRole: string;
