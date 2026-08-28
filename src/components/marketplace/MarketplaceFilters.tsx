@@ -36,24 +36,25 @@ const MarketplaceFilters = ({
 
   // Responsive sizing
   const inputSize = isMobile ? 'text-sm' : isTablet ? 'text-sm' : '';
-  const selectWidth = isMobile ? 'w-28' : isTablet ? 'w-32' : 'w-40';
+  const selectWidth = 'w-full sm:w-40';
   const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-3' : 'p-4';
 
   return (
     <Card className="border-0 shadow-sm">
       <CardContent className={cardPadding}>
-        <div className={`flex ${isMobile ? 'flex-col space-y-2' : 'gap-2'}`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex-1 relative">
             <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isTablet ? 'h-3.5 w-3.5' : 'h-4 w-4'} text-gray-400`} />
             <Input
               placeholder={isTablet ? "Search datasets..." : "Search enterprise datasets..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`pl-9 border-gray-200 ${inputSize}`}
+              className={`pl-9 border-gray-200 min-h-11 ${inputSize}`}
             />
           </div>
           
-          <div className={`flex ${isMobile ? 'space-x-2' : 'gap-2'}`}>
+          <div className="flex flex-wrap items-center gap-2">
+
             <Select 
               value={appliedFilters.industry || ''} 
               onValueChange={(value) => setAppliedFilters({...appliedFilters, industry: value || undefined})}
