@@ -1,11 +1,56 @@
+import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Coins, Database, Users, Clock, Info } from "lucide-react";
+import { Coins, Database, Users, Clock, Info, Copy, Check } from "lucide-react";
 import { getFreshness, relativeTime, windowLabel, windowShort } from "@/lib/bundle-freshness";
 
 interface BundleDetailSheetProps {
   bundle: any;
+}
+
+/** Serialize the full bundle detail into plain text for clipboard / AI pasting. */
+function buildBundleText(bundle: any, freshness: ReturnType<typeof getFreshness>): string {
+  const lines: string[] = [];
+  lines.push(`# ${bundle.name ?? ""}`);
+  lines.push("");
+  const meta = [
+    `Tier: ${bundle.tier ?? ""}`,
+    `Category: ${bundle.category ?? ""}`,
+    `Window: ${windowShort(bundle.windowKey)}`,
+    `Freshness: ${freshness.label}`,
+  ];
+  lines.push(meta.join(" | "));
+  lines.push("");
+  lines.push("## Description");
+  lines.push(bundle.description ?? "");
+  lines.push("");
+  lines.push("## Snapshot");
+  lines.push(`Records: ${Number(bundle.records ?? 0).toLocaleString()}`);
+  lines.push(`Contributors: ${Number(bundle.contributors ?? 0).toLocaleString()}`);
+  lines.push(`Price: ${bundle.price} CR`);
+  lines.push(`Version: ${bundle.version ?? 1}`);
+  lines.push("");
+  lines.push("## Provenance");
+  lines.push(`Pull window: ${windowLabel(bundle.windowKey)}`);
+  lines.push(`Newest record: ${relativeTime(bundle.sourceLatestAt)}`);
+  lines.push(`Snapshot taken: ${relativeTime(bundle.generatedAt ?? bundle.updatedAt)}`);
+  if (bundle.windowStart) {
+    const end = bundle.windowEnd ? new Date(bundle.windowEnd).toLocaleString() : "now";
+    lines.push(`Range: ${new Date(bundle.windowStart).toLocaleString()} -> ${end}`);
+  }
+  lines.push("");
+  const sectionText = (title: string, items?: string[]) => {
+    if (!items || items.length === 0) return;
+    lines.push(`## ${title}`);
+    items.forEach((it) => lines.push(`- ${it}`));
+    lines.push("");
+  };
+  sectionText("Key Insights", bundle.keyInsights);
+  sectionText("Data Points", bundle.dataPoints);
+  sectionText("Features", bundle.features);
+  sectionText("Suggested Filters", bundle.suggestedFilters);
+  return lines.join("\n").trim();
 }
 
 const Section = ({ title, items }: { title: string; items?: string[] }) => {
