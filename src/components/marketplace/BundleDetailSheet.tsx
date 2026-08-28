@@ -94,7 +94,19 @@ const BundleDetailSheet = ({ bundle }: BundleDetailSheetProps) => {
       </SheetTrigger>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader className="text-left">
-          <SheetTitle className="pr-6 text-base leading-snug break-words">{bundle.name}</SheetTitle>
+          <div className="flex items-start justify-between gap-3">
+            <SheetTitle className="pr-6 text-base leading-snug break-words">{bundle.name}</SheetTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              className="shrink-0 gap-1.5"
+              aria-label="Copy full bundle details"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
         </SheetHeader>
 
         <div className="mt-4 space-y-5 pb-10">
