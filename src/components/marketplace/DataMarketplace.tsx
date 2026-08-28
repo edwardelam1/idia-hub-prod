@@ -32,6 +32,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<any>({});
+  const [windowFilter, setWindowFilter] = useState<string>("any");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [activeTile, setActiveTile] = useState<ToolTile>("bundles");
 
@@ -61,6 +62,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     createdAt: bundle.created_at,
     updatedAt: bundle.updated_at,
     version: bundle.bundle_version,
+    windowKey: (bundle as any).window_key ?? "all",
+    windowStart: (bundle as any).window_start ?? null,
+    windowEnd: (bundle as any).window_end ?? null,
+    sourceLatestAt: (bundle as any).source_latest_at ?? null,
+    generatedAt: (bundle as any).generated_at ?? null,
   }));
 
   const handleAnalyzeWithAI = (bundle: any) => {
@@ -116,16 +122,20 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     }
   };
 
-  const filteredBundles = convertedBundles.filter((bundle) => {
-    const matchesSearch =
-      !searchQuery ||
-      bundle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bundle.description.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredBundles = convertedBundles
+    .filter((bundle) => {
+      const matchesSearch =
+        !searchQuery ||
+        bundle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        bundle.description.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory = !appliedFilters.category || bundle.category === appliedFilters.category;
+      const matchesCategory = !appliedFilters.category || bundle.category === appliedFilters.category;
+      const matchesWindow = windowFilter === "any" || bundle.windowKey === windowFilter;
 
-    return matchesSearch && matchesCategory;
-  });
+      return matchesSearch && matchesCategory && matchesWindow;
+    })
+    // Freshest telemetry first.
+    .sort((a, b) => new Date(b.sourceLatestAt ?? 0).getTime() - new Date(a.sourceLatestAt ?? 0).getTime());
 
   const bundleCategory = filteredBundles.length > 0 ? filteredBundles[0].category : undefined;
 
@@ -162,7 +172,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       </div>
 
       {/* ─── Tool Tile Panel ─── */}
-      <div className={`grid gap-2 ${isMobile ? "grid-cols-1" : isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-3" : ""}`}>
         {tiles.filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
@@ -208,6 +218,23 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
               isTablet={isTablet}
               bundleCategory={bundleCategory}
             />
+            {/* Freshness / time-window selector */}
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+              {[{ key: "any", short: "ALL WINDOWS" }, ...WINDOW_OPTIONS].map((w: any) => (
+                <button
+                  key={w.key}
+                  type="button"
+                  onClick={() => setWindowFilter(w.key)}
+                  className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors ${
+                    windowFilter === w.key
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {w.short}
+                </button>
+              ))}
+            </div>
             <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
@@ -215,7 +242,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 <span className="text-gray-600">Loading live bundle catalog…</span>
               </div>
             ) : (
-              <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+
                 {filteredBundles.map((bundle) => (
                   <BundleCard
                     key={bundle.id}

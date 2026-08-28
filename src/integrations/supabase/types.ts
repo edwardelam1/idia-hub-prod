@@ -5938,16 +5938,22 @@ export type Database = {
           data_points: string[] | null
           description: string
           features: string[] | null
+          generated_at: string
           is_active: boolean | null
           key_insights: string[] | null
           match_percentage: number | null
           participant_count: number | null
           predictive_analytics: Json | null
           price: number
+          source_latest_at: string | null
+          stat_fingerprint: Json
           suggested_filters: string[] | null
           tier: string
           title: string
           updated_at: string | null
+          window_end: string | null
+          window_key: string
+          window_start: string | null
         }
         Insert: {
           bundle_category?: string | null
@@ -5961,16 +5967,22 @@ export type Database = {
           data_points?: string[] | null
           description: string
           features?: string[] | null
+          generated_at?: string
           is_active?: boolean | null
           key_insights?: string[] | null
           match_percentage?: number | null
           participant_count?: number | null
           predictive_analytics?: Json | null
           price: number
+          source_latest_at?: string | null
+          stat_fingerprint?: Json
           suggested_filters?: string[] | null
           tier: string
           title: string
           updated_at?: string | null
+          window_end?: string | null
+          window_key?: string
+          window_start?: string | null
         }
         Update: {
           bundle_category?: string | null
@@ -5984,16 +5996,22 @@ export type Database = {
           data_points?: string[] | null
           description?: string
           features?: string[] | null
+          generated_at?: string
           is_active?: boolean | null
           key_insights?: string[] | null
           match_percentage?: number | null
           participant_count?: number | null
           predictive_analytics?: Json | null
           price?: number
+          source_latest_at?: string | null
+          stat_fingerprint?: Json
           suggested_filters?: string[] | null
           tier?: string
           title?: string
           updated_at?: string | null
+          window_end?: string | null
+          window_key?: string
+          window_start?: string | null
         }
         Relationships: []
       }
@@ -12053,6 +12071,21 @@ export type Database = {
           distinct_contributors: number
           source: string
           total_records: number
+        }[]
+      }
+      get_staging_aggregates_windowed: {
+        Args: never
+        Returns: {
+          activity_mix: Json
+          avg_quality: number
+          category: string
+          distinct_contributors: number
+          source: string
+          source_latest_at: string
+          total_records: number
+          window_end: string
+          window_key: string
+          window_start: string
         }[]
       }
       get_synapse_balance: { Args: { uid: string }; Returns: number }

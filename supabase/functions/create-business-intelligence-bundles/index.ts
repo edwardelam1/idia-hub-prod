@@ -1,105 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const TIERS = [
-  { tier: "Analyst", minRecords: 10 },
-  { tier: "Professional", minRecords: 250 },
-  { tier: "Enterprise", minRecords: 1000 },
-];
+import { corsHeaders, runWindowedBundleGeneration } from "../_shared/window-bundle-runner.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   console.info("[BEGIN: BusinessBundle.Handler]");
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    console.info("[BEGIN: BusinessBundle.DB.StagingAggregates]");
-    const { data: aggregates, error } = await supabase.rpc("get_staging_aggregates");
-    console.info(
-      `[END: BusinessBundle.DB.StagingAggregates] rows=${aggregates?.length ?? 0} error=${error?.message ?? "none"}`,
-    );
-    if (error) throw error;
-
-    const groups = (aggregates ?? []).filter(
-      (a: any) => a.source === "staged_business_data" && Number(a.total_records) > 0,
-    );
-
-    if (groups.length === 0) {
-      console.info("[END: BusinessBundle.Handler] reason=empty_source");
-      return new Response(
-        JSON.stringify({ seeded: 0, reason: "staged_business_data empty — Golden Rule preserved" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    let seeded = 0;
-    const errors: string[] = [];
-
-    for (const group of groups) {
-      const category = group.category as string;
-      const totalRecords = Number(group.total_records);
-      const uniqueBusinesses = Number(group.distinct_contributors);
-      const avgQuality = Number(group.avg_quality);
-
-      for (const { tier, minRecords } of TIERS) {
-        if (totalRecords < minRecords) continue;
-
-        const payload = {
-          action: "curate_and_publish",
-          bundleType: category,
-          data: {
-            length: totalRecords,
-            record_count: totalRecords,
-            participant_count: uniqueBusinesses,
-            unique_users_count: uniqueBusinesses,
-            avg_quality_score: avgQuality,
-            category,
-            bundle_category: category,
-            tier,
-            data_fusion_level: "single_source",
-            data_json: {
-              source: "staged_business_data",
-              record_count: totalRecords,
-              unique_businesses: uniqueBusinesses,
-            },
-            geographic_coverage: "Anonymized zones",
-          },
-        };
-
-        console.info(`[BEGIN: BusinessBundle.FetchCurator] category=${category} tier=${tier} records=${totalRecords}`);
-        try {
-          const resp = await fetch(`${supabaseUrl}/functions/v1/ai-data-curator`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-            body: JSON.stringify(payload),
-          });
-          const result = await resp.json().catch(() => ({}));
-          console.info(`[END: BusinessBundle.FetchCurator] category=${category} tier=${tier} status=${resp.status} ok=${resp.ok}`);
-          if (!resp.ok || result.error) {
-            errors.push(`${category}/${tier}: ${result.error ?? resp.status}`);
-          } else {
-            seeded++;
-          }
-        } catch (e) {
-          console.error(`[CATCH: BusinessBundle.FetchCurator] category=${category} tier=${tier} error=${(e as Error).message}`);
-          errors.push(`${category}/${tier}: ${(e as Error).message}`);
-        }
-      }
-    }
-
-    console.info(`[END: BusinessBundle.Handler] seeded=${seeded} errors=${errors.length}`);
-    return new Response(
-      JSON.stringify({ seeded, errors, categories: groups.map((g: any) => g.category) }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const result = await runWindowedBundleGeneration({
+      source: "staged_business_data",
+      label: "BusinessBundle",
+      contributorKey: "unique_businesses",
+    });
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error(`[CATCH: BusinessBundle.Handler] ${(error as Error).message}`);
     return new Response(JSON.stringify({ error: (error as Error).message }), {
