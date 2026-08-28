@@ -96,16 +96,14 @@ const BundleDetailSheet = ({ bundle }: BundleDetailSheetProps) => {
         <SheetHeader className="text-left">
           <div className="flex items-start justify-between gap-3">
             <SheetTitle className="pr-6 text-base leading-snug break-words">{bundle.name}</SheetTitle>
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              type="button"
               onClick={handleCopy}
-              className="shrink-0 gap-1.5"
+              className="mt-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
               aria-label="Copy full bundle details"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
+              {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+            </button>
           </div>
         </SheetHeader>
 
