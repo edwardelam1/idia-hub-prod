@@ -77,36 +77,54 @@ async function calculateDynamicFee(
   adminClient: any,
   userId: string,
   subModuleId: string,
-): Promise<{ feeCR: number; sectorLabel: string }> {
+  datasetJurisdiction = "USA",
+  datasetCadence: "STREAMING" | "INTRADAY" | "BATCH" = "BATCH",
+): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number }> {
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
   const marketBaseValue = SECTOR_VALUES[sectorLabel] ?? 1.0;
 
   try {
-    // 2. Attempt to fetch Buyer's interest battery
-    const { data: profile, error } = await adminClient
-      .from("business_interest_profiles")
-      .select("interest_weights")
-      .eq("business_id", userId)
+    // 2. Fetch the buyer's diagnostic profile vector (server-calculated weights)
+    const { data: vectorData, error: vectorError } = await adminClient
+      .from("buyer_profile_vectors")
+      .select("role, jurisdiction, latency_requirement, weights")
+      .eq("user_id", userId)
       .maybeSingle();
 
-    if (error || !profile) {
-      console.info(`[Info] No business profile for ${userId}, using default fee.`);
-      const feeCR = Math.ceil(1 * marketBaseValue * 1.0);
-      return { feeCR, sectorLabel };
+    if (vectorError) throw vectorError;
+
+    if (!vectorData) {
+      console.warn(`[SYNAPSE_CONTROLLER:VECTOR_MISSING] No vector for ${userId}. Default weight 1.0`);
+      return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
     }
 
-    // 4. Calculate Weighting if profile exists
-    const buyerWeight = profile?.interest_weights?.[sectorLabel] ?? 1.0;
-    const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
+    const canonicalCat = resolveCanonicalCategory(`${sectorLabel} ${subModuleId ?? ""}`);
+    const { relevance, breakdown } = calculateDatasetRelevance(
+      {
+        userId,
+        role: vectorData.role,
+        jurisdiction: vectorData.jurisdiction,
+        latencyRequirement: vectorData.latency_requirement,
+        weights: vectorData.weights,
+      },
+      canonicalCat,
+      datasetJurisdiction,
+      datasetCadence,
+    );
 
-    return { feeCR, sectorLabel };
+    console.log(
+      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor}`,
+    );
+
+    return { feeCR: Math.ceil(1 * marketBaseValue * relevance), sectorLabel, buyerWeight: relevance };
   } catch (e: any) {
-    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e?.message ?? String(e)}`);
-    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
+    console.error(`[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}`);
+    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
   }
 }
+
 
 // ====================================================================
 // MAIN EDGE FUNCTION
