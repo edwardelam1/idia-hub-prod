@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getRoute } from "../_shared/payAppRouting.ts";
 import { SECTOR_VALUES } from "../_shared/sectorValues.ts";
+import { calculateDatasetRelevance, resolveCanonicalCategory } from "../_shared/buyer-affinity.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -180,7 +181,15 @@ Deno.serve(async (req) => {
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
     // 1. DYNAMIC PRICING CALL
-    const { feeCR, sectorLabel } = await calculateDynamicFee(adminClient, user_id, sub_module_id);
+    const { feeCR, sectorLabel, buyerWeight } = await calculateDynamicFee(
+      adminClient,
+      user_id,
+      sub_module_id,
+      body?.jurisdiction ?? "USA",
+      body?.cadence ?? "BATCH",
+    );
+    console.log(`[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight}`);
+
     const totalSynapseDeduction = -feeCR;
     const fiatEquivalentValue = feeCR * 0.75;
 
