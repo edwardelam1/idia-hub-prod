@@ -32,6 +32,8 @@ import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
 import { useAuth } from "@/contexts/AuthContext";
 import TermsAcceptanceModal from "@/components/legal/TermsAcceptanceModal";
+import BuyerDiagnosticLevel0 from "@/components/onboarding/BuyerDiagnosticLevel0";
+import BuyerDiagnosticLevel1 from "@/components/onboarding/BuyerDiagnosticLevel1";
 import { TERMS_VERSION } from "@/content/terms-cdla";
 
 const Index = () => {
@@ -101,7 +103,10 @@ const Index = () => {
   return (
     <>
     {mustAcceptTerms && <TermsAcceptanceModal />}
+    <BuyerDiagnosticLevel0 />
+    <BuyerDiagnosticLevel1 />
     <AppLayout userRole={effectiveRole} onLogout={handleLogout}>
+
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={renderDashboard()} />

@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getRoute } from "../_shared/payAppRouting.ts";
 import { SECTOR_VALUES } from "../_shared/sectorValues.ts";
+import { calculateDatasetRelevance, resolveCanonicalCategory } from "../_shared/buyer-affinity.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,36 +78,54 @@ async function calculateDynamicFee(
   adminClient: any,
   userId: string,
   subModuleId: string,
-): Promise<{ feeCR: number; sectorLabel: string }> {
+  datasetJurisdiction = "USA",
+  datasetCadence: "STREAMING" | "INTRADAY" | "BATCH" = "BATCH",
+): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number }> {
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
   const marketBaseValue = SECTOR_VALUES[sectorLabel] ?? 1.0;
 
   try {
-    // 2. Attempt to fetch Buyer's interest battery
-    const { data: profile, error } = await adminClient
-      .from("business_interest_profiles")
-      .select("interest_weights")
-      .eq("business_id", userId)
+    // 2. Fetch the buyer's diagnostic profile vector (server-calculated weights)
+    const { data: vectorData, error: vectorError } = await adminClient
+      .from("buyer_profile_vectors")
+      .select("role, jurisdiction, latency_requirement, weights")
+      .eq("user_id", userId)
       .maybeSingle();
 
-    if (error || !profile) {
-      console.info(`[Info] No business profile for ${userId}, using default fee.`);
-      const feeCR = Math.ceil(1 * marketBaseValue * 1.0);
-      return { feeCR, sectorLabel };
+    if (vectorError) throw vectorError;
+
+    if (!vectorData) {
+      console.warn(`[SYNAPSE_CONTROLLER:VECTOR_MISSING] No vector for ${userId}. Default weight 1.0`);
+      return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
     }
 
-    // 4. Calculate Weighting if profile exists
-    const buyerWeight = profile?.interest_weights?.[sectorLabel] ?? 1.0;
-    const feeCR = Math.ceil(1 * marketBaseValue * buyerWeight);
+    const canonicalCat = resolveCanonicalCategory(`${sectorLabel} ${subModuleId ?? ""}`);
+    const { relevance, breakdown } = calculateDatasetRelevance(
+      {
+        userId,
+        role: vectorData.role,
+        jurisdiction: vectorData.jurisdiction,
+        latencyRequirement: vectorData.latency_requirement,
+        weights: vectorData.weights,
+      },
+      canonicalCat,
+      datasetJurisdiction,
+      datasetCadence,
+    );
 
-    return { feeCR, sectorLabel };
+    console.log(
+      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor}`,
+    );
+
+    return { feeCR: Math.ceil(1 * marketBaseValue * relevance), sectorLabel, buyerWeight: relevance };
   } catch (e: any) {
-    console.error(`[Warning] Dynamic pricing default fallback triggered: ${e?.message ?? String(e)}`);
-    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel };
+    console.error(`[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}`);
+    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
   }
 }
+
 
 // ====================================================================
 // MAIN EDGE FUNCTION
@@ -162,7 +181,15 @@ Deno.serve(async (req) => {
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
     // 1. DYNAMIC PRICING CALL
-    const { feeCR, sectorLabel } = await calculateDynamicFee(adminClient, user_id, sub_module_id);
+    const { feeCR, sectorLabel, buyerWeight } = await calculateDynamicFee(
+      adminClient,
+      user_id,
+      sub_module_id,
+      body?.jurisdiction ?? "USA",
+      body?.cadence ?? "BATCH",
+    );
+    console.log(`[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight}`);
+
     const totalSynapseDeduction = -feeCR;
     const fiatEquivalentValue = feeCR * 0.75;
 
