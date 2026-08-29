@@ -2,14 +2,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ShieldCheck, Lock, Smartphone, Fingerprint, ScrollText, CalendarClock } from "lucide-react";
+import {
+  ShieldCheck,
+  Lock,
+  Smartphone,
+  Fingerprint,
+  ScrollText,
+  CalendarClock,
+  Gauge,
+  RefreshCw,
+  Loader2,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { TermsDownloadButton } from "@/components/legal/TermsDownloadButton";
 import { TERMS_TITLE, TERMS_VERSION } from "@/content/terms-cdla";
+import { useBuyerProfile } from "@/hooks/useBuyerProfile";
+import { CATEGORY_LABELS, type CanonicalDataCategory } from "@/lib/buyer-affinity";
+import { useToast } from "@/hooks/use-toast";
 
 export const SettingsProfile = () => {
   const { user, piiData, termsAccepted, termsAcceptedAt, termsVersion } = useAuth();
+  const { vector, saving, recalibrate } = useBuyerProfile();
+  const { toast } = useToast();
+
+  const handleRecalibrate = async () => {
+    try {
+      await recalibrate();
+      toast({
+        title: "Recalibration queued",
+        description: "The diagnostic battery will re-open so your weights can be rebuilt.",
+      });
+    } catch {
+      toast({ title: "Recalibration failed", description: "Please try again.", variant: "destructive" });
+    }
+  };
+
 
   // PII comes from in-memory bridge (IDIA Life device), never from DB
   const displayName = piiData?.displayName || "—";
@@ -141,8 +170,53 @@ export const SettingsProfile = () => {
               )}
             </div>
           </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Gauge className="h-4 w-4 text-primary" />
+                  Buyer Diagnostic Profile
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Your declared posture and jurisdiction set the affinity weights used to price Synapse Credit
+                  consumption. Recalibrate whenever your role or mandate changes.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleRecalibrate} disabled={saving}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
+                Recalibrate Profile
+              </Button>
+            </div>
+
+            {vector?.level0_completed_at ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
+                  {vector.role.replace(/_/g, " ")}
+                </Badge>
+                <Badge variant="outline">{vector.jurisdiction.replace(/_/g, " / ")}</Badge>
+                <Badge variant="outline">{vector.latency_requirement}</Badge>
+              </div>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground text-xs">
+                Not calibrated
+              </Badge>
+            )}
+
+            {vector?.level0_completed_at && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                {(Object.keys(CATEGORY_LABELS) as CanonicalDataCategory[]).map((key) => (
+                  <div key={key} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground truncate">{CATEGORY_LABELS[key]}</span>
+                    <span className="font-mono text-foreground">{Number(vector.weights?.[key] ?? 0).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 };
+
