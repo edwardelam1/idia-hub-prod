@@ -42,8 +42,9 @@ export default function VultureIngestionPanel({ userRole }: Props) {
             Mesh Gateway Airlock
           </h4>
           <p className="text-[12px] text-[#D2D2D7] leading-relaxed">
-            Inbound multiplexed streams from autonomous edge nodes are intercepted in-memory, PII-stripped via the DELT
-            Protocol, and shaped into 40-byte LoRa binaries or high-level JSON event schemas. Payloads are tagged{" "}
+            Inbound multiplexed streams from autonomous edge nodes are intercepted in-memory, PII-stripped via the
+            Liability Shield. Protocol, and shaped into 40-byte LoRa binaries or high-level JSON event schemas. Payloads
+            are tagged{" "}
             <code className="bg-white/10 px-1 py-0.5 rounded text-[#F2F2F7] font-mono text-[10px]">
               ACQUIRED_REHABILITATED
             </code>{" "}
