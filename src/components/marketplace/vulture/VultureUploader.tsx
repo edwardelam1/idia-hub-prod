@@ -7,7 +7,7 @@ import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
 async function generateTelemetryHash(payload: any): Promise<string> {
   try {
     const msgBuffer = new TextEncoder().encode(JSON.stringify(payload));
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer); // Protects PII prior to on-chain storage
+    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
   } catch (error) {
@@ -60,10 +60,10 @@ interface SightingPin {
   timestamp: string;
 }
 
-interface AzizAlert {
+interface NetworkAlert {
   alert_id: string;
   issuer_id: string;
-  missing_person_hash: string;
+  target_biometric_hash: string;
   status: "ACTIVE" | "RESOLVED";
   priority: "CRITICAL" | "STANDARD";
   geo_polygon: { type: "Polygon"; coordinates: number[][][] };
@@ -84,7 +84,7 @@ interface ModelMetadata {
 
 interface LedgerCommit {
   id: string;
-  type: "JSON_PIN" | "LORA_TELEMETRY" | "AZIZ_ALERT" | "MODEL_METADATA" | "AZIZ_VALIDATION";
+  type: "JSON_PIN" | "LORA_TELEMETRY" | "NETWORK_ALERT" | "MODEL_METADATA" | "NETWORK_VALIDATION";
   hash: string;
   status: "processing" | "committed" | "rejected";
   confidence?: number;
@@ -97,25 +97,42 @@ export default function VultureUploader() {
   const [commits, setCommits] = useState<LedgerCommit[]>([]);
 
   const toggleGatewayStatus = async () => {
+    console.info("[BEGIN: VultureUI.GatewayToggle] Initiating gateway state transition.");
     setIsTransitioning(true);
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800)); // Aziz network validation
+      const targetState = !isListening ? "OPEN_MESH_GATEWAY" : "SEVER_MESH_GATEWAY";
+      console.info(
+        `[BEGIN: VultureUI.NetworkValidation] Requesting autonomous system validation from external mesh network for action: ${targetState}`,
+      );
+
+      // Simulating external autonomous network validation delay
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      console.info(`[END: VultureUI.NetworkValidation] External network validation acquired.`);
+
       if (!isListening) {
+        console.info("[BEGIN: VultureUI.ValidationLedger] Writing mesh gateway authorization to local UI log.");
         setCommits((prev) => [
           {
             id: crypto.randomUUID(),
-            type: "AZIZ_VALIDATION",
-            hash: "AUTHORIZED_BY_AZIZ_NETWORK",
+            type: "NETWORK_VALIDATION",
+            hash: "AUTHORIZED_BY_MESH_NETWORK",
             status: "committed",
           },
           ...prev,
         ]);
+        console.info("[END: VultureUI.ValidationLedger] Gateway authorization logged.");
       }
+
       setIsListening(!isListening);
     } catch (error) {
-      console.error(error);
+      console.error(
+        `[ERROR: VultureUI.GatewayToggle] Gateway transition aborted due to network validation rejection. Exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setIsTransitioning(false);
+      console.info("[END: VultureUI.GatewayToggle] Gateway state transition sequence terminated.");
     }
   };
 
@@ -123,7 +140,8 @@ export default function VultureUploader() {
     if (!isListening) return;
 
     const interval = setInterval(async () => {
-      // Simulate multiplexed data streams (QUIC/UDP) arriving at the edge gateway
+      console.info("[BEGIN: VultureUI.IngestionCycle] Awaiting incoming multiplexed data from mesh network.");
+
       const eventType = Math.random();
       let payloadToHash: any;
       let commitType: LedgerCommit["type"];
@@ -131,15 +149,15 @@ export default function VultureUploader() {
       let routingNote: string | undefined;
 
       if (eventType > 0.6) {
-        // AI Sighting Pin
+        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing AI Sighting Pin payload.");
         const pin: SightingPin = {
           pin_id: crypto.randomUUID(),
           source_type: "AI_VISION_NODE",
-          source_id: "xiao-sense-s3-node-04",
+          source_id: "edge-node-04",
           confidence_score: 0.94,
           location: { lat: 38.0406, lon: -84.5037, accuracy_meters: 5.2 },
           media_attached: true,
-          media_uri: `https://storage.projectaziz.com/pins/${crypto.randomUUID()}.jpg`,
+          media_uri: `https://storage.decentralized-mesh.net/pins/${crypto.randomUUID()}.jpg`,
           timestamp: new Date().toISOString(),
         };
         payloadToHash = pin;
@@ -147,21 +165,21 @@ export default function VultureUploader() {
         confidenceScore = pin.confidence_score;
         if (confidenceScore > 0.9) routingNote = "Escalated to Official Law Enforcement Channels";
       } else if (eventType > 0.3) {
-        // LoRa 40-byte Telemetry
+        console.info("[PROCESS: VultureUI.IngestionCycle] Decoding 40-byte LoRa telemetry buffer.");
         const buffer = new ArrayBuffer(40);
         const view = new DataView(buffer);
         view.setFloat64(0, 38.0406, true);
         view.setFloat64(8, -84.5037, true);
         view.setFloat32(16, 210.5, true);
-        view.setUint8(37, 1); // fix_status: 1 (New fix)
+        view.setUint8(37, 1);
         payloadToHash = decodeLoRaPayload(buffer);
         commitType = "LORA_TELEMETRY";
       } else if (eventType > 0.1) {
-        // Aziz Alert
-        const alert: AzizAlert = {
+        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing Network Alert payload.");
+        const alert: NetworkAlert = {
           alert_id: crypto.randomUUID(),
           issuer_id: crypto.randomUUID(),
-          missing_person_hash: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+          target_biometric_hash: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
           status: "ACTIVE",
           priority: "CRITICAL",
           geo_polygon: {
@@ -179,13 +197,13 @@ export default function VultureUploader() {
           audience_reached: 198,
         };
         payloadToHash = alert;
-        commitType = "AZIZ_ALERT";
+        commitType = "NETWORK_ALERT";
       } else {
-        // Model Metadata
+        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing Model Metadata payload.");
         const model: ModelMetadata = {
           model_id: crypto.randomUUID(),
           case_id: crypto.randomUUID(),
-          target_name_pseudonym: "JD_P_01",
+          target_name_pseudonym: "TARGET_P_01",
           data_sources: { image_count: 45, video_seconds: 120, voice_samples: 3 },
           compiled_binary_uri: "ipfs://QmYwAPJzv5CZsnA625s3Xf2n...",
           checksum: "a2c5b...f9d1",
@@ -208,12 +226,21 @@ export default function VultureUploader() {
         },
         ...prev,
       ]);
+      console.info(`[END: VultureUI.IngestionCycle] Payload structured. ID: ${commitId}, Type: ${commitType}`);
 
       try {
+        console.info(`[BEGIN: VultureUI.TelemetryLedger] Generating hash for ID: ${commitId}`);
         const hash = await generateTelemetryHash(payloadToHash);
+
+        console.info(`[PROCESS: VultureUI.TelemetryLedger] Committing hash ${hash.substring(0, 8)}... to ledger.`);
         // IDIA Protocol ledger write implementation here
+
         setCommits((prev) => prev.map((c) => (c.id === commitId ? { ...c, status: "committed", hash } : c)));
+        console.info(`[END: VultureUI.TelemetryLedger] Ledger sequence complete for ID: ${commitId}`);
       } catch (error) {
+        console.error(
+          `[ERROR: VultureUI.TelemetryLedger] Rejection during hashing or ledger write for ID: ${commitId}. Exception: ${error instanceof Error ? error.message : String(error)}`,
+        );
         setCommits((prev) => prev.map((c) => (c.id === commitId ? { ...c, status: "rejected" } : c)));
       }
     }, 4500);
@@ -239,7 +266,7 @@ export default function VultureUploader() {
         <p className="text-[13px] text-[#86868B] mt-1 mb-6 text-center max-w-sm leading-relaxed">
           {isListening
             ? "Decoding 40-byte LoRa binaries and HTTP/3 multiplexed JSON event schemas."
-            : "Establish connection to the Project Aziz mesh network. Validation is handled autonomously."}
+            : "Establish connection to the external mesh network. Validation is handled autonomously."}
         </p>
 
         <Button
@@ -273,7 +300,7 @@ export default function VultureUploader() {
               <div
                 key={c.id}
                 className={`relative w-full flex flex-col gap-1 px-4 py-3 border transition-all ${
-                  c.type === "AZIZ_VALIDATION"
+                  c.type === "NETWORK_VALIDATION"
                     ? "bg-[#1D1D1F] border-[#007AFF]/40"
                     : "bg-slate-950 border-violet-900/40"
                 }`}
@@ -282,7 +309,7 @@ export default function VultureUploader() {
                 <div className="flex items-center justify-between">
                   <span
                     className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
-                      c.type === "AZIZ_VALIDATION" ? "text-[#007AFF]" : "text-violet-400"
+                      c.type === "NETWORK_VALIDATION" ? "text-[#007AFF]" : "text-violet-400"
                     }`}
                   >
                     {c.status === "processing" ? (
