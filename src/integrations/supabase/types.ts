@@ -6421,6 +6421,39 @@ export type Database = {
           },
         ]
       }
+      mesh_telemetry_events: {
+        Row: {
+          created_at: string
+          data_quality_score: number
+          id: string
+          payload_data: Json
+          processed_at: string
+          pseudo_node_id: string
+          telemetry_category: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_quality_score?: number
+          id?: string
+          payload_data?: Json
+          processed_at?: string
+          pseudo_node_id: string
+          telemetry_category?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_quality_score?: number
+          id?: string
+          payload_data?: Json
+          processed_at?: string
+          pseudo_node_id?: string
+          telemetry_category?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       nano_bite_executions: {
         Row: {
           action: string
