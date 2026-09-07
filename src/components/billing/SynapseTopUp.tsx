@@ -90,11 +90,19 @@ const SynapseTopUp = () => {
         await refreshWalletBalance?.();
         toast({ title: "Wallet Connected", description: "Your IDIA Life wallet is now actively bridged." });
       } else {
-        toast({ title: "Connection Cancelled", description: "No accounts returned from MetaMask.", variant: "destructive" });
+        toast({
+          title: "Connection Cancelled",
+          description: "No accounts returned from MetaMask.",
+          variant: "destructive",
+        });
       }
     } catch (err: any) {
       console.error(`[SynapseTopUp][MetaMaskOnboard] !!! FATAL ERROR: ${err?.message}`);
-      toast({ title: "Connection Failed", description: err?.message || "MetaMask onboarding was interrupted.", variant: "destructive" });
+      toast({
+        title: "Connection Failed",
+        description: err?.message || "MetaMask onboarding was interrupted.",
+        variant: "destructive",
+      });
     } finally {
       setIsConnectingWallet(false);
       console.log("[SynapseTopUp][MetaMaskOnboard] <<< END.");
@@ -102,7 +110,9 @@ const SynapseTopUp = () => {
   };
 
   const handleProceedToPayment = () => {
-    console.log(`[SynapseTopUp][handleProceedToPayment] [START] mode=${purchaseMode} credits=${displayCredits} usd=${usdAmount}`);
+    console.log(
+      `[SynapseTopUp][handleProceedToPayment] [START] mode=${purchaseMode} credits=${displayCredits} usd=${usdAmount}`,
+    );
     if (!canProceed) {
       console.warn("[SynapseTopUp][handleProceedToPayment] [BLOCKED] canProceed=false");
       return;
@@ -112,7 +122,9 @@ const SynapseTopUp = () => {
   };
 
   const handlePurchase = async () => {
-    console.log(`[SynapseTopUp][handlePurchase] [START] rail=${paymentRail} credits=${displayCredits} usd=${usdAmount}`);
+    console.log(
+      `[SynapseTopUp][handlePurchase] [START] rail=${paymentRail} credits=${displayCredits} usd=${usdAmount}`,
+    );
     if (!canProceed) {
       console.warn("[SynapseTopUp][handlePurchase] [BLOCKED] canProceed=false");
       return;
@@ -135,7 +147,9 @@ const SynapseTopUp = () => {
       if (paymentRail === "wix") {
         console.log("[SynapseTopUp][handlePurchase] [WIX_DIRECT] [START] minting paymentId");
         const idempotencyKey = crypto.randomUUID();
-        console.log(`[SynapseTopUp][handlePurchase] [WIX_DIRECT] [REQUEST] POST ${WIX_DOMAIN}/_functions/checkout idem=${idempotencyKey}`);
+        console.log(
+          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [REQUEST] POST ${WIX_DOMAIN}/_functions/checkout idem=${idempotencyKey}`,
+        );
 
         let wixResponse: Response;
         try {
@@ -155,7 +169,9 @@ const SynapseTopUp = () => {
           console.error(`🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [NETWORK_ERROR] ${netErr?.message}`);
           throw new Error(`Wix checkout network error: ${netErr?.message}`);
         }
-        console.log(`[SynapseTopUp][handlePurchase] [WIX_DIRECT] [RESPONSE] status=${wixResponse.status} ok=${wixResponse.ok}`);
+        console.log(
+          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [RESPONSE] status=${wixResponse.status} ok=${wixResponse.ok}`,
+        );
 
         if (!wixResponse.ok) {
           console.error(`🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
@@ -164,7 +180,9 @@ const SynapseTopUp = () => {
 
         console.log("[SynapseTopUp][handlePurchase] [WIX_DIRECT] [PARSE] reading JSON body");
         const wixData = await wixResponse.json();
-        console.log(`[SynapseTopUp][handlePurchase] [WIX_DIRECT] [PARSED] paymentId=${wixData?.paymentId ?? "<missing>"}`);
+        console.log(
+          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [PARSED] paymentId=${wixData?.paymentId ?? "<missing>"}`,
+        );
 
         if (!wixData?.paymentId) {
           console.error("🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [FAILED] Missing paymentId");
@@ -218,7 +236,10 @@ const SynapseTopUp = () => {
         user_wallet: buyerWallet,
         idempotency_key: txReference,
       };
-      console.log("[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_BEGIN] supabase.functions.invoke('top-up-credits')", internalPayload);
+      console.log(
+        "[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_BEGIN] supabase.functions.invoke('top-up-credits')",
+        internalPayload,
+      );
 
       const invokeStart = performance.now();
       const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
@@ -233,7 +254,9 @@ const SynapseTopUp = () => {
         const backendErrorString = await unpackEdgeError(topUpError);
         console.log("[SynapseTopUp][handlePurchase] [USDC_FLOW] unpacked backend error:", backendErrorString);
         if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
-          console.warn("[SynapseTopUp][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.");
+          console.warn(
+            "[SynapseTopUp][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
+          );
           setNeedsApproval(true);
           return;
         }
@@ -242,7 +265,10 @@ const SynapseTopUp = () => {
 
       setStep("success");
       setNeedsApproval(false);
-      toast({ title: "Synapse Hydrated!", description: `${formatCredits(displayCredits)} added to your operational ledger.` });
+      toast({
+        title: "Synapse Hydrated!",
+        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
+      });
 
       console.log("[SynapseTopUp][handlePurchase] [REFRESH_BEGIN] refreshing balances");
       await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
@@ -393,23 +419,23 @@ const SynapseTopUp = () => {
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 mb-4 flex gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    To find your recovery phrase, open IDIA Life, visit the Wallet page, tap Security, and press Reveal Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device that is not your own.
+                    To find your recovery phrase, open IDIA Life, visit the Wallet page, tap Security, and press Reveal
+                    Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device that is
+                    not your own.
                   </p>
                 </div>
               )}
               {!hasEnoughBalance && (
-                <Button
-                  className="w-full gap-2 mb-4"
-                  onClick={handleConnectMetaMask}
-                  disabled={isConnectingWallet}
-                >
+                <Button className="w-full gap-2 mb-4" onClick={handleConnectMetaMask} disabled={isConnectingWallet}>
                   {isConnectingWallet ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
                   Connect MetaMask
                 </Button>
               )}
               <div className="bg-muted/50 border border-border rounded-xl p-3 flex justify-between items-center mb-4">
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
+                    Settlement Rail
+                  </p>
                   <p className="text-sm font-bold text-foreground flex items-center gap-2">
                     <CircleDollarSign className="h-4 w-4 text-primary" /> Verified dual-rail port
                   </p>
@@ -462,7 +488,11 @@ const SynapseTopUp = () => {
                     try {
                       const r = await ensureUsdcApproval({ owner: buyerWalletForRecovery });
                       if (!r.ok) {
-                        toast({ title: "Authorization Failed", description: (r as { reason: string }).reason, variant: "destructive" });
+                        toast({
+                          title: "Authorization Failed",
+                          description: (r as { reason: string }).reason,
+                          variant: "destructive",
+                        });
                         return;
                       }
                       setNeedsApproval(false);
@@ -470,13 +500,21 @@ const SynapseTopUp = () => {
                       await handlePurchase();
                     } catch (err: any) {
                       console.error("[AuthorizeRelayer] threw:", err);
-                      toast({ title: "Authorization Failed", description: err?.message ?? String(err), variant: "destructive" });
+                      toast({
+                        title: "Authorization Failed",
+                        description: err?.message ?? String(err),
+                        variant: "destructive",
+                      });
                     } finally {
                       setIsAuthorizingRelayer(false);
                     }
                   }}
                 >
-                  {isAuthorizingRelayer ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  {isAuthorizingRelayer ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-4 w-4" />
+                  )}
                   Authorize Relayer (one-time)
                 </Button>
               )}
@@ -507,9 +545,7 @@ const SynapseTopUp = () => {
                 <span className="font-medium">Total Due</span>
                 <div className="text-right">
                   <div className="text-2xl font-bold font-mono">${usdAmount.toFixed(2)}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    USDC On-Chain: ${availableUSDC.toFixed(2)}
-                  </div>
+                  <div className="text-[10px] text-muted-foreground">USDC On-Chain: ${availableUSDC.toFixed(2)}</div>
                 </div>
               </div>
 
