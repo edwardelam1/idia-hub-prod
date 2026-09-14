@@ -1,6 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
+import {
+  pollLedgerStatus,
+  invokeWithTimeout,
+  rememberPendingPurchase,
+  clearPendingPurchase,
+  readPendingPurchase,
+} from "@/lib/poll-ledger-status";
 import {
   Dialog,
   DialogContent,
@@ -175,6 +182,49 @@ const SynapsePurchaseModal = ({
     }
   };
 
+  // Poll the ledger instead of holding a socket open through the chain wait.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[SynapsePurchaseModal][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        setNeedsApproval(false);
+        setStep("success");
+        toast.success("Synapse Hydrated!", {
+          description: `${formatCredits(displayCredits)} added to your operational ledger.`,
+        });
+        await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+        setTimeout(() => handleOpenChange(false), 3500);
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        toast.error(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("payment");
+      } else {
+        toast.warning("Payment still confirming on the network. Reopen this window shortly to see the result.");
+        setStep("payment");
+      }
+    } finally {
+      console.log(`[SynapsePurchaseModal][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) void resolveSettlement(pending);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) void resolveSettlement(key);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   const handlePurchase = async () => {
     console.log(`[SynapsePurchaseModal][handlePurchase] [START] Initiating settlement via ${paymentRail}.`);
     if (!canProceed) return;
@@ -282,10 +332,14 @@ const SynapsePurchaseModal = ({
         internalPayload,
       );
 
-      const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
-        body: internalPayload,
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      rememberPendingPurchase(txReference);
+      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
+        "top-up-credits",
+        {
+          body: internalPayload,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
 
       if (topUpError) {
         console.error(
@@ -297,26 +351,23 @@ const SynapsePurchaseModal = ({
           "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] unpacked backend error:",
           backendErrorString,
         );
+        clearPendingPurchase();
         if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
           console.warn(
             "[SynapsePurchaseModal][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
           );
           setNeedsApproval(true);
+          setStep("payment");
           return;
         }
         throw new Error(backendErrorString);
       }
 
-      console.log("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] hash=", (topUpData as any)?.hash);
+      console.log(
+        `[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] dispatched hash=${(topUpData as any)?.hash ?? "none"} timedOut=${timedOut}`,
+      );
 
-      setStep("success");
-      setNeedsApproval(false);
-      toast.success("Synapse Hydrated!", {
-        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
-      });
-
-      await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
-      setTimeout(() => handleOpenChange(false), 3500);
+      await resolveSettlement(txReference);
     } catch (err: any) {
       console.error("[SynapsePurchaseModal][handlePurchase] [END_WITH_ERROR] Transaction stalled:", err.message);
       toast.error(err.message || "Settlement failed.");
@@ -325,6 +376,7 @@ const SynapsePurchaseModal = ({
       console.log("[SynapsePurchaseModal][handlePurchase] [FINALLY] Exit execution thread.");
     }
   };
+
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

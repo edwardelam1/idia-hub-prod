@@ -10,6 +10,13 @@ import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
 import { ensureUsdcApproval } from "@/lib/usdc-approval";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
+import {
+  pollLedgerStatus,
+  invokeWithTimeout,
+  rememberPendingPurchase,
+  clearPendingPurchase,
+  readPendingPurchase,
+} from "@/lib/poll-ledger-status";
 import { toast } from "sonner";
 
 const PLANS = [
@@ -61,6 +68,56 @@ const UniversalPurchaseScreen = () => {
       if (!cancelled) setLinkedWallet((data?.wallet_address as string | null) ?? null);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Resolve a settlement by polling the ledger — never by holding a socket open.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    setIsProcessing(true);
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
+        await refreshWalletBalance();
+        queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
+        queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
+        setStep("success");
+        setVerifyState("verified");
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        toast.error(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("review");
+      } else {
+        toast.warning("Payment still confirming on the network. Reopen this page shortly to see the result.");
+        setStep("review");
+      }
+    } finally {
+      setIsProcessing(false);
+      console.log(`[UniversalPurchaseScreen][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase after a tab kill / screen lock, and re-check
+  // whenever the tab returns to the foreground (Chromium throttles background tabs).
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) {
+      console.log(`[UniversalPurchaseScreen][Lifecycle] Resuming unresolved purchase key=${pending}`);
+      void resolveSettlement(pending);
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) {
+        console.log(`[UniversalPurchaseScreen][Lifecycle] Foregrounded — re-polling key=${key}`);
+        void resolveSettlement(key);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -195,7 +252,8 @@ const UniversalPurchaseScreen = () => {
         };
 
         console.log("[UniversalPurchaseScreen][USDC_FLOW] Invoking top-up-credits", payload);
-        const { data, error } = await supabase.functions.invoke("top-up-credits", {
+        rememberPendingPurchase(txReference);
+        const { data, error, timedOut } = await invokeWithTimeout("top-up-credits", {
           body: payload,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
@@ -203,22 +261,24 @@ const UniversalPurchaseScreen = () => {
         if (error) {
           const detail = await unpackEdgeError(error);
           if (/APPROVAL_REQUIRED/i.test(detail)) {
+            clearPendingPurchase();
             setNeedsApproval(true);
             setStep("review");
             setIsProcessing(false);
             toast.warning("Relayer authorization required.");
             return;
           }
+          clearPendingPurchase();
           throw new Error(detail);
         }
 
-        console.log("[UniversalPurchaseScreen][USDC_FLOW] success hash=", (data as any)?.hash);
-        toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
-        await refreshWalletBalance();
-        queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
-        queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
-        setStep("success");
-        setVerifyState("verified");
+        if (timedOut) {
+          console.warn("[UniversalPurchaseScreen][USDC_FLOW] invoke timed out — polling ledger instead.");
+        } else {
+          console.log("[UniversalPurchaseScreen][USDC_FLOW] dispatched hash=", (data as any)?.hash);
+        }
+
+        await resolveSettlement(txReference);
       } catch (err: any) {
         console.error("[UniversalPurchaseScreen][USDC_FLOW] failed", err);
         toast.error(err?.message || "On-chain settlement failed");
@@ -228,6 +288,7 @@ const UniversalPurchaseScreen = () => {
       }
       return;
     }
+
 
     // ============================================
     // RAIL 2: WIX FIAT REDIRECT (fallback)

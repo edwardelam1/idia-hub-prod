@@ -1,7 +1,14 @@
 // src/components/billing/SynapseTopUp.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
+import {
+  pollLedgerStatus,
+  invokeWithTimeout,
+  rememberPendingPurchase,
+  clearPendingPurchase,
+  readPendingPurchase,
+} from "@/lib/poll-ledger-status";
 import {
   CreditCard,
   Zap,
@@ -120,6 +127,52 @@ const SynapseTopUp = () => {
     setStep("payment");
     console.log("[SynapseTopUp][handleProceedToPayment] [END] step=payment");
   };
+
+  // Poll the ledger instead of holding a socket open through the chain wait.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[SynapseTopUp][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        setNeedsApproval(false);
+        setError(null);
+        setStep("success");
+        toast({
+          title: "Synapse Hydrated!",
+          description: `${formatCredits(displayCredits)} added to your operational ledger.`,
+        });
+        await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
+        setTimeout(() => setStep("select"), 3500);
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        setError(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("payment");
+        toast({ title: "Settlement Failed", description: result.reason ?? undefined, variant: "destructive" });
+      } else {
+        setError("Payment still confirming on the network. Reopen this page shortly to see the result.");
+        setStep("payment");
+      }
+    } finally {
+      console.log(`[SynapseTopUp][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) void resolveSettlement(pending);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) void resolveSettlement(key);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const handlePurchase = async () => {
     console.log(
@@ -241,43 +294,35 @@ const SynapseTopUp = () => {
         internalPayload,
       );
 
+      rememberPendingPurchase(txReference);
       const invokeStart = performance.now();
-      const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
-        body: internalPayload,
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
+        "top-up-credits",
+        {
+          body: internalPayload,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
       console.log(
-        `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} error=${topUpError ? topUpError.message : "none"}`,
+        `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} timedOut=${timedOut} error=${topUpError ? topUpError.message : "none"}`,
       );
       if (topUpError) {
         console.error("[SynapseTopUp][handlePurchase] [USDC_FLOW] raw edge error:", topUpError);
         const backendErrorString = await unpackEdgeError(topUpError);
         console.log("[SynapseTopUp][handlePurchase] [USDC_FLOW] unpacked backend error:", backendErrorString);
+        clearPendingPurchase();
         if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
           console.warn(
             "[SynapseTopUp][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
           );
           setNeedsApproval(true);
+          setStep("payment");
           return;
         }
         throw new Error(backendErrorString);
       }
 
-      setStep("success");
-      setNeedsApproval(false);
-      toast({
-        title: "Synapse Hydrated!",
-        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
-      });
-
-      console.log("[SynapseTopUp][handlePurchase] [REFRESH_BEGIN] refreshing balances");
-      await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
-      console.log("[SynapseTopUp][handlePurchase] [REFRESH_END] balances refreshed");
-
-      setTimeout(() => {
-        console.log("[SynapseTopUp][handlePurchase] [RESET] returning to select");
-        setStep("select");
-      }, 3500);
+      await resolveSettlement(txReference);
     } catch (err: any) {
       console.error(`🚨 [SynapseTopUp][handlePurchase] [FATAL] ${err?.message}`);
       setError(err?.message || "Settlement failed.");
@@ -287,6 +332,7 @@ const SynapseTopUp = () => {
       console.log("[SynapseTopUp][handlePurchase] [FINALLY] exit");
     }
   };
+
 
   return (
     <div className="max-w-4xl mx-auto p-6">
