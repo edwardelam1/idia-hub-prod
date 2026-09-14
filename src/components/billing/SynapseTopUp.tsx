@@ -241,43 +241,35 @@ const SynapseTopUp = () => {
         internalPayload,
       );
 
+      rememberPendingPurchase(txReference);
       const invokeStart = performance.now();
-      const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
-        body: internalPayload,
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
+        "top-up-credits",
+        {
+          body: internalPayload,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
       console.log(
-        `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} error=${topUpError ? topUpError.message : "none"}`,
+        `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} timedOut=${timedOut} error=${topUpError ? topUpError.message : "none"}`,
       );
       if (topUpError) {
         console.error("[SynapseTopUp][handlePurchase] [USDC_FLOW] raw edge error:", topUpError);
         const backendErrorString = await unpackEdgeError(topUpError);
         console.log("[SynapseTopUp][handlePurchase] [USDC_FLOW] unpacked backend error:", backendErrorString);
+        clearPendingPurchase();
         if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
           console.warn(
             "[SynapseTopUp][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
           );
           setNeedsApproval(true);
+          setStep("payment");
           return;
         }
         throw new Error(backendErrorString);
       }
 
-      setStep("success");
-      setNeedsApproval(false);
-      toast({
-        title: "Synapse Hydrated!",
-        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
-      });
-
-      console.log("[SynapseTopUp][handlePurchase] [REFRESH_BEGIN] refreshing balances");
-      await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
-      console.log("[SynapseTopUp][handlePurchase] [REFRESH_END] balances refreshed");
-
-      setTimeout(() => {
-        console.log("[SynapseTopUp][handlePurchase] [RESET] returning to select");
-        setStep("select");
-      }, 3500);
+      await resolveSettlement(txReference);
     } catch (err: any) {
       console.error(`🚨 [SynapseTopUp][handlePurchase] [FATAL] ${err?.message}`);
       setError(err?.message || "Settlement failed.");
@@ -287,6 +279,7 @@ const SynapseTopUp = () => {
       console.log("[SynapseTopUp][handlePurchase] [FINALLY] exit");
     }
   };
+
 
   return (
     <div className="max-w-4xl mx-auto p-6">
