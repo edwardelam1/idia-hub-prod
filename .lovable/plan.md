@@ -25,11 +25,14 @@ Buying credits from the IDIA wallet is one long request: the app asks the backen
 ## Technical notes
 
 Purchase flow:
+- Root cause confirmed across Android Chrome and Brave: both are Chromium, so backgrounding the tab (wallet overlay, screen lock) throttles it, and Brave's Shields additionally terminate long-hanging sockets without firing a JS error — the `await` on `functions.invoke` never settles. Short, rapid polls survive both.
 - `top-up-credits` splits into two phases: phase one validates, checks allowance/balance, records a `pending` ledger row keyed by `idempotency_key`, dispatches `transferFrom`, and returns the tx hash immediately without awaiting the receipt. Receipt confirmation moves to a background task (`EdgeRuntime.waitUntil`) that flips the row to `completed` and credits the balance, or `failed` with a reason.
-- New lightweight status read: the client polls the `synapse_credit_ledger` row by `idempotency_key` (existing RLS covers the owner) rather than holding the invoke open. Poll with backoff, cap around 90s, then switch to "still confirming".
-- Client callers — `UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`, `APIEndpoints.tsx` — wrap `functions.invoke` in an `AbortController` timeout (~20s) and fall through to polling instead of treating a dropped request as a hang; every catch path resets `isProcessing`/`step`.
-- On mount, each surface checks for an unresolved purchase reference (persisted in `sessionStorage`) and resumes polling; a `visibilitychange` listener re-polls on foreground.
+- New shared helper `src/lib/poll-ledger-status.ts` implementing the supplied `pollLedgerStatus(idempotencyKey, maxAttempts = 15)` contract: `while` loop, exponential backoff `min(2000 * 1.5^(n-1), 10000)`, network faults logged and retried rather than breaking the loop, and `[POLL_LEDGER_*]` begin/end bracketed logs at every level (START, ITERATION_START, QUERY_ERROR, NO_DATA, STATUS_CHECK, SUCCESS, TX_FAILED, NETWORK_FAULT, ITERATION_END, DELAY_START/END, TIMEOUT, END). Resolves to `completed` / `failed` / `timeout` so each caller drives its own UI state and balance refresh.
+- Query detail: `idempotency_key` lives inside `synapse_credit_ledger.metadata`, so the poll filters `metadata->>idempotency_key` and uses `maybeSingle()` (a missing row on early attempts is normal, not an error). Existing owner RLS already covers the read.
+- Client callers — `UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`, `APIEndpoints.tsx` — wrap `functions.invoke` in an `AbortController` timeout (~20s) and fall through to `pollLedgerStatus` instead of treating a dropped request as a hang; every catch path resets `isProcessing`/`step`.
+- On mount, each surface checks for an unresolved purchase reference (persisted in `sessionStorage`) and resumes polling; a `visibilitychange` listener re-polls on foreground so a throttled tab catches up the moment the user returns.
 - `APPROVAL_REQUIRED` keeps its current meaning but is surfaced as a message on the existing authorise action — no new wallet-connect entry point, no MetaMask onboarding UI.
+
 
 Ford data (database migration):
 - Grant `SELECT` on `public.staged_ford_data` to `authenticated`, `ALL` to `service_role`; owner-scoped select policy replaced with `USING (true)` for authenticated users.
