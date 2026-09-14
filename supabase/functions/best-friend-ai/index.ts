@@ -28,6 +28,10 @@ type MarketplaceFetchResult = {
 export type OmniAggregates = {
   health: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
   lifestyle: { count: number; totals: Record<string, number | null>; range: Record<string, string | null> } | null;
+  // Ford vehicle telemetry is an ecosystem-wide shared pool, never user-scoped.
+  ford:
+    | { scope?: string; count: number; totals: Record<string, number | null>; range: Record<string, string | null> }
+    | null;
 };
 
 async function fetchOmniAggregates(
@@ -38,21 +42,23 @@ async function fetchOmniAggregates(
     const { data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId });
     if (error) {
       console.error("[ERROR: OmniAggregates] RPC failed:", error.message);
-      return { health: null, lifestyle: null };
+      return { health: null, lifestyle: null, ford: null };
     }
     const parsed = (data ?? {}) as any;
     console.info(
-      `[STATUS: OmniAggregates] health.count=${parsed?.health?.count ?? 0} lifestyle.count=${parsed?.lifestyle?.count ?? 0}`,
+      `[STATUS: OmniAggregates] health.count=${parsed?.health?.count ?? 0} lifestyle.count=${parsed?.lifestyle?.count ?? 0} ford.count=${parsed?.ford?.count ?? 0}`,
     );
     return {
       health: parsed?.health ?? null,
       lifestyle: parsed?.lifestyle ?? null,
+      ford: parsed?.ford ?? null,
     };
   } catch (err) {
     console.error("[CRITICAL FAILURE: OmniAggregates] Exception:", err);
-    return { health: null, lifestyle: null };
+    return { health: null, lifestyle: null, ford: null };
   }
 }
+
 
 function numberOrNull(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -535,6 +541,7 @@ const ACA_HASH_KEY_TABLES = [
   "raw_app_data",
   "staged_health_data",
   "staged_lifestyle_data",
+  "staged_ford_data",
   "governance_ledger",
   "data_lineage_index",
   "dao_proposals",
