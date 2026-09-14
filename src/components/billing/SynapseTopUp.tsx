@@ -128,6 +128,52 @@ const SynapseTopUp = () => {
     console.log("[SynapseTopUp][handleProceedToPayment] [END] step=payment");
   };
 
+  // Poll the ledger instead of holding a socket open through the chain wait.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[SynapseTopUp][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        setNeedsApproval(false);
+        setError(null);
+        setStep("success");
+        toast({
+          title: "Synapse Hydrated!",
+          description: `${formatCredits(displayCredits)} added to your operational ledger.`,
+        });
+        await Promise.all([refreshSynapseBalance?.(), refreshWalletBalance?.()]);
+        setTimeout(() => setStep("select"), 3500);
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        setError(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("payment");
+        toast({ title: "Settlement Failed", description: result.reason ?? undefined, variant: "destructive" });
+      } else {
+        setError("Payment still confirming on the network. Reopen this page shortly to see the result.");
+        setStep("payment");
+      }
+    } finally {
+      console.log(`[SynapseTopUp][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) void resolveSettlement(pending);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) void resolveSettlement(key);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   const handlePurchase = async () => {
     console.log(
       `[SynapseTopUp][handlePurchase] [START] rail=${paymentRail} credits=${displayCredits} usd=${usdAmount}`,
