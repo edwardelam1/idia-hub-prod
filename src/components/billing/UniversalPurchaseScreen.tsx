@@ -70,6 +70,56 @@ const UniversalPurchaseScreen = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // Resolve a settlement by polling the ledger — never by holding a socket open.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    setIsProcessing(true);
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
+        await refreshWalletBalance();
+        queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
+        queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
+        setStep("success");
+        setVerifyState("verified");
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        toast.error(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("review");
+      } else {
+        toast.warning("Payment still confirming on the network. Reopen this page shortly to see the result.");
+        setStep("review");
+      }
+    } finally {
+      setIsProcessing(false);
+      console.log(`[UniversalPurchaseScreen][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase after a tab kill / screen lock, and re-check
+  // whenever the tab returns to the foreground (Chromium throttles background tabs).
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) {
+      console.log(`[UniversalPurchaseScreen][Lifecycle] Resuming unresolved purchase key=${pending}`);
+      void resolveSettlement(pending);
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) {
+        console.log(`[UniversalPurchaseScreen][Lifecycle] Foregrounded — re-polling key=${key}`);
+        void resolveSettlement(key);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isSuccessReturn) return;
     console.log("[UniversalPurchaseScreen][Lifecycle] Detected Wix success return.");
