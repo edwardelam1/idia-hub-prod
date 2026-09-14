@@ -182,6 +182,49 @@ const SynapsePurchaseModal = ({
     }
   };
 
+  // Poll the ledger instead of holding a socket open through the chain wait.
+  const resolveSettlement = async (idempotencyKey: string) => {
+    console.log(`[SynapsePurchaseModal][resolveSettlement] BEGIN key=${idempotencyKey}`);
+    setStep("processing");
+    try {
+      const result = await pollLedgerStatus(idempotencyKey);
+      if (result.outcome === "completed") {
+        clearPendingPurchase();
+        setNeedsApproval(false);
+        setStep("success");
+        toast.success("Synapse Hydrated!", {
+          description: `${formatCredits(displayCredits)} added to your operational ledger.`,
+        });
+        await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+        setTimeout(() => handleOpenChange(false), 3500);
+      } else if (result.outcome === "failed") {
+        clearPendingPurchase();
+        toast.error(result.reason || "The payment could not be completed. No credits were added.");
+        setStep("payment");
+      } else {
+        toast.warning("Payment still confirming on the network. Reopen this window shortly to see the result.");
+        setStep("payment");
+      }
+    } finally {
+      console.log(`[SynapsePurchaseModal][resolveSettlement] END key=${idempotencyKey}`);
+    }
+  };
+
+  // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
+  useEffect(() => {
+    const pending = readPendingPurchase();
+    if (pending) void resolveSettlement(pending);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const key = readPendingPurchase();
+      if (key) void resolveSettlement(key);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   const handlePurchase = async () => {
     console.log(`[SynapsePurchaseModal][handlePurchase] [START] Initiating settlement via ${paymentRail}.`);
     if (!canProceed) return;
