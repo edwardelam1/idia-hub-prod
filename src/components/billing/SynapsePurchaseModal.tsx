@@ -289,10 +289,14 @@ const SynapsePurchaseModal = ({
         internalPayload,
       );
 
-      const { data: topUpData, error: topUpError } = await supabase.functions.invoke("top-up-credits", {
-        body: internalPayload,
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      rememberPendingPurchase(txReference);
+      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
+        "top-up-credits",
+        {
+          body: internalPayload,
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
 
       if (topUpError) {
         console.error(
@@ -304,26 +308,23 @@ const SynapsePurchaseModal = ({
           "[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] unpacked backend error:",
           backendErrorString,
         );
+        clearPendingPurchase();
         if (/APPROVAL_REQUIRED/i.test(backendErrorString)) {
           console.warn(
             "[SynapsePurchaseModal][handlePurchase] APPROVAL_REQUIRED detected — surfacing relayer authorization UI.",
           );
           setNeedsApproval(true);
+          setStep("payment");
           return;
         }
         throw new Error(backendErrorString);
       }
 
-      console.log("[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] [SUCCESS] hash=", (topUpData as any)?.hash);
+      console.log(
+        `[SynapsePurchaseModal][handlePurchase] [LEDGER_DISPATCH] dispatched hash=${(topUpData as any)?.hash ?? "none"} timedOut=${timedOut}`,
+      );
 
-      setStep("success");
-      setNeedsApproval(false);
-      toast.success("Synapse Hydrated!", {
-        description: `${formatCredits(displayCredits)} added to your operational ledger.`,
-      });
-
-      await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
-      setTimeout(() => handleOpenChange(false), 3500);
+      await resolveSettlement(txReference);
     } catch (err: any) {
       console.error("[SynapsePurchaseModal][handlePurchase] [END_WITH_ERROR] Transaction stalled:", err.message);
       toast.error(err.message || "Settlement failed.");
@@ -332,6 +333,7 @@ const SynapsePurchaseModal = ({
       console.log("[SynapsePurchaseModal][handlePurchase] [FINALLY] Exit execution thread.");
     }
   };
+
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
