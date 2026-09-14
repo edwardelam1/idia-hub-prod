@@ -195,7 +195,8 @@ const UniversalPurchaseScreen = () => {
         };
 
         console.log("[UniversalPurchaseScreen][USDC_FLOW] Invoking top-up-credits", payload);
-        const { data, error } = await supabase.functions.invoke("top-up-credits", {
+        rememberPendingPurchase(txReference);
+        const { data, error, timedOut } = await invokeWithTimeout("top-up-credits", {
           body: payload,
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
@@ -203,22 +204,24 @@ const UniversalPurchaseScreen = () => {
         if (error) {
           const detail = await unpackEdgeError(error);
           if (/APPROVAL_REQUIRED/i.test(detail)) {
+            clearPendingPurchase();
             setNeedsApproval(true);
             setStep("review");
             setIsProcessing(false);
             toast.warning("Relayer authorization required.");
             return;
           }
+          clearPendingPurchase();
           throw new Error(detail);
         }
 
-        console.log("[UniversalPurchaseScreen][USDC_FLOW] success hash=", (data as any)?.hash);
-        toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
-        await refreshWalletBalance();
-        queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
-        queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
-        setStep("success");
-        setVerifyState("verified");
+        if (timedOut) {
+          console.warn("[UniversalPurchaseScreen][USDC_FLOW] invoke timed out — polling ledger instead.");
+        } else {
+          console.log("[UniversalPurchaseScreen][USDC_FLOW] dispatched hash=", (data as any)?.hash);
+        }
+
+        await resolveSettlement(txReference);
       } catch (err: any) {
         console.error("[UniversalPurchaseScreen][USDC_FLOW] failed", err);
         toast.error(err?.message || "On-chain settlement failed");
@@ -228,6 +231,7 @@ const UniversalPurchaseScreen = () => {
       }
       return;
     }
+
 
     // ============================================
     // RAIL 2: WIX FIAT REDIRECT (fallback)
