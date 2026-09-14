@@ -1,59 +1,38 @@
-# Buyer Diagnostic Battery & Affinity-Weighted Credit Pricing
+# Mobile wallet purchases + shared Ford vehicle data
 
-Establish a buyer profile vector (role, jurisdiction, latency, category weights) captured through diagnostic questionnaires, and use it to price every Synapse Credit consumption action accurately.
+Two open items: the credit purchase spins forever on Android, and the new Ford vehicle data needs to be visible to everyone across the app.
 
-## Current state (verified)
+## 1. Fix the credit purchase on phones and all browsers
 
-- `synapse-controller.calculateDynamicFee` already multiplies the sector base value by a `buyerWeight` read from a table `business_interest_profiles` — that table does not exist in the database, so the lookup always fails and every buyer is charged at weight `1.0`.
-- `_shared/bundle-pricing.ts` accepts an optional `buyerWeight` input that no caller currently supplies.
-- `public.profiles` has no columns for role posture, jurisdiction, latency, or weights.
+Today the purchase screen asks the wallet to connect and then simply waits. On a phone browser there is no wallet extension, so nothing ever comes back and the button spins indefinitely with no message.
 
-So the pricing hook points exist; the profile data behind them does not. This plan fills that gap.
+What changes:
 
-## Phase 1 — Data model
+- **Detect the situation up front.** If there's no wallet available in the current browser and the user is on a phone, don't silently wait — hand off to the MetaMask app directly (deep link), or show a clear "Open in MetaMask" action that reopens the same purchase page inside the MetaMask app browser.
+- **Never spin forever.** Every wallet step (connect, authorize, confirm) gets a time limit. If the wallet doesn't answer, the screen returns to the purchase view with a plain-English reason and a retry button.
+- **Handle coming back from the app.** When the user returns from MetaMask, the page re-checks the wallet connection automatically instead of staying stuck.
+- **Clear messages for the common cases:** request cancelled in the wallet, a request already waiting in the wallet, wrong network, no wallet installed.
+- **Same behaviour everywhere a wallet is used:** the purchase screen, the credit top-up, the purchase pop-up, earnings withdrawal, and the API endpoint purchase — so no surface is left with the old stuck spinner.
+- **Check on real browsers:** Android Chrome, iOS Safari, desktop Chrome/Safari/Firefox, and inside the MetaMask in-app browser.
 
-New table `public.buyer_profile_vectors` (one row per user):
+## 2. Make Ford vehicle data available to everyone
 
-- `user_id` (unique), `role`, `jurisdiction`, `latency_requirement`
-- `weights` jsonb — the six canonical categories: `realtimeSentiment`, `consumerTransactions`, `geospatialSar`, `b2bFirmographics`, `identityGraphs`, `consentArtifacts`
-- `level0_completed_at`, `level1_completed_at`, `level1_battery` (which role battery produced the weights), `tier_at_completion`
-- `raw_answers` jsonb for audit/replay
+The Ford vehicle table exists but is currently locked to each record's own owner, and nothing in the app reads it.
 
-New table `public.buyer_diagnostic_responses` — append-only log of every answer set (question id, choice, battery, timestamp) so weight changes are auditable.
-
-Both tables: explicit GRANTs, RLS enabled, users read/write only their own row; `service_role` full access for edge functions.
-
-## Phase 2 — Level 0 hard gate
-
-- `src/components/onboarding/BuyerDiagnosticLevel0.tsx`: a non-dismissible modal with the two questions (Organizational Posture A–D, Jurisdictional Exposure A–E). No close button, no escape, no overlay dismiss.
-- Mounted in `AppLayout` so it covers any landing route. It renders when the signed-in user has no `level0_completed_at`. Existing users get it at their next login; new users on first dashboard load.
-- On submit: write role + jurisdiction, seed the default weight vector for the chosen role, stamp `level0_completed_at`.
-
-## Phase 3 — Level 1 role batteries (tier-upgrade triggered)
-
-- `src/components/onboarding/BuyerDiagnosticLevel1.tsx` renders the matching battery by role:
-  - Trading Desk: Q1 latency, Q2 feature types, Q3 provenance
-  - Org Admin / BI: E1 value objective, E2 entity linkage, E3 cadence
-  - Compliance: C1 framework, C2 TOMs, C3 retention
-  - Individual: I1 vault utilization, I2 sharing posture
-- Trigger: a tier change only. A hook compares `profiles.active_saas_tiers` against `tier_at_completion` on the vector row; when the tier rises, the battery opens (dismissible, re-prompts until answered) and rewrites the weight vector with the published vectors for that role, adjusted by the answers (latency answer sets `latency_requirement`).
-
-## Phase 4 — Valuation engine
-
-- `src/lib/buyer-affinity.ts` (shared with an identical `supabase/functions/_shared/buyer-affinity.ts`): the `BuyerProfileVector` interface and `calculateDatasetRelevance()` exactly as specified — base weight × jurisdiction factor (1.20 match / 0.85 mismatch) × latency factor (1.15 match / 0.90 mismatch), clamped to [0.10, 1.00].
-- Category mapping: bundle/module category strings map to the six weight keys (e.g. `health.*`/`lifestyle.*` → `consumerTransactions` or `geospatialSar` by subtype, `business.*` → `b2bFirmographics`, feature feeds → `realtimeSentiment`, compliance datasets → `consentArtifacts`).
-- Pricing direction (confirmed): high relevance costs more. `V_final = base cost × relevance`, so a 1.00-affinity dataset charges full sector price and a 0.10-affinity dataset is heavily discounted.
-
-## Phase 5 — Wire the engine into every credit path
-
-- `synapse-controller`: replace the dead `business_interest_profiles` lookup with `buyer_profile_vectors`, resolve the dataset category from the routed sub-module, and apply `calculateDatasetRelevance` as the buyer weight.
-- `best-friend-ai`: same weight applied to its query fee.
-- Bundle pricing: pass `buyerWeight` into `calculateBundlePrice` for the requesting buyer so marketplace prices are personalized.
-- Marketplace UI: each bundle card and the detail sheet show an "Affinity" indicator and the personalized credit price, with a tooltip explaining that price scales with relevance to the buyer's declared profile.
-- Trading Desk / MCP / feature feed consumption calls route through the same helper — one source of truth, no per-surface duplication.
+- Any signed-in user can read all Ford vehicle records — it is a shared pool like the other marketplace data, not personal data.
+- Ford records are added to the platform-wide data totals that feed the marketplace catalogue, the trading desk figures, and freshness windows (24h / 7d / 30d / all time), grouped by metric type.
+- The AI assistant gets Ford records as a queryable source alongside health, lifestyle and business data, with ecosystem-wide totals so it never quotes a small sample as the real count.
 
 ## Technical notes
 
-- Weight vectors are stored as data, not hardcoded in components, so they can be retuned without a deploy.
-- Every fee calculation logs the resolved weight, jurisdiction factor, and latency factor alongside the charge for auditability.
-- If a user somehow has no vector (edge function called before Level 0), the engine falls back to weight `1.0` — full price, never a free query.
+Wallet flow:
+- `src/lib/metamask-sdk.ts`: add mobile/deep-link handling to the SDK config, expose provider-availability and in-app-browser detection, and wrap `eth_requestAccounts` in a timeout that rejects with a typed reason.
+- `src/lib/usdc-approval.ts`: apply the same timeout/abort to `wallet_switchEthereumChain`, `approve`, and receipt waiting; keep the existing error codes.
+- Callers to update: `UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`, `EarningsSettlement.tsx`, `APIEndpoints.tsx` — reset `isProcessing`/`step` on every failure path and add a "Open in MetaMask app" fallback button when no provider is injected.
+- Deep link target: `https://metamask.app.link/dapp/<host><path>` so the user lands back on the same purchase route.
+
+Ford data (database migration):
+- Grant `SELECT` on `public.staged_ford_data` to `authenticated`, `ALL` to `service_role`; replace the owner-scoped select policy with `USING (true)` for authenticated users.
+- Extend `get_staging_aggregates` and `get_staging_aggregates_windowed` with a `staged_ford_data` branch, categories `vehicle.<metric_type>`, windows keyed off `processed_at` (the table has no `created_at`), quality left null since the table carries no quality score.
+- Extend `get_omni_aggregates` with an ecosystem-wide `ford` block (count, distinct metric types, distinct vehicles, contributors, value average, recorded/processed ranges) — not filtered by user.
+- `supabase/functions/best-friend-ai/index.ts`: add Ford to the omni fetch, marketplace aggregate scan, ACA-hash table list, and the prompt context, labelling it ecosystem-wide.
