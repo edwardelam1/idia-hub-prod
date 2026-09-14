@@ -724,7 +724,10 @@ function buildAcaContext(
     const totals = inspectResult.totals;
     const grouped = {
       raw_signals: (totals["raw_health_data"] ?? 0) + (totals["raw_app_data"] ?? 0),
-      staged_signals: (totals["staged_health_data"] ?? 0) + (totals["staged_lifestyle_data"] ?? 0),
+      staged_signals:
+        (totals["staged_health_data"] ?? 0) +
+        (totals["staged_lifestyle_data"] ?? 0) +
+        (totals["staged_ford_data"] ?? 0),
       financial_events: (totals["delt_transfers"] ?? 0) + (totals["usdc_payments"] ?? 0),
       governance_events:
         (totals["governance_ledger"] ?? 0) +
@@ -797,7 +800,8 @@ function buildAcaPlainResponse(
     const t = inspectResult.totals;
     const reg: any = inspectResult.registry ?? {};
     const raw = (t["raw_health_data"] ?? 0) + (t["raw_app_data"] ?? 0);
-    const staged = (t["staged_health_data"] ?? 0) + (t["staged_lifestyle_data"] ?? 0);
+    const staged =
+      (t["staged_health_data"] ?? 0) + (t["staged_lifestyle_data"] ?? 0) + (t["staged_ford_data"] ?? 0);
     const fin = (t["delt_transfers"] ?? 0) + (t["usdc_payments"] ?? 0);
     const gov =
       (t["governance_ledger"] ?? 0) +
