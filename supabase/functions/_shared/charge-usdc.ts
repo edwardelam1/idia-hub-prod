@@ -180,3 +180,115 @@ export async function chargeBuyerUsdc(opts: {
     return { ok: false, code: "RELAYER_EXECUTION_FAILED", message: msg };
   }
 }
+
+// ===================================================================
+// ASYNC SPLIT — phase 1 dispatch (no receipt wait) and phase 2 confirm.
+// Keeps the HTTP request to the client short so aggressively throttled
+// mobile browsers (Android Chrome / Brave) never hold an open socket
+// through a 15-90s blockchain confirmation window.
+// ===================================================================
+
+/**
+ * Phase 1: preflight allowance + balance, then submit transferFrom and
+ * return the hash IMMEDIATELY. Does not wait for the receipt.
+ */
+export async function dispatchBuyerUsdcCharge(opts: {
+  buyer_wallet: string;
+  usd_amount: number;
+}): Promise<ChargeResult> {
+  const stage = "dispatchBuyerUsdcCharge";
+  console.log(`[BEGIN: ${stage}] buyer=${opts.buyer_wallet} usd=${opts.usd_amount}`);
+  try {
+    if (!isAddress(opts.buyer_wallet)) {
+      return { ok: false, code: "INVALID_BUYER", message: `Not a valid address: ${opts.buyer_wallet}` };
+    }
+    if (!Number.isFinite(opts.usd_amount) || opts.usd_amount <= 0) {
+      return { ok: false, code: "INVALID_AMOUNT", message: `usd_amount must be > 0` };
+    }
+
+    const pk = Deno.env.get("RELAYER_PRIVATE_KEY");
+    if (!pk) {
+      return { ok: false, code: "RELAYER_MISCONFIGURED", message: "RELAYER_PRIVATE_KEY is not set" };
+    }
+    const normalizedPk = (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`;
+
+    const buyer = getAddress(opts.buyer_wallet);
+    const treasury = getTreasury();
+    const amount = parseUnits(opts.usd_amount.toFixed(6), 6);
+    const account = privateKeyToAccount(normalizedPk);
+    const transport = http(getRpc());
+    const publicClient = createPublicClient({ chain: base, transport });
+    const walletClient = createWalletClient({ chain: base, transport, account });
+
+    const [allowance, buyerBalance] = await Promise.all([
+      publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "allowance",
+        args: [buyer, account.address],
+      } as any) as Promise<bigint>,
+      publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [buyer],
+      } as any) as Promise<bigint>,
+    ]);
+    console.log(
+      `[${stage}] allowance=${allowance.toString()} balance=${buyerBalance.toString()} required=${amount.toString()}`,
+    );
+
+    if (allowance < amount) {
+      return {
+        ok: false,
+        code: "APPROVAL_REQUIRED",
+        message: `Buyer ${buyer} has not granted the relayer sufficient USDC allowance.`,
+      };
+    }
+    if (buyerBalance < amount) {
+      return {
+        ok: false,
+        code: "INSUFFICIENT_BUYER_BALANCE",
+        message: `Buyer USDC balance ${buyerBalance.toString()} below required ${amount.toString()}.`,
+      };
+    }
+
+    const hash = (await walletClient.writeContract({
+      address: USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: "transferFrom",
+      args: [buyer, treasury, amount],
+      chain: base,
+    } as any)) as `0x${string}`;
+    console.log(`[END: ${stage}] dispatched hash=${hash} (receipt deferred)`);
+    return { ok: true, hash };
+  } catch (err: any) {
+    const msg = err?.shortMessage ?? err?.message ?? String(err);
+    console.error(`🚨 [FATAL: ${stage}] ${msg}`);
+    if (/allowance/i.test(msg)) return { ok: false, code: "APPROVAL_REQUIRED", message: msg };
+    if (/balance/i.test(msg)) return { ok: false, code: "INSUFFICIENT_BUYER_BALANCE", message: msg };
+    return { ok: false, code: "RELAYER_EXECUTION_FAILED", message: msg };
+  }
+}
+
+/** Phase 2: wait for the receipt of an already-dispatched transfer. */
+export async function confirmUsdcCharge(hash: string): Promise<ChargeResult> {
+  const stage = "confirmUsdcCharge";
+  console.log(`[BEGIN: ${stage}] hash=${hash}`);
+  try {
+    const publicClient = createPublicClient({ chain: base, transport: http(getRpc()) });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: hash as `0x${string}`,
+      timeout: 120_000,
+    });
+    if (receipt.status !== "success") {
+      return { ok: false, code: "TX_REVERTED", message: `transferFrom reverted at block ${receipt.blockNumber}` };
+    }
+    console.log(`[END: ${stage}] confirmed in block ${receipt.blockNumber}`);
+    return { ok: true, hash };
+  } catch (err: any) {
+    const msg = err?.shortMessage ?? err?.message ?? String(err);
+    console.error(`🚨 [FATAL: ${stage}] ${msg}`);
+    return { ok: false, code: "RECEIPT_UNCONFIRMED", message: msg };
+  }
+}
