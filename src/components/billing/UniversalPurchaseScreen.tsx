@@ -10,6 +10,13 @@ import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
 import { ensureUsdcApproval } from "@/lib/usdc-approval";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
+import {
+  pollLedgerStatus,
+  invokeWithTimeout,
+  rememberPendingPurchase,
+  clearPendingPurchase,
+  readPendingPurchase,
+} from "@/lib/poll-ledger-status";
 import { toast } from "sonner";
 
 const PLANS = [
