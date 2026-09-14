@@ -1,38 +1,38 @@
-# Mobile wallet purchases + shared Ford vehicle data
+# Fix the Synapse credit purchase hanging on mobile
 
-Two open items: the credit purchase spins forever on Android, and the new Ford vehicle data needs to be visible to everyone across the app.
+No wallet connect option is added anywhere. The wallet is already attached to the account from IDIA Life, and the purchase keeps using that wallet exactly as it does today.
 
-## 1. Fix the credit purchase on phones and all browsers
+## What's happening
 
-Today the purchase screen asks the wallet to connect and then simply waits. On a phone browser there is no wallet extension, so nothing ever comes back and the button spins indefinitely with no message.
+Buying credits from the IDIA wallet is one long request: the app asks the backend to move USDC, and the backend holds the connection open while it sends the transaction and waits for the network to confirm it. On a phone that single connection often dies — the screen locks, the browser backgrounds the tab, or the mobile network drops — and the app never hears back. The result is a spinner that never stops, even in cases where the payment actually went through.
 
-What changes:
+## What changes
 
-- **Detect the situation up front.** If there's no wallet available in the current browser and the user is on a phone, don't silently wait — hand off to the MetaMask app directly (deep link), or show a clear "Open in MetaMask" action that reopens the same purchase page inside the MetaMask app browser.
-- **Never spin forever.** Every wallet step (connect, authorize, confirm) gets a time limit. If the wallet doesn't answer, the screen returns to the purchase view with a plain-English reason and a retry button.
-- **Handle coming back from the app.** When the user returns from MetaMask, the page re-checks the wallet connection automatically instead of staying stuck.
-- **Clear messages for the common cases:** request cancelled in the wallet, a request already waiting in the wallet, wrong network, no wallet installed.
-- **Same behaviour everywhere a wallet is used:** the purchase screen, the credit top-up, the purchase pop-up, earnings withdrawal, and the API endpoint purchase — so no surface is left with the old stuck spinner.
-- **Check on real browsers:** Android Chrome, iOS Safari, desktop Chrome/Safari/Firefox, and inside the MetaMask in-app browser.
+- **The purchase no longer depends on one long connection.** The app hands the purchase to the backend, gets an immediate acknowledgement, and then checks on its status. The confirmation wait happens on the server side.
+- **The screen always resolves.** Within a few seconds the user sees either "credits added", "payment still confirming — we'll update you", or a plain-English failure with a retry button. No indefinite spinner.
+- **Returning to the app picks up where it left off.** If the phone was locked or the browser was backgrounded, reopening the purchase screen resumes checking and shows the final result.
+- **No double charges.** The purchase reference already in use guarantees a repeated attempt returns the original result instead of charging twice.
+- **Clear wording for the real failure cases:** not enough USDC in the wallet, the wallet hasn't authorised the transfer yet, or the network is congested.
+- **Applies to every credit purchase surface:** the plan checkout screen, the credit top-up panel, the purchase pop-up, and the API endpoint purchase.
+- **Verified on Android Chrome and iOS Safari** as well as desktop, including a screen-lock mid-purchase.
 
-## 2. Make Ford vehicle data available to everyone
+## Also pending: shared Ford vehicle data
 
-The Ford vehicle table exists but is currently locked to each record's own owner, and nothing in the app reads it.
-
-- Any signed-in user can read all Ford vehicle records — it is a shared pool like the other marketplace data, not personal data.
-- Ford records are added to the platform-wide data totals that feed the marketplace catalogue, the trading desk figures, and freshness windows (24h / 7d / 30d / all time), grouped by metric type.
-- The AI assistant gets Ford records as a queryable source alongside health, lifestyle and business data, with ecosystem-wide totals so it never quotes a small sample as the real count.
+- Any signed-in user can read all Ford vehicle records — it is a shared pool like the other data sources, not personal data.
+- Ford records join the platform-wide totals feeding the marketplace, trading desk figures and freshness windows (24h / 7d / 30d / all time), grouped by metric type.
+- The AI assistant can query Ford records alongside health, lifestyle and business data, using ecosystem-wide totals so it never quotes a sample as the real count.
 
 ## Technical notes
 
-Wallet flow:
-- `src/lib/metamask-sdk.ts`: add mobile/deep-link handling to the SDK config, expose provider-availability and in-app-browser detection, and wrap `eth_requestAccounts` in a timeout that rejects with a typed reason.
-- `src/lib/usdc-approval.ts`: apply the same timeout/abort to `wallet_switchEthereumChain`, `approve`, and receipt waiting; keep the existing error codes.
-- Callers to update: `UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`, `EarningsSettlement.tsx`, `APIEndpoints.tsx` — reset `isProcessing`/`step` on every failure path and add a "Open in MetaMask app" fallback button when no provider is injected.
-- Deep link target: `https://metamask.app.link/dapp/<host><path>` so the user lands back on the same purchase route.
+Purchase flow:
+- `top-up-credits` splits into two phases: phase one validates, checks allowance/balance, records a `pending` ledger row keyed by `idempotency_key`, dispatches `transferFrom`, and returns the tx hash immediately without awaiting the receipt. Receipt confirmation moves to a background task (`EdgeRuntime.waitUntil`) that flips the row to `completed` and credits the balance, or `failed` with a reason.
+- New lightweight status read: the client polls the `synapse_credit_ledger` row by `idempotency_key` (existing RLS covers the owner) rather than holding the invoke open. Poll with backoff, cap around 90s, then switch to "still confirming".
+- Client callers — `UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`, `APIEndpoints.tsx` — wrap `functions.invoke` in an `AbortController` timeout (~20s) and fall through to polling instead of treating a dropped request as a hang; every catch path resets `isProcessing`/`step`.
+- On mount, each surface checks for an unresolved purchase reference (persisted in `sessionStorage`) and resumes polling; a `visibilitychange` listener re-polls on foreground.
+- `APPROVAL_REQUIRED` keeps its current meaning but is surfaced as a message on the existing authorise action — no new wallet-connect entry point, no MetaMask onboarding UI.
 
 Ford data (database migration):
-- Grant `SELECT` on `public.staged_ford_data` to `authenticated`, `ALL` to `service_role`; replace the owner-scoped select policy with `USING (true)` for authenticated users.
-- Extend `get_staging_aggregates` and `get_staging_aggregates_windowed` with a `staged_ford_data` branch, categories `vehicle.<metric_type>`, windows keyed off `processed_at` (the table has no `created_at`), quality left null since the table carries no quality score.
-- Extend `get_omni_aggregates` with an ecosystem-wide `ford` block (count, distinct metric types, distinct vehicles, contributors, value average, recorded/processed ranges) — not filtered by user.
-- `supabase/functions/best-friend-ai/index.ts`: add Ford to the omni fetch, marketplace aggregate scan, ACA-hash table list, and the prompt context, labelling it ecosystem-wide.
+- Grant `SELECT` on `public.staged_ford_data` to `authenticated`, `ALL` to `service_role`; owner-scoped select policy replaced with `USING (true)` for authenticated users.
+- Extend `get_staging_aggregates` and `get_staging_aggregates_windowed` with a `staged_ford_data` branch, categories `vehicle.<metric_type>`, windows keyed off `processed_at`, quality null (no quality column).
+- Extend `get_omni_aggregates` with an ecosystem-wide `ford` block (count, distinct metric types, distinct vehicles, contributors, value average, recorded/processed ranges), not user-filtered.
+- `supabase/functions/best-friend-ai/index.ts`: add Ford to the omni fetch, marketplace aggregate scan, ACA-hash table list, and prompt context, labelled ecosystem-wide.
