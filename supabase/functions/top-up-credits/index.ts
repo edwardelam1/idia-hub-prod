@@ -1,8 +1,15 @@
 // supabase/functions/top-up-credits/index.ts
 // Hardened payload contract: aligned with Hub and Life application financial structures.
+//
+// v8 — ASYNC SETTLEMENT. The HTTP response no longer waits on a blockchain
+// receipt. Phase 1 (fast, in-request): validate, preflight allowance/balance,
+// dispatch transferFrom, write a `pending` ledger row. Phase 2 (background via
+// EdgeRuntime.waitUntil): await the receipt and flip the row to completed /
+// failed. Clients poll the ledger by idempotency_key, which survives Chromium
+// mobile tab throttling and Brave's termination of long-hanging sockets.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
-import { chargeBuyerUsdc } from "../_shared/charge-usdc.ts";
+import { dispatchBuyerUsdcCharge, confirmUsdcCharge } from "../_shared/charge-usdc.ts";
 import { isAddress } from "https://esm.sh/viem@2.9.20";
 
 const corsHeaders = {
@@ -10,7 +17,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-console.log("[BOOT: top-up-credits] Synapse Hydration Engine v7 (Relayer Delegated Pull) online.");
+console.log("[BOOT: top-up-credits] Synapse Hydration Engine v8 (Async Relayer Pull) online.");
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -76,7 +83,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[BEGIN: ${stage}] key=${idempotency_key}`);
     const { data: existing, error: idemError } = await supabase
       .from("synapse_credit_ledger")
-      .select("blockchain_tx_hash, amount, metadata")
+      .select("id, status, blockchain_tx_hash, amount, metadata")
       .eq("user_id", user_id)
       .filter("metadata->>idempotency_key", "eq", idempotency_key)
       .limit(1)
@@ -85,11 +92,12 @@ Deno.serve(async (req: Request) => {
     if (idemError) {
       console.warn(`[WARNING: ${stage}] lookup failed: ${idemError.message}`);
     } else if (existing) {
-      console.log(`[END: ${stage}] REPLAY hit. hash=${existing.blockchain_tx_hash}`);
+      console.log(`[END: ${stage}] REPLAY hit. status=${existing.status} hash=${existing.blockchain_tx_hash}`);
       return new Response(
         JSON.stringify({
           success: true,
           replayed: true,
+          status: existing.status,
           hash: existing.blockchain_tx_hash,
           updated_balance: null,
         }),
@@ -99,32 +107,138 @@ Deno.serve(async (req: Request) => {
       console.log(`[END: ${stage}] no prior settlement.`);
     }
 
-    let txHash: string = payment_reference;
+    const baseMetadata = {
+      class: "Synapse_Purchase",
+      product_class: "SAAS_UTILITY_PURCHASE",
+      fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
+      usd_amount: usd_amount,
+      rate_usd_per_cr: RATE_USD_PER_CR,
+      payment_reference: payment_reference,
+      routing: routing,
+      user_wallet: user_wallet ?? null,
+      idempotency_key,
+    };
 
-    // 🚨 RELAYER DELEGATED PULL: The Relayer pays gas and executes transferFrom based on existing allowance
+    // ==========================================================
+    // ON-CHAIN RAIL — dispatch now, confirm in the background.
+    // ==========================================================
     if (routing === "on-chain") {
-      stage = "SYNAPSE_BILLING_CHARGE";
-      console.log(`[BEGIN: ${stage}] Relayer attempting to pull ${usd_amount} USDC from ${user_wallet}`);
+      stage = "SYNAPSE_BILLING_DISPATCH";
+      console.log(`[BEGIN: ${stage}] Relayer dispatching ${usd_amount} USDC pull from ${user_wallet}`);
 
-      const chargeResult = await chargeBuyerUsdc({
+      const dispatchResult = await dispatchBuyerUsdcCharge({
         buyer_wallet: user_wallet!,
         usd_amount: usd_amount,
       });
 
-      if (!chargeResult.ok) {
-        // If this throws APPROVAL_REQUIRED, the blockchain is confirming the Relayer lacks allowance for this specific wallet.
-        console.error(`🚨 [FATAL STALL: ${stage}] ${chargeResult.code}: ${chargeResult.message}`);
-        throw new Error(`USDC_CHARGE_REJECTED: ${chargeResult.code}`);
+      if (!dispatchResult.ok) {
+        console.error(`🚨 [REJECTED: ${stage}] ${dispatchResult.code}: ${dispatchResult.message}`);
+        throw new Error(`USDC_CHARGE_REJECTED: ${dispatchResult.code}`);
       }
 
-      txHash = chargeResult.hash!;
-      console.log(`[END: ${stage}] Settlement verified on Base. Hash=${txHash}`);
-    } else {
-      console.log(`[SKIP: ONCHAIN_CHARGE] routing=${routing} wallet=${user_wallet}`);
+      const txHash = dispatchResult.hash!;
+      console.log(`[END: ${stage}] dispatched hash=${txHash}`);
+
+      stage = "LEDGER_INSERT_PENDING";
+      console.log(`[BEGIN: ${stage}]`);
+      const { data: pendingRow, error: pendingError } = await supabase
+        .from("synapse_credit_ledger")
+        .insert({
+          user_id: user_id,
+          amount: credit_amount,
+          transaction_type: "internal_deposit",
+          entry_type: "deposit",
+          status: "pending",
+          blockchain_tx_hash: txHash,
+          metadata: { ...baseMetadata, settlement_phase: "dispatched" },
+        })
+        .select("id")
+        .single();
+
+      if (pendingError) {
+        throw new Error(`LEDGER_INSERT_FAILED: ${pendingError.message}`);
+      }
+      const ledgerId = pendingRow!.id as string;
+      console.log(`[END: ${stage}] pending ledger row=${ledgerId}`);
+
+      // ---- Phase 2: background receipt confirmation ----
+      const confirmTask = (async () => {
+        console.log(`[BEGIN: BACKGROUND_CONFIRM] ledger=${ledgerId} hash=${txHash}`);
+        try {
+          const confirmation = await confirmUsdcCharge(txHash);
+          if (confirmation.ok) {
+            const { error: upErr } = await supabase
+              .from("synapse_credit_ledger")
+              .update({
+                status: "completed",
+                metadata: { ...baseMetadata, settlement_phase: "confirmed" },
+              })
+              .eq("id", ledgerId);
+            if (upErr) {
+              console.error(`🚨 [BACKGROUND_CONFIRM] status update failed: ${upErr.message}`);
+            } else {
+              console.log(`[END: BACKGROUND_CONFIRM] ledger=${ledgerId} marked completed.`);
+            }
+
+            const { error: railError } = await supabase
+              .from("profiles")
+              .update({ compliance_rail: "on-chain" })
+              .eq("user_id", user_id);
+            if (railError) console.warn(`[BACKGROUND_CONFIRM] compliance_rail skip: ${railError.message}`);
+          } else {
+            console.error(`🚨 [BACKGROUND_CONFIRM] ${confirmation.code}: ${confirmation.message}`);
+            await supabase
+              .from("synapse_credit_ledger")
+              .update({
+                status: "failed",
+                metadata: {
+                  ...baseMetadata,
+                  settlement_phase: "failed",
+                  failure_code: confirmation.code,
+                  failure_reason: confirmation.message,
+                },
+              })
+              .eq("id", ledgerId);
+          }
+        } catch (bgErr: any) {
+          console.error(`🚨 [BACKGROUND_CONFIRM] unhandled: ${bgErr?.message ?? String(bgErr)}`);
+          await supabase
+            .from("synapse_credit_ledger")
+            .update({
+              status: "failed",
+              metadata: {
+                ...baseMetadata,
+                settlement_phase: "failed",
+                failure_code: "BACKGROUND_EXCEPTION",
+                failure_reason: bgErr?.message ?? String(bgErr),
+              },
+            })
+            .eq("id", ledgerId);
+        }
+      })();
+
+      // deno-lint-ignore no-explicit-any
+      const runtime = (globalThis as any).EdgeRuntime;
+      if (runtime?.waitUntil) {
+        runtime.waitUntil(confirmTask);
+      } else {
+        // Local/dev fallback — do not block the response.
+        confirmTask.catch(() => {});
+      }
+
+      console.log(`[END: INVOKE] dispatched hash=${txHash} status=pending`);
+      return new Response(
+        JSON.stringify({ success: true, status: "pending", hash: txHash, updated_balance: null }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
     }
 
+    // ==========================================================
+    // FIAT RAIL — settles synchronously, no chain wait involved.
+    // ==========================================================
     stage = "LEDGER_INSERT";
     console.log(`[BEGIN: ${stage}]`);
+    const txHash = payment_reference;
     const { error: ledgerError } = await supabase.from("synapse_credit_ledger").insert({
       user_id: user_id,
       amount: credit_amount,
@@ -132,17 +246,7 @@ Deno.serve(async (req: Request) => {
       entry_type: "deposit",
       status: "completed",
       blockchain_tx_hash: txHash,
-      metadata: {
-        class: "Synapse_Purchase",
-        product_class: "SAAS_UTILITY_PURCHASE",
-        fund: routing === "on-chain" ? "STABLECOIN_RESERVE" : "CORPORATE_REVENUE",
-        usd_amount: usd_amount,
-        rate_usd_per_cr: RATE_USD_PER_CR,
-        payment_reference: payment_reference,
-        routing: routing,
-        user_wallet: user_wallet ?? null,
-        idempotency_key,
-      },
+      metadata: { ...baseMetadata, settlement_phase: "confirmed" },
     });
 
     if (ledgerError) {
@@ -151,71 +255,51 @@ Deno.serve(async (req: Request) => {
     console.log(`[END: ${stage}]`);
 
     stage = "COMPLIANCE_RAIL_LOCK";
-    console.log(`[BEGIN: ${stage}] rail=${routing}`);
-    if (routing === "fiat" || routing === "on-chain") {
-      const { error: railError } = await supabase
-        .from("profiles")
-        .update({ compliance_rail: routing })
-        .eq("user_id", user_id);
-      if (railError) {
-        console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
-      } else {
-        console.log(`[END: ${stage}] Compliance rail locked: ${routing}`);
-      }
-    } else {
-      console.warn(`[SKIP: ${stage}] Non-canonical routing="${routing}". Skipping rail persistence.`);
+    const { error: railError } = await supabase
+      .from("profiles")
+      .update({ compliance_rail: "fiat" })
+      .eq("user_id", user_id);
+    if (railError) {
+      console.error(`[WARNING: ${stage}] Failed to persist compliance_rail: ${railError.message}`);
     }
 
     stage = "WALLET_HYDRATE";
-    console.log(`[BEGIN: ${stage}] Initiating balance hydration for routing=${routing}`);
-    let newBalance: number | null = null;
+    console.log(`[BEGIN: ${stage}] fiat balance hydration`);
+    const targetColumn = "corporate_revenue";
+    const { data: wallet, error: fetchError } = await supabase
+      .from("wallets")
+      .select(targetColumn)
+      .eq("user_id", user_id)
+      .maybeSingle();
 
-    if (routing === "fiat") {
-      const targetColumn = "corporate_revenue";
-      console.log(`[LOG: ${stage}] Fetching prior balance from column=${targetColumn}`);
-
-      const { data: wallet, error: fetchError } = await supabase
-        .from("wallets")
-        .select(targetColumn)
-        .eq("user_id", user_id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error(`🚨 [STALL DETECTED: ${stage}] Wallet fetch aborted: ${fetchError.message}`);
-        throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
-      }
-
-      const currentBalance = Number((wallet as any)?.[targetColumn]) || 0;
-      newBalance = currentBalance + credit_amount;
-      console.log(`[LOG: ${stage}] Calculation: Previous(${currentBalance}) + Inbound(${credit_amount}) = Target(${newBalance})`);
-
-      console.log(`[LOG: ${stage}] Executing state upsert to guarantee persistence.`);
-      const { error: upsertError } = await supabase
-        .from("wallets")
-        .upsert(
-          {
-            user_id: user_id,
-            [targetColumn]: newBalance,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
-
-      if (upsertError) {
-        console.error(`🚨 [STALL DETECTED: ${stage}] Wallet upsert aborted: ${upsertError.message}`);
-        throw new Error(`WALLET_UPSERT_FAILED: ${upsertError.message}`);
-      }
-
-      console.log(`[END: ${stage}] fiat column=${targetColumn} newTotal=${newBalance} successfully committed.`);
-    } else {
-      console.log(`[SKIP: ${stage}] On-chain routing — USDC truth lives on Base.`);
+    if (fetchError) {
+      console.error(`🚨 [STALL DETECTED: ${stage}] Wallet fetch aborted: ${fetchError.message}`);
+      throw new Error(`WALLET_FETCH_FAILED: ${fetchError.message}`);
     }
 
+    const currentBalance = Number((wallet as any)?.[targetColumn]) || 0;
+    const newBalance = currentBalance + credit_amount;
+
+    const { error: upsertError } = await supabase.from("wallets").upsert(
+      {
+        user_id: user_id,
+        [targetColumn]: newBalance,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+
+    if (upsertError) {
+      console.error(`🚨 [STALL DETECTED: ${stage}] Wallet upsert aborted: ${upsertError.message}`);
+      throw new Error(`WALLET_UPSERT_FAILED: ${upsertError.message}`);
+    }
+    console.log(`[END: ${stage}] fiat newTotal=${newBalance} committed.`);
+
     console.log(`[END: INVOKE] success hash=${txHash}`);
-    return new Response(JSON.stringify({ success: true, hash: txHash, updated_balance: newBalance }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({ success: true, status: "completed", hash: txHash, updated_balance: newBalance }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+    );
   } catch (error: any) {
     console.error(`🚨 [FATAL EXCEPTION: ${stage}] System halted: ${error?.message}`);
     return new Response(JSON.stringify({ error: error?.message ?? "Unknown error", failed_at: stage }), {
