@@ -87,13 +87,21 @@ const BundleCard = ({ bundle, userCredits, onAddToCart, isExpanded, onToggle }: 
                 {bundle.name}
               </span>
               {!isExpanded && (
-                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-normal leading-tight text-muted-foreground">
-                  <span>{bundle.tier}</span>
-                  <span>{bundle.category}</span>
-                  <span>{windowShort(bundle.windowKey)}</span>
-                  <span>{Number(bundle.records ?? 0).toLocaleString()} records</span>
-                  <span>{relativeTime(bundle.sourceLatestAt)}</span>
-                  <span className="font-medium text-foreground">{bundle.price} CR</span>
+                <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-normal leading-tight text-muted-foreground">
+                  <Badge className={`${getTierColor(bundle.tier)} px-1.5 py-0 text-[9px]`} variant="outline">
+                    {bundle.tier}
+                  </Badge>
+                  <Badge variant="secondary" className="max-w-full px-1.5 py-0 text-[9px]">
+                    {bundle.category}
+                  </Badge>
+                  <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
+                    {windowShort(bundle.windowKey)}
+                  </Badge>
+                  <Badge variant="outline" className={`${freshness.className} px-1.5 py-0 text-[9px]`}>
+                    {relativeTime(bundle.sourceLatestAt)}
+                  </Badge>
+                  <span className="px-0.5">{Number(bundle.records ?? 0).toLocaleString()} records</span>
+                  <span className="px-0.5 font-medium text-foreground">{bundle.price} CR</span>
                 </span>
               )}
             </span>
