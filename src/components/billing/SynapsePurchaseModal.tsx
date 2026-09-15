@@ -63,6 +63,10 @@ interface SynapsePurchaseModalProps {
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   insufficientWarning?: string;
+  /** Optional USD amount to pre-load into the à la carte field (e.g. a staged utility balance). */
+  prefillUsd?: number;
+  /** Fired once settlement completes successfully. */
+  onPurchaseComplete?: () => void;
 }
 
 const SynapsePurchaseModal = ({
@@ -70,6 +74,8 @@ const SynapsePurchaseModal = ({
   defaultOpen,
   onOpenChange,
   insufficientWarning,
+  prefillUsd,
+  onPurchaseComplete,
 }: SynapsePurchaseModalProps) => {
   console.log("[SynapsePurchaseModal][Component] [START] Rendering component.");
 
@@ -196,6 +202,13 @@ const SynapsePurchaseModal = ({
           description: `${formatCredits(displayCredits)} added to your operational ledger.`,
         });
         await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+        try {
+          onPurchaseComplete?.();
+        } catch (cbError) {
+          console.error(
+            `[SynapsePurchaseModal][resolveSettlement] [CALLBACK_FAULT] ${cbError instanceof Error ? cbError.stack : String(cbError)}`,
+          );
+        }
         setTimeout(() => handleOpenChange(false), 3500);
       } else if (result.outcome === "failed") {
         clearPendingPurchase();
@@ -209,6 +222,15 @@ const SynapsePurchaseModal = ({
       console.log(`[SynapsePurchaseModal][resolveSettlement] END key=${idempotencyKey}`);
     }
   };
+
+  // Pre-load a staged balance (utility settlement) into the à la carte field.
+  useEffect(() => {
+    if (!open || !prefillUsd || prefillUsd <= 0) return;
+    console.log(`[SynapsePurchaseModal][prefill] [START] Pre-loading $${prefillUsd.toFixed(2)} settlement amount.`);
+    setPurchaseMode("alacarte");
+    setAlacarteAmount(String(Math.max(2, Math.ceil(prefillUsd))));
+    console.log(`[SynapsePurchaseModal][prefill] [END] À la carte amount applied.`);
+  }, [open, prefillUsd]);
 
   // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
   useEffect(() => {

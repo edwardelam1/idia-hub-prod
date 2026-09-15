@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useNavigate } from "react-router-dom";
 import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
-import { Loader2, Bot, Terminal, Boxes, Bird } from "lucide-react";
+import { Loader2, Bot, Terminal, Boxes, Bird, Radar } from "lucide-react";
 import MarketplaceHeader from "./MarketplaceHeader";
 import MarketplaceFilters from "./MarketplaceFilters";
 import ResultsHeader from "./ResultsHeader";
@@ -11,6 +11,7 @@ import BundleCard from "./BundleCard";
 import ShoppingCartComponent from "./ShoppingCart";
 import MarketplaceTerminal from "./MarketplaceTerminal";
 import VultureIngestionPanel from "./vulture/VultureIngestionPanel";
+import UtilitiesIngestionPanel from "./utilities/UtilitiesIngestionPanel";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +22,7 @@ interface DataMarketplaceProps {
   userRole: string;
 }
 
-type ToolTile = "sql" | "bundles" | "vulture";
+type ToolTile = "sql" | "bundles" | "vulture" | "utilities";
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
@@ -158,6 +159,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     { id: "sql", title: "SQL Terminal", icon: Terminal, show: true },
     { id: "bundles", title: "AI Bundles", icon: Boxes, show: true },
     { id: "vulture", title: "The Vulture", icon: Bird, show: isAdmin },
+    { id: "utilities", title: "Utilities", icon: Radar, show: true },
   ];
 
   return (
@@ -173,7 +175,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       </div>
 
       {/* ─── Tool Tile Panel ─── */}
-      <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-3" : ""}`}>
+      <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {tiles.filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
@@ -197,6 +199,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 {t.id === "sql" && "Bio-sovereign SQL editor with floating-rate pricing."}
                 {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
                 {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
+                {t.id === "utilities" && "Commercial intake gateway and staged data dividend balances."}
               </p>
             </button>
           );
@@ -275,6 +278,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         )}
 
         {activeTile === "vulture" && <VultureIngestionPanel userRole={userRole} />}
+
+        {activeTile === "utilities" && <UtilitiesIngestionPanel />}
       </div>
     </div>
   );

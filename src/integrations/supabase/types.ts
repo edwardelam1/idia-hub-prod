@@ -5762,6 +5762,44 @@ export type Database = {
           },
         ]
       }
+      lidd_extraction_events: {
+        Row: {
+          citizen_guid: string
+          created_at: string
+          extraction_timestamp: string
+          extractor_id: string
+          id: string
+          payment_status: string
+          synapse_credit_cost: number
+        }
+        Insert: {
+          citizen_guid: string
+          created_at?: string
+          extraction_timestamp: string
+          extractor_id: string
+          id?: string
+          payment_status?: string
+          synapse_credit_cost?: number
+        }
+        Update: {
+          citizen_guid?: string
+          created_at?: string
+          extraction_timestamp?: string
+          extractor_id?: string
+          id?: string
+          payment_status?: string
+          synapse_credit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lidd_extraction_events_citizen_guid_fkey"
+            columns: ["citizen_guid"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["platform_guid"]
+          },
+        ]
+      }
       lifestyle_processing_queue: {
         Row: {
           created_at: string | null
@@ -7284,8 +7322,17 @@ export type Database = {
           available_credit_line: number | null
           avatar_url: string | null
           bio: string | null
+          buyer_jurisdiction: string | null
+          buyer_latency: string | null
+          buyer_role: string | null
+          buyer_weights: Json | null
           compliance_rail: string | null
           created_at: string | null
+          diagnostic_level0_completed_at: string | null
+          diagnostic_level1_battery: string | null
+          diagnostic_level1_completed_at: string | null
+          diagnostic_raw_answers: Json | null
+          diagnostic_tier_at_completion: string | null
           document_type: string | null
           ein: string | null
           fbo_account_id: string | null
@@ -7328,8 +7375,17 @@ export type Database = {
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
+          buyer_jurisdiction?: string | null
+          buyer_latency?: string | null
+          buyer_role?: string | null
+          buyer_weights?: Json | null
           compliance_rail?: string | null
           created_at?: string | null
+          diagnostic_level0_completed_at?: string | null
+          diagnostic_level1_battery?: string | null
+          diagnostic_level1_completed_at?: string | null
+          diagnostic_raw_answers?: Json | null
+          diagnostic_tier_at_completion?: string | null
           document_type?: string | null
           ein?: string | null
           fbo_account_id?: string | null
@@ -7372,8 +7428,17 @@ export type Database = {
           available_credit_line?: number | null
           avatar_url?: string | null
           bio?: string | null
+          buyer_jurisdiction?: string | null
+          buyer_latency?: string | null
+          buyer_role?: string | null
+          buyer_weights?: Json | null
           compliance_rail?: string | null
           created_at?: string | null
+          diagnostic_level0_completed_at?: string | null
+          diagnostic_level1_battery?: string | null
+          diagnostic_level1_completed_at?: string | null
+          diagnostic_raw_answers?: Json | null
+          diagnostic_tier_at_completion?: string | null
           document_type?: string | null
           ein?: string | null
           fbo_account_id?: string | null
