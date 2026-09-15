@@ -58,7 +58,9 @@ Deno.serve(async (req) => {
     console.log(`[PAYLOAD_PARSE_START] Reading action payload.`);
     const body = await req.json().catch(() => ({}));
     const action = String(body.action ?? "create");
-    console.log(`[PAYLOAD_PARSE_END] Action: ${action}`);
+    const requestedEnv = String(body.environment ?? "lidd");
+    const environment = requestedEnv === "mesh" ? "mesh" : "lidd";
+    console.log(`[PAYLOAD_PARSE_END] Action: ${action}. Environment: ${environment}`);
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
