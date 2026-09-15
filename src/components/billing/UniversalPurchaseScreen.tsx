@@ -270,10 +270,18 @@ const UniversalPurchaseScreen = () => {
             setNeedsApproval(true);
             setStep("review");
             setIsProcessing(false);
-            toast.warning("Relayer authorization required.");
+            toast.warning("Your wallet hasn't authorized settlement yet — one-time step below.");
             return;
           }
           clearPendingPurchase();
+          if (/INSUFFICIENT_BUYER_BALANCE/i.test(detail)) {
+            setStep("review");
+            setIsProcessing(false);
+            toast.error(
+              `Not enough USDC in your IDIA wallet for $${plan.price.toFixed(2)}. Add funds and try again.`,
+            );
+            return;
+          }
           throw new Error(detail);
         }
 
@@ -505,15 +513,20 @@ const UniversalPurchaseScreen = () => {
                 </div>
               )}
               {needsApproval && (
-                <Button
-                  className="w-full gap-2"
-                  variant="outline"
-                  onClick={handleAuthorizeRelayer}
-                  disabled={isAuthorizingRelayer}
-                >
-                  {isAuthorizingRelayer ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  Authorize Relayer (one-time)
-                </Button>
+                <div className="space-y-1">
+                  <Button
+                    className="w-full gap-2"
+                    variant="outline"
+                    onClick={handleAuthorizeRelayer}
+                    disabled={isAuthorizingRelayer}
+                  >
+                    {isAuthorizingRelayer ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in IDIA Life (one-time)"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Opens the IDIA Life app to approve settlement with your own wallet. Return here when it's done.
+                  </p>
+                </div>
               )}
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center pt-1">
                 <ShieldCheck className="h-3 w-3" />
