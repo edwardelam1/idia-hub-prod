@@ -42,3 +42,9 @@ verify_jwt = false
 
 [functions.mcp-telemetry-stream]
 verify_jwt = false
+
+[functions.surveillance-api-intake]
+verify_jwt = false
+
+[functions.issue-extractor-key]
+verify_jwt = false
