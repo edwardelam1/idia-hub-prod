@@ -63,6 +63,10 @@ interface SynapsePurchaseModalProps {
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   insufficientWarning?: string;
+  /** Optional USD amount to pre-load into the à la carte field (e.g. a staged utility balance). */
+  prefillUsd?: number;
+  /** Fired once settlement completes successfully. */
+  onPurchaseComplete?: () => void;
 }
 
 const SynapsePurchaseModal = ({
@@ -70,6 +74,8 @@ const SynapsePurchaseModal = ({
   defaultOpen,
   onOpenChange,
   insufficientWarning,
+  prefillUsd,
+  onPurchaseComplete,
 }: SynapsePurchaseModalProps) => {
   console.log("[SynapsePurchaseModal][Component] [START] Rendering component.");
 
