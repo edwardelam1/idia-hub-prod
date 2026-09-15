@@ -25,7 +25,7 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
   const { bundles } = useMarketplaceBundles();
   const dynamicFilters = useDynamicFilters(bundles);
 
-  const getFilterAccess = () => {
+  const getRoleTiers = () => {
     switch (userRole) {
       case 'super-admin': return ['Analyst', 'Professional', 'Enterprise'];
       case 'organization-admin': return ['Analyst', 'Professional', 'Enterprise'];
@@ -35,7 +35,10 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
     }
   };
 
-  const filterAccess = getFilterAccess();
+  // Only advertise tiers the role allows AND that actually exist in the live catalogue.
+  const roleTiers = getRoleTiers();
+  const availableTiers = dynamicFilters.tiers.filter((t) => roleTiers.includes(t));
+  const filterAccess = availableTiers.length > 0 ? availableTiers : roleTiers;
   const hasProfessional = filterAccess.includes('Professional');
   const hasEnterprise = filterAccess.includes('Enterprise');
 
@@ -132,7 +135,9 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
           {/* Analyst Filters */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="bg-green-100 text-green-800">Analyst</Badge>
+              <Badge variant="outline" className="bg-green-100 text-green-800">
+                {filterAccess[0] ?? 'Basic'}
+              </Badge>
               <h3 className="text-lg font-semibold">Basic Filters</h3>
             </div>
 
