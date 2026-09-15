@@ -15,6 +15,6 @@
 - issue-extractor-key edge function (real franchise keys, SHA-256 hash stored)
 - Utilities marketplace tab with balance + settlement via SynapsePurchaseModal
 
-## Marketplace compact controls (in progress)
+## Marketplace compact controls (done)
 - Mobile 2 × 2 marketplace tool grid
 - Title-only bundles with individual and bulk expand/collapse controls
