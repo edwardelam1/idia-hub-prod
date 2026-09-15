@@ -135,7 +135,9 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
           {/* Analyst Filters */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="bg-green-100 text-green-800">Analyst</Badge>
+              <Badge variant="outline" className="bg-green-100 text-green-800">
+                {filterAccess[0] ?? 'Basic'}
+              </Badge>
               <h3 className="text-lg font-semibold">Basic Filters</h3>
             </div>
 
