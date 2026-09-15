@@ -72,18 +72,30 @@ const BundleCard = ({ bundle, userCredits, onAddToCart, isExpanded, onToggle }: 
 
   return (
     <Card className="border-0 shadow-sm transition-shadow hover:shadow-md">
-      <CardContent className={isExpanded ? 'p-4 sm:p-5' : 'p-2'}>
-        <div className="space-y-3">
+      <CardContent className={isExpanded ? 'p-4 sm:p-5' : 'p-1.5'}>
+        <div className={isExpanded ? 'space-y-3' : 'space-y-0'}>
           <Button
             type="button"
             variant="ghost"
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${bundle.name}`}
             onClick={onToggle}
-            className="h-auto min-h-11 w-full justify-between gap-3 whitespace-normal px-2 py-2 text-left"
+            className={`h-auto w-full justify-between whitespace-normal text-left ${isExpanded ? 'min-h-11 gap-3 px-2 py-2' : 'min-h-0 gap-2 px-1.5 py-1.5'}`}
           >
-            <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
-              {bundle.name}
+            <span className="min-w-0 flex-1">
+              <span className={`block break-words font-semibold leading-snug text-foreground ${isExpanded ? 'text-sm sm:text-base' : 'text-xs'}`}>
+                {bundle.name}
+              </span>
+              {!isExpanded && (
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-normal leading-tight text-muted-foreground">
+                  <span>{bundle.tier}</span>
+                  <span>{bundle.category}</span>
+                  <span>{windowShort(bundle.windowKey)}</span>
+                  <span>{Number(bundle.records ?? 0).toLocaleString()} records</span>
+                  <span>{relativeTime(bundle.sourceLatestAt)}</span>
+                  <span className="font-medium text-foreground">{bundle.price} CR</span>
+                </span>
+              )}
             </span>
             {isExpanded ? (
               <ChevronUp className="h-4 w-4 shrink-0" />
