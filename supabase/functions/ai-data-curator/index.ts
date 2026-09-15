@@ -239,15 +239,12 @@ Bundle Characteristics:
 - Enterprise Value: ${data.enterprise_value || 'significant'}
 - Market Demand: ${data.market_demand || 'medium-high'}
 
-Consider these pricing tiers:
-- Analyst: $500-1500 (basic data, good quality)
-- Professional: $1500-3000 (high quality, valuable insights)
-- Enterprise: $3000-6000 (premium data, unique insights)
+Price is set deterministically downstream from the data itself (record volume x
+per-query consumption rate x quality). Never propose tier-based pricing.
 
 Provide pricing recommendation in this JSON format:
 {
   "recommended_price": number,
-  "tier": "Analyst|Professional|Enterprise",
   "justification": "Detailed explanation",
   "value_proposition": "Key selling points",
   "competitive_positioning": "Market position"
@@ -333,19 +330,18 @@ function calculateActivityDistribution(data: any[]) {
 // Explicit lookup -> UPDATE or INSERT. No upserts, no ON CONFLICT.
 async function publishBundle(supabaseClient: any, bundle: any) {
   const category = bundle.category ?? 'general';
-  const tier = bundle.tier ?? 'Analyst';
   const windowKey = bundle.window_key ?? 'all';
   const recordCount = Number(
     bundle.record_count ?? bundle.data_json?.record_count ?? 0,
   );
 
-  // Deterministic price — AI copy never sets money.
+  // Deterministic price — AI copy never sets money, and the size label never scales it.
   const pricing = calculateBundlePrice({
     recordCount,
     category,
-    tier,
     avgQualityScore: bundle.avg_quality_score,
   });
+  const tier = pricing.sizeLabel;
 
   const row: Record<string, unknown> = {
     title: bundle.title,
@@ -401,14 +397,15 @@ async function publishBundle(supabaseClient: any, bundle: any) {
   return { published: true, mode: 'insert', bundle: data };
 }
 
-async function lookupBundle(supabaseClient: any, category: string, tier: string, windowKey: string) {
-  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} tier=${tier} window=${windowKey}`);
+async function lookupBundle(supabaseClient: any, category: string, _tier: string, windowKey: string) {
+  // One listing per (category, window) — tier is only a size label, never an identity key.
+  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} window=${windowKey}`);
   const { data, error } = await supabaseClient
     .from('marketplace_bundles')
     .select('bundle_id, bundle_version, stat_fingerprint')
     .eq('category', category)
-    .eq('tier', tier)
     .eq('window_key', windowKey)
+    .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
