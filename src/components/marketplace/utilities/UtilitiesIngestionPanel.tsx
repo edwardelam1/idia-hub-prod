@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, CreditCard, Key, Copy } from "lucide-react";
+import { Activity, CreditCard, Key, Copy, Terminal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,41 @@ const UtilitiesIngestionPanel = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+
+  const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
+
+  const ingestionEndpoint = useMemo(() => {
+    const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+    return `${base}/functions/v1/surveillance-api-intake`;
+  }, []);
+
+  const payloadSample = useMemo(
+    () =>
+      `{
+  "extractor_id": "${extractorId}",
+  "infractions": [
+    {
+      "license_plate": "ABC1234",
+      "timestamp": "2026-09-15T14:30:00Z"
+    }
+  ]
+}`,
+    [extractorId],
+  );
+
+  const headersSample = useMemo(
+    () => `x-api-key: ${apiKey ?? "<your franchise key>"}\nContent-Type: application/json`,
+    [apiKey],
+  );
+
+  const curlSample = useMemo(
+    () =>
+      `curl -X POST "${ingestionEndpoint}" \\
+  -H "x-api-key: ${apiKey ?? "<your franchise key>"}" \\
+  -H "Content-Type: application/json" \\
+  -d '${payloadSample.replace(/\n\s*/g, " ")}'`,
+    [ingestionEndpoint, apiKey, payloadSample],
+  );
 
   const fetchBalance = useCallback(async () => {
     if (!user?.user_id) return;
@@ -76,9 +111,11 @@ const UtilitiesIngestionPanel = () => {
     console.log(`[API_KEY_GEN_START] Initiating commercial franchise API key generation.`);
     setIsGenerating(true);
     try {
+      console.log(`[API_KEY_GEN_FETCH_START] Requesting new key from edge function.`);
       const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
         body: { action: "create", name: "LIDD Franchise Key" },
       });
+      console.log(`[API_KEY_GEN_FETCH_END] Issuer responded.`);
       if (error) {
         console.error(`[API_KEY_GEN_QUERY_ERROR] ${error.message}`);
         throw error;
@@ -103,12 +140,35 @@ const UtilitiesIngestionPanel = () => {
     }
   };
 
-  const copyToClipboard = () => {
-    if (apiKey) {
-      navigator.clipboard.writeText(apiKey);
-      toast({ title: "API Key Copied", description: "Store this securely. It will not be shown again." });
+  const copyToClipboard = (text: string, label: string) => {
+    console.log(`[COPY_TO_CLIPBOARD_START] Copying ${label} to clipboard.`);
+    try {
+      void navigator.clipboard.writeText(text);
+      toast({ title: "Copied to clipboard", description: `${label} has been copied.` });
+    } catch (err) {
+      console.error(`[COPY_TO_CLIPBOARD_ERROR] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({ title: "Copy failed", description: `Could not copy ${label}.`, variant: "destructive" });
+    } finally {
+      console.log(`[COPY_TO_CLIPBOARD_END] Copy routine finished.`);
     }
   };
+
+  const CodeBlock = ({ value, label }: { value: string; label: string }) => (
+    <div className="flex items-start gap-2">
+      <pre className="min-w-0 flex-1 overflow-x-auto rounded-md border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+        {value}
+      </pre>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        aria-label={`Copy ${label}`}
+        onClick={() => copyToClipboard(value, label)}
+      >
+        <Copy className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -125,64 +185,126 @@ const UtilitiesIngestionPanel = () => {
         </Badge>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Pending Data Dividend Balance</CardTitle>
-            <CardDescription>Total un-settled Synapse Credits from staged API extraction events.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="text-3xl font-bold tracking-tight text-foreground">
-                {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Across {eventCount} specific identity infractions
-              </p>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Pending Data Dividend Balance</CardTitle>
+          <CardDescription>Total un-settled Synapse Credits from staged API extraction events.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-3xl font-bold tracking-tight text-foreground">
+              {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
             </div>
-            <Button
-              onClick={() => setIsCheckoutOpen(true)}
-              disabled={isLoading || unpaidBalance === 0}
-              className="w-full gap-2"
-            >
-              <CreditCard className="h-4 w-4" />
-              Settle Balance
-            </Button>
-          </CardContent>
-        </Card>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Across {eventCount} specific identity infractions
+            </p>
+          </div>
+          <Button
+            onClick={() => setIsCheckoutOpen(true)}
+            disabled={isLoading || unpaidBalance === 0}
+            className="w-full gap-2 sm:w-auto"
+          >
+            <CreditCard className="h-4 w-4" />
+            Settle Balance
+          </Button>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Commercial Ingestion Credentials</CardTitle>
-            <CardDescription>
-              Generate the API keys required to connect ALPR arrays to the clearinghouse.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-              <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-mono text-xs text-foreground">
-                {apiKey ? apiKey : "••••••••••••••••••••••••••••"}
-              </span>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Terminal className="h-4 w-4 text-muted-foreground" />
+            Commercial Ingestion Integration
+          </CardTitle>
+          <CardDescription>
+            Use these credentials and endpoints to transmit ALPR batch data to the clearinghouse.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">1. Franchise API Key</h3>
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-mono text-xs text-foreground">
+                  {apiKey ?? "••••••••••••••••••••••••••••"}
+                </span>
+              </div>
+              {apiKey ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Copy API key"
+                  onClick={() => copyToClipboard(apiKey, "API key")}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button onClick={handleGenerateKey} disabled={isGenerating} className="shrink-0">
+                  {isGenerating ? "Provisioning..." : "Generate Key"}
+                </Button>
+              )}
             </div>
-            {apiKey ? (
-              <Button variant="outline" onClick={copyToClipboard} className="w-full gap-2">
-                <Copy className="h-4 w-4" />
-                Copy Key
-              </Button>
-            ) : (
-              <Button onClick={handleGenerateKey} disabled={isGenerating} className="w-full">
-                {isGenerating ? "Provisioning..." : "Generate Franchise Key"}
-              </Button>
-            )}
             {apiKey && (
               <p className="text-[11px] text-muted-foreground">
                 Store this securely — it will not be shown again.
               </p>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">2. Ingestion Endpoint</h3>
+            <CodeBlock value={`POST ${ingestionEndpoint}`} label="Endpoint URL" />
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">3. Required Headers</h3>
+            <CodeBlock value={headersSample} label="Headers" />
+            <p className="text-[11px] text-muted-foreground">
+              The gateway authenticates on the franchise key alone — no user login is required.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">4. JSON Payload Schema</h3>
+            <CodeBlock value={payloadSample} label="JSON payload" />
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">5. Ready-to-run Example</h3>
+            <CodeBlock value={curlSample} label="curl example" />
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">6. Response &amp; Errors</h3>
+            <CodeBlock
+              value={`200 OK
+{
+  "status": "success",
+  "records_processed": 120,
+  "matches_found": 14,
+  "debt_staged": 35.00
+}`}
+              label="Success response"
+            />
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li>
+                <span className="font-mono text-foreground">401</span> — missing, unknown or revoked franchise key.
+              </li>
+              <li>
+                <span className="font-mono text-foreground">403</span> — extractor_id in the body does not match the key owner.
+              </li>
+              <li>
+                <span className="font-mono text-foreground">400</span> — empty or malformed infractions array.
+              </li>
+              <li>
+                <span className="font-mono text-foreground">500</span> — clearinghouse fault; retry the batch.
+              </li>
+            </ul>
+          </section>
+        </CardContent>
+      </Card>
 
       {isCheckoutOpen && (
         <SynapsePurchaseModal
