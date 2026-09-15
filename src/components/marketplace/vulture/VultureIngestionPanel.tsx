@@ -59,8 +59,9 @@ export default function VultureIngestionPanel({ userRole }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 space-y-6">
           <VultureUploader />
+          <MeshNodeIntegration />
         </div>
         <div className="lg:col-span-7">
           <VultureLedgerTable />
