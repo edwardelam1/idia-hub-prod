@@ -83,9 +83,22 @@ export function isAuthorized(state: UsdcWalletState, requiredUsd?: number): bool
   return state.allowance >= required;
 }
 
+/**
+ * Canonical Hub origin. IDIA Life only honours `return` targets on this host,
+ * so previews/custom hosts must still hand back the production URL.
+ */
+export const HUB_RETURN_ORIGIN = "https://hub.thebigidia.com";
+
+/** Same-origin path (+query/hash) the user should land back on inside the Hub. */
+function hubReturnUrl(): string {
+  if (typeof window === "undefined") return HUB_RETURN_ORIGIN;
+  const { pathname, search, hash } = window.location;
+  return `${HUB_RETURN_ORIGIN}${pathname}${search}${hash}`;
+}
+
 /** Builds the deep link handed to IDIA Life. */
 export function buildLifeAuthorizationUrl(owner: string): { native: string; web: string } {
-  const origin = typeof window !== "undefined" ? window.location.href : "https://hub.thebigidia.com";
+  const origin = hubReturnUrl();
   const qs = `owner=${encodeURIComponent(owner)}&relayer=${encodeURIComponent(
     RELAYER_ADDRESS,
   )}&return=${encodeURIComponent(origin)}`;

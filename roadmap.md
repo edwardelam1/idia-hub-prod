@@ -5,7 +5,6 @@
 - Wired the handoff into UniversalPurchaseScreen, SynapseTopUp, SynapsePurchaseModal and APIEndpoints.
 - Hard 2-minute timeout + spinner always cleared; "insufficient USDC" now reads differently from "not authorized".
 
-## Blocked (needs the IDIA Life app)
-- Life must answer `idialife://authorize-relayer?owner=&relayer=&return=` in its appUrlOpen listener by running the
-  existing (currently unwired) `walletService.provisionNewWallet()` and then reopening the `return` URL.
-  Until that ships, the Hub handoff opens Life but nothing approves on-chain.
+- IDIA Life now answers `idialife://authorize-relayer?owner=&relayer=&return=`: it shows an authorization screen,
+  runs the one-time approval on the on-device wallet, warns on an owner mismatch, refuses a non-IDIA relayer, and
+  returns to the Hub. Hub pins `return` to `https://hub.thebigidia.com` (Life only honours that host).
