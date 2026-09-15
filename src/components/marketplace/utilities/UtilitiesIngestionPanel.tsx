@@ -417,7 +417,7 @@ const UtilitiesIngestionPanel = () => {
 
       <Dialog open={!!apiKey}>
         <DialogContent
-          hideClose
+          hideCloseButton
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
           className="sm:max-w-lg"
