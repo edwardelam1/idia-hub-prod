@@ -121,13 +121,63 @@ const UtilitiesIngestionPanel = () => {
     }
   }, [user?.user_id, fetchBalance]);
 
+  const fetchKeys = useCallback(async () => {
+    console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
+    try {
+      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
+        body: { action: "list" },
+      });
+      if (error) {
+        console.error(`[API_KEY_LIST_QUERY_ERROR] ${error.message}`);
+        throw error;
+      }
+      setKeys((data?.keys ?? []) as FranchiseKey[]);
+      console.log(`[API_KEY_LIST_SUCCESS] ${data?.keys?.length ?? 0} keys retrieved.`);
+    } catch (err) {
+      console.error(`[API_KEY_LIST_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+    } finally {
+      setIsLoadingKeys(false);
+      console.log(`[API_KEY_LIST_END] Process terminated.`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.user_id) return;
+    void fetchKeys();
+  }, [user?.user_id, fetchKeys]);
+
+  const handleKeyAction = async (keyId: string, action: "revoke" | "delete") => {
+    console.log(`[API_KEY_${action.toUpperCase()}_START] Key ${keyId}`);
+    setBusyKeyId(keyId);
+    try {
+      const { error } = await supabase.functions.invoke("issue-extractor-key", {
+        body: { action, key_id: keyId },
+      });
+      if (error) {
+        console.error(`[API_KEY_${action.toUpperCase()}_QUERY_ERROR] ${error.message}`);
+        throw error;
+      }
+      toast({
+        title: action === "revoke" ? "Key revoked" : "Key deleted",
+        description: action === "revoke" ? "This key can no longer authenticate." : "The key record was removed.",
+      });
+      await fetchKeys();
+    } catch (err) {
+      console.error(`[API_KEY_${action.toUpperCase()}_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({ title: "Action failed", description: `Could not ${action} the key.`, variant: "destructive" });
+    } finally {
+      setBusyKeyId(null);
+      console.log(`[API_KEY_${action.toUpperCase()}_END] Process terminated.`);
+    }
+  };
+
   const handleGenerateKey = async () => {
     console.log(`[API_KEY_GEN_START] Initiating commercial franchise API key generation.`);
     setIsGenerating(true);
     try {
       console.log(`[API_KEY_GEN_FETCH_START] Requesting new key from edge function.`);
       const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "create", name: "LIDD Franchise Key" },
+        body: { action: "create", name: keyName.trim() || "LIDD Franchise Key" },
       });
       console.log(`[API_KEY_GEN_FETCH_END] Issuer responded.`);
       if (error) {
