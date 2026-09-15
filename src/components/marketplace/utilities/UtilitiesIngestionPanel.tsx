@@ -187,6 +187,7 @@ const UtilitiesIngestionPanel = () => {
         throw error;
       }
       if (!data?.key) throw new Error("No key returned by the issuer.");
+      setIssuedKeyName(keyName.trim() || "LIDD Franchise Key");
       setApiKey(data.key as string);
       setKeyName("");
       console.log(`[API_KEY_GEN_SUCCESS] Key generated successfully.`);
