@@ -80,35 +80,49 @@ const BundleCard = ({ bundle, userCredits, onAddToCart, isExpanded, onToggle }: 
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${bundle.name}`}
             onClick={onToggle}
-            className={`h-auto w-full justify-between whitespace-normal text-left ${isExpanded ? 'min-h-11 gap-3 px-2 py-2' : 'min-h-0 gap-2 px-1.5 py-1.5'}`}
+            className={
+              isExpanded
+                ? 'h-auto min-h-11 w-full justify-between gap-3 whitespace-normal px-2 py-2 text-left'
+                : 'h-auto w-full flex-col items-stretch gap-1 whitespace-normal p-1.5 text-left'
+            }
           >
-            <span className="min-w-0 flex-1">
-              <span className={`block break-words font-semibold leading-snug text-foreground ${isExpanded ? 'text-sm sm:text-base' : 'text-xs'}`}>
-                {bundle.name}
-              </span>
-              {!isExpanded && (
-                <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-normal leading-tight text-muted-foreground">
-                  <Badge className={`${getTierColor(bundle.tier)} px-1.5 py-0 text-[9px]`} variant="outline">
-                    {bundle.tier}
-                  </Badge>
-                  <Badge variant="secondary" className="max-w-full px-1.5 py-0 text-[9px]">
-                    {bundle.category}
-                  </Badge>
-                  <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
-                    {windowShort(bundle.windowKey)}
-                  </Badge>
-                  <Badge variant="outline" className={`${freshness.className} px-1.5 py-0 text-[9px]`}>
-                    {relativeTime(bundle.sourceLatestAt)}
-                  </Badge>
-                  <span className="px-0.5">{Number(bundle.records ?? 0).toLocaleString()} records</span>
-                  <span className="px-0.5 font-medium text-foreground">{bundle.price} CR</span>
-                </span>
-              )}
-            </span>
             {isExpanded ? (
-              <ChevronUp className="h-4 w-4 shrink-0" />
+              <>
+                <span className="min-w-0 flex-1 break-words font-semibold leading-snug text-foreground text-sm sm:text-base">
+                  {bundle.name}
+                </span>
+                <ChevronUp className="h-4 w-4 shrink-0" />
+              </>
             ) : (
-              <ChevronDown className="h-4 w-4 shrink-0" />
+              <>
+                <span className="flex w-full items-start justify-between gap-2">
+                  <span className="min-w-0 flex-1 break-words text-xs font-semibold leading-snug text-foreground">
+                    {bundle.name}
+                  </span>
+                  <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />
+                </span>
+                <span className="flex w-full flex-wrap items-end justify-between gap-x-2 gap-y-1">
+                  <span className="flex min-w-0 flex-wrap items-center gap-1 text-[10px] font-normal leading-tight text-muted-foreground">
+                    <Badge className={`${getTierColor(bundle.tier)} px-1.5 py-0 text-[9px]`} variant="outline">
+                      {bundle.tier}
+                    </Badge>
+                    <Badge variant="secondary" className="max-w-full px-1.5 py-0 text-[9px]">
+                      {bundle.category}
+                    </Badge>
+                    <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
+                      {windowShort(bundle.windowKey)}
+                    </Badge>
+                    <Badge variant="outline" className={`${freshness.className} px-1.5 py-0 text-[9px]`}>
+                      {relativeTime(bundle.sourceLatestAt)}
+                    </Badge>
+                    <span className="px-0.5">{Number(bundle.records ?? 0).toLocaleString()} records</span>
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center text-sm font-semibold text-purple-600 tabular-nums">
+                    <Coins className="mr-1 h-3.5 w-3.5" />
+                    {bundle.price}
+                  </span>
+                </span>
+              </>
             )}
           </Button>
 
