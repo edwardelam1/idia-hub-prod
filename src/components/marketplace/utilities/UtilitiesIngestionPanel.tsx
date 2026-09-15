@@ -3,7 +3,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
@@ -85,7 +92,10 @@ const UtilitiesIngestionPanel = () => {
       }
 
       const rows = data ?? [];
-      const total = rows.reduce((sum, row: { synapse_credit_cost: number | string }) => sum + Number(row.synapse_credit_cost), 0);
+      const total = rows.reduce(
+        (sum, row: { synapse_credit_cost: number | string }) => sum + Number(row.synapse_credit_cost),
+        0,
+      );
       setUnpaidBalance(total);
       setEventCount(rows.length);
       console.log(`[FETCH_LIDD_BALANCE_SUCCESS] Found ${rows.length} events totaling ${total} credits.`);
@@ -197,7 +207,9 @@ const UtilitiesIngestionPanel = () => {
       });
       await fetchKeys();
     } catch (error) {
-      console.error(`[API_KEY_GEN_ERROR] Failed to generate key: ${error instanceof Error ? error.stack : String(error)}`);
+      console.error(
+        `[API_KEY_GEN_ERROR] Failed to generate key: ${error instanceof Error ? error.stack : String(error)}`,
+      );
       toast({
         title: "Key generation failed",
         description: "The credential could not be issued. Please try again.",
@@ -264,9 +276,7 @@ const UtilitiesIngestionPanel = () => {
             <div className="text-3xl font-bold tracking-tight text-foreground">
               {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Across {eventCount} specific identity infractions
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Across {eventCount} specific identity infractions</p>
           </div>
           <Button
             onClick={() => setIsCheckoutOpen(true)}
@@ -286,17 +296,16 @@ const UtilitiesIngestionPanel = () => {
             Commercial Ingestion Integration
           </CardTitle>
           <CardDescription>
-            Use these credentials and endpoints to transmit ALPR batch data to the clearinghouse.
+            Use these credentials and endpoints to transmit Utility batch data to the clearinghouse.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
 
-
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
-                placeholder="Key label (e.g. Louisville ALPR fleet)"
+                placeholder="Key label (e.g. Louisville Utility fleet)"
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
                 className="sm:flex-1"
@@ -402,7 +411,8 @@ const UtilitiesIngestionPanel = () => {
                 <span className="font-mono text-foreground">401</span> — missing, unknown or revoked franchise key.
               </li>
               <li>
-                <span className="font-mono text-foreground">403</span> — extractor_id in the body does not match the key owner.
+                <span className="font-mono text-foreground">403</span> — extractor_id in the body does not match the key
+                owner.
               </li>
               <li>
                 <span className="font-mono text-foreground">400</span> — empty or malformed infractions array.
@@ -424,9 +434,7 @@ const UtilitiesIngestionPanel = () => {
         >
           <DialogHeader>
             <DialogTitle>Franchise Key Issued</DialogTitle>
-            <DialogDescription>
-              Copy this key now — it will not be shown again once dismissed.
-            </DialogDescription>
+            <DialogDescription>Copy this key now — it will not be shown again once dismissed.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
