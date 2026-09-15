@@ -310,7 +310,7 @@ const UtilitiesIngestionPanel = () => {
         <SynapsePurchaseModal
           defaultOpen
           onOpenChange={(open) => setIsCheckoutOpen(open)}
-          prefillUsd={unpaidBalance}
+          prefillUsdc={unpaidBalance}
           onPurchaseComplete={() => void handleSettlementComplete()}
         />
       )}
