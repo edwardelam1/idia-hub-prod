@@ -1,16 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFingerprint, WindowKey, WINDOW_KEYS } from "./bundle-freshness.ts";
+import { resolveSizeLabel } from "./bundle-pricing.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TIERS: Array<{ tier: string; minRecords: number }> = [
-  { tier: "Analyst", minRecords: 10 },
-  { tier: "Professional", minRecords: 250 },
-  { tier: "Enterprise", minRecords: 1000 },
-];
+/** A window must hold at least this many records to be worth listing. */
+const MIN_RECORDS = 10;
+
 
 export interface RunOptions {
   /** staging table name as reported by get_staging_aggregates_windowed */
