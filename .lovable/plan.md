@@ -1,24 +1,39 @@
-# Move the new franchise key into a blocking popup
+# Make "API Active" truthful and put the Vulture gateway into production
 
-## What changes
+Two things in the Marketplace are currently theatre. This replaces both with real, working plumbing.
 
-Today, after pressing "Generate New Key", the new key appears as a highlighted panel inline above the key label field and stays there until dismissed.
+## 1. "API Active" badge (Utilities tab)
 
-Instead:
+Today the badge is hardcoded text — it says "API Active" even when the operator has never issued a key or sent a single record.
 
-1. The operator types a key label and presses "Generate New Key".
-2. A modal opens showing the newly issued key, the label it was saved under (read-only text, not an editable field), a copy button, and a Dismiss button.
-3. The modal cannot be closed by accident — no outside-click or Escape close; only the Dismiss button closes it.
-4. After dismissing, the panel shows only the label field, the "Generate New Key" button, and the key history list. The inline "new key" frame is removed entirely.
+It becomes a live status derived from real data:
 
-## Technical details
+- **No Keys** (grey) — the operator has no active franchise key.
+- **Awaiting First Call** (amber) — a key exists but has never been used.
+- **API Active** (green) — a key has been used; the badge shows when the last call arrived ("last call 4m ago").
+- **Checking…** while the key list and last-call time load.
 
-In `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`:
+Source of truth: the operator's own franchise keys (active status, last-used time) and the most recent staged extraction event. No hardcoded state.
 
-- Delete the inline `{apiKey && (...)}` block (the bordered primary/5 panel in section 1).
-- Keep `apiKey` state as the modal's open condition; capture the submitted label into a new `issuedKeyName` state at generation time (since `keyName` is cleared on success).
-- Render a shadcn `Dialog` with `open={!!apiKey}`, `onOpenChange` ignored except via the Dismiss button, `onInteractOutside` / `onEscapeKeyDown` prevented, and the default close "X" hidden so Dismiss is the only exit.
-- Modal contents: title "Franchise Key Issued", the label as plain read-only text, the key in the existing monospace/truncate row with the icon-only copy button reusing `copyToClipboard`, and a warning that the key will not be shown again.
-- Dismiss sets `apiKey` to null; key history refresh behaviour is unchanged.
+## 2. Vulture Mesh Gateway — from simulation to production
 
-No changes to the edge function, key contracts, or logging brackets beyond the existing calls.
+Today the panel fabricates fake sightings, telemetry and alerts on a timer in the browser, hashes them locally, and the "authorize gateway" button just waits 800ms and writes a pretend approval line. Nothing reaches the backend. This also breaks the project's rule against synthetic data.
+
+The whole simulated generator is removed and replaced with the real path that already exists on the backend:
+
+**a. Real file ingestion.** The panel becomes a genuine uploader: drag or choose a `.json`, `.csv`, `.bin` or `.lora` capture file, it is uploaded into the secure quarantine bucket, and the sanitization agent is invoked on it. That agent (already live) strips identifying fields, reconstructs timestamps, tags records `ACQUIRED_REHABILITATED`, writes them to the mesh telemetry store, publishes a provenance manifest and records the result in the provenance ledger. Per-file progress, record counts and failures are shown from the real response — the ledger table below already streams live rows, so results appear automatically.
+
+**b. Real gateway authorization for edge nodes.** Autonomous nodes need a door. A new authenticated ingest endpoint accepts mesh payloads over HTTP, authenticated with a franchise-style key (same key issuing/revocation machinery as the LIDD keys, in a `mesh` environment). It refuses everything when the gateway is closed.
+
+The gateway switch becomes real: its open/closed state is stored server-side, so flipping it in the UI actually opens or seals the ingest endpoint, and the state survives reloads and is the same for every operator. Each transition is written to the provenance ledger as a real authorization event, not a UI-only line.
+
+**c. Integration details for node operators.** The Vulture panel gets the same treatment the Utilities tab already has: endpoint URL, method, required headers, payload schema, a ready-to-run example, and key issue/revoke/delete — each with a copy button.
+
+## Technical notes
+
+- `UtilitiesIngestionPanel.tsx`: badge state computed from `keys` (active + `last_used_at`) plus a `lidd_extraction_events` max `extraction_timestamp` query; loading and empty states included.
+- `VultureUploader.tsx`: delete `setInterval` generator, `decodeLoRaPayload`, and all synthetic payload builders. Upload via `supabase.storage.from("idia-data-quarantine-prod").upload(...)`, then `supabase.functions.invoke("vulture-sanitization-agent", { body: { bucket, name, created_at } })`; render `{ records, originalHash, sanitizedHash }` from the response.
+- New table `public.mesh_gateway_state` (single row: `is_open`, `updated_at`, `updated_by`) with RLS: read for authenticated, write restricted to admin/csuite via existing role checks; service role full access. Requires a migration you approve.
+- New edge function `mesh-telemetry-intake`: CORS preflight, `x-api-key` SHA-256 lookup against `api_keys` (`environment = 'mesh'`, `status = 'active'`), gateway-state check (503 when sealed), payload validation, PII strip with the vault salt, insert into `mesh_telemetry_events`, ledger row, `last_used_at` stamp. Full `[PHASE_START]`/`[PHASE_END]` bracketing and stack traces in every catch, per the logging mandate.
+- `issue-extractor-key` extended with an `environment` argument so mesh keys reuse the existing create/list/revoke/delete flow.
+- Bucket `idia-data-quarantine-prod` and `rehabilitated-manifests` already exist; the sanitization agent, `mesh_telemetry_events` and `vulture_provenance_ledger` are already live. Ledger is currently empty because nothing has ever reached it.
