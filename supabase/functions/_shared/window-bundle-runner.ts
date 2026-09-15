@@ -129,15 +129,19 @@ export async function runWindowedBundleGeneration({ source, label, contributorKe
   // Windows that no longer hold data must not keep selling dead numbers.
   let deactivated = 0;
   const categories = Array.from(new Set(groups.map((g: any) => g.category as string)));
-  if (categories.length > 0) {
+  // Match on the domain root (e.g. "health") so listings from retired
+  // sub-categories are swept too, not just the ones still being generated.
+  const roots = Array.from(new Set(categories.map((c) => c.split(".")[0])));
+  if (roots.length > 0) {
     const { data: activeRows } = await supabase
       .from("marketplace_bundles")
       .select("bundle_id, category, tier, window_key")
-      .in("category", categories)
       .eq("is_active", true);
 
     const stale = (activeRows ?? []).filter(
-      (r: any) => !liveKeys.has(`${r.category}|${r.window_key ?? "all"}`),
+      (r: any) =>
+        roots.includes(String(r.category ?? "").split(".")[0]) &&
+        !liveKeys.has(`${r.category}|${r.window_key ?? "all"}`),
     );
     if (stale.length > 0) {
       const { error: deactivateError } = await supabase
