@@ -64,61 +64,67 @@ export async function runWindowedBundleGeneration({ source, label, contributorKe
     const avgQuality = Number(group.avg_quality);
     const fingerprint = buildFingerprint(group);
 
-    for (const { tier, minRecords } of TIERS) {
-      if (totalRecords < minRecords) continue;
-      liveKeys.add(`${category}|${tier}|${windowKey}`);
+    if (totalRecords < MIN_RECORDS) continue;
 
-      const payload = {
-        action: "curate_and_publish",
-        bundleType: category,
-        data: {
-          length: totalRecords,
+    // Exactly one listing per (category, window). The label below describes the
+    // size of the dataset; it never influences price.
+    const tier = resolveSizeLabel(totalRecords);
+    liveKeys.add(`${category}|${windowKey}`);
+
+    const payload = {
+      action: "curate_and_publish",
+      bundleType: category,
+      data: {
+        length: totalRecords,
+        record_count: totalRecords,
+        participant_count: contributors,
+        unique_users_count: contributors,
+        avg_quality_score: avgQuality,
+        category,
+        bundle_category: category,
+        tier,
+        data_fusion_level: "single_source",
+        window_key: windowKey,
+        window_start: group.window_start,
+        window_end: group.window_end,
+        source_latest_at: group.source_latest_at,
+        stat_fingerprint: fingerprint,
+        data_json: {
+          source,
           record_count: totalRecords,
-          participant_count: contributors,
-          unique_users_count: contributors,
-          avg_quality_score: avgQuality,
-          category,
-          bundle_category: category,
-          tier,
-          data_fusion_level: "single_source",
+          [contributorKey]: contributors,
           window_key: windowKey,
           window_start: group.window_start,
           window_end: group.window_end,
           source_latest_at: group.source_latest_at,
-          stat_fingerprint: fingerprint,
-          data_json: {
-            source,
-            record_count: totalRecords,
-            [contributorKey]: contributors,
-            window_key: windowKey,
-            window_start: group.window_start,
-            window_end: group.window_end,
-            source_latest_at: group.source_latest_at,
-            activity_mix: group.activity_mix ?? {},
-          },
-          geographic_coverage: "Anonymized zones",
+          activity_mix: group.activity_mix ?? {},
         },
-      };
+        geographic_coverage: "Anonymized zones",
+      },
+    };
 
-      try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/ai-data-curator`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify(payload),
-        });
-        const result = await resp.json().catch(() => ({}));
-        if (!resp.ok || result.error) {
-          errors.push(`${category}/${tier}/${windowKey}: ${result.error ?? resp.status}`);
-        } else if (result?.result?.mode === "unchanged") {
-          unchanged++;
-        } else {
-          seeded++;
-        }
-      } catch (e) {
-        errors.push(`${category}/${tier}/${windowKey}: ${(e as Error).message}`);
+    console.info(`[BEGIN: ${label}.Curate] category=${category} window=${windowKey} records=${totalRecords}`);
+    try {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/ai-data-curator`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await resp.json().catch(() => ({}));
+      if (!resp.ok || result.error) {
+        errors.push(`${category}/${windowKey}: ${result.error ?? resp.status}`);
+      } else if (result?.result?.mode === "unchanged") {
+        unchanged++;
+      } else {
+        seeded++;
       }
+    } catch (e) {
+      console.error(`[CATCH: ${label}.Curate] category=${category} window=${windowKey} error=${(e as Error).message} stack=${(e as Error).stack}`);
+      errors.push(`${category}/${windowKey}: ${(e as Error).message}`);
     }
+    console.info(`[END: ${label}.Curate] category=${category} window=${windowKey}`);
   }
+
 
   // Windows that no longer hold data must not keep selling dead numbers.
   let deactivated = 0;
