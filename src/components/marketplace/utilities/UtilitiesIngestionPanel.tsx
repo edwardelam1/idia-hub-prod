@@ -43,6 +43,19 @@ const UtilitiesIngestionPanel = () => {
 
   const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
 
+  const gatewayStatus = useMemo(() => {
+    if (isLoadingKeys) return { label: "Checking…", tone: "muted" as const };
+    const active = keys.filter((k) => k.status === "active");
+    if (active.length === 0) return { label: "No Keys", tone: "muted" as const };
+    const stamps = active.map((k) => (k.last_used_at ? new Date(k.last_used_at).getTime() : 0)).filter(Boolean);
+    if (stamps.length === 0) return { label: "Awaiting First Call", tone: "warn" as const };
+    const last = Math.max(...stamps);
+    const mins = Math.floor((Date.now() - last) / 60000);
+    const ago =
+      mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
+    return { label: `API Active · last call ${ago}`, tone: "live" as const };
+  }, [isLoadingKeys, keys]);
+
   const ingestionEndpoint = useMemo(() => {
     const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
     return `${base}/functions/v1/surveillance-api-intake`;
@@ -260,9 +273,18 @@ const UtilitiesIngestionPanel = () => {
             Manage your commercial surveillance franchise connections and balances.
           </p>
         </div>
-        <Badge variant="outline" className="w-fit gap-1.5 border-primary/40 text-primary">
+        <Badge
+          variant="outline"
+          className={
+            gatewayStatus.tone === "live"
+              ? "w-fit gap-1.5 border-emerald-500/40 text-emerald-600"
+              : gatewayStatus.tone === "warn"
+                ? "w-fit gap-1.5 border-amber-500/40 text-amber-600"
+                : "w-fit gap-1.5 border-border text-muted-foreground"
+          }
+        >
           <Activity className="h-3.5 w-3.5" />
-          API Active
+          {gatewayStatus.label}
         </Badge>
       </div>
 

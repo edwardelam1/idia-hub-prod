@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Lock, Radio } from "lucide-react";
 import VultureUploader from "./VultureUploader";
 import VultureLedgerTable from "./VultureLedgerTable";
+import MeshNodeIntegration from "./MeshNodeIntegration";
 import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
 
 interface Props {
@@ -59,8 +60,9 @@ export default function VultureIngestionPanel({ userRole }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 space-y-6">
           <VultureUploader />
+          <MeshNodeIntegration />
         </div>
         <div className="lg:col-span-7">
           <VultureLedgerTable />

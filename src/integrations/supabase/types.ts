@@ -6539,6 +6539,30 @@ export type Database = {
           },
         ]
       }
+      mesh_gateway_state: {
+        Row: {
+          created_at: string
+          id: string
+          is_open: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_open?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_open?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       mesh_telemetry_events: {
         Row: {
           created_at: string
