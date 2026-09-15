@@ -273,9 +273,18 @@ const UtilitiesIngestionPanel = () => {
             Manage your commercial surveillance franchise connections and balances.
           </p>
         </div>
-        <Badge variant="outline" className="w-fit gap-1.5 border-primary/40 text-primary">
+        <Badge
+          variant="outline"
+          className={
+            gatewayStatus.tone === "live"
+              ? "w-fit gap-1.5 border-emerald-500/40 text-emerald-600"
+              : gatewayStatus.tone === "warn"
+                ? "w-fit gap-1.5 border-amber-500/40 text-amber-600"
+                : "w-fit gap-1.5 border-border text-muted-foreground"
+          }
+        >
           <Activity className="h-3.5 w-3.5" />
-          API Active
+          {gatewayStatus.label}
         </Badge>
       </div>
 
