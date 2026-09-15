@@ -11,11 +11,20 @@ import { SECTOR_VALUES } from "./sectorValues.ts";
  */
 export const CHAT_ROW_WINDOW = 500;
 
-export const TIER_MULTIPLIERS: Record<string, number> = {
-  Analyst: 1.0,
-  Professional: 1.25,
-  Enterprise: 1.5,
-};
+/**
+ * Size bands. Purely a descriptive label for the catalogue — never a price input.
+ */
+export const SIZE_BANDS: Array<{ tier: string; minRecords: number }> = [
+  { tier: "Enterprise", minRecords: 1000 },
+  { tier: "Professional", minRecords: 250 },
+  { tier: "Analyst", minRecords: 0 },
+];
+
+export function resolveSizeLabel(recordCount: number): string {
+  const n = Math.max(0, Math.floor(recordCount ?? 0));
+  return SIZE_BANDS.find((b) => n >= b.minRecords)?.tier ?? "Analyst";
+}
+
 
 /** Map a bundle category (e.g. "health.biometric") to a sector pricing key. */
 export function resolveSectorKey(category: string): string {
