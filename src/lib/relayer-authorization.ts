@@ -175,9 +175,12 @@ export async function waitForRelayerAllowance(
   }
 }
 
-export type AuthorizationResult =
-  | { ok: true; alreadyAuthorized: boolean }
-  | { ok: false; reason: string; pending?: boolean };
+export type AuthorizationResult = {
+  ok: boolean;
+  alreadyAuthorized?: boolean;
+  reason?: string;
+  pending?: boolean;
+};
 
 /**
  * Drop-in replacement for the old MetaMask `ensureUsdcApproval`.
