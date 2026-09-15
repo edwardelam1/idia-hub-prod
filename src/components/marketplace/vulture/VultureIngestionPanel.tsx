@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Lock, Radio } from "lucide-react";
 import VultureUploader from "./VultureUploader";
 import VultureLedgerTable from "./VultureLedgerTable";
+import MeshNodeIntegration from "./MeshNodeIntegration";
 import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
 
 interface Props {
