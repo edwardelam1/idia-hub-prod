@@ -224,7 +224,6 @@ const SynapsePurchaseModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
   const handlePurchase = async () => {
     console.log(`[SynapsePurchaseModal][handlePurchase] [START] Initiating settlement via ${paymentRail}.`);
     if (!canProceed) return;
@@ -333,13 +332,14 @@ const SynapsePurchaseModal = ({
       );
 
       rememberPendingPurchase(txReference);
-      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
-        "top-up-credits",
-        {
-          body: internalPayload,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        },
-      );
+      const {
+        data: topUpData,
+        error: topUpError,
+        timedOut,
+      } = await invokeWithTimeout("top-up-credits", {
+        body: internalPayload,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
 
       if (topUpError) {
         console.error(
@@ -376,7 +376,6 @@ const SynapsePurchaseModal = ({
       console.log("[SynapsePurchaseModal][handlePurchase] [FINALLY] Exit execution thread.");
     }
   };
-
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -568,7 +567,7 @@ const SynapsePurchaseModal = ({
                         onClick={async () => {
                           setIsAuthorizingRelayer(true);
                           try {
-                            toast.info("Opening IDIA Life to authorize your wallet…");
+                            toast.info("Opening Life by IDIA to authorize your wallet…");
                             const r = await authorizeRelayerViaLife({
                               owner: buyerWalletForRecovery,
                               requiredUsd: usdAmount,
@@ -594,7 +593,7 @@ const SynapsePurchaseModal = ({
                         ) : (
                           <ShieldCheck className="h-4 w-4" />
                         )}
-                        {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in IDIA Life (one-time)"}
+                        {isAuthorizingRelayer ? "Waiting for Life…" : "Authorize in Life (one-time)"}
                       </Button>
                       <p className="text-[10px] text-muted-foreground text-center">
                         Opens the IDIA Life app so you can approve settlement with your own wallet.
