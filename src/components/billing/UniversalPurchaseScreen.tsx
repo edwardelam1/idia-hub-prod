@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
-import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
 import {
   pollLedgerStatus,
@@ -189,13 +189,18 @@ const UniversalPurchaseScreen = () => {
         .eq("id", session?.user?.id ?? "")
         .maybeSingle();
       const owner = profile?.wallet_address as string | undefined;
-      if (!owner) throw new Error("No wallet linked. Connect MetaMask first.");
-      const r = await ensureUsdcApproval({ owner });
+      if (!owner) throw new Error("No IDIA wallet is linked to this account yet.");
+      toast.info("Opening IDIA Life to authorize your wallet…");
+      const r = await authorizeRelayerViaLife({ owner, requiredUsd: plan.price });
       if (!r.ok) {
-        throw new Error(("reason" in r && r.reason) || "Approval failed");
+        if (r.pending) {
+          toast.warning(r.reason);
+          return;
+        }
+        throw new Error(r.reason);
       }
       setNeedsApproval(false);
-      toast.success("Relayer authorized. Retry your purchase.");
+      toast.success("Wallet authorized. You can complete your purchase.");
     } catch (err: any) {
       toast.error(err?.message || "Authorization failed");
     } finally {
@@ -265,10 +270,18 @@ const UniversalPurchaseScreen = () => {
             setNeedsApproval(true);
             setStep("review");
             setIsProcessing(false);
-            toast.warning("Relayer authorization required.");
+            toast.warning("Your wallet hasn't authorized settlement yet — one-time step below.");
             return;
           }
           clearPendingPurchase();
+          if (/INSUFFICIENT_BUYER_BALANCE/i.test(detail)) {
+            setStep("review");
+            setIsProcessing(false);
+            toast.error(
+              `Not enough USDC in your IDIA wallet for $${plan.price.toFixed(2)}. Add funds and try again.`,
+            );
+            return;
+          }
           throw new Error(detail);
         }
 
@@ -500,15 +513,20 @@ const UniversalPurchaseScreen = () => {
                 </div>
               )}
               {needsApproval && (
-                <Button
-                  className="w-full gap-2"
-                  variant="outline"
-                  onClick={handleAuthorizeRelayer}
-                  disabled={isAuthorizingRelayer}
-                >
-                  {isAuthorizingRelayer ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  Authorize Relayer (one-time)
-                </Button>
+                <div className="space-y-1">
+                  <Button
+                    className="w-full gap-2"
+                    variant="outline"
+                    onClick={handleAuthorizeRelayer}
+                    disabled={isAuthorizingRelayer}
+                  >
+                    {isAuthorizingRelayer ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in IDIA Life (one-time)"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Opens the IDIA Life app to approve settlement with your own wallet. Return here when it's done.
+                  </p>
+                </div>
               )}
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground justify-center pt-1">
                 <ShieldCheck className="h-3 w-3" />
