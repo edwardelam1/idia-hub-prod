@@ -1,348 +1,277 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldAlert, Activity, Cpu, Fingerprint, Wifi } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Cpu, Wifi, WifiOff, Upload, ShieldCheck, AlertTriangle, FileUp } from "lucide-react";
 import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
-// --- CORE SYSTEM ARCHITECTURE: CRYPTOGRAPHIC HASHING ---
-async function generateTelemetryHash(payload: any): Promise<string> {
-  try {
-    const msgBuffer = new TextEncoder().encode(JSON.stringify(payload));
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  } catch (error) {
-    throw error;
-  }
-}
+const QUARANTINE_BUCKET = "idia-data-quarantine-prod";
+const ACCEPTED = ".json,.csv,.bin,.lora";
 
-// --- LOW-LEVEL TELEMETRY DATA SHAPING (LORA/RETICULUM) ---
-interface LoRaTelemetryPayload {
-  latitude: number; // 8 bytes (double)
-  longitude: number; // 8 bytes (double)
-  altitude: number; // 4 bytes (float)
-  gps_time: number; // 4 bytes (uint32)
-  gps_date: number; // 4 bytes (uint32)
-  satellites: number; // 1 byte (uint8)
-  hdop: number; // 4 bytes (float)
-  battery_voltage: number; // 4 bytes (float)
-  fix_status: number; // 1 byte (uint8)
-  fw_ver_major: number; // 1 byte (uint8)
-  fw_ver_minor: number; // 1 byte (uint8)
-}
-
-function decodeLoRaPayload(buffer: ArrayBuffer): LoRaTelemetryPayload {
-  if (buffer.byteLength !== 40) throw new Error("Invalid payload size. Expected 40 bytes.");
-  const view = new DataView(buffer);
-  return {
-    latitude: view.getFloat64(0, true),
-    longitude: view.getFloat64(8, true),
-    altitude: view.getFloat32(16, true),
-    gps_time: view.getUint32(20, true),
-    gps_date: view.getUint32(24, true),
-    satellites: view.getUint8(28),
-    hdop: view.getFloat32(29, true),
-    battery_voltage: view.getFloat32(33, true),
-    fix_status: view.getUint8(37),
-    fw_ver_major: view.getUint8(38),
-    fw_ver_minor: view.getUint8(39),
-  };
-}
-
-// --- HIGH-LEVEL APPLICATION DATA SHAPING (JSON) ---
-interface SightingPin {
-  pin_id: string;
-  source_type: "HUMAN_VOLUNTEER" | "AI_VISION_NODE" | "AI_VOICE_NODE";
-  source_id: string;
-  confidence_score: number;
-  location: { lat: number; lon: number; accuracy_meters: number };
-  media_attached: boolean;
-  media_uri?: string;
-  timestamp: string;
-}
-
-interface NetworkAlert {
-  alert_id: string;
-  issuer_id: string;
-  target_biometric_hash: string;
-  status: "ACTIVE" | "RESOLVED";
-  priority: "CRITICAL" | "STANDARD";
-  geo_polygon: { type: "Polygon"; coordinates: number[][][] };
-  timestamp_issued: string;
-  audience_reached: number;
-}
-
-interface ModelMetadata {
-  model_id: string;
-  case_id: string;
-  target_name_pseudonym: string;
-  data_sources: { image_count: number; video_seconds: number; voice_samples: number };
-  compiled_binary_uri: string;
-  checksum: string;
-  target_hardware: "ESP32-S3" | string;
-  created_at: string;
-}
-
-interface LedgerCommit {
+interface UploadResult {
   id: string;
-  type: "JSON_PIN" | "LORA_TELEMETRY" | "NETWORK_ALERT" | "MODEL_METADATA" | "NETWORK_VALIDATION";
-  hash: string;
-  status: "processing" | "committed" | "rejected";
-  confidence?: number;
-  routing_note?: string;
+  fileName: string;
+  status: "uploading" | "sanitizing" | "committed" | "rejected";
+  records?: number;
+  sanitizedHash?: string;
+  error?: string;
 }
 
 export default function VultureUploader() {
-  const [isListening, setIsListening] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isOpen, setIsOpen] = useState(false);
+  const [gatewayLoading, setGatewayLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [commits, setCommits] = useState<LedgerCommit[]>([]);
+  const [results, setResults] = useState<UploadResult[]>([]);
+  const [isBusy, setIsBusy] = useState(false);
 
-  const toggleGatewayStatus = async () => {
-    console.info("[BEGIN: VultureUI.GatewayToggle] Initiating gateway state transition.");
-    setIsTransitioning(true);
-
+  const loadGatewayState = useCallback(async () => {
+    console.info("[BEGIN: Vulture.GatewayState] Reading persisted mesh gateway authorization state.");
     try {
-      const targetState = !isListening ? "OPEN_MESH_GATEWAY" : "SEVER_MESH_GATEWAY";
-      console.info(
-        `[BEGIN: VultureUI.NetworkValidation] Requesting autonomous system validation from external mesh network for action: ${targetState}`,
-      );
-
-      // Simulating external autonomous network validation delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      console.info(`[END: VultureUI.NetworkValidation] External network validation acquired.`);
-
-      if (!isListening) {
-        console.info("[BEGIN: VultureUI.ValidationLedger] Writing mesh gateway authorization to local UI log.");
-        setCommits((prev) => [
-          {
-            id: crypto.randomUUID(),
-            type: "NETWORK_VALIDATION",
-            hash: "AUTHORIZED_BY_MESH_NETWORK",
-            status: "committed",
-          },
-          ...prev,
-        ]);
-        console.info("[END: VultureUI.ValidationLedger] Gateway authorization logged.");
+      const { data, error } = await supabase
+        .from("mesh_gateway_state")
+        .select("is_open")
+        .eq("id", "singleton")
+        .maybeSingle();
+      if (error) {
+        console.error(`[ERROR: Vulture.GatewayState] ${error.message}`);
+        throw error;
       }
-
-      setIsListening(!isListening);
-    } catch (error) {
+      setIsOpen(Boolean(data?.is_open));
+      console.info(`[END: Vulture.GatewayState] Gateway is ${data?.is_open ? "OPEN" : "SEALED"}.`);
+    } catch (err) {
       console.error(
-        `[ERROR: VultureUI.GatewayToggle] Gateway transition aborted due to network validation rejection. Exception: ${error instanceof Error ? error.message : String(error)}`,
+        `[ERROR: Vulture.GatewayState.Stall] ${err instanceof Error ? err.stack : String(err)}`,
       );
     } finally {
+      setGatewayLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadGatewayState();
+  }, [loadGatewayState]);
+
+  const toggleGateway = async () => {
+    console.info("[BEGIN: Vulture.GatewayToggle] Persisting mesh gateway state transition.");
+    setIsTransitioning(true);
+    const next = !isOpen;
+    try {
+      const { error } = await supabase
+        .from("mesh_gateway_state")
+        .update({ is_open: next, updated_by: user?.user_id ?? null })
+        .eq("id", "singleton");
+      if (error) {
+        console.error(`[ERROR: Vulture.GatewayToggle] ${error.message}`);
+        throw error;
+      }
+
+      console.info("[BEGIN: Vulture.GatewayToggle.Ledger] Recording authorization event to provenance ledger.");
+      const { error: ledgerError } = await supabase.from("vulture_provenance_ledger" as any).insert({
+        original_file_name: next ? "MESH_GATEWAY_OPENED" : "MESH_GATEWAY_SEALED",
+        action: "gateway_authorization",
+        status: "success",
+        record_count: 0,
+      });
+      if (ledgerError) console.error(`[ERROR: Vulture.GatewayToggle.Ledger] ${ledgerError.message}`);
+      console.info("[END: Vulture.GatewayToggle.Ledger] Authorization event recorded.");
+
+      setIsOpen(next);
+      toast({
+        title: next ? "Mesh gateway open" : "Mesh gateway sealed",
+        description: next
+          ? "Authorized edge nodes can now transmit telemetry."
+          : "All inbound node telemetry is now refused.",
+      });
+    } catch (err) {
+      console.error(
+        `[ERROR: Vulture.GatewayToggle.Stall] ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      toast({
+        title: "Gateway unchanged",
+        description: "You may not have clearance to change the gateway state.",
+        variant: "destructive",
+      });
+    } finally {
       setIsTransitioning(false);
-      console.info("[END: VultureUI.GatewayToggle] Gateway state transition sequence terminated.");
+      console.info("[END: Vulture.GatewayToggle] Transition sequence terminated.");
     }
   };
 
-  useEffect(() => {
-    if (!isListening) return;
+  const processFile = async (file: File) => {
+    const id = crypto.randomUUID();
+    const objectPath = `${new Date().toISOString().slice(0, 10)}/${id}-${file.name}`;
+    setResults((prev) => [{ id, fileName: file.name, status: "uploading" }, ...prev]);
 
-    const interval = setInterval(async () => {
-      console.info("[BEGIN: VultureUI.IngestionCycle] Awaiting incoming multiplexed data from mesh network.");
-
-      const eventType = Math.random();
-      let payloadToHash: any;
-      let commitType: LedgerCommit["type"];
-      let confidenceScore: number | undefined;
-      let routingNote: string | undefined;
-
-      if (eventType > 0.6) {
-        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing AI Sighting Pin payload.");
-        const pin: SightingPin = {
-          pin_id: crypto.randomUUID(),
-          source_type: "AI_VISION_NODE",
-          source_id: "edge-node-04",
-          confidence_score: 0.94,
-          location: { lat: 38.0406, lon: -84.5037, accuracy_meters: 5.2 },
-          media_attached: true,
-          media_uri: `https://storage.decentralized-mesh.net/pins/${crypto.randomUUID()}.jpg`,
-          timestamp: new Date().toISOString(),
-        };
-        payloadToHash = pin;
-        commitType = "JSON_PIN";
-        confidenceScore = pin.confidence_score;
-        if (confidenceScore > 0.9) routingNote = "Escalated to Official Law Enforcement Channels";
-      } else if (eventType > 0.3) {
-        console.info("[PROCESS: VultureUI.IngestionCycle] Decoding 40-byte LoRa telemetry buffer.");
-        const buffer = new ArrayBuffer(40);
-        const view = new DataView(buffer);
-        view.setFloat64(0, 38.0406, true);
-        view.setFloat64(8, -84.5037, true);
-        view.setFloat32(16, 210.5, true);
-        view.setUint8(37, 1);
-        payloadToHash = decodeLoRaPayload(buffer);
-        commitType = "LORA_TELEMETRY";
-      } else if (eventType > 0.1) {
-        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing Network Alert payload.");
-        const alert: NetworkAlert = {
-          alert_id: crypto.randomUUID(),
-          issuer_id: crypto.randomUUID(),
-          target_biometric_hash: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
-          status: "ACTIVE",
-          priority: "CRITICAL",
-          geo_polygon: {
-            type: "Polygon",
-            coordinates: [
-              [
-                [-84.5, 38.0],
-                [-84.4, 38.0],
-                [-84.4, 38.1],
-                [-84.5, 38.0],
-              ],
-            ],
-          },
-          timestamp_issued: new Date().toISOString(),
-          audience_reached: 198,
-        };
-        payloadToHash = alert;
-        commitType = "NETWORK_ALERT";
-      } else {
-        console.info("[PROCESS: VultureUI.IngestionCycle] Constructing Model Metadata payload.");
-        const model: ModelMetadata = {
-          model_id: crypto.randomUUID(),
-          case_id: crypto.randomUUID(),
-          target_name_pseudonym: "TARGET_P_01",
-          data_sources: { image_count: 45, video_seconds: 120, voice_samples: 3 },
-          compiled_binary_uri: "ipfs://QmYwAPJzv5CZsnA625s3Xf2n...",
-          checksum: "a2c5b...f9d1",
-          target_hardware: "ESP32-S3",
-          created_at: new Date().toISOString(),
-        };
-        payloadToHash = model;
-        commitType = "MODEL_METADATA";
+    console.info(`[BEGIN: Vulture.QuarantineUpload] Uploading ${file.name} (${file.size} bytes).`);
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(QUARANTINE_BUCKET)
+        .upload(objectPath, file, { upsert: false, contentType: file.type || "application/octet-stream" });
+      if (uploadError) {
+        console.error(`[ERROR: Vulture.QuarantineUpload] ${uploadError.message}`);
+        throw uploadError;
       }
+      console.info(`[END: Vulture.QuarantineUpload] Object committed at ${objectPath}.`);
 
-      const commitId = crypto.randomUUID();
-      setCommits((prev) => [
-        {
-          id: commitId,
-          type: commitType,
-          hash: "pending...",
-          status: "processing",
-          confidence: confidenceScore,
-          routing_note: routingNote,
-        },
-        ...prev,
-      ]);
-      console.info(`[END: VultureUI.IngestionCycle] Payload structured. ID: ${commitId}, Type: ${commitType}`);
+      setResults((prev) => prev.map((r) => (r.id === id ? { ...r, status: "sanitizing" } : r)));
 
-      try {
-        console.info(`[BEGIN: VultureUI.TelemetryLedger] Generating hash for ID: ${commitId}`);
-        const hash = await generateTelemetryHash(payloadToHash);
-
-        console.info(`[PROCESS: VultureUI.TelemetryLedger] Committing hash ${hash.substring(0, 8)}... to ledger.`);
-        // IDIA Protocol ledger write implementation here
-
-        setCommits((prev) => prev.map((c) => (c.id === commitId ? { ...c, status: "committed", hash } : c)));
-        console.info(`[END: VultureUI.TelemetryLedger] Ledger sequence complete for ID: ${commitId}`);
-      } catch (error) {
-        console.error(
-          `[ERROR: VultureUI.TelemetryLedger] Rejection during hashing or ledger write for ID: ${commitId}. Exception: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        setCommits((prev) => prev.map((c) => (c.id === commitId ? { ...c, status: "rejected" } : c)));
+      console.info(`[BEGIN: Vulture.SanitizationInvoke] Dispatching sanitization agent for ${objectPath}.`);
+      const { data, error } = await supabase.functions.invoke("vulture-sanitization-agent", {
+        body: { bucket: QUARANTINE_BUCKET, name: objectPath, created_at: new Date().toISOString() },
+      });
+      if (error) {
+        console.error(`[ERROR: Vulture.SanitizationInvoke] ${error.message}`);
+        throw error;
       }
-    }, 4500);
+      console.info(`[END: Vulture.SanitizationInvoke] Agent responded with ${data?.records ?? 0} records.`);
 
-    return () => clearInterval(interval);
-  }, [isListening]);
+      setResults((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? { ...r, status: "committed", records: Number(data?.records ?? 0), sanitizedHash: data?.sanitizedHash }
+            : r,
+        ),
+      );
+      toast({
+        title: "Payload rehabilitated",
+        description: `${data?.records ?? 0} records sanitized and ledgered from ${file.name}.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[ERROR: Vulture.QuarantinePipeline.Stall] ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      setResults((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected", error: message } : r)));
+      toast({ title: "Ingestion rejected", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    console.info(`[BEGIN: Vulture.IngestionBatch] ${files.length} file(s) queued for rehabilitation.`);
+    setIsBusy(true);
+    try {
+      for (const file of Array.from(files)) {
+        await processFile(file);
+      }
+    } finally {
+      setIsBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      console.info("[END: Vulture.IngestionBatch] Batch sequence terminated.");
+    }
+  };
 
   return (
     <SovereignWrapper id="vulture.mesh.gateway" className="max-w-2xl mx-auto">
       <div className="p-8 flex flex-col items-center justify-center border-b border-[#F2F2F7]">
-        {isListening ? (
+        {isOpen ? (
           <div className="relative">
             <Wifi className="h-12 w-12 text-[#007AFF] animate-ping absolute opacity-20" />
             <Cpu className="h-12 w-12 text-[#007AFF] relative z-10" />
           </div>
         ) : (
-          <Activity className="h-12 w-12 text-[#D2D2D7] mb-2" />
+          <WifiOff className="h-12 w-12 text-[#D2D2D7]" />
         )}
 
-        <h3 className="text-lg font-bold text-[#1D1D1F] mt-4 tracking-tight">
-          {isListening ? "Reticulum Mesh Active" : "Edge Ingestion Offline"}
-        </h3>
-        <p className="text-[13px] text-[#86868B] mt-1 mb-6 text-center max-w-sm leading-relaxed">
-          {isListening
-            ? "Decoding 40-byte LoRa binaries and HTTP/3 multiplexed JSON event schemas."
-            : "Establish connection to the external mesh network. Validation is handled autonomously."}
+        <h3 className="mt-4 text-sm font-bold text-[#1D1D1F] uppercase tracking-widest">Mesh Gateway</h3>
+        <p className="mt-1 text-[12px] text-[#86868B] text-center max-w-sm">
+          {gatewayLoading
+            ? "Reading authorization state…"
+            : isOpen
+              ? "Open. Authorized edge nodes may transmit telemetry to the ingest endpoint."
+              : "Sealed. Inbound node telemetry is refused at the door."}
         </p>
 
-        <Button
-          onClick={toggleGatewayStatus}
-          disabled={isTransitioning}
-          variant={isListening ? "destructive" : "default"}
-          className="rounded-full px-6 font-bold tracking-wide"
-        >
-          {isTransitioning ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <ShieldAlert className="w-4 h-4 mr-2" />
-          )}
-          <span>{isListening ? "Sever Gateway" : "Authorize Gateway"}</span>
+        <Button onClick={toggleGateway} disabled={isTransitioning || gatewayLoading} className="mt-5 gap-2">
+          {isTransitioning ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {isOpen ? "Seal Gateway" : "Authorize Gateway"}
         </Button>
       </div>
 
-      <div className="bg-[#FBFBFD] p-6 flex-1 min-h-[400px] overflow-y-auto">
-        <h4 className="text-[10px] font-black text-[#86868B] uppercase tracking-[0.15em] mb-4">
-          Machine Provenance Log
-        </h4>
+      <div className="p-6 border-b border-[#F2F2F7]">
+        <div className="flex items-center gap-2 mb-3">
+          <FileUp className="h-4 w-4 text-[#007AFF]" />
+          <h4 className="text-[11px] font-black text-[#1D1D1F] uppercase tracking-widest">Quarantine Intake</h4>
+        </div>
+        <p className="text-[12px] text-[#86868B] mb-4">
+          Upload a capture file (.json, .csv, .bin, .lora). It is quarantined, stripped of identifying fields,
+          timestamp-reconstructed, ledgered and published with a provenance manifest.
+        </p>
 
-        {commits.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 opacity-50">
-            <Fingerprint className="h-8 w-8 text-[#D2D2D7] mb-2" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#86868B]">Awaiting Hashes</span>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {commits.map((c) => (
-              <div
-                key={c.id}
-                className={`relative w-full flex flex-col gap-1 px-4 py-3 border transition-all ${
-                  c.type === "NETWORK_VALIDATION"
-                    ? "bg-[#1D1D1F] border-[#007AFF]/40"
-                    : "bg-slate-950 border-violet-900/40"
-                }`}
-                style={{ borderRadius: 12 }}
-              >
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
-                      c.type === "NETWORK_VALIDATION" ? "text-[#007AFF]" : "text-violet-400"
-                    }`}
-                  >
-                    {c.status === "processing" ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Fingerprint className="h-3 w-3" />
-                    )}
-                    {c.type.replace("_", " ")}
-                  </span>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ACCEPTED}
+          className="hidden"
+          onChange={(e) => void handleFiles(e.target.files)}
+        />
 
-                  {c.confidence && (
-                    <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-sm ${
-                        c.confidence > 0.9 ? "bg-red-500/20 text-red-400" : "bg-white/10 text-slate-300"
-                      }`}
-                    >
-                      CF: {(c.confidence * 100).toFixed(0)}%
-                    </span>
-                  )}
-                </div>
-
-                <span className="text-[12px] font-mono text-slate-300 truncate mt-1">{c.hash}</span>
-
-                {c.routing_note && (
-                  <span className="text-[10px] font-bold text-red-400 mt-1 uppercase tracking-wider">
-                    {c.routing_note}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            void handleFiles(e.dataTransfer.files);
+          }}
+          className="rounded-[18px] border-2 border-dashed border-[#E5E5EA] bg-[#FBFBFD] px-6 py-8 text-center"
+        >
+          <Upload className="mx-auto h-6 w-6 text-[#86868B] mb-2" />
+          <p className="text-[12px] text-[#86868B] mb-3">Drop capture files here</p>
+          <Button variant="outline" disabled={isBusy} onClick={() => fileInputRef.current?.click()} className="gap-2">
+            {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Choose Files
+          </Button>
+        </div>
       </div>
+
+      {results.length > 0 && (
+        <div className="p-6 space-y-2">
+          {results.map((r) => (
+            <div
+              key={r.id}
+              className="flex items-center justify-between gap-3 rounded-[14px] border border-[#F2F2F7] bg-white px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-semibold text-[#1D1D1F]">{r.fileName}</p>
+                <p className="truncate font-mono text-[10px] text-[#86868B]">
+                  {r.status === "committed"
+                    ? `${r.records} records · ${r.sanitizedHash?.slice(0, 16) ?? ""}…`
+                    : r.status === "rejected"
+                      ? r.error
+                      : r.status === "uploading"
+                        ? "Uploading to quarantine…"
+                        : "Sanitizing…"}
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className={
+                  r.status === "committed"
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-200/50 text-[10px]"
+                    : r.status === "rejected"
+                      ? "bg-red-500/10 text-red-600 border-red-200/50 text-[10px]"
+                      : "bg-blue-500/10 text-blue-600 border-blue-200/50 text-[10px]"
+                }
+              >
+                {r.status === "committed" ? (
+                  <ShieldCheck className="mr-1 h-3 w-3" />
+                ) : r.status === "rejected" ? (
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                ) : (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                )}
+                {r.status.toUpperCase()}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      )}
     </SovereignWrapper>
   );
 }
