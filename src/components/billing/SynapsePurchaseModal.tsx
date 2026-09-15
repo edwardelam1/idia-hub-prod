@@ -202,6 +202,13 @@ const SynapsePurchaseModal = ({
           description: `${formatCredits(displayCredits)} added to your operational ledger.`,
         });
         await Promise.all([refreshSynapseBalance(), refreshWalletBalance()]);
+        try {
+          onPurchaseComplete?.();
+        } catch (cbError) {
+          console.error(
+            `[SynapsePurchaseModal][resolveSettlement] [CALLBACK_FAULT] ${cbError instanceof Error ? cbError.stack : String(cbError)}`,
+          );
+        }
         setTimeout(() => handleOpenChange(false), 3500);
       } else if (result.outcome === "failed") {
         clearPendingPurchase();
