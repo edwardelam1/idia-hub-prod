@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
-import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
 import {
   pollLedgerStatus,
@@ -189,13 +189,18 @@ const UniversalPurchaseScreen = () => {
         .eq("id", session?.user?.id ?? "")
         .maybeSingle();
       const owner = profile?.wallet_address as string | undefined;
-      if (!owner) throw new Error("No wallet linked. Connect MetaMask first.");
-      const r = await ensureUsdcApproval({ owner });
+      if (!owner) throw new Error("No IDIA wallet is linked to this account yet.");
+      toast.info("Opening IDIA Life to authorize your wallet…");
+      const r = await authorizeRelayerViaLife({ owner, requiredUsd: plan.price });
       if (!r.ok) {
-        throw new Error(("reason" in r && r.reason) || "Approval failed");
+        if (r.pending) {
+          toast.warning(r.reason);
+          return;
+        }
+        throw new Error(r.reason);
       }
       setNeedsApproval(false);
-      toast.success("Relayer authorized. Retry your purchase.");
+      toast.success("Wallet authorized. You can complete your purchase.");
     } catch (err: any) {
       toast.error(err?.message || "Authorization failed");
     } finally {
