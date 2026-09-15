@@ -525,44 +525,53 @@ const SynapseTopUp = () => {
               )}
 
               {needsApproval && buyerWalletForRecovery && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 mb-3"
-                  disabled={isAuthorizingRelayer}
-                  onClick={async () => {
-                    setIsAuthorizingRelayer(true);
-                    try {
-                      const r = await ensureUsdcApproval({ owner: buyerWalletForRecovery });
-                      if (!r.ok) {
+                <div className="space-y-1 mb-3">
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    disabled={isAuthorizingRelayer}
+                    onClick={async () => {
+                      setIsAuthorizingRelayer(true);
+                      try {
+                        toast({ title: "Opening IDIA Life", description: "Authorize settlement in your wallet app." });
+                        const r = await authorizeRelayerViaLife({
+                          owner: buyerWalletForRecovery,
+                          requiredUsd: usdAmount,
+                        });
+                        if (!r.ok) {
+                          toast({
+                            title: r.pending ? "Still waiting" : "Authorization Failed",
+                            description: r.reason,
+                            variant: r.pending ? "default" : "destructive",
+                          });
+                          return;
+                        }
+                        setNeedsApproval(false);
+                        setError(null);
+                        await handlePurchase();
+                      } catch (err: any) {
+                        console.error("[AuthorizeRelayer] threw:", err);
                         toast({
                           title: "Authorization Failed",
-                          description: (r as { reason: string }).reason,
+                          description: err?.message ?? String(err),
                           variant: "destructive",
                         });
-                        return;
+                      } finally {
+                        setIsAuthorizingRelayer(false);
                       }
-                      setNeedsApproval(false);
-                      setError(null);
-                      await handlePurchase();
-                    } catch (err: any) {
-                      console.error("[AuthorizeRelayer] threw:", err);
-                      toast({
-                        title: "Authorization Failed",
-                        description: err?.message ?? String(err),
-                        variant: "destructive",
-                      });
-                    } finally {
-                      setIsAuthorizingRelayer(false);
-                    }
-                  }}
-                >
-                  {isAuthorizingRelayer ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4" />
-                  )}
-                  Authorize Relayer (one-time)
-                </Button>
+                    }}
+                  >
+                    {isAuthorizingRelayer ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4" />
+                    )}
+                    {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in IDIA Life (one-time)"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Opens the IDIA Life app so you can approve settlement with your own wallet.
+                  </p>
+                </div>
               )}
 
               <div className="flex gap-2">
