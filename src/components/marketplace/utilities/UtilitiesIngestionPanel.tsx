@@ -9,6 +9,15 @@ import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
+interface FranchiseKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  status: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 const UtilitiesIngestionPanel = () => {
   const { user } = useAuth();
   const { toast } = useToast();
