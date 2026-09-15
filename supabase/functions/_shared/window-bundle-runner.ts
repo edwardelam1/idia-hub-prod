@@ -137,7 +137,7 @@ export async function runWindowedBundleGeneration({ source, label, contributorKe
       .eq("is_active", true);
 
     const stale = (activeRows ?? []).filter(
-      (r: any) => !liveKeys.has(`${r.category}|${r.tier}|${r.window_key ?? "all"}`),
+      (r: any) => !liveKeys.has(`${r.category}|${r.window_key ?? "all"}`),
     );
     if (stale.length > 0) {
       const { error: deactivateError } = await supabase
