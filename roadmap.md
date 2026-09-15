@@ -14,3 +14,7 @@
 - surveillance-api-intake edge function (x-api-key auth, Wix vault bridge, PII dropped)
 - issue-extractor-key edge function (real franchise keys, SHA-256 hash stored)
 - Utilities marketplace tab with balance + settlement via SynapsePurchaseModal
+
+## Marketplace compact controls (in progress)
+- Mobile 2 × 2 marketplace tool grid
+- Title-only bundles with individual and bulk expand/collapse controls

@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useNavigate } from "react-router-dom";
 import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
-import { Loader2, Bot, Terminal, Boxes, Bird, Radar } from "lucide-react";
+import { Loader2, Bot, Terminal, Boxes, Bird, Radar, ChevronsDown, ChevronsUp } from "lucide-react";
 import MarketplaceHeader from "./MarketplaceHeader";
 import MarketplaceFilters from "./MarketplaceFilters";
 import ResultsHeader from "./ResultsHeader";
@@ -17,6 +17,7 @@ import { CartItem } from "@/types/marketplace";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { WINDOW_OPTIONS } from "@/lib/bundle-freshness";
+import { Button } from "@/components/ui/button";
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -37,6 +38,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [windowFilter, setWindowFilter] = useState<string>("any");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [activeTile, setActiveTile] = useState<ToolTile>("bundles");
+  const [expandedBundleIds, setExpandedBundleIds] = useState<Set<string>>(() => new Set());
 
   const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
 
@@ -140,6 +142,26 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     .sort((a, b) => new Date(b.sourceLatestAt ?? 0).getTime() - new Date(a.sourceLatestAt ?? 0).getTime());
 
   const bundleCategory = filteredBundles.length > 0 ? filteredBundles[0].category : undefined;
+  const visibleBundleIds = filteredBundles.map((bundle) => bundle.id);
+  const allVisibleBundlesExpanded =
+    visibleBundleIds.length > 0 && visibleBundleIds.every((id) => expandedBundleIds.has(id));
+
+  const toggleBundle = (bundleId: string) => {
+    setExpandedBundleIds((current) => {
+      const next = new Set(current);
+      if (next.has(bundleId)) next.delete(bundleId);
+      else next.add(bundleId);
+      return next;
+    });
+  };
+
+  const setAllVisibleBundlesExpanded = (expanded: boolean) => {
+    setExpandedBundleIds((current) => {
+      const next = new Set(current);
+      visibleBundleIds.forEach((id) => (expanded ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  };
 
   if (error) {
     return (
@@ -175,7 +197,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       </div>
 
       {/* ─── Tool Tile Panel ─── */}
-      <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+      <div className={`grid grid-cols-2 gap-2 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {tiles.filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
@@ -183,7 +205,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             <button
               key={t.id}
               onClick={() => setActiveTile(t.id)}
-              className={`text-left rounded-lg border-2 transition-all p-4 ${
+              className={`min-w-0 rounded-lg border-2 p-3 text-left transition-all sm:p-4 ${
                 active
                   ? "border-primary bg-white shadow-md"
                   : "border-transparent bg-white/60 hover:bg-white hover:border-primary/30"
@@ -191,11 +213,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             >
               <div className="flex items-center gap-2 mb-1">
                 <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
-                <span className={`text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
+                <span className={`min-w-0 break-words text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
                   {t.title}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
                 {t.id === "sql" && "Bio-sovereign SQL editor with floating-rate pricing."}
                 {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
                 {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
@@ -239,7 +261,33 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 </button>
               ))}
             </div>
-            <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+              {filteredBundles.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAllVisibleBundlesExpanded(false)}
+                    disabled={!visibleBundleIds.some((id) => expandedBundleIds.has(id))}
+                  >
+                    <ChevronsUp className="mr-1.5 h-4 w-4" />
+                    Collapse All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAllVisibleBundlesExpanded(true)}
+                    disabled={allVisibleBundlesExpanded}
+                  >
+                    <ChevronsDown className="mr-1.5 h-4 w-4" />
+                    Expand All
+                  </Button>
+                </div>
+              )}
+            </div>
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-4" />
@@ -257,6 +305,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                     userCredits={currentLedgerBalance}
                     onDownload={handleAnalyzeWithAI}
                     onAddToCart={handleAddToCart}
+                    isExpanded={expandedBundleIds.has(bundle.id)}
+                    onToggle={() => toggleBundle(bundle.id)}
                   />
                 ))}
                 {filteredBundles.length === 0 && (
