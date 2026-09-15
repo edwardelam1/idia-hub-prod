@@ -1,39 +1,46 @@
-# LIDD Utility Intake & Data Staging
+# LIDD Utility Intake — Staged Debt & Utilities Tab
 
-A commercial surveillance operator pushes batches of plate reads to IDIA. Each read is checked against the external Wix identity vault, the plate is dropped immediately, and every matched person produces a $2.50 staged debt against the operator. A new "Utilities" tab in the marketplace shows the operator their accumulated unpaid balance and lets them settle it through the existing checkout.
+A commercial surveillance operator pushes batches of plate reads. Each plate is checked against the external Wix identity vault, the plate is dropped immediately, and every matched person stages a $2.50 unpaid debt against the operator. A new "Utilities" tab in the marketplace shows that accumulated balance and settles it through the existing checkout.
 
-## Phase 1 — Staging table
+## Phase 1 — Database
 
-New table `lidd_extraction_events` exactly as specified: extractor ID (the operator's account email), matched person's ID, $2.50 cost, payment status defaulting to unpaid, extraction time, created time.
+Run the supplied SQL as given:
 
-Access: back-end services have full access; a signed-in operator can read only rows whose extractor ID matches their own sign-in email. No plate, location or vehicle data is ever stored.
+- Adds the buyer diagnostic columns to `profiles` (role, jurisdiction, latency, weights, completion timestamps, raw answers) — none exist today, so nothing is overwritten.
+- Adds the server-side trigger that sets the weights from the chosen role on insert or role change.
+- Creates `lidd_extraction_events` (extractor's account, matched person's GUID, $2.50 cost, unpaid status, extraction time). The person's GUID links to the unique `platform_guid` on profiles, which exists. Access: back-end services full, a signed-in operator reads only its own rows. No plate, location or vehicle data is stored.
 
-One addition required for the payment step: an update rule so a settlement can flip that operator's own rows from unpaid to paid, plus the grants the table needs to be reachable at all.
+Two additions the settlement step needs: grants so the table is reachable at all, and an update rule so an operator can flip its own rows from unpaid to paid after paying.
 
 ## Phase 2 — Intake endpoint
 
-New edge function `surveillance-api-intake`, using the supplied batch code with its loop, math and log brackets unchanged: parse payload, validate extractor and infractions array, loop each plate through the Wix vault, skip non-matches and per-plate faults without aborting the batch, collect matched events, bulk-insert them, return processed/matched/debt-staged counts. Every step keeps its `[PHASE_START]`/`[PHASE_END]` logs and every catch logs the full stack.
+New `supabase/functions/surveillance-api-intake/index.ts` using the supplied code verbatim — same loop, same math, same `[PHASE_START]`/`[PHASE_END]` bracketing, same stack traces in every catch.
 
 Two additions, since this endpoint is exposed to an outside company:
 
-- The request must carry the issued credential in an `x-api-key` header. The function hashes it, matches an active key record, and derives the extractor identity from that record — the `extractor_id` in the body is only cross-checked. Unknown or revoked keys are rejected with 401 before any vault call. This is logged with the same bracketing.
 - Cross-origin headers on every response, including errors.
+- The request must carry the issued credential in an `x-api-key` header; unknown or revoked keys are rejected with 401 before any vault call, logged with the same bracketing. The body's `extractor_id` is cross-checked against the key's owner.
 
 The Wix vault key must be saved before the function can run — I'll open the secure form for `WIX_SECURE_API_KEY` during the build.
 
 ## Phase 3 — Utilities marketplace tab
 
-`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone alongside SQL Terminal, AI Bundles and The Vulture; it passes the signed-in person's email as the extractor ID.
+`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone alongside SQL Terminal, AI Bundles and The Vulture.
 
-New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`. The pasted snippet lost its markup in transit, so I'll rebuild it faithfully to what it describes, keeping its logic and bracketed logs verbatim: header with title, subtitle and an "API Active" badge; a "Pending Data Dividend Balance" card summing all unpaid events with the event count and a "Settle Balance" button (disabled while loading or at zero); a credentials card with a masked key field, copy action and "Generate Franchise Key" button; the existing `SynapsePurchaseModal` opened with the balance prefilled.
+New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`, built from the supplied component — the pasted markup lost its tags in transit, so I'll rebuild the layout faithfully to what it describes while keeping every line of logic and every bracketed log verbatim:
+
+- Header: title, subtitle, "API Active" badge.
+- "Pending Data Dividend Balance" card: sum of unpaid events, count of identity infractions, "Settle Balance" button disabled while loading or at zero.
+- "Commercial Ingestion Credentials" card: masked key field, copy action, "Generate Franchise Key" button.
+- The existing `SynapsePurchaseModal`, unmodified, opened with the balance prefilled.
 
 Two behaviour notes:
 
-- Key generation calls the back end to mint a real key (per your earlier decision): shown in full once with a "store this securely" notice, only its hash kept, previously issued keys listed by prefix with a revoke action.
-- After the checkout modal reports success, the panel marks that operator's settled events as paid and refreshes, so the balance actually clears.
+- Key generation calls the back end to mint a real key rather than the placeholder string in the snippet, so the key it shows actually works against the intake endpoint. Shown in full once with a "store this securely" notice; only its hash is kept.
+- After checkout reports success, the panel marks that operator's settled events as paid and refreshes, so the balance actually clears.
 
 ## Technical notes
 
-- Settlement is prefilled in credits at the standing $0.75/credit rate; the staged amount stays as recorded.
-- Key issuance reuses the existing `api_keys` table (SHA-256 hash, 8-char prefix) through a small `issue-extractor-key` edge function; no raw key is persisted.
-- `SynapsePurchaseModal` stays unmodified; the panel only supplies the prefill amount and reacts to its result.
+- Key issuance reuses the existing `api_keys` table (SHA-256 hash, 8-char prefix) via a small `issue-extractor-key` edge function; no raw key is persisted.
+- Settlement is prefilled at the standing $0.75/credit rate; the staged amount stays as recorded.
+- `SynapsePurchaseModal` is untouched; the panel only supplies the prefill and reacts to the result.
