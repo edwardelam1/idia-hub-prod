@@ -18,6 +18,10 @@ const UtilitiesIngestionPanel = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [keyName, setKeyName] = useState("");
+  const [keys, setKeys] = useState<FranchiseKey[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+  const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
 
   const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
 
