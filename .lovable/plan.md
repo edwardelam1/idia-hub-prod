@@ -1,28 +1,38 @@
-# Make "Authorize Relayer" actually work
+# Utilities Intake Gateway & Ephemeral Verification Bridge
 
-## What I found (verified on-chain and in the code)
+A fourth tab in the Data Marketplace, "Utilities", where a commercial surveillance operator gets a credential to feed plate reads into IDIA. Each accepted read charges the operator a $2.50 processing royalty and splits it four ways in the clearinghouse ledger. Plate numbers are never stored here — they are exchanged with the Wix identity vault for an opaque account ID and dropped.
 
-- The button asks for a **MetaMask** wallet. Your users don't have one — their wallet lives in the IDIA Life app, non-custodial, with the passphrase on their own device. On Android there is no MetaMask to answer, so the request never comes back and the button spins forever. That matches exactly what you see: nothing happens at all.
-- Authorization itself is real and needed. Checking wallets on Base right now: some are already authorized for the Hub relayer (unlimited), others sit at **zero** — for example the wallet holding 10 USDC on account `9ac198fb…` is not authorized, so its purchase will always be refused.
-- Separately, your own wallet **is** authorized but holds only **$0.33 USDC**, so a purchase from it fails for lack of funds, not authorization. Today the screen can make that look like the same problem.
-- The IDIA Life app already has the exact routine that fixes this (`provisionNewWallet`: gas drip, then approve the relayer and the Synapse vault, then self-delegate) — and nothing in Life currently calls it. That is why newer wallets are never authorized.
+## Phase 1 — Ledger and billing
 
-## The fix
+New table `clearinghouse_ledger`: account ID (text — a real account ID or a pool name such as `POOL_DISTRICT_4`), amount, category, extractor ID, created time. Access rules: back-end services get full access; a signed-in person can read only the rows paid to their own account. Pool and admin rows stay invisible to regular users.
 
-**1. Hub stops asking for MetaMask.** The "Authorize Relayer" button becomes "Authorize in IDIA Life": it opens the IDIA Life app on the user's phone to the authorization step. No MetaMask, no wallet-connect, nothing new to install.
+New billing routine `deduct_extractor_balance(p_extractor_id text, p_amount numeric)`:
+- Resolves the extractor to its IDIA account and charges the $2.50 against its existing Synapse credit balance at the standing $0.75/credit rate (3.3333 CR, 4 decimals internally).
+- Refuses and raises when the balance is short, so nothing is written to the ledger for an unbilled read.
+- Appends a normal credit-ledger entry so the charge shows in the operator's activity.
 
-**2. Hub waits intelligently, never forever.** After the handoff, Hub checks the chain every few seconds for up to two minutes. The moment the authorization lands it confirms, refreshes and lets the purchase continue automatically. If the user returns without finishing, they get a plain message and a retry button — never an endless spinner.
+## Phase 2 — Intake endpoint
 
-**3. Honest status before the user pays.** The purchase screen reads the wallet's live authorization and USDC balance first and says which one is wrong: "Wallet not yet authorized", or "Only $0.33 USDC available — add funds", instead of one generic failure.
+New edge function `surveillance-api-intake`, built on the supplied code with its math and log structure untouched. Two additions required by the "real keys" decision:
 
-**4. The IDIA Life side must be wired up** (separate app, separate change): Life needs to answer the incoming link by running its existing provisioning routine and returning the user to Hub. Without that step the handoff has nowhere to land. I can plan and apply that change in the Life project next, on your say-so.
+- The call must carry the issued credential in an `x-api-key` header. The function hashes it, looks up the matching key record, and takes the extractor identity from that record — the `extractor_id` in the body is only cross-checked, never trusted on its own. Unknown, revoked or mismatched keys are rejected with 401 before any Wix call or billing.
+- Standard cross-origin headers on every response, including errors.
+
+Everything else stays exactly as specified: payload validation, the Wix vault round trip, clean 200 "ignored" exit for unregistered assets, the $2.50 split (citizen $0.75, District 4 $0.50, community $0.25, admin $1.00), the four ledger rows, then the extractor charge. Every step keeps its bracketed start/end logs, and every failure path logs the exact error and stack.
+
+The Wix vault key is needed before the function can run — I'll open the secure form for `WIX_SECURE_API_KEY` during the build.
+
+## Phase 3 — Utilities tab
+
+`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone, sitting next to SQL Terminal, AI Bundles and The Vulture.
+
+New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`. The pasted snippet lost its markup in transit, so I'll rebuild it faithfully to the described design: a header with title, subtitle and a "System Operational" status badge; a credentials card with a masked key field, a copy action, and a "Generate Franchise Key" button that shows "Provisioning…" while it works; the $2.50 royalty footnote. It keeps the bracketed console logs from the snippet.
+
+Behaviour differences from the snippet, following the "real keys" decision: the button calls the back end to mint a genuine key, the full value is shown exactly once with the "store this securely" notice, and only its hash is kept. The panel also lists previously issued keys by prefix with a revoke action, and shows the extractor's current credit balance so an operator can see when they need to top up.
 
 ## Technical notes
 
-- `src/lib/usdc-approval.ts`: the MetaMask SDK path (`connectEmbeddedWallet` / `eth_requestAccounts` / `writeContract`) is the hang — no injected provider on Android Chrome, and the SDK's install modal is suppressed, so the promise never settles. Replace `ensureUsdcApproval` with `requestLifeAuthorization({ owner })`: open `idialife://authorize-relayer?owner=<addr>&relayer=<addr>&return=<hub-url>` (fallback `https://idia-life-ui.lovable.app/?authorizeRelayer=…` when the scheme doesn't resolve), then poll allowance.
-- New `waitForRelayerAllowance(owner, { maxMs: 120_000 })` reading `USDC.allowance(owner, RELAYER_ADDRESS)` through the existing `base-rpc-proxy` edge function, 4s interval, bracketed `[AUTH_RELAYER_*]` begin/end logs at every level (START, DEEP_LINK, POLL_ITERATION, RPC_FAULT — retried not fatal, GRANTED, TIMEOUT, END). Resolves `granted | timeout | aborted`. Re-polls on `visibilitychange` so the app-switch return is caught immediately.
-- New read-only preflight in the three purchase surfaces (`UniversalPurchaseScreen.tsx`, `SynapseTopUp.tsx`, `SynapsePurchaseModal.tsx`): one `base-rpc-proxy` call returning `{ allowance, usdcBalance }` → drives `needsApproval` and a distinct `insufficientFunds` state. `INSUFFICIENT_BUYER_BALANCE` from `top-up-credits` maps to the funds message, `APPROVAL_REQUIRED` to the authorize action; today both can read as an authorization problem.
-- Every authorize handler gets a hard timeout and a `finally` that clears `isAuthorizingRelayer`, so no path can leave the spinner running.
-- `RELAYER_ADDRESS` (`0xd816…31a7`) confirmed correct: provisioned Life wallets hold unlimited allowance to it, so Life's gas-drip relayer and the Hub relayer are the same account. No contract or key change needed.
-- MetaMask SDK stays in the codebase for the existing on/off-ramp flows; only the approval path stops using it.
-- IDIA Life companion change (project `IDIA Life App`): handle `idialife://authorize-relayer` in the `appUrlOpen` listener, call the unused `walletService.provisionNewWallet()`, then return to the Hub URL passed in.
+- `clearinghouse_ledger.user_id` is text on purpose — it holds either a Supabase auth ID or a pool constant, so no foreign key.
+- Key issuance reuses the existing `api_keys` table (SHA-256 hash stored, 8-char prefix for display) via a small `issue-extractor-key` edge function; no raw key is ever persisted.
+- Billing runs through the routine rather than inline SQL so the balance check and the ledger append stay in one transaction.
+- Nothing about plate data is written to Supabase at any point; the plate exists only in the request body and the outbound Wix call.
