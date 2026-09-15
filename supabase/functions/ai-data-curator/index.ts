@@ -401,14 +401,15 @@ async function publishBundle(supabaseClient: any, bundle: any) {
   return { published: true, mode: 'insert', bundle: data };
 }
 
-async function lookupBundle(supabaseClient: any, category: string, tier: string, windowKey: string) {
-  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} tier=${tier} window=${windowKey}`);
+async function lookupBundle(supabaseClient: any, category: string, _tier: string, windowKey: string) {
+  // One listing per (category, window) — tier is only a size label, never an identity key.
+  console.info(`[BEGIN: Curator.DB.LookupBundle] category=${category} window=${windowKey}`);
   const { data, error } = await supabaseClient
     .from('marketplace_bundles')
     .select('bundle_id, bundle_version, stat_fingerprint')
     .eq('category', category)
-    .eq('tier', tier)
     .eq('window_key', windowKey)
+    .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
