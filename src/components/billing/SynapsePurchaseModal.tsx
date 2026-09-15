@@ -223,6 +223,15 @@ const SynapsePurchaseModal = ({
     }
   };
 
+  // Pre-load a staged balance (utility settlement) into the à la carte field.
+  useEffect(() => {
+    if (!open || !prefillUsd || prefillUsd <= 0) return;
+    console.log(`[SynapsePurchaseModal][prefill] [START] Pre-loading $${prefillUsd.toFixed(2)} settlement amount.`);
+    setPurchaseMode("alacarte");
+    setAlacarteAmount(String(Math.max(2, Math.ceil(prefillUsd))));
+    console.log(`[SynapsePurchaseModal][prefill] [END] À la carte amount applied.`);
+  }, [open, prefillUsd]);
+
   // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
   useEffect(() => {
     const pending = readPendingPurchase();
