@@ -415,6 +415,48 @@ const UtilitiesIngestionPanel = () => {
         </CardContent>
       </Card>
 
+      <Dialog open={!!apiKey}>
+        <DialogContent
+          hideClose
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-lg"
+        >
+          <DialogHeader>
+            <DialogTitle>Franchise Key Issued</DialogTitle>
+            <DialogDescription>
+              Copy this key now — it will not be shown again once dismissed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Key label</p>
+              <p className="text-sm font-medium text-foreground">{issuedKeyName}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label="Copy API key"
+                onClick={() => apiKey && copyToClipboard(apiKey, "API key")}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full sm:w-auto" onClick={() => setApiKey(null)}>
+              Dismiss
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {isCheckoutOpen && (
         <SynapsePurchaseModal
           defaultOpen
