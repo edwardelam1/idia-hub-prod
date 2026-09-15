@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Coins, Users, Database, Loader2, Clock } from 'lucide-react';
+import { Coins, Users, Database, Loader2, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import AlaCarteModal from './AlaCarteModal';
 import BundleDetailSheet from './BundleDetailSheet';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,18 +18,14 @@ interface BundleCardProps {
   userCredits: number;
   onDownload: (bundle: any) => void;
   onAddToCart?: (items: any[]) => void;
+  isExpanded: boolean;
+  onToggle: () => void;
 }
 
-const COLLAPSED_INSIGHTS = 3;
-const COLLAPSED_CHIPS = 4;
-
-const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
+const BundleCard = ({ bundle, userCredits, onAddToCart, isExpanded, onToggle }: BundleCardProps) => {
   const navigate = useNavigate();
   const { refreshBalance } = useSynapseCredits();
   const [isAccessing, setIsAccessing] = useState(false);
-  const [showFullText, setShowFullText] = useState(false);
-  const [showAllPoints, setShowAllPoints] = useState(false);
-  const [showAllFeatures, setShowAllFeatures] = useState(false);
 
   const freshness = getFreshness(bundle.sourceLatestAt);
 
@@ -74,27 +70,32 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
   const features: string[] = bundle.features ?? [];
   const insights: string[] = bundle.keyInsights ?? [];
 
-  const visiblePoints = showAllPoints ? dataPoints : dataPoints.slice(0, COLLAPSED_CHIPS);
-  const visibleFeatures = showAllFeatures ? features : features.slice(0, COLLAPSED_CHIPS);
-  const visibleInsights = showFullText ? insights : insights.slice(0, COLLAPSED_INSIGHTS);
-
   return (
     <Card className="border-0 shadow-sm transition-shadow hover:shadow-md">
-      <CardContent className="p-4 sm:p-5">
+      <CardContent className={isExpanded ? 'p-4 sm:p-5' : 'p-2'}>
         <div className="space-y-3">
-          {/* Header */}
+          <Button
+            type="button"
+            variant="ghost"
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${bundle.name}`}
+            onClick={onToggle}
+            className="h-auto min-h-11 w-full justify-between gap-3 whitespace-normal px-2 py-2 text-left"
+          >
+            <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground sm:text-base">
+              {bundle.name}
+            </span>
+            {isExpanded ? (
+              <ChevronUp className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            )}
+          </Button>
+
+          {isExpanded && (
+            <>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-2">
-              <button
-                type="button"
-                aria-expanded={showFullText}
-                onClick={() => setShowFullText((v) => !v)}
-                className="block w-full text-left"
-              >
-                <h3 className="text-sm font-semibold leading-snug text-foreground break-words sm:text-base">
-                  {bundle.name}
-                </h3>
-              </button>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge className={`${getTierColor(bundle.tier)} text-[11px]`} variant="outline">
                   {bundle.tier}
@@ -125,69 +126,33 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
             </span>
           </div>
 
-          {/* Description — tap to expand */}
-          <button
-            type="button"
-            aria-expanded={showFullText}
-            onClick={() => setShowFullText((v) => !v)}
-            className="block w-full text-left"
-          >
-            <p
-              className={`text-xs text-muted-foreground sm:text-sm break-words ${
-                showFullText ? '' : 'line-clamp-3'
-              }`}
-            >
-              {bundle.description}
-            </p>
-          </button>
+          <p className="break-words text-xs text-muted-foreground sm:text-sm">{bundle.description}</p>
 
-          {/* Key Insights — tap to expand */}
+          {/* Key Insights */}
           {insights.length > 0 && (
-            <button
-              type="button"
-              aria-expanded={showFullText}
-              onClick={() => setShowFullText((v) => !v)}
-              className="block w-full rounded-lg bg-blue-500/10 p-3 text-left"
-            >
+            <div className="block w-full rounded-lg bg-blue-500/10 p-3 text-left">
               <h4 className="mb-1.5 text-xs font-medium text-blue-900">Key Insights</h4>
               <ul className="space-y-1">
-                {visibleInsights.map((insight, index) => (
+                {insights.map((insight, index) => (
                   <li key={index} className="flex gap-1.5 text-xs text-blue-800">
                     <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-blue-500" />
                     <span className="break-words">{insight}</span>
                   </li>
                 ))}
               </ul>
-            </button>
+            </div>
           )}
-
-          <button
-            type="button"
-            aria-expanded={showFullText}
-            onClick={() => setShowFullText((v) => !v)}
-            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-          >
-            {showFullText ? 'Show less' : 'Show more'}
-          </button>
-
 
           {/* Data Points */}
           {dataPoints.length > 0 && (
             <div className="rounded-lg bg-muted/60 p-3">
               <h4 className="mb-1.5 text-xs font-medium text-foreground">Data Points</h4>
               <div className="flex flex-wrap gap-1">
-                {visiblePoints.map((point, index) => (
+                {dataPoints.map((point, index) => (
                   <Badge key={index} variant="outline" className="max-w-full break-words text-[11px]">
                     {point}
                   </Badge>
                 ))}
-                {dataPoints.length > COLLAPSED_CHIPS && (
-                  <button type="button" onClick={() => setShowAllPoints((v) => !v)}>
-                    <Badge variant="outline" className="cursor-pointer text-[11px] hover:bg-accent">
-                      {showAllPoints ? 'Show less' : `+${dataPoints.length - COLLAPSED_CHIPS} more`}
-                    </Badge>
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -207,18 +172,11 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
           {/* Features */}
           {features.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {visibleFeatures.map((feature, index) => (
+              {features.map((feature, index) => (
                 <Badge key={index} variant="secondary" className="max-w-full break-words text-[11px]">
                   {feature}
                 </Badge>
               ))}
-              {features.length > COLLAPSED_CHIPS && (
-                <button type="button" onClick={() => setShowAllFeatures((v) => !v)}>
-                  <Badge variant="secondary" className="cursor-pointer text-[11px] hover:bg-accent">
-                    {showAllFeatures ? 'Show less' : `+${features.length - COLLAPSED_CHIPS} more`}
-                  </Badge>
-                </button>
-              )}
             </div>
           )}
 
@@ -249,6 +207,8 @@ const BundleCard = ({ bundle, userCredits, onAddToCart }: BundleCardProps) => {
               <BundleDetailSheet bundle={bundle} />
             </div>
           </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
