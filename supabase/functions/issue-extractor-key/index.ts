@@ -95,6 +95,24 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (action === "delete") {
+      const keyId = String(body.key_id ?? "");
+      console.log(`[KEY_DELETE_START] Deleting key ${keyId}`);
+      if (!keyId) return json({ error: "key_id required." }, 400);
+      const { error } = await admin
+        .from("api_keys")
+        .delete()
+        .eq("id", keyId)
+        .eq("user_id", userId)
+        .eq("environment", "lidd");
+      if (error) {
+        console.error(`[KEY_DELETE_ERROR] ${error.message}`);
+        throw error;
+      }
+      console.log(`[KEY_DELETE_END] Key permanently deleted.`);
+      return json({ ok: true });
+    }
+
     console.log(`[KEY_CREATE_START] Minting franchise key for ${userId}`);
     const rawKey = mintKey();
     const keyHash = await sha256Hex(rawKey);

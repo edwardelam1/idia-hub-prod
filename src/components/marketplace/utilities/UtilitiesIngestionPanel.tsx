@@ -2,11 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, CreditCard, Key, Copy, Terminal } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+
+interface FranchiseKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  status: string;
+  created_at: string;
+  last_used_at: string | null;
+}
 
 const UtilitiesIngestionPanel = () => {
   const { user } = useAuth();
@@ -17,6 +27,10 @@ const UtilitiesIngestionPanel = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [keyName, setKeyName] = useState("");
+  const [keys, setKeys] = useState<FranchiseKey[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+  const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
 
   const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
 
@@ -107,13 +121,63 @@ const UtilitiesIngestionPanel = () => {
     }
   }, [user?.user_id, fetchBalance]);
 
+  const fetchKeys = useCallback(async () => {
+    console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
+    try {
+      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
+        body: { action: "list" },
+      });
+      if (error) {
+        console.error(`[API_KEY_LIST_QUERY_ERROR] ${error.message}`);
+        throw error;
+      }
+      setKeys((data?.keys ?? []) as FranchiseKey[]);
+      console.log(`[API_KEY_LIST_SUCCESS] ${data?.keys?.length ?? 0} keys retrieved.`);
+    } catch (err) {
+      console.error(`[API_KEY_LIST_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+    } finally {
+      setIsLoadingKeys(false);
+      console.log(`[API_KEY_LIST_END] Process terminated.`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.user_id) return;
+    void fetchKeys();
+  }, [user?.user_id, fetchKeys]);
+
+  const handleKeyAction = async (keyId: string, action: "revoke" | "delete") => {
+    console.log(`[API_KEY_${action.toUpperCase()}_START] Key ${keyId}`);
+    setBusyKeyId(keyId);
+    try {
+      const { error } = await supabase.functions.invoke("issue-extractor-key", {
+        body: { action, key_id: keyId },
+      });
+      if (error) {
+        console.error(`[API_KEY_${action.toUpperCase()}_QUERY_ERROR] ${error.message}`);
+        throw error;
+      }
+      toast({
+        title: action === "revoke" ? "Key revoked" : "Key deleted",
+        description: action === "revoke" ? "This key can no longer authenticate." : "The key record was removed.",
+      });
+      await fetchKeys();
+    } catch (err) {
+      console.error(`[API_KEY_${action.toUpperCase()}_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({ title: "Action failed", description: `Could not ${action} the key.`, variant: "destructive" });
+    } finally {
+      setBusyKeyId(null);
+      console.log(`[API_KEY_${action.toUpperCase()}_END] Process terminated.`);
+    }
+  };
+
   const handleGenerateKey = async () => {
     console.log(`[API_KEY_GEN_START] Initiating commercial franchise API key generation.`);
     setIsGenerating(true);
     try {
       console.log(`[API_KEY_GEN_FETCH_START] Requesting new key from edge function.`);
       const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "create", name: "LIDD Franchise Key" },
+        body: { action: "create", name: keyName.trim() || "LIDD Franchise Key" },
       });
       console.log(`[API_KEY_GEN_FETCH_END] Issuer responded.`);
       if (error) {
@@ -122,11 +186,13 @@ const UtilitiesIngestionPanel = () => {
       }
       if (!data?.key) throw new Error("No key returned by the issuer.");
       setApiKey(data.key as string);
+      setKeyName("");
       console.log(`[API_KEY_GEN_SUCCESS] Key generated successfully.`);
       toast({
         title: "Franchise Key Issued",
         description: "Store this securely. It will not be shown again.",
       });
+      await fetchKeys();
     } catch (error) {
       console.error(`[API_KEY_GEN_ERROR] Failed to generate key: ${error instanceof Error ? error.stack : String(error)}`);
       toast({
@@ -221,36 +287,99 @@ const UtilitiesIngestionPanel = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">1. Franchise API Key</h3>
-            <div className="flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-                <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-mono text-xs text-foreground">
-                  {apiKey ?? "••••••••••••••••••••••••••••"}
-                </span>
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
+
+            {apiKey && (
+              <div className="space-y-1 rounded-md border border-primary/40 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary">New key — copy it now, it will not be shown again.</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Copy API key"
+                    onClick={() => copyToClipboard(apiKey, "API key")}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => setApiKey(null)}>
+                    Dismiss
+                  </Button>
+                </div>
               </div>
-              {apiKey ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  aria-label="Copy API key"
-                  onClick={() => copyToClipboard(apiKey, "API key")}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Key label (e.g. Louisville ALPR fleet)"
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                className="sm:flex-1"
+              />
+              <Button onClick={handleGenerateKey} disabled={isGenerating} className="shrink-0">
+                {isGenerating ? "Provisioning..." : "Generate New Key"}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {isLoadingKeys ? (
+                <p className="text-xs text-muted-foreground">Loading key history...</p>
+              ) : keys.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No franchise keys issued yet.</p>
               ) : (
-                <Button onClick={handleGenerateKey} disabled={isGenerating} className="shrink-0">
-                  {isGenerating ? "Provisioning..." : "Generate Key"}
-                </Button>
+                keys.map((k) => (
+                  <div
+                    key={k.id}
+                    className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-medium text-foreground">{k.name}</span>
+                        <Badge variant={k.status === "active" ? "outline" : "secondary"} className="text-[10px]">
+                          {k.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                        {k.key_prefix}••••••••••••••••
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Created {new Date(k.created_at).toLocaleDateString()} • Last used{" "}
+                        {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "never"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      {k.status === "active" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={busyKeyId === k.id}
+                          onClick={() => void handleKeyAction(k.id, "revoke")}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                          Revoke
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-destructive hover:text-destructive"
+                        disabled={busyKeyId === k.id}
+                        onClick={() => void handleKeyAction(k.id, "delete")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
-            {apiKey && (
-              <p className="text-[11px] text-muted-foreground">
-                Store this securely — it will not be shown again.
-              </p>
-            )}
           </section>
 
           <section className="space-y-2">
