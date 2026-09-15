@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
         .from("api_keys")
         .select("id, name, key_prefix, status, created_at, last_used_at")
         .eq("user_id", userId)
-        .eq("environment", "lidd")
+        .eq("environment", environment)
         .order("created_at", { ascending: false });
       if (error) {
         console.error(`[KEY_LIST_ERROR] ${error.message}`);
@@ -88,7 +88,8 @@ Deno.serve(async (req) => {
         .from("api_keys")
         .update({ status: "revoked" })
         .eq("id", keyId)
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .eq("environment", environment);
       if (error) {
         console.error(`[KEY_REVOKE_ERROR] ${error.message}`);
         throw error;
@@ -106,7 +107,7 @@ Deno.serve(async (req) => {
         .delete()
         .eq("id", keyId)
         .eq("user_id", userId)
-        .eq("environment", "lidd");
+        .eq("environment", environment);
       if (error) {
         console.error(`[KEY_DELETE_ERROR] ${error.message}`);
         throw error;
@@ -123,10 +124,10 @@ Deno.serve(async (req) => {
       .from("api_keys")
       .insert({
         user_id: userId,
-        name: String(body.name ?? "LIDD Franchise Key"),
+        name: String(body.name ?? (environment === "mesh" ? "Mesh Node Key" : "LIDD Franchise Key")),
         key_prefix: keyPrefix,
         key_hash: keyHash,
-        environment: "lidd",
+        environment,
         status: "active",
       })
       .select("id, key_prefix, created_at")
