@@ -1,9 +1,11 @@
 # Roadmap
 
-## In progress
-- [x] Replace the MetaMask-based "Authorize Relayer" path with an IDIA Life deep-link handoff + on-chain allowance polling (`src/lib/relayer-authorization.ts`).
-- [ ] Wire the new handoff into the three purchase surfaces (UniversalPurchaseScreen, SynapseTopUp, SynapsePurchaseModal) and distinguish "not authorized" from "insufficient USDC".
-- [ ] Use the native `idialife://` scheme so the handoff opens inside the iOS/Android shells, not the browser (same scheme already allow-listed for Supabase auth callbacks).
+## Done
+- Replaced the MetaMask relayer-approval path with an IDIA Life deep-link handoff (`src/lib/relayer-authorization.ts`).
+- Wired the handoff into UniversalPurchaseScreen, SynapseTopUp, SynapsePurchaseModal and APIEndpoints.
+- Hard 2-minute timeout + spinner always cleared; "insufficient USDC" now reads differently from "not authorized".
 
-## Blocked / needs another project
-- [ ] IDIA Life companion change: answer `idialife://authorize-relayer` by running `walletService.provisionNewWallet()` and returning to the Hub URL in `return`. Until this ships, Hub's handoff has nothing to land on.
+## Blocked (needs the IDIA Life app)
+- Life must answer `idialife://authorize-relayer?owner=&relayer=&return=` in its appUrlOpen listener by running the
+  existing (currently unwired) `walletService.provisionNewWallet()` and then reopening the `return` URL.
+  Until that ships, the Hub handoff opens Life but nothing approves on-chain.
