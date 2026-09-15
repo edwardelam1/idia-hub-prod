@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
@@ -28,6 +29,7 @@ const UtilitiesIngestionPanel = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyName, setKeyName] = useState("");
+  const [issuedKeyName, setIssuedKeyName] = useState("");
   const [keys, setKeys] = useState<FranchiseKey[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
@@ -185,6 +187,7 @@ const UtilitiesIngestionPanel = () => {
         throw error;
       }
       if (!data?.key) throw new Error("No key returned by the issuer.");
+      setIssuedKeyName(keyName.trim() || "LIDD Franchise Key");
       setApiKey(data.key as string);
       setKeyName("");
       console.log(`[API_KEY_GEN_SUCCESS] Key generated successfully.`);
@@ -290,29 +293,6 @@ const UtilitiesIngestionPanel = () => {
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
 
-            {apiKey && (
-              <div className="space-y-1 rounded-md border border-primary/40 bg-primary/5 p-3">
-                <p className="text-xs font-semibold text-primary">New key — copy it now, it will not be shown again.</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-2">
-                    <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    aria-label="Copy API key"
-                    onClick={() => copyToClipboard(apiKey, "API key")}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => setApiKey(null)}>
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            )}
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
@@ -434,6 +414,48 @@ const UtilitiesIngestionPanel = () => {
           </section>
         </CardContent>
       </Card>
+
+      <Dialog open={!!apiKey}>
+        <DialogContent
+          hideCloseButton
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-lg"
+        >
+          <DialogHeader>
+            <DialogTitle>Franchise Key Issued</DialogTitle>
+            <DialogDescription>
+              Copy this key now — it will not be shown again once dismissed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Key label</p>
+              <p className="text-sm font-medium text-foreground">{issuedKeyName}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label="Copy API key"
+                onClick={() => apiKey && copyToClipboard(apiKey, "API key")}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full sm:w-auto" onClick={() => setApiKey(null)}>
+              Dismiss
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isCheckoutOpen && (
         <SynapsePurchaseModal
