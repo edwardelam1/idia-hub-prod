@@ -186,11 +186,13 @@ const UtilitiesIngestionPanel = () => {
       }
       if (!data?.key) throw new Error("No key returned by the issuer.");
       setApiKey(data.key as string);
+      setKeyName("");
       console.log(`[API_KEY_GEN_SUCCESS] Key generated successfully.`);
       toast({
         title: "Franchise Key Issued",
         description: "Store this securely. It will not be shown again.",
       });
+      await fetchKeys();
     } catch (error) {
       console.error(`[API_KEY_GEN_ERROR] Failed to generate key: ${error instanceof Error ? error.stack : String(error)}`);
       toast({
