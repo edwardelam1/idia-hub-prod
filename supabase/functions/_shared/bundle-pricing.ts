@@ -45,7 +45,8 @@ export function resolveSectorKey(category: string): string {
 export interface BundlePriceInput {
   recordCount: number;
   category: string;
-  tier: string;
+  /** Size label only — has no effect on price. */
+  tier?: string;
   avgQualityScore?: number;
   buyerWeight?: number;
 }
@@ -55,8 +56,8 @@ export interface BundlePriceResult {
   chatEquivalents: number;
   perChatFeeCR: number;
   sectorKey: string;
-  tierMultiplier: number;
   qualityFactor: number;
+  sizeLabel: string;
 }
 
 export function calculateBundlePrice(input: BundlePriceInput): BundlePriceResult {
@@ -69,15 +70,19 @@ export function calculateBundlePrice(input: BundlePriceInput): BundlePriceResult
   const perChatFeeCR = Math.ceil(1 * sectorValue * buyerWeight);
 
   const chatEquivalents = Math.max(1, Math.ceil(recordCount / CHAT_ROW_WINDOW));
-  const tierMultiplier = TIER_MULTIPLIERS[input.tier] ?? 1.0;
 
   const quality = Math.min(1, Math.max(0, Number(input.avgQualityScore ?? 0.8)));
   const qualityFactor = 0.75 + quality * 0.25;
 
-  const price = Math.max(
-    1,
-    Math.ceil(chatEquivalents * perChatFeeCR * tierMultiplier * qualityFactor),
-  );
+  // Price is a pure function of the data: consumption cost x quality.
+  const price = Math.max(1, Math.ceil(chatEquivalents * perChatFeeCR * qualityFactor));
 
-  return { price, chatEquivalents, perChatFeeCR, sectorKey, tierMultiplier, qualityFactor };
+  return {
+    price,
+    chatEquivalents,
+    perChatFeeCR,
+    sectorKey,
+    qualityFactor,
+    sizeLabel: resolveSizeLabel(recordCount),
+  };
 }
