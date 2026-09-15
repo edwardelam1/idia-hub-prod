@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { fetchApi } from "@/lib/api";
-import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { supabase } from "@/integrations/supabase/client";
 
 // --- Type Definitions ---
@@ -316,18 +316,18 @@ axios.get('${origin}/v1/features/market-data', config)
       // ====================================================================
       if (result?.error === "APPROVAL_REQUIRED" && useOnChain && buyerWallet) {
         console.warn("[APIEndpoints][executeLiveCall][approval_flow] BEGIN — prompting wallet approval");
-        toast.message("One-time USDC approval required — sign in your wallet.");
-        const approval = await ensureUsdcApproval({ owner: buyerWallet });
+        toast.message("One-time authorization required — approve in the IDIA Life app.");
+        const approval = await authorizeRelayerViaLife({ owner: buyerWallet });
         if (approval.ok !== true) {
-          const reason = (approval as { reason?: string }).reason ?? "unknown";
+          const reason = approval.reason ?? "unknown";
           console.error(
             `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${reason}`,
           );
-          toast.error(`USDC approval failed: ${reason}`);
+          toast.error(reason);
           return;
         }
         console.info(
-          `[APIEndpoints][executeLiveCall][approval_flow] END approval_tx=${approval.hash} — retrying charge`,
+          `[APIEndpoints][executeLiveCall][approval_flow] END alreadyAuthorized=${approval.alreadyAuthorized} — retrying charge`,
         );
         toast.success("Approval confirmed. Retrying charge…");
         result = await fetchApi("/api/v1/synapse/controller", {

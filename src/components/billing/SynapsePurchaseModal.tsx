@@ -39,7 +39,7 @@ import { toast } from "sonner";
 import { formatCredits } from "@/lib/utils";
 import SynapseGasGauge from "./SynapseGasGauge";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
-import { ensureUsdcApproval } from "@/lib/usdc-approval";
+import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { Wallet } from "lucide-react";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
