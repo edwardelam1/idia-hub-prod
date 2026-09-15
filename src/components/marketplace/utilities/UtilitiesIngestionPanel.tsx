@@ -293,29 +293,6 @@ const UtilitiesIngestionPanel = () => {
           <section className="space-y-3">
             <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
 
-            {apiKey && (
-              <div className="space-y-1 rounded-md border border-primary/40 bg-primary/5 p-3">
-                <p className="text-xs font-semibold text-primary">New key — copy it now, it will not be shown again.</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-2">
-                    <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    aria-label="Copy API key"
-                    onClick={() => copyToClipboard(apiKey, "API key")}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => setApiKey(null)}>
-                    Dismiss
-                  </Button>
-                </div>
-              </div>
-            )}
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
