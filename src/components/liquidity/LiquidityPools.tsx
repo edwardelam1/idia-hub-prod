@@ -1,22 +1,27 @@
-import { useMemo, useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ExternalLink, Plus, Minus, Eye, Settings, Loader2, AlertTriangle } from 'lucide-react';
-import { useUniswapPoolStats, useOrgSafeAddress, type UniswapPoolStat } from '@/hooks/useUniswapPoolStats';
-import { useWalletLpPositions, useUserWalletAddress, type WalletPosition } from '@/hooks/useWalletLpPositions';
-import { NoWalletState } from './NoWalletState';
+import { useMemo, useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ExternalLink, Plus, Minus, Eye, Settings, Loader2, AlertTriangle } from "lucide-react";
+import { useUniswapPoolStats, useOrgSafeAddress, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
+import { useWalletLpPositions, useUserWalletAddress, type WalletPosition } from "@/hooks/useWalletLpPositions";
+import { NoWalletState } from "./NoWalletState";
 
-const IDIA = '0x6526f939d257e67896821c25b6c24daa404a01fb';
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
+const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-const uniswapAddUrl = (feeTier: number) =>
-  `https://app.uniswap.org/add/${USDC}/${IDIA}/${feeTier}?chain=base`;
-const uniswapPoolUrl = (poolAddress: string) =>
-  `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
+const uniswapAddUrl = (feeTier: number) => `https://app.uniswap.org/add/${USDC}/${IDIA}/${feeTier}?chain=base`;
+const uniswapPoolUrl = (poolAddress: string) => `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
 const basescanUrl = (addr: string) => `https://basescan.org/address/${addr}`;
 // Fallbacks used when live pool data is unavailable, so links never resolve to "#"
 const UNISWAP_ADD_FALLBACK = uniswapAddUrl(3000);
@@ -26,8 +31,7 @@ const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 const formatUSD = (n: number) =>
   n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${n.toFixed(2)}`;
 const formatAPR = (n: number) => `${(n * 100).toFixed(2)}%`;
-const sumValue = (positions: WalletPosition[] | undefined) =>
-  (positions ?? []).reduce((s, p) => s + p.valueUSD, 0);
+const sumValue = (positions: WalletPosition[] | undefined) => (positions ?? []).reduce((s, p) => s + p.valueUSD, 0);
 const sumFees = (positions: WalletPosition[] | undefined) =>
   (positions ?? []).reduce((s, p) => s + p.uncollectedFeesUSD, 0);
 
@@ -38,8 +42,7 @@ const LiquidityPools = () => {
 
   const pools = poolsQuery.data ?? [];
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
-  const selectedPool: UniswapPoolStat | undefined =
-    pools.find((p) => p.id === selectedPoolId) ?? pools[0];
+  const selectedPool: UniswapPoolStat | undefined = pools.find((p) => p.id === selectedPoolId) ?? pools[0];
 
   const userPositionsQuery = useWalletLpPositions(userWalletQuery.data, pools);
   const orgPositionsQuery = useWalletLpPositions(safeQuery.data, pools);
@@ -63,16 +66,12 @@ const LiquidityPools = () => {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">Liquidity Pools</h1>
-          <p className="text-sm text-muted-foreground">
-            IDIA / USDC on Base · Uniswap v3 · live on-chain data
-          </p>
+          <p className="text-sm text-muted-foreground">IDIA / USDC on Base · Uniswap v3 · live on-chain data</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary">Pool TVL: {formatUSD(totalTVL)}</Badge>
           <Badge variant="default">Org Position: {formatUSD(orgValue)}</Badge>
-          {hasUserWallet && (
-            <Badge variant="outline">Your Position: {formatUSD(userValue)}</Badge>
-          )}
+          {hasUserWallet && <Badge variant="outline">Your Position: {formatUSD(userValue)}</Badge>}
         </div>
       </div>
 
@@ -88,11 +87,11 @@ const LiquidityPools = () => {
       {/* Stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-3">
-          <div className="text-lg font-bold">{loading ? '—' : formatUSD(totalTVL)}</div>
+          <div className="text-lg font-bold">{loading ? "—" : formatUSD(totalTVL)}</div>
           <div className="text-xs text-muted-foreground">Pool TVL (all fee tiers)</div>
         </Card>
         <Card className="p-3">
-          <div className="text-lg font-bold">{loading ? '—' : formatUSD(total24hVol)}</div>
+          <div className="text-lg font-bold">{loading ? "—" : formatUSD(total24hVol)}</div>
           <div className="text-xs text-muted-foreground">24h Volume</div>
         </Card>
         <Card className="p-3">
@@ -111,9 +110,7 @@ const LiquidityPools = () => {
           )}
         </Card>
         <Card className="p-3">
-          <div className="text-lg font-bold">
-            {selectedPool ? formatAPR(selectedPool.feeApr) : '—'}
-          </div>
+          <div className="text-lg font-bold">{selectedPool ? formatAPR(selectedPool.feeApr) : "—"}</div>
           <div className="text-xs text-muted-foreground">
             Fee APR (30d){selectedPool && ` · ${(selectedPool.feeTier / 10_000).toFixed(2)}% tier`}
           </div>
@@ -137,9 +134,7 @@ const LiquidityPools = () => {
                 </DialogTrigger>
                 <DialogContent className="max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>
-                      IDIA/USDC · {(selectedPool.feeTier / 10_000).toFixed(2)}% · 30d
-                    </DialogTitle>
+                    <DialogTitle>IDIA/USDC · {(selectedPool.feeTier / 10_000).toFixed(2)}% · 30d</DialogTitle>
                     <DialogDescription>From Uniswap v3 subgraph on Base</DialogDescription>
                   </DialogHeader>
                   <div className="h-96">
@@ -150,7 +145,13 @@ const LiquidityPools = () => {
                         <YAxis />
                         <Tooltip formatter={(v: number) => formatUSD(v)} />
                         <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} name="TVL" />
-                        <Line type="monotone" dataKey="volume" stroke="hsl(var(--accent-foreground))" strokeWidth={2} name="Volume" />
+                        <Line
+                          type="monotone"
+                          dataKey="volume"
+                          stroke="hsl(var(--accent-foreground))"
+                          strokeWidth={2}
+                          name="Volume"
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -167,7 +168,13 @@ const LiquidityPools = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={selectedPool.series}>
                   <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="volume" stroke="hsl(var(--accent-foreground))" strokeWidth={2} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="volume"
+                    stroke="hsl(var(--accent-foreground))"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -185,21 +192,18 @@ const LiquidityPools = () => {
             <div className="p-2 bg-accent/50 rounded text-xs space-y-1">
               <div className="flex justify-between">
                 <span>Selected tier:</span>
-                <span>{selectedPool ? `${(selectedPool.feeTier / 10_000).toFixed(2)}%` : '—'}</span>
+                <span>{selectedPool ? `${(selectedPool.feeTier / 10_000).toFixed(2)}%` : "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span>Pool TVL:</span>
-                <span>{selectedPool ? formatUSD(selectedPool.tvlUSD) : '—'}</span>
+                <span>{selectedPool ? formatUSD(selectedPool.tvlUSD) : "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span>Your position:</span>
-                <span>{hasUserWallet ? formatUSD(userValue) : 'No wallet'}</span>
+                <span>{hasUserWallet ? formatUSD(userValue) : "No wallet"}</span>
               </div>
             </div>
-            <Button
-              asChild
-              className="w-full h-8 text-xs"
-            >
+            <Button asChild className="w-full h-8 text-xs">
               <a
                 href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK}
                 target="_blank"
@@ -208,18 +212,14 @@ const LiquidityPools = () => {
                 <Plus className="h-3 w-3 mr-1" /> Add Liquidity <ExternalLink className="h-3 w-3 ml-1" />
               </a>
             </Button>
-            <Button
-              asChild
-              variant="destructive"
-              className="w-full h-8 text-xs"
-            >
+            <Button asChild variant="destructive" className="w-full h-8 text-xs">
               <a href="https://app.uniswap.org/pool" target="_blank" rel="noopener noreferrer">
                 <Minus className="h-3 w-3 mr-1" /> Remove Liquidity <ExternalLink className="h-3 w-3 ml-1" />
               </a>
             </Button>
             {!hasUserWallet && (
               <p className="text-[10px] text-muted-foreground">
-                Provision your wallet in IDIA Life to interact directly.
+                Provision your wallet in Life by IDIA to interact directly.
               </p>
             )}
           </div>
@@ -286,14 +286,12 @@ const LiquidityPools = () => {
                           <TableCell className="font-mono text-xs">#{p.tokenId}</TableCell>
                           <TableCell>{(p.fee / 10_000).toFixed(2)}%</TableCell>
                           <TableCell>
-                            <Badge variant={p.inRange ? 'default' : 'secondary'}>
-                              {p.inRange ? 'In range' : 'Out of range'}
+                            <Badge variant={p.inRange ? "default" : "secondary"}>
+                              {p.inRange ? "In range" : "Out of range"}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">{formatUSD(p.valueUSD)}</TableCell>
-                          <TableCell className="text-right text-green-600">
-                            {formatUSD(p.uncollectedFeesUSD)}
-                          </TableCell>
+                          <TableCell className="text-right text-green-600">{formatUSD(p.uncollectedFeesUSD)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -385,7 +383,7 @@ const LiquidityPools = () => {
               key={p.id}
               onClick={() => setSelectedPoolId(p.id)}
               className={`p-2 border rounded text-xs hover:bg-accent transition-colors text-left ${
-                selectedPool?.id === p.id ? 'bg-accent border-primary' : ''
+                selectedPool?.id === p.id ? "bg-accent border-primary" : ""
               }`}
             >
               <div className="font-medium">IDIA/USDC · {(p.feeTier / 10_000).toFixed(2)}%</div>

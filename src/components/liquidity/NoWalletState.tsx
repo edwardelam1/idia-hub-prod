@@ -1,5 +1,5 @@
-import { Wallet, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Wallet, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const NoWalletState = ({ compact = false }: { compact?: boolean }) => {
   if (compact) {
@@ -16,12 +16,13 @@ export const NoWalletState = ({ compact = false }: { compact?: boolean }) => {
       <div>
         <h4 className="text-sm font-semibold">Wallet not provisioned</h4>
         <p className="text-xs text-muted-foreground mt-1">
-          Your IDIA wallet is provisioned through the IDIA Life app. Open Life to set up your wallet, then return here.
+          Your Life wallet is provisioned through the Life by IDIA app. Open Life to set up your wallet, then return
+          here.
         </p>
       </div>
       <Button asChild size="sm" variant="outline">
         <a href="https://app.idia.life" target="_blank" rel="noopener noreferrer">
-          Open IDIA Life <ExternalLink className="h-3 w-3 ml-1" />
+          Open Life by IDIA <ExternalLink className="h-3 w-3 ml-1" />
         </a>
       </Button>
     </div>

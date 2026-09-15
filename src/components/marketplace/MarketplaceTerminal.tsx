@@ -31,7 +31,10 @@ interface SavedQuery {
 const STORAGE_KEY = "synapse.terminal.savedQueries";
 const SQL_HINT = /^\s*(select|with|explain|show)\b/i;
 
-const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified = false }: MarketplaceTerminalProps) => {
+const MarketplaceTerminalImpl = ({
+  synapseBalance: propBalance,
+  isBioKeyVerified = false,
+}: MarketplaceTerminalProps) => {
   const [sql, setSql] = useState<string>("SELECT bundle_id, title FROM marketplace_bundles LIMIT 10;");
   const [isExecuting, setIsExecuting] = useState(false);
   const [isEstimating, setIsEstimating] = useState(false);
@@ -111,33 +114,32 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
     setResults(null);
     try {
       // 1) Identity for receipt issuance.
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("Authentication required to run a query.");
 
       // 2) Burn credits via synapse-controller — same contract every other
       //    trading-desk tool uses. The SQL itself is the auditable artifact;
       //    we hash it into a stable ref so the ledger receipt is reproducible.
-      const queryRef = `sql_${Math.abs(
-        Array.from(sql).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0),
-      ).toString(36)}_${Date.now().toString(36)}`;
+      const queryRef = `sql_${Math.abs(Array.from(sql).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)).toString(
+        36,
+      )}_${Date.now().toString(36)}`;
 
-      const { data: receipt, error: receiptErr } = await supabase.functions.invoke(
-        "synapse-controller",
-        {
-          body: {
-            user_id: user.id,
-            client_id: "IDIA_HUB_SQL_TERMINAL",
-            intent_type: "SQL_TERMINAL_QUERY",
-            sub_module_id: "general",
-            aca_record_ids: [queryRef],
-            metadata: {
-              dialect: "sql",
-              cost_estimate_cr: estimatedCost,
-              query_length: sql.length,
-            },
+      const { data: receipt, error: receiptErr } = await supabase.functions.invoke("synapse-controller", {
+        body: {
+          user_id: user.id,
+          client_id: "IDIA_HUB_SQL_TERMINAL",
+          intent_type: "SQL_TERMINAL_QUERY",
+          sub_module_id: "general",
+          aca_record_ids: [queryRef],
+          metadata: {
+            dialect: "sql",
+            cost_estimate_cr: estimatedCost,
+            query_length: sql.length,
           },
         },
-      );
+      });
 
       if (receiptErr) throw receiptErr;
       if ((receipt as any)?.error) throw new Error((receipt as any).error);
@@ -219,7 +221,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
               <div>
                 <p className="text-xs font-semibold text-destructive">Bio-Sovereign Auth Required</p>
                 <p className="text-[11px] text-destructive/70 mt-0.5">
-                  Verify via the IDIA Life app to unlock the Synapse Engine.
+                  Verify via the Life by IDIA app to unlock the Synapse Engine.
                 </p>
               </div>
             </div>
@@ -231,9 +233,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
                 <FileCode className="w-3 h-3" /> SQL
               </span>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {sql.length} chars
-              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">{sql.length} chars</span>
             </div>
             <textarea
               value={sql}
@@ -260,9 +260,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
                   Est. Cost: {estimatedCost.toFixed(2)} CRD
                 </span>
               ) : (
-                <span className="text-muted-foreground">
-                  Run "Estimate Cost" to enable execution.
-                </span>
+                <span className="text-muted-foreground">Run "Estimate Cost" to enable execution.</span>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -282,7 +280,11 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
                 disabled={!sqlLooksValid || isEstimating || isExecuting}
                 className="h-8 text-xs gap-1.5"
               >
-                {isEstimating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Calculator className="w-3.5 h-3.5" />}
+                {isEstimating ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Calculator className="w-3.5 h-3.5" />
+                )}
                 Estimate Cost
               </Button>
               <Button
@@ -300,9 +302,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
           {/* Output panel — Supabase SQL Editor style */}
           <div className="rounded-lg border border-border overflow-hidden bg-muted/20">
             <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/40">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Output
-              </span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Output</span>
               {results && (
                 <button
                   onClick={() => setResults(null)}
@@ -318,9 +318,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
                   <Loader2 className="w-4 h-4 animate-spin" /> Executing against Iceberg…
                 </div>
               ) : errorMsg ? (
-                <pre className="p-3 font-mono text-xs text-destructive whitespace-pre-wrap">
-                  {errorMsg}
-                </pre>
+                <pre className="p-3 font-mono text-xs text-destructive whitespace-pre-wrap">{errorMsg}</pre>
               ) : results ? (
                 <pre className="p-3 font-mono text-[11px] text-foreground whitespace-pre-wrap">
                   {typeof results === "string" ? results : JSON.stringify(results, null, 2)}
@@ -340,9 +338,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
             Saved Queries
           </div>
           {savedQueries.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground px-1">
-              Save a query to reuse it later.
-            </p>
+            <p className="text-[11px] text-muted-foreground px-1">Save a query to reuse it later.</p>
           ) : (
             <ul className="space-y-1 max-h-80 overflow-auto">
               {savedQueries.map((q) => (
@@ -354,9 +350,7 @@ const MarketplaceTerminalImpl = ({ synapseBalance: propBalance, isBioKeyVerified
                 >
                   <div className="min-w-0">
                     <div className="text-[11px] font-medium text-foreground truncate">{q.name}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate">
-                      {q.sql.slice(0, 40)}
-                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono truncate">{q.sql.slice(0, 40)}</div>
                   </div>
                   <button
                     onClick={(e) => {
