@@ -64,7 +64,7 @@ interface SynapsePurchaseModalProps {
   onOpenChange?: (open: boolean) => void;
   insufficientWarning?: string;
   /** Optional USD amount to pre-load into the à la carte field (e.g. a staged utility balance). */
-  prefillUsd?: number;
+  prefillUsdc?: number;
   /** Fired once settlement completes successfully. */
   onPurchaseComplete?: () => void;
 }
@@ -74,7 +74,7 @@ const SynapsePurchaseModal = ({
   defaultOpen,
   onOpenChange,
   insufficientWarning,
-  prefillUsd,
+  prefillUsdc,
   onPurchaseComplete,
 }: SynapsePurchaseModalProps) => {
   console.log("[SynapsePurchaseModal][Component] [START] Rendering component.");
@@ -225,12 +225,12 @@ const SynapsePurchaseModal = ({
 
   // Pre-load a staged balance (utility settlement) into the à la carte field.
   useEffect(() => {
-    if (!open || !prefillUsd || prefillUsd <= 0) return;
-    console.log(`[SynapsePurchaseModal][prefill] [START] Pre-loading $${prefillUsd.toFixed(2)} settlement amount.`);
+    if (!open || !prefillUsdc || prefillUsdc <= 0) return;
+    console.log(`[SynapsePurchaseModal][prefill] [START] Pre-loading $${prefillUsdc.toFixed(2)} settlement amount.`);
     setPurchaseMode("alacarte");
-    setAlacarteAmount(String(Math.max(2, Math.ceil(prefillUsd))));
+    setAlacarteAmount(String(Math.max(2, Math.ceil(prefillUsdc))));
     console.log(`[SynapsePurchaseModal][prefill] [END] À la carte amount applied.`);
-  }, [open, prefillUsd]);
+  }, [open, prefillUsdc]);
 
   // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
   useEffect(() => {
