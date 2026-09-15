@@ -1,38 +1,39 @@
-# Utilities Intake Gateway & Ephemeral Verification Bridge
+# LIDD Utility Intake & Data Staging
 
-A fourth tab in the Data Marketplace, "Utilities", where a commercial surveillance operator gets a credential to feed plate reads into IDIA. Each accepted read charges the operator a $2.50 processing royalty and splits it four ways in the clearinghouse ledger. Plate numbers are never stored here — they are exchanged with the Wix identity vault for an opaque account ID and dropped.
+A commercial surveillance operator pushes batches of plate reads to IDIA. Each read is checked against the external Wix identity vault, the plate is dropped immediately, and every matched person produces a $2.50 staged debt against the operator. A new "Utilities" tab in the marketplace shows the operator their accumulated unpaid balance and lets them settle it through the existing checkout.
 
-## Phase 1 — Ledger and billing
+## Phase 1 — Staging table
 
-New table `clearinghouse_ledger`: account ID (text — a real account ID or a pool name such as `POOL_DISTRICT_4`), amount, category, extractor ID, created time. Access rules: back-end services get full access; a signed-in person can read only the rows paid to their own account. Pool and admin rows stay invisible to regular users.
+New table `lidd_extraction_events` exactly as specified: extractor ID (the operator's account email), matched person's ID, $2.50 cost, payment status defaulting to unpaid, extraction time, created time.
 
-New billing routine `deduct_extractor_balance(p_extractor_id text, p_amount numeric)`:
-- Resolves the extractor to its IDIA account and charges the $2.50 against its existing Synapse credit balance at the standing $0.75/credit rate (3.3333 CR, 4 decimals internally).
-- Refuses and raises when the balance is short, so nothing is written to the ledger for an unbilled read.
-- Appends a normal credit-ledger entry so the charge shows in the operator's activity.
+Access: back-end services have full access; a signed-in operator can read only rows whose extractor ID matches their own sign-in email. No plate, location or vehicle data is ever stored.
+
+One addition required for the payment step: an update rule so a settlement can flip that operator's own rows from unpaid to paid, plus the grants the table needs to be reachable at all.
 
 ## Phase 2 — Intake endpoint
 
-New edge function `surveillance-api-intake`, built on the supplied code with its math and log structure untouched. Two additions required by the "real keys" decision:
+New edge function `surveillance-api-intake`, using the supplied batch code with its loop, math and log brackets unchanged: parse payload, validate extractor and infractions array, loop each plate through the Wix vault, skip non-matches and per-plate faults without aborting the batch, collect matched events, bulk-insert them, return processed/matched/debt-staged counts. Every step keeps its `[PHASE_START]`/`[PHASE_END]` logs and every catch logs the full stack.
 
-- The call must carry the issued credential in an `x-api-key` header. The function hashes it, looks up the matching key record, and takes the extractor identity from that record — the `extractor_id` in the body is only cross-checked, never trusted on its own. Unknown, revoked or mismatched keys are rejected with 401 before any Wix call or billing.
-- Standard cross-origin headers on every response, including errors.
+Two additions, since this endpoint is exposed to an outside company:
 
-Everything else stays exactly as specified: payload validation, the Wix vault round trip, clean 200 "ignored" exit for unregistered assets, the $2.50 split (citizen $0.75, District 4 $0.50, community $0.25, admin $1.00), the four ledger rows, then the extractor charge. Every step keeps its bracketed start/end logs, and every failure path logs the exact error and stack.
+- The request must carry the issued credential in an `x-api-key` header. The function hashes it, matches an active key record, and derives the extractor identity from that record — the `extractor_id` in the body is only cross-checked. Unknown or revoked keys are rejected with 401 before any vault call. This is logged with the same bracketing.
+- Cross-origin headers on every response, including errors.
 
-The Wix vault key is needed before the function can run — I'll open the secure form for `WIX_SECURE_API_KEY` during the build.
+The Wix vault key must be saved before the function can run — I'll open the secure form for `WIX_SECURE_API_KEY` during the build.
 
-## Phase 3 — Utilities tab
+## Phase 3 — Utilities marketplace tab
 
-`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone, sitting next to SQL Terminal, AI Bundles and The Vulture.
+`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone alongside SQL Terminal, AI Bundles and The Vulture; it passes the signed-in person's email as the extractor ID.
 
-New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`. The pasted snippet lost its markup in transit, so I'll rebuild it faithfully to the described design: a header with title, subtitle and a "System Operational" status badge; a credentials card with a masked key field, a copy action, and a "Generate Franchise Key" button that shows "Provisioning…" while it works; the $2.50 royalty footnote. It keeps the bracketed console logs from the snippet.
+New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`. The pasted snippet lost its markup in transit, so I'll rebuild it faithfully to what it describes, keeping its logic and bracketed logs verbatim: header with title, subtitle and an "API Active" badge; a "Pending Data Dividend Balance" card summing all unpaid events with the event count and a "Settle Balance" button (disabled while loading or at zero); a credentials card with a masked key field, copy action and "Generate Franchise Key" button; the existing `SynapsePurchaseModal` opened with the balance prefilled.
 
-Behaviour differences from the snippet, following the "real keys" decision: the button calls the back end to mint a genuine key, the full value is shown exactly once with the "store this securely" notice, and only its hash is kept. The panel also lists previously issued keys by prefix with a revoke action, and shows the extractor's current credit balance so an operator can see when they need to top up.
+Two behaviour notes:
+
+- Key generation calls the back end to mint a real key (per your earlier decision): shown in full once with a "store this securely" notice, only its hash kept, previously issued keys listed by prefix with a revoke action.
+- After the checkout modal reports success, the panel marks that operator's settled events as paid and refreshes, so the balance actually clears.
 
 ## Technical notes
 
-- `clearinghouse_ledger.user_id` is text on purpose — it holds either a Supabase auth ID or a pool constant, so no foreign key.
-- Key issuance reuses the existing `api_keys` table (SHA-256 hash stored, 8-char prefix for display) via a small `issue-extractor-key` edge function; no raw key is ever persisted.
-- Billing runs through the routine rather than inline SQL so the balance check and the ledger append stay in one transaction.
-- Nothing about plate data is written to Supabase at any point; the plate exists only in the request body and the outbound Wix call.
+- Settlement is prefilled in credits at the standing $0.75/credit rate; the staged amount stays as recorded.
+- Key issuance reuses the existing `api_keys` table (SHA-256 hash, 8-char prefix) through a small `issue-extractor-key` edge function; no raw key is persisted.
+- `SynapsePurchaseModal` stays unmodified; the panel only supplies the prefill amount and reacts to its result.
