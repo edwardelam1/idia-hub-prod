@@ -1,46 +1,43 @@
-# LIDD Utility Intake — Staged Debt & Utilities Tab
+# Utilities Panel → Full Integration Portal
 
-A commercial surveillance operator pushes batches of plate reads. Each plate is checked against the external Wix identity vault, the plate is dropped immediately, and every matched person stages a $2.50 unpaid debt against the operator. A new "Utilities" tab in the marketplace shows that accumulated balance and settles it through the existing checkout.
+Turn the Utilities tab from a key generator into a complete developer spec for commercial operators: where to send data, how to authenticate, and exactly what the data must look like.
 
-## Phase 1 — Database
+## What the operator will see
 
-Run the supplied SQL as given:
+The existing header, "Pending Data Dividend Balance" card and settlement flow stay exactly as they are. Below them, a new full-width "Commercial Ingestion Integration" card with four numbered steps, each with its own copy button:
 
-- Adds the buyer diagnostic columns to `profiles` (role, jurisdiction, latency, weights, completion timestamps, raw answers) — none exist today, so nothing is overwritten.
-- Adds the server-side trigger that sets the weights from the chosen role on insert or role change.
-- Creates `lidd_extraction_events` (extractor's account, matched person's GUID, $2.50 cost, unpaid status, extraction time). The person's GUID links to the unique `platform_guid` on profiles, which exists. Access: back-end services full, a signed-in operator reads only its own rows. No plate, location or vehicle data is stored.
+1. **Franchise API Key** — unchanged behaviour: generate once, shown in full once, copy action, "store this securely" notice.
+2. **Ingestion Endpoint** — method and URL:
+   `POST https://zxyngqciipcvveigrzqt.supabase.co/functions/v1/surveillance-api-intake`
+3. **Required Headers** — the piece currently missing. The intake gateway authenticates on the franchise key header, not on a user login:
+   - `x-api-key: <franchise key>`
+   - `Content-Type: application/json`
+4. **JSON Payload Schema** — the batch shape the gateway actually accepts, with the operator's own extractor ID filled in:
+   ```
+   { "extractor_id": "<their id>",
+     "infractions": [ { "license_plate": "ABC1234", "timestamp": "2026-09-15T14:30:00Z" } ] }
+   ```
 
-Two additions the settlement step needs: grants so the table is reachable at all, and an update rule so an operator can flip its own rows from unpaid to paid after paying.
+Plus two additions the pasted draft was missing, because an integrator cannot go live without them:
 
-## Phase 2 — Intake endpoint
+5. **Ready-to-run example** — a complete `curl` command combining endpoint, headers and payload, in one copy action.
+6. **Response and error reference** — the success body (`status`, `records_processed`, `matches_found`, `debt_staged`) and what each rejection means: 401 missing/unknown/revoked key, 403 extractor ID does not match the key, 400 empty batch.
 
-New `supabase/functions/surveillance-api-intake/index.ts` using the supplied code verbatim — same loop, same math, same `[PHASE_START]`/`[PHASE_END]` bracketing, same stack traces in every catch.
+Everything is mobile-first: code blocks scroll horizontally rather than being cut off, copy buttons are icon-only and sit beside each block.
 
-Two additions, since this endpoint is exposed to an outside company:
+## Corrections to the pasted code
 
-- Cross-origin headers on every response, including errors.
-- The request must carry the issued credential in an `x-api-key` header; unknown or revoked keys are rejected with 401 before any vault call, logged with the same bracketing. The body's `extractor_id` is cross-checked against the key's owner.
+The pasted snippet lost its markup in transit and also targets contracts this project does not use. It will be rebuilt faithfully to the described design, with these corrected against the live backend:
 
-The Wix vault key must be saved before the function can run — I'll open the secure form for `WIX_SECURE_API_KEY` during the build.
+- Key generation posts `{ action: "create", name: "LIDD Franchise Key" }` and reads `data.key` — the deployed issuer's actual contract. The draft's `{ extractor_id }` / `data.apiKey` would return nothing.
+- Checkout keeps `prefillUsd` + `onPurchaseComplete` and the settle-on-success step that clears the balance. The draft's `prefillAmount` / `purchaseType` props do not exist on the checkout modal and would break settlement.
+- Identity reads `user.user_id` (this project's shape), not `user.id`.
+- The spec card documents `x-api-key`; the draft omitted headers entirely, which is the actual thing blocking an operator from transmitting.
 
-## Phase 3 — Utilities marketplace tab
-
-`DataMarketplace.tsx` gains a fourth tile, "Utilities", visible to everyone alongside SQL Terminal, AI Bundles and The Vulture.
-
-New `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`, built from the supplied component — the pasted markup lost its tags in transit, so I'll rebuild the layout faithfully to what it describes while keeping every line of logic and every bracketed log verbatim:
-
-- Header: title, subtitle, "API Active" badge.
-- "Pending Data Dividend Balance" card: sum of unpaid events, count of identity infractions, "Settle Balance" button disabled while loading or at zero.
-- "Commercial Ingestion Credentials" card: masked key field, copy action, "Generate Franchise Key" button.
-- The existing `SynapsePurchaseModal`, unmodified, opened with the balance prefilled.
-
-Two behaviour notes:
-
-- Key generation calls the back end to mint a real key rather than the placeholder string in the snippet, so the key it shows actually works against the intake endpoint. Shown in full once with a "store this securely" notice; only its hash is kept.
-- After checkout reports success, the panel marks that operator's settled events as paid and refreshes, so the balance actually clears.
+All `[PHASE_START]` / `[PHASE_END]` logging is retained, and copy actions get their own bracketed logs.
 
 ## Technical notes
 
-- Key issuance reuses the existing `api_keys` table (SHA-256 hash, 8-char prefix) via a small `issue-extractor-key` edge function; no raw key is persisted.
-- Settlement is prefilled at the standing $0.75/credit rate; the staged amount stays as recorded.
-- `SynapsePurchaseModal` is untouched; the panel only supplies the prefill and reacts to the result.
+- Single file changed: `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`. No backend, schema or edge function changes.
+- Endpoint URL derived from `import.meta.env.VITE_SUPABASE_URL` rather than hardcoded, so it stays correct per environment.
+- Card layout shifts to: balance card on top, integration card full width beneath it, so the code blocks have room to breathe.
