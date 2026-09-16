@@ -148,22 +148,33 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     [logs],
   );
 
-  const { data: spendMap = new Map<string, number>() } = useQuery({
+  const { data: ledgerMeta = { spend: new Map<string, number>(), reference: new Map<string, string>() } } = useQuery({
     queryKey: ["egress-credit-spend", ledgerIds],
     enabled: ledgerIds.length > 0,
     queryFn: async () => {
-      console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs.");
-      const { data, error } = await supabase.from("synapse_credit_ledger").select("id, amount").in("id", ledgerIds);
+      console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs and settlement references.");
+      const { data, error } = await supabase
+        .from("synapse_credit_ledger")
+        .select("id, amount, reference_id")
+        .in("id", ledgerIds);
       if (error) {
         console.error(`[PHASE_END: EgressLogs.LedgerQuery] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
-      const m = new Map<string, number>();
-      (data || []).forEach((r: any) => m.set(r.id, Number(r.amount ?? 0)));
-      console.info(`[PHASE_END: EgressLogs.LedgerQuery] rows=${data?.length ?? 0}`);
-      return m;
+      const spend = new Map<string, number>();
+      const reference = new Map<string, string>();
+      (data || []).forEach((r: any) => {
+        spend.set(r.id, Number(r.amount ?? 0));
+        if (r.reference_id) reference.set(r.id, String(r.reference_id));
+      });
+      console.info(
+        `[PHASE_END: EgressLogs.LedgerQuery] rows=${data?.length ?? 0} withReference=${reference.size}`,
+      );
+      return { spend, reference };
     },
   });
+  const spendMap = ledgerMeta.spend;
+  const referenceMap = ledgerMeta.reference;
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
