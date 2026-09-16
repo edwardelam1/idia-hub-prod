@@ -1088,26 +1088,33 @@ serve(async (req) => {
               success: true,
               health: [],
               lifestyle: [],
+              ford: [],
               receiptIds: [],
               contributorCount: 0,
               unresolvedHashCount: 0,
             } as MarketplaceFetchResult),
       ]);
       aggregates = aggResult;
-      // In marketplace mode, prefer cross-owner sample so receipts fan out to
-      // every contributing owner. Fall back to caller-scoped rows otherwise.
-      if (isDataScientistMode && marketplaceAudit.success && (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0)) {
+      // Marketplace mode = ecosystem-wide: every contributor, every staged table.
+      // Personal mode (marketplace disabled) is the only owner-scoped path.
+      if (
+        isDataScientistMode &&
+        marketplaceAudit.success &&
+        (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0 || marketplaceAudit.ford.length > 0)
+      ) {
         sourceHealth = marketplaceAudit.health;
         sourceLifestyle = marketplaceAudit.lifestyle;
+        sourceFord = marketplaceAudit.ford;
         marketplaceReceiptIds = marketplaceAudit.receiptIds;
         console.info(
-          `[STATUS: BestFriendAI.MarketplaceSample] Balanced rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle; receipt contributors=${marketplaceAudit.contributorCount}; unresolved_hashes=${marketplaceAudit.unresolvedHashCount}.`,
+          `[STATUS: BestFriendAI.MarketplaceSample] Balanced rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle + ${sourceFord.length} vehicle; receipt contributors=${marketplaceAudit.contributorCount}; consent_refs=${marketplaceReceiptIds.length}; unresolved_hashes=${marketplaceAudit.unresolvedHashCount}.`,
         );
       } else if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
+        if (audit.ford.length > 0) sourceFord = audit.ford;
         console.info(
-          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows fetched for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"}.`,
+          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle + ${audit.ford.length} vehicle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"} vehicle=${aggregates?.ford?.count ?? "n/a"}.`,
         );
       } else {
         console.info(`[BEGIN: BestFriendAI.OmniFetchExecution.Warning] Handling OmniFetch failure condition.`);
