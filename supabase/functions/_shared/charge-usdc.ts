@@ -58,14 +58,26 @@ export type ChargeResult =
   | { ok: true; hash: string }
   | { ok: false; code: string; message: string };
 
-function getTreasury(): string {
-  const fromEnv = Deno.env.get("IDIA_SAFE_ADDRESS_BASE") ?? Deno.env.get("IDIA_TREASURY_ADDRESS");
-  const candidate = (fromEnv && fromEnv.trim().length > 0 ? fromEnv : PROTOCOL.treasury) as string;
+/**
+ * Settlement receiver for credit purchases = the RELAYER wallet
+ * (PROTOCOL.treasury). The governance Safe (PROTOCOL.safe) must NEVER be the
+ * destination here — it was previously picked up from IDIA_SAFE_ADDRESS_BASE
+ * and silently misrouted every purchase.
+ */
+function getSettlementReceiver(): { address: string; source: "protocol" | "env" } {
+  const override = Deno.env.get("IDIA_SETTLEMENT_RECEIVER");
+  const useOverride = !!override && override.trim().length > 0;
+  const candidate = (useOverride ? override!.trim() : PROTOCOL.treasury) as string;
   if (!isAddress(candidate)) {
     throw new Error(`TREASURY_MISCONFIGURED: ${candidate}`);
   }
-  return getAddress(candidate);
+  const normalized = getAddress(candidate);
+  if (normalized.toLowerCase() === PROTOCOL.safe.toLowerCase()) {
+    throw new Error(`TREASURY_MISCONFIGURED: settlement receiver must not be the governance Safe (${normalized})`);
+  }
+  return { address: normalized, source: useOverride ? "env" : "protocol" };
 }
+
 
 function getRpc(): string {
   return (
