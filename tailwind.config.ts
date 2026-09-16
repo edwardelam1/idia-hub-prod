@@ -18,6 +18,10 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ['"Work Sans Variable"', 'sans-serif'],
+				mono: ['"JetBrains Mono Variable"', 'monospace']
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
