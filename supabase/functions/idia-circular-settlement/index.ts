@@ -762,6 +762,7 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
                 is_settled: idiaStatus === "completed",
                 settled_at: new Date().toISOString(),
                 description: `1:1 IDIA royalty yield for Ref: ${ingestionReference}`,
+                metadata: { reference_id: ingestionReference, contributor_wallet: lifeWallet, asset: "IDIA" },
               },
             });
             idiaSettled = true;
