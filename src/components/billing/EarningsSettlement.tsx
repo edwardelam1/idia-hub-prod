@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import ActivityLedger from "./ActivityLedger";
+import ContributorSettlementHashes from "./ContributorSettlementHashes";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { connectEmbeddedWallet } from "@/lib/metamask-sdk";
 import { toast } from "sonner";
