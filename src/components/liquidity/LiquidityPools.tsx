@@ -18,6 +18,7 @@ import { useWalletLpPositions, useUserWalletAddress, type WalletPosition } from 
 import { NoWalletState } from "./NoWalletState";
 import ProtocolHoldings from "./ProtocolHoldings";
 import ContractInformation from "./ContractInformation";
+import V4Positions from "./V4Positions";
 import { deriveIdiaUsdPrice } from "@/lib/idia-price";
 
 const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
@@ -379,7 +380,8 @@ const LiquidityPools = () => {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {pools.length === 0 && !loading && (
             <div className="col-span-full text-xs text-muted-foreground p-4 text-center">
-              No IDIA/USDC pools returned. Subgraph may be syncing.
+              No Uniswap v3 IDIA/USDC pools exist on Base. IDIA liquidity lives in Uniswap v4 — see
+              the v4 positions panel below.
             </div>
           )}
           {pools.map((p) => (
@@ -400,6 +402,7 @@ const LiquidityPools = () => {
         </div>
       </Card>
 
+      <V4Positions owners={[userWalletQuery.data, safeQuery.data]} userWallet={userWalletQuery.data} />
       <ProtocolHoldings idiaUsdPrice={idiaUsdPrice} />
       <ContractInformation idiaUsdPrice={idiaUsdPrice} />
     </div>
