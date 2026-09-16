@@ -384,6 +384,14 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </div>
                     ))}
                     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
+                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">ACA refs</dt>
+                      <dd className="min-w-0">
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                      </dd>
+                      <span />
+                    </div>
+
+                    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
                       <dt className="text-[10px] font-medium uppercase text-muted-foreground">Liability NFT</dt>
                       <dd className="min-w-0 break-all font-mono text-[10px] leading-4">
                         {minted ? (
