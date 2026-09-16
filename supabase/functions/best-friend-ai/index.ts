@@ -1128,39 +1128,46 @@ serve(async (req) => {
       console.info("[END: BestFriendAI.OmniFetchExecution]");
     }
 
-    console.info("[BEGIN: BestFriendAI.DataTruncation] Ensuring payload fits context window.");
-    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(sourceHealth, sourceLifestyle);
+    console.info("[PHASE_START: BestFriendAI.DataTruncation] Ensuring sample payload fits context window.");
+    const {
+      health: healthMetrics,
+      lifestyle: lifestyleEvents,
+      ford: vehicleMetrics,
+    } = truncateRecords(sourceHealth, sourceLifestyle, sourceFord);
     console.info(
-      `[END: BestFriendAI.DataTruncation] Final dimensions: ${healthMetrics.length} health, ${lifestyleEvents.length} lifestyle.`,
+      `[PHASE_END: BestFriendAI.DataTruncation] Sample dimensions: ${healthMetrics.length} health, ${lifestyleEvents.length} lifestyle, ${vehicleMetrics.length} vehicle.`,
     );
 
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
     const marketplaceSummary = isDataScientistMode
-      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents)
+      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents, vehicleMetrics)
       : null;
 
     const totalsGuidance =
       "\n\nIMPORTANT: When reporting counts, sums, averages, or ranges, use the TRUE_TOTALS block. " +
-      "The SAMPLE_ROWS block is a small preview of individual records for context and is NOT representative of totals. " +
+      "TRUE_TOTALS is computed over every row of every staging table — nothing is paged or capped. " +
+      "The SAMPLE_ROWS block is a small illustrative preview of individual records and is NOT representative of totals. " +
       "Never count SAMPLE_ROWS to answer 'how many' or 'how much' questions.";
 
     let systemPrompt: string;
     if (isDataScientistMode) {
       systemPrompt =
-        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents) +
+        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents, vehicleMetrics) +
         totalsGuidance;
     } else {
-      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents);
+      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents, vehicleMetrics);
       const hasAnyData =
         (trueTotals.health_records ?? 0) > 0 ||
         (trueTotals.lifestyle_records ?? 0) > 0 ||
+        (trueTotals.vehicle_records ?? 0) > 0 ||
         healthMetrics.length > 0 ||
-        lifestyleEvents.length > 0;
+        lifestyleEvents.length > 0 ||
+        vehicleMetrics.length > 0;
       const navSummary = hasAnyData
-        ? "\n\nTRUE_TOTALS (from database, authoritative):\n" +
+        ? "\n\nTRUE_TOTALS (from database, authoritative, personal scope):\n" +
           JSON.stringify(trueTotals) +
           "\n\nSAMPLE_ROWS (preview only, NOT representative of totals): " +
-          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle records shown.`
+          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle + ${vehicleMetrics.length} vehicle records shown.`
         : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
       systemPrompt = STORE_CLERK_PERSONA + navSummary + totalsGuidance;
     }
