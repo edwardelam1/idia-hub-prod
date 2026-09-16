@@ -91,11 +91,19 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   };
 
   const handleAddToCart = (items: any[]) => {
-    const newItems = items.map((item) => ({
-      ...item,
-      quantity: 1,
-    }));
-    setCartItems((prev) => [...prev, ...newItems]);
+    setCartItems((prev) => {
+      const merged = [...prev];
+      for (const item of items) {
+        // Same bundle + same stream selection is one line, not two.
+        const existing = merged.findIndex((c) => c.id === item.id);
+        if (existing >= 0) {
+          merged[existing] = { ...merged[existing], quantity: (merged[existing].quantity || 1) + 1 };
+        } else {
+          merged.push({ ...item, quantity: 1 });
+        }
+      }
+      return merged;
+    });
   };
 
   const handleUpdateCart = (items: CartItem[]) => {
@@ -108,7 +116,11 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       const results = await Promise.all(
         cartItems.map((item) =>
           supabase.functions.invoke("marketplace-bundle-access", {
-            body: { bundle_id: item.bundleId ?? item.id, quantity: item.quantity ?? 1 },
+            body: {
+              bundle_id: item.bundleId ?? item.id,
+              quantity: item.quantity ?? 1,
+              streams: item.streams ?? null,
+            },
           }),
         ),
       );
