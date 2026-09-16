@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { formatCredits } from "@/lib/utils";
+import ContributorSettlementHashes from "./ContributorSettlementHashes";
 
 export type LedgerRail = "tradfi" | "defi";
 
