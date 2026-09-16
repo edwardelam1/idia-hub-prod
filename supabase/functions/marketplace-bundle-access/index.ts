@@ -73,22 +73,80 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Pull the real ACA record keys backing this bundle.
     const dj: any = bundle.data_json ?? {};
-    const acaRecordIds: string[] = Array.isArray(dj.aca_record_ids)
+
+    // Price this purchase server-side. A partial (à la carte) pick pays exactly
+    // its share of the records; the client's number is never trusted.
+    console.info("[PHASE_START: MarketplaceBundleAccess.Price]");
+    const selection = priceSelection(
+      dj?.activity_mix,
+      Number((bundle as any).price ?? 0),
+      Array.isArray(requestedStreams) ? requestedStreams.map((s: unknown) => String(s)) : null,
+    );
+    if (Array.isArray(requestedStreams) && requestedStreams.length > 0 && selection.streams.length === 0) {
+      console.info("[PHASE_END: MarketplaceBundleAccess.Price] selected streams no longer in bundle");
+      return new Response(
+        JSON.stringify({ error: "The selected data streams are no longer part of this bundle." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    console.info(
+      `[PHASE_END: MarketplaceBundleAccess.Price] price=${selection.price} streams=${selection.streams.length}`,
+    );
+
+    // Resolve the real source records backing this purchase.
+    console.info("[PHASE_START: MarketplaceBundleAccess.Lineage]");
+    let acaRecordIds: string[] = Array.isArray(dj.aca_record_ids)
       ? dj.aca_record_ids
       : Array.isArray(dj.records)
         ? dj.records.map((r: any) => r?.aca_hash_key ?? r?.id).filter(Boolean)
         : [];
 
     if (acaRecordIds.length === 0) {
-      console.info("[BEGIN: MarketplaceBundleAccess.Lineage.Stall] No auditable lineage in bundle.");
-      return new Response(JSON.stringify({ error: "Bundle has no auditable lineage." }), {
+      const root = String(bundle.category ?? "").split(".")[0];
+      const LINEAGE_SOURCES: Record<string, { table: string; typeColumn: string | null; timeColumn: string }> = {
+        health: { table: "staged_health_data", typeColumn: "activity_type", timeColumn: "created_at" },
+        lifestyle: { table: "staged_lifestyle_data", typeColumn: "event_type", timeColumn: "created_at" },
+        business: { table: "staged_business_data", typeColumn: null, timeColumn: "created_at" },
+        vehicle: { table: "staged_ford_data", typeColumn: "metric_type", timeColumn: "recorded_at" },
+        ford: { table: "staged_ford_data", typeColumn: "metric_type", timeColumn: "recorded_at" },
+      };
+      const src = LINEAGE_SOURCES[root];
+      if (!src) {
+        console.info(`[PHASE_END: MarketplaceBundleAccess.Lineage] unknown source root=${root}`);
+        return new Response(JSON.stringify({ error: "Bundle has no auditable lineage." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let query = admin.from(src.table).select("aca_hash_key").limit(5000);
+      const windowStart = (bundle as any).window_start as string | null;
+      const windowEnd = (bundle as any).window_end as string | null;
+      if (windowStart && !windowStart.startsWith("-infinity")) query = query.gte(src.timeColumn, windowStart);
+      if (windowEnd) query = query.lte(src.timeColumn, windowEnd);
+
+      const lineageStreams =
+        selection.streams.length > 0 ? selection.streams : Object.keys(dj?.activity_mix ?? {});
+      if (src.typeColumn && lineageStreams.length > 0) query = query.in(src.typeColumn, lineageStreams);
+
+      const { data: lineageRows, error: lineageErr } = await query;
+      if (lineageErr) throw lineageErr;
+      acaRecordIds = (lineageRows ?? []).map((r: any) => r.aca_hash_key).filter(Boolean);
+      console.info(
+        `[PHASE_END: MarketplaceBundleAccess.Lineage] table=${src.table} streams=${lineageStreams.length} records=${acaRecordIds.length}`,
+      );
+    } else {
+      console.info(`[PHASE_END: MarketplaceBundleAccess.Lineage] embedded records=${acaRecordIds.length}`);
+    }
+
+    if (acaRecordIds.length === 0) {
+      console.info("[PHASE_END: MarketplaceBundleAccess.Lineage] empty after resolution");
+      return new Response(JSON.stringify({ error: "No source records remain for this selection." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.info(`[END: MarketplaceBundleAccess.BundleResolve] records=${acaRecordIds.length}`);
 
     // Hand off to synapse-controller — same contract Best Friend AI uses.
     console.info("[BEGIN: MarketplaceBundleAccess.SynapseHandoff]");
