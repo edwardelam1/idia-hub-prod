@@ -42,7 +42,7 @@ function boundedPayload(value: unknown): unknown {
   return safe;
 }
 
-export async function recordActivity(write: ActivityWrite) {
+export async function recordActivity(write: ActivityWrite): Promise<boolean> {
   console.info(`[PHASE_START: ActivityHistory.Record] source=${write.source} action=${write.action}`);
   try {
     console.info("[PHASE_START: ActivityHistory.Identity] Resolving authenticated owner.");
@@ -76,7 +76,8 @@ export async function recordActivity(write: ActivityWrite) {
       "[PHASE_END: ActivityHistory.Record] Failed:",
       error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error),
     );
-    throw error;
+    return false;
   }
   console.info("[PHASE_END: ActivityHistory.Record] Complete.");
+  return true;
 }

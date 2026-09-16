@@ -32,6 +32,7 @@ interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   liabilityTokenHash?: string | null;
+  egressLogId?: string | null;
   creditDeducted?: boolean;
 }
 
@@ -129,7 +130,8 @@ const BestFriendPage = () => {
         {
           role: "assistant",
           content: assistantContent,
-          liabilityTokenHash: receipt?.egress_log_id ?? digiRampAnchorId,
+          liabilityTokenHash: digiRampAnchorId,
+          egressLogId: receipt?.egress_log_id ?? null,
           creditDeducted: marketplaceMode,
         },
       ]);
@@ -215,7 +217,9 @@ const BestFriendPage = () => {
                           variant="ghost"
                           size="sm"
                           className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                          onClick={() => navigate(`/egress-logs?receipt=${encodeURIComponent(msg.liabilityTokenHash)}`)}
+                          onClick={() => navigate(msg.egressLogId
+                            ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
+                            : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`)}
                         >
                           <FileKey size={12} className="text-amber-500" />
                           {truncateHash(msg.liabilityTokenHash)}
