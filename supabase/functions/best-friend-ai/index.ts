@@ -8,14 +8,16 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const MAX_OMNI_ROWS = 500;
-const MARKETPLACE_HASH_PAGE_SIZE = 1_000;
-const MARKETPLACE_MAX_HASH_PAGES = 75;
+// Hash scanning is set-based in the database now — no client-side paging limits.
 const MARKETPLACE_SAMPLE_ROW_BUDGET = 150;
+
+type StagedTable = "staged_health_data" | "staged_lifestyle_data" | "staged_ford_data";
 
 type MarketplaceFetchResult = {
   success: boolean;
   health: any[];
   lifestyle: any[];
+  ford: any[];
   receiptIds: string[];
   contributorCount: number;
   unresolvedHashCount: number;
@@ -34,12 +36,19 @@ export type OmniAggregates = {
     | null;
 };
 
+// Personal scope: the ONLY owner-scoped read path (Best Friend with marketplace
+// disabled). Ford telemetry stays ecosystem-wide by policy.
 async function fetchOmniAggregates(
   supabase: ReturnType<typeof createClient>,
   pseudoId: string,
 ): Promise<OmniAggregates> {
   try {
-    const { data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId });
+    console.info(`[PHASE_START: OmniAggregates] Personal full-table aggregates for ${pseudoId}.`);
+    let { data, error } = await supabase.rpc("staged_user_aggregates", { _pseudo_id: pseudoId });
+    if (error) {
+      console.error("[ERROR: OmniAggregates] staged_user_aggregates failed:", error.message);
+      ({ data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId }));
+    }
     if (error) {
       console.error("[ERROR: OmniAggregates] RPC failed:", error.message);
       return { health: null, lifestyle: null, ford: null };
@@ -93,124 +102,43 @@ function updateRange(range: { min: string | null; max: string | null }, value: u
   if (!range.max || value > range.max) range.max = value;
 }
 
+// Ecosystem-wide totals across EVERY staged row of EVERY staging table.
+// Computed set-based in the database: no paging, no row ceiling.
 async function fetchMarketplaceAggregates(supabase: ReturnType<typeof createClient>): Promise<OmniAggregates> {
   try {
-    console.info("[BEGIN: MarketplaceAggregates] Calculating all-staged marketplace totals.");
-    const healthTotals: Record<string, { sum: number; count: number }> = {};
-    const lifestyleTotals: Record<string, { sum: number; count: number }> = {};
-    const healthRange = { min: null as string | null, max: null as string | null };
-    const lifestyleRange = { min: null as string | null, max: null as string | null };
-    const eventTypes = new Set<string>();
-    const eventCategories = new Set<string>();
-    let healthCount = 0;
-    let lifestyleCount = 0;
-
-    for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
-      const offset = page * MARKETPLACE_HASH_PAGE_SIZE;
-      const { data, error } = await supabase
-        .from("staged_health_data")
-        .select(
-          "id, steps_count, duration_seconds, active_energy_kcal, basal_energy_kcal, data_quality_score, heart_rate, resting_heart_rate, blood_oxygen_percentage, vo2_max, processed_at",
-        )
-        .order("id", { ascending: true })
-        .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
-      if (error) throw new Error(`Marketplace health aggregate scan failed: ${error.message}`);
-      for (const row of data ?? []) {
-        healthCount += 1;
-        addMetric(healthTotals, "steps", (row as any).steps_count);
-        addMetric(healthTotals, "duration_seconds", (row as any).duration_seconds);
-        addMetric(healthTotals, "active_energy_kcal", (row as any).active_energy_kcal);
-        addMetric(healthTotals, "basal_energy_kcal", (row as any).basal_energy_kcal);
-        addMetric(healthTotals, "quality", (row as any).data_quality_score);
-        addMetric(healthTotals, "heart_rate", (row as any).heart_rate);
-        addMetric(healthTotals, "resting_heart_rate", (row as any).resting_heart_rate);
-        addMetric(healthTotals, "blood_oxygen", (row as any).blood_oxygen_percentage);
-        addMetric(healthTotals, "vo2_max", (row as any).vo2_max);
-        updateRange(healthRange, (row as any).processed_at);
-      }
-      if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
-    }
-
-    for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
-      const offset = page * MARKETPLACE_HASH_PAGE_SIZE;
-      const { data, error } = await supabase
-        .from("staged_lifestyle_data")
-        .select("id, session_duration, data_quality_score, event_type, event_category, processed_at")
-        .order("id", { ascending: true })
-        .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
-      if (error) throw new Error(`Marketplace lifestyle aggregate scan failed: ${error.message}`);
-      for (const row of data ?? []) {
-        lifestyleCount += 1;
-        addMetric(lifestyleTotals, "session_duration", (row as any).session_duration);
-        addMetric(lifestyleTotals, "quality", (row as any).data_quality_score);
-        if ((row as any).event_type) eventTypes.add(String((row as any).event_type));
-        if ((row as any).event_category) eventCategories.add(String((row as any).event_category));
-        updateRange(lifestyleRange, (row as any).processed_at);
-      }
-      if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
-    }
-
-    const avg = (bucket: Record<string, { sum: number; count: number }>, key: string, places: number) => {
-      const metric = bucket[key];
-      return metric?.count ? roundNullable(metric.sum / metric.count, places) : null;
-    };
-    const sum = (bucket: Record<string, { sum: number; count: number }>, key: string) => bucket[key]?.sum ?? 0;
-
+    console.info("[PHASE_START: MarketplaceAggregates] Ecosystem-wide staged totals (set-based).");
+    const { data, error } = await supabase.rpc("staged_marketplace_aggregates");
+    if (error) throw new Error(`staged_marketplace_aggregates failed: ${error.message}`);
+    const parsed = (data ?? {}) as any;
     console.info(
-      `[END: MarketplaceAggregates] health.count=${healthCount} lifestyle.count=${lifestyleCount}`,
+      `[PHASE_END: MarketplaceAggregates] health=${parsed?.health?.count ?? 0} lifestyle=${parsed?.lifestyle?.count ?? 0} ford=${parsed?.ford?.count ?? 0}`,
     );
-
     return {
-      health: {
-        count: healthCount,
-        totals: {
-          steps: sum(healthTotals, "steps"),
-          duration_seconds: sum(healthTotals, "duration_seconds"),
-          active_energy_kcal: sum(healthTotals, "active_energy_kcal"),
-          basal_energy_kcal: sum(healthTotals, "basal_energy_kcal"),
-          avg_quality: avg(healthTotals, "quality", 4),
-          avg_heart_rate: avg(healthTotals, "heart_rate", 2),
-          avg_resting_hr: avg(healthTotals, "resting_heart_rate", 2),
-          max_heart_rate: null,
-          min_heart_rate: null,
-          avg_blood_oxygen: avg(healthTotals, "blood_oxygen", 2),
-          avg_vo2_max: avg(healthTotals, "vo2_max", 2),
-        },
-        range: {
-          min_processed_at: healthRange.min,
-          max_processed_at: healthRange.max,
-        },
-      },
-      lifestyle: {
-        count: lifestyleCount,
-        totals: {
-          session_duration: sum(lifestyleTotals, "session_duration"),
-          avg_quality: avg(lifestyleTotals, "quality", 4),
-          event_types: eventTypes.size,
-          event_categories: eventCategories.size,
-        },
-        range: {
-          min_processed_at: lifestyleRange.min,
-          max_processed_at: lifestyleRange.max,
-        },
-      },
+      health: parsed?.health ?? null,
+      lifestyle: parsed?.lifestyle ?? null,
+      ford: parsed?.ford ?? null,
     };
   } catch (err) {
-    console.error("[CRITICAL FAILURE: MarketplaceAggregates] Exception:", err);
-    return { health: null, lifestyle: null };
+    console.error(
+      "[CRITICAL FAILURE: MarketplaceAggregates]",
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+    );
+    return { health: null, lifestyle: null, ford: null };
   }
 }
 
-// Pulls every relevant staged record for a user across BOTH staging tables.
+// Personal scope sample rows (marketplace disabled). Health and lifestyle are
+// owner-scoped; Ford telemetry is an ecosystem-wide shared pool. Row counts here
+// are only a bounded PREVIEW — true totals come from the aggregate RPC.
 async function fetchOmniRecords(
   supabase: ReturnType<typeof createClient>,
   pseudoId: string,
-): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; ford: any[]; error?: string }> {
   try {
-    console.info(`[BEGIN: OmniFetch] Initiating cross-table data retrieval for operator: ${pseudoId}`);
+    console.info(`[PHASE_START: OmniFetch] Personal sample retrieval for operator: ${pseudoId}`);
     const filter = `user_id.eq.${pseudoId},entity_id.eq.${pseudoId},pseudo_user_id.eq.${pseudoId}`;
 
-    const [healthRes, lifestyleRes] = await Promise.all([
+    const [healthRes, lifestyleRes, fordRes] = await Promise.all([
       supabase
         .from("staged_health_data")
         .select("*")
@@ -221,34 +149,40 @@ async function fetchOmniRecords(
         .from("staged_lifestyle_data")
         .select("*")
         .or(filter)
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_ford_data")
+        .select("*")
         .order("processed_at", { ascending: false })
         .limit(MAX_OMNI_ROWS),
     ]);
 
     if (healthRes.error) {
-      console.info(`[BEGIN: OmniFetch.Health.Error] Evaluating Health API error response.`);
-      console.error("[ERROR: OmniFetch.Health] Health table query failed:", healthRes.error.message);
-      console.info(`[END: OmniFetch.Health.Error] Error logged.`);
+      console.error("[ERROR: OmniFetch.Health]", healthRes.error.message);
     }
     if (lifestyleRes.error) {
-      console.info(`[BEGIN: OmniFetch.Lifestyle.Error] Evaluating Lifestyle API error response.`);
-      console.error("[ERROR: OmniFetch.Lifestyle] Lifestyle table query failed:", lifestyleRes.error.message);
-      console.info(`[END: OmniFetch.Lifestyle.Error] Error logged.`);
+      console.error("[ERROR: OmniFetch.Lifestyle]", lifestyleRes.error.message);
+    }
+    if (fordRes.error) {
+      console.error("[ERROR: OmniFetch.Ford]", fordRes.error.message);
     }
 
     console.info(
-      `[END: OmniFetch] Retrieval complete. Health: ${healthRes.data?.length || 0}, Lifestyle: ${lifestyleRes.data?.length || 0}`,
+      `[PHASE_END: OmniFetch] sample_health=${healthRes.data?.length || 0} sample_lifestyle=${lifestyleRes.data?.length || 0} sample_ford=${fordRes.data?.length || 0}`,
     );
     return {
       success: !healthRes.error && !lifestyleRes.error,
       health: healthRes.data ?? [],
       lifestyle: lifestyleRes.data ?? [],
+      ford: fordRes.data ?? [],
     };
   } catch (err) {
-    console.info(`[BEGIN: OmniFetch.Stall] Catch block triggered during parallel retrieval.`);
-    console.error("[CRITICAL FAILURE: OmniFetch] Fatal exception during parallel retrieval:", err);
-    console.info(`[END: OmniFetch.Stall] Returning empty result set following error.`);
-    return { success: false, health: [], lifestyle: [], error: String(err) };
+    console.error(
+      "[CRITICAL FAILURE: OmniFetch]",
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+    );
+    return { success: false, health: [], lifestyle: [], ford: [], error: String(err) };
   }
 }
 
@@ -262,30 +196,35 @@ function chunkArray<T>(values: T[], size: number): T[][] {
   return chunks;
 }
 
+// Set-based: the database returns every distinct consent reference across all
+// three staging tables in one answer. No paging, no 1,000-row cap, no ceiling.
 async function collectStagedAcaHashes(
   supabase: ReturnType<typeof createClient>,
-  table: "staged_health_data" | "staged_lifestyle_data",
-): Promise<string[]> {
-  const hashes = new Set<string>();
-  let offset = 0;
+): Promise<Record<StagedTable, string[]>> {
+  console.info("[PHASE_START: StagedHashScan] Reading distinct consent references across all staged tables.");
+  const { data, error } = await supabase.rpc("staged_aca_hashes");
+  if (error) throw new Error(`staged_aca_hashes failed: ${error.message}`);
 
-  for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
-    const { data, error } = await supabase
-      .from(table)
-      .select("id, aca_hash_key")
-      .not("aca_hash_key", "is", null)
-      .order("id", { ascending: true })
-      .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
-
-    if (error) throw new Error(`${table} hash scan failed: ${error.message}`);
-    for (const row of data ?? []) {
-      if ((row as any).aca_hash_key) hashes.add(String((row as any).aca_hash_key));
-    }
-    if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
-    offset += MARKETPLACE_HASH_PAGE_SIZE;
+  const byTable: Record<StagedTable, Set<string>> = {
+    staged_health_data: new Set<string>(),
+    staged_lifestyle_data: new Set<string>(),
+    staged_ford_data: new Set<string>(),
+  };
+  for (const row of (data ?? []) as any[]) {
+    const vault = String(row.vault) as StagedTable;
+    const hash = row.aca_hash_key ? String(row.aca_hash_key) : "";
+    if (hash && byTable[vault]) byTable[vault].add(hash);
   }
 
-  return Array.from(hashes);
+  const result = {
+    staged_health_data: Array.from(byTable.staged_health_data),
+    staged_lifestyle_data: Array.from(byTable.staged_lifestyle_data),
+    staged_ford_data: Array.from(byTable.staged_ford_data),
+  };
+  console.info(
+    `[PHASE_END: StagedHashScan] health=${result.staged_health_data.length} lifestyle=${result.staged_lifestyle_data.length} ford=${result.staged_ford_data.length}`,
+  );
+  return result;
 }
 
 async function resolveHashOwners(
@@ -310,7 +249,7 @@ async function resolveHashOwners(
 
 async function fetchBalancedRowsForReceipt(
   supabase: ReturnType<typeof createClient>,
-  table: "staged_health_data" | "staged_lifestyle_data",
+  table: StagedTable,
   hashes: string[],
   rowsPerContributor: number,
 ): Promise<any[]> {
@@ -336,44 +275,47 @@ async function fetchBalancedRowsForReceipt(
   return rows;
 }
 
-// Marketplace mode: scan staged ACA lineage across ALL contributing owners so
-// payouts do not depend on the newest 500 rows belonging to a single user.
+// Marketplace / ecosystem mode: every staged row of EVERY staging table, from
+// every contributor, regardless of owner. Consent lineage is complete; the row
+// sample is bounded only because the model prompt cannot hold the whole pool.
 async function fetchMarketplaceRecords(
   supabase: ReturnType<typeof createClient>,
 ): Promise<MarketplaceFetchResult> {
   try {
-    console.info(`[BEGIN: MarketplaceFetch] Cross-owner retrieval initiated.`);
+    console.info(`[PHASE_START: MarketplaceFetch] Ecosystem-wide retrieval initiated.`);
 
-    const [healthHashes, lifestyleHashes] = await Promise.all([
-      collectStagedAcaHashes(supabase, "staged_health_data"),
-      collectStagedAcaHashes(supabase, "staged_lifestyle_data"),
-    ]);
-    const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes]);
+    const hashesByTable = await collectStagedAcaHashes(supabase);
+    const healthHashes = hashesByTable.staged_health_data;
+    const lifestyleHashes = hashesByTable.staged_lifestyle_data;
+    const fordHashes = hashesByTable.staged_ford_data;
+    const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes, ...fordHashes]);
     const hashToOwner = await resolveHashOwners(supabase, allHashes);
 
     // Sampling stays balanced (one representative stream per contributor) so the
     // model prompt keeps its row budget, but the RECEIPT must carry EVERY consent
     // reference behind the data that was read — not one sample per contributor.
-    const perContributor = new Map<string, { hash: string; table: "staged_health_data" | "staged_lifestyle_data" }>();
-    const registerHash = (hash: string, table: "staged_health_data" | "staged_lifestyle_data") => {
+    const perContributor = new Map<string, { hash: string; table: StagedTable }>();
+    const registerHash = (hash: string, table: StagedTable) => {
       const owner = hashToOwner.get(hash);
       if (owner && !perContributor.has(owner)) perContributor.set(owner, { hash, table });
     };
     healthHashes.forEach((hash) => registerHash(hash, "staged_health_data"));
     lifestyleHashes.forEach((hash) => registerHash(hash, "staged_lifestyle_data"));
+    fordHashes.forEach((hash) => registerHash(hash, "staged_ford_data"));
 
-    const healthReceiptHashes = Array.from(perContributor.values())
-      .filter((entry) => entry.table === "staged_health_data")
-      .map((entry) => entry.hash);
-    const lifestyleReceiptHashes = Array.from(perContributor.values())
-      .filter((entry) => entry.table === "staged_lifestyle_data")
-      .map((entry) => entry.hash);
+    const hashesFor = (table: StagedTable) =>
+      Array.from(perContributor.values())
+        .filter((entry) => entry.table === table)
+        .map((entry) => entry.hash);
+    const healthReceiptHashes = hashesFor("staged_health_data");
+    const lifestyleReceiptHashes = hashesFor("staged_lifestyle_data");
+    const fordReceiptHashes = hashesFor("staged_ford_data");
 
     // Full consent lineage: every staged hash that resolves to a known owner.
-    console.info(`[BEGIN: MarketplaceFetch.ReceiptLineage] Building full consent reference set.`);
+    console.info(`[PHASE_START: MarketplaceFetch.ReceiptLineage] Building full consent reference set.`);
     const receiptIds = uniqueStrings(allHashes.filter((hash) => hashToOwner.has(hash)));
     console.info(
-      `[END: MarketplaceFetch.ReceiptLineage] consent_references=${receiptIds.length} contributors=${perContributor.size} sampled_streams=${healthReceiptHashes.length + lifestyleReceiptHashes.length}`,
+      `[PHASE_END: MarketplaceFetch.ReceiptLineage] consent_references=${receiptIds.length} contributors=${perContributor.size} sampled_streams=${healthReceiptHashes.length + lifestyleReceiptHashes.length + fordReceiptHashes.length}`,
     );
 
     const rowsPerContributor = Math.max(
@@ -381,29 +323,35 @@ async function fetchMarketplaceRecords(
       Math.floor(MARKETPLACE_SAMPLE_ROW_BUDGET / Math.max(1, perContributor.size)),
     );
 
-    const [health, lifestyle] = await Promise.all([
+    const [health, lifestyle, ford] = await Promise.all([
       fetchBalancedRowsForReceipt(supabase, "staged_health_data", healthReceiptHashes, rowsPerContributor),
       fetchBalancedRowsForReceipt(supabase, "staged_lifestyle_data", lifestyleReceiptHashes, rowsPerContributor),
+      fetchBalancedRowsForReceipt(supabase, "staged_ford_data", fordReceiptHashes, rowsPerContributor),
     ]);
 
     const unresolvedHashCount = allHashes.filter((hash) => !hashToOwner.has(hash)).length;
     console.info(
-      `[END: MarketplaceFetch] candidate_hashes=${allHashes.length} resolved_contributors=${perContributor.size} receipt_ids=${receiptIds.length} unresolved_hashes=${unresolvedHashCount} sample_health=${health.length} sample_lifestyle=${lifestyle.length}`,
+      `[PHASE_END: MarketplaceFetch] candidate_hashes=${allHashes.length} resolved_contributors=${perContributor.size} receipt_ids=${receiptIds.length} unresolved_hashes=${unresolvedHashCount} sample_health=${health.length} sample_lifestyle=${lifestyle.length} sample_ford=${ford.length}`,
     );
     return {
       success: true,
       health,
       lifestyle,
+      ford,
       receiptIds,
       contributorCount: perContributor.size,
       unresolvedHashCount,
     };
   } catch (err) {
-    console.error("[CRITICAL FAILURE: MarketplaceFetch]", err);
+    console.error(
+      "[CRITICAL FAILURE: MarketplaceFetch]",
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+    );
     return {
       success: false,
       health: [],
       lifestyle: [],
+      ford: [],
       receiptIds: [],
       contributorCount: 0,
       unresolvedHashCount: 0,
@@ -866,15 +814,24 @@ function buildAcaPlainResponse(
 }
 // ───────────────────────────────────────────────────────────────────────────────
 
-function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
+function truncateRecords(
+  health: any[],
+  lifestyle: any[],
+  ford: any[] = [],
+): { health: any[]; lifestyle: any[]; ford: any[] } {
   let h = health.slice(0, MAX_RECORDS_PER_TABLE);
   let l = lifestyle.slice(0, MAX_RECORDS_PER_TABLE);
+  let f = ford.slice(0, MAX_RECORDS_PER_TABLE);
   // Iteratively shrink until under byte budget (gpt-4o-mini TPM = 200k tokens).
-  while (JSON.stringify(h).length + JSON.stringify(l).length > MAX_PAYLOAD_BYTES && (h.length > 1 || l.length > 1)) {
+  while (
+    JSON.stringify(h).length + JSON.stringify(l).length + JSON.stringify(f).length > MAX_PAYLOAD_BYTES &&
+    (h.length > 1 || l.length > 1 || f.length > 1)
+  ) {
     h = h.slice(0, Math.max(1, Math.floor(h.length / 2)));
     l = l.slice(0, Math.max(1, Math.floor(l.length / 2)));
+    f = f.slice(0, Math.max(1, Math.floor(f.length / 2)));
   }
-  return { health: h, lifestyle: l };
+  return { health: h, lifestyle: l, ford: f };
 }
 
 function redactPII(text: string): string {
@@ -936,15 +893,19 @@ function summarizeMarketplaceData(
   aggregates: OmniAggregates | null,
   sampleHealth: any[],
   sampleLifestyle: any[],
+  sampleFord: any[] = [],
 ) {
   const h = aggregates?.health;
   const l = aggregates?.lifestyle;
+  const f = aggregates?.ford;
   const healthCount = h?.count ?? sampleHealth.length;
   const lifestyleCount = l?.count ?? sampleLifestyle.length;
+  const fordCount = f?.count ?? sampleFord.length;
   return {
     health_records: healthCount,
     lifestyle_records: lifestyleCount,
-    total_samples: healthCount + lifestyleCount,
+    vehicle_records: fordCount,
+    total_samples: healthCount + lifestyleCount + fordCount,
     step_volume: h?.totals?.steps ?? null,
     active_energy_kcal: h?.totals?.active_energy_kcal ?? null,
     basal_energy_kcal: h?.totals?.basal_energy_kcal ?? null,
@@ -958,9 +919,14 @@ function summarizeMarketplaceData(
     avg_vo2_max: h?.totals?.avg_vo2_max ?? null,
     lifestyle_event_types: l?.totals?.event_types ?? null,
     lifestyle_event_categories: l?.totals?.event_categories ?? null,
+    vehicle_metric_types: f?.totals?.metric_types ?? null,
+    vehicle_count: f?.totals?.vehicles ?? null,
+    vehicle_avg_metric_value: f?.totals?.avg_metric_value ?? null,
     date_range_health: h?.range ?? null,
     date_range_lifestyle: l?.range ?? null,
-    sample_size: sampleHealth.length + sampleLifestyle.length,
+    date_range_vehicle: f?.range ?? null,
+    scope: (h as any)?.scope ?? "ecosystem",
+    sample_size: sampleHealth.length + sampleLifestyle.length + sampleFord.length,
     aggregates_source: aggregates ? "database" : "sample_fallback",
   };
 }
@@ -971,10 +937,12 @@ function buildOrchestratorPrompt(
   marketplaceSummary: Record<string, unknown> | null,
   healthRecords: any[],
   lifestyleRecords: any[],
+  fordRecords: any[] = [],
 ) {
   let compactData = "No marketplace dataset is attached to this request.";
   if (marketplaceSummary) {
     compactData =
+      "SCOPE: ecosystem-wide. Every staged record from every contributor is in view.\n\n" +
       "TRUE_TOTALS (from database, authoritative — use these for all counts/sums/averages):\n" +
       JSON.stringify(marketplaceSummary) +
       "\n\n" +
@@ -982,7 +950,10 @@ function buildOrchestratorPrompt(
       JSON.stringify(healthRecords) +
       "\n\n" +
       "SAMPLE_ROWS — LIFESTYLE (preview only, NOT representative of totals):\n" +
-      JSON.stringify(lifestyleRecords);
+      JSON.stringify(lifestyleRecords) +
+      "\n\n" +
+      "SAMPLE_ROWS — VEHICLE TELEMETRY (preview only, NOT representative of totals):\n" +
+      JSON.stringify(fordRecords);
   }
 
   return (
@@ -1101,6 +1072,7 @@ serve(async (req) => {
 
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
+    let sourceFord: any[] = [];
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -1116,26 +1088,33 @@ serve(async (req) => {
               success: true,
               health: [],
               lifestyle: [],
+              ford: [],
               receiptIds: [],
               contributorCount: 0,
               unresolvedHashCount: 0,
             } as MarketplaceFetchResult),
       ]);
       aggregates = aggResult;
-      // In marketplace mode, prefer cross-owner sample so receipts fan out to
-      // every contributing owner. Fall back to caller-scoped rows otherwise.
-      if (isDataScientistMode && marketplaceAudit.success && (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0)) {
+      // Marketplace mode = ecosystem-wide: every contributor, every staged table.
+      // Personal mode (marketplace disabled) is the only owner-scoped path.
+      if (
+        isDataScientistMode &&
+        marketplaceAudit.success &&
+        (marketplaceAudit.health.length > 0 || marketplaceAudit.lifestyle.length > 0 || marketplaceAudit.ford.length > 0)
+      ) {
         sourceHealth = marketplaceAudit.health;
         sourceLifestyle = marketplaceAudit.lifestyle;
+        sourceFord = marketplaceAudit.ford;
         marketplaceReceiptIds = marketplaceAudit.receiptIds;
         console.info(
-          `[STATUS: BestFriendAI.MarketplaceSample] Balanced rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle; receipt contributors=${marketplaceAudit.contributorCount}; unresolved_hashes=${marketplaceAudit.unresolvedHashCount}.`,
+          `[STATUS: BestFriendAI.MarketplaceSample] Balanced rows: ${sourceHealth.length} health + ${sourceLifestyle.length} lifestyle + ${sourceFord.length} vehicle; receipt contributors=${marketplaceAudit.contributorCount}; consent_refs=${marketplaceReceiptIds.length}; unresolved_hashes=${marketplaceAudit.unresolvedHashCount}.`,
         );
       } else if (audit.success) {
         if (audit.health.length > 0) sourceHealth = audit.health;
         if (audit.lifestyle.length > 0) sourceLifestyle = audit.lifestyle;
+        if (audit.ford.length > 0) sourceFord = audit.ford;
         console.info(
-          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows fetched for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"}.`,
+          `[STATUS: BestFriendAI.OmniFetchExecution] Sample rows for ${operatorId}: ${audit.health.length} health + ${audit.lifestyle.length} lifestyle + ${audit.ford.length} vehicle. True totals: health=${aggregates?.health?.count ?? "n/a"} lifestyle=${aggregates?.lifestyle?.count ?? "n/a"} vehicle=${aggregates?.ford?.count ?? "n/a"}.`,
         );
       } else {
         console.info(`[BEGIN: BestFriendAI.OmniFetchExecution.Warning] Handling OmniFetch failure condition.`);
@@ -1149,39 +1128,46 @@ serve(async (req) => {
       console.info("[END: BestFriendAI.OmniFetchExecution]");
     }
 
-    console.info("[BEGIN: BestFriendAI.DataTruncation] Ensuring payload fits context window.");
-    const { health: healthMetrics, lifestyle: lifestyleEvents } = truncateRecords(sourceHealth, sourceLifestyle);
+    console.info("[PHASE_START: BestFriendAI.DataTruncation] Ensuring sample payload fits context window.");
+    const {
+      health: healthMetrics,
+      lifestyle: lifestyleEvents,
+      ford: vehicleMetrics,
+    } = truncateRecords(sourceHealth, sourceLifestyle, sourceFord);
     console.info(
-      `[END: BestFriendAI.DataTruncation] Final dimensions: ${healthMetrics.length} health, ${lifestyleEvents.length} lifestyle.`,
+      `[PHASE_END: BestFriendAI.DataTruncation] Sample dimensions: ${healthMetrics.length} health, ${lifestyleEvents.length} lifestyle, ${vehicleMetrics.length} vehicle.`,
     );
 
     const plan = buildResearchPlan(message, detectedAgent, isDataScientistMode, healthMetrics, lifestyleEvents);
     const marketplaceSummary = isDataScientistMode
-      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents)
+      ? summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents, vehicleMetrics)
       : null;
 
     const totalsGuidance =
       "\n\nIMPORTANT: When reporting counts, sums, averages, or ranges, use the TRUE_TOTALS block. " +
-      "The SAMPLE_ROWS block is a small preview of individual records for context and is NOT representative of totals. " +
+      "TRUE_TOTALS is computed over every row of every staging table — nothing is paged or capped. " +
+      "The SAMPLE_ROWS block is a small illustrative preview of individual records and is NOT representative of totals. " +
       "Never count SAMPLE_ROWS to answer 'how many' or 'how much' questions.";
 
     let systemPrompt: string;
     if (isDataScientistMode) {
       systemPrompt =
-        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents) +
+        buildOrchestratorPrompt(plan, agentPrompt, marketplaceSummary, healthMetrics, lifestyleEvents, vehicleMetrics) +
         totalsGuidance;
     } else {
-      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents);
+      const trueTotals = summarizeMarketplaceData(aggregates, healthMetrics, lifestyleEvents, vehicleMetrics);
       const hasAnyData =
         (trueTotals.health_records ?? 0) > 0 ||
         (trueTotals.lifestyle_records ?? 0) > 0 ||
+        (trueTotals.vehicle_records ?? 0) > 0 ||
         healthMetrics.length > 0 ||
-        lifestyleEvents.length > 0;
+        lifestyleEvents.length > 0 ||
+        vehicleMetrics.length > 0;
       const navSummary = hasAnyData
-        ? "\n\nTRUE_TOTALS (from database, authoritative):\n" +
+        ? "\n\nTRUE_TOTALS (from database, authoritative, personal scope):\n" +
           JSON.stringify(trueTotals) +
           "\n\nSAMPLE_ROWS (preview only, NOT representative of totals): " +
-          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle records shown.`
+          `${healthMetrics.length} health + ${lifestyleEvents.length} lifestyle + ${vehicleMetrics.length} vehicle records shown.`
         : "\n\nLIBRARY SNAPSHOT: empty or not loaded for this session.";
       systemPrompt = STORE_CLERK_PERSONA + navSummary + totalsGuidance;
     }
