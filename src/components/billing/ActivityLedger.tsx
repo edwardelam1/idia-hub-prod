@@ -82,6 +82,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
           blockchain_tx_hash: r.blockchain_tx_hash,
           transaction_id: r.transaction_id,
           status: r.status,
+          reference_id: r.reference_id ?? null,
           rail: classifyRail(r),
         };
 
