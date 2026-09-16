@@ -106,8 +106,11 @@ const AcaReferenceViewer = ({ receiptId, references, recordCount, triggerClassNa
         <DialogHeader>
           <DialogTitle className="text-base">Auditable Consent Artifacts</DialogTitle>
           <DialogDescription className="text-xs">
-            {total.toLocaleString()} consent hash{total === 1 ? "" : "es"} proving the data records in this yield.
-            These are data fingerprints, not settlement transactions.
+            {total.toLocaleString()} consent hash{total === 1 ? "" : "es"}
+            {typeof recordCount === "number" && recordCount > 0
+              ? ` covering ${recordCount.toLocaleString()} data record${recordCount === 1 ? "" : "s"}`
+              : ""}{" "}
+            in this yield. These are data fingerprints, not settlement transactions.
           </DialogDescription>
         </DialogHeader>
 
