@@ -17,7 +17,7 @@ interface ActivityWrite {
   idempotencyKey: string;
 }
 
-const SECRET_KEY = /(authorization|api[_-]?key|token|secret|password|credential)/i;
+const SECRET_KEY = /(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|bearer|secret|password|credential)/i;
 const MAX_PAYLOAD_BYTES = 512_000;
 
 function redact(value: unknown): unknown {
