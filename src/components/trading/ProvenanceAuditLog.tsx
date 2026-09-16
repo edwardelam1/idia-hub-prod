@@ -421,9 +421,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
           ) : (
             filteredAndSortedLogs.map((log, index) => {
               const acaRefs = log.aca_record_references || [];
-              const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
-              const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
+              const { charged: spend, distributed } = receiptSpend(log);
               const minted = Boolean(log.nft_token_id);
+              const records = recordsConsumed(log);
               const fields = [
                 { key: "token", label: "Liability token", value: log.liability_token_hash },
                 { key: "anchor", label: "DigiRAMP anchor", value: log.digiramp_anchor_id },
