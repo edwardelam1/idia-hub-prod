@@ -150,7 +150,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   );
 
   const { data: ledgerMeta = { spend: new Map<string, number>(), reference: new Map<string, string>() } } = useQuery({
-    queryKey: ["egress-credit-spend", ledgerIds],
+    queryKey: ["egress-ledger-meta", ledgerIds],
     enabled: ledgerIds.length > 0,
     queryFn: async () => {
       console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs and settlement references.");
@@ -174,8 +174,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
       return { spend, reference };
     },
   });
-  const spendMap = ledgerMeta.spend;
-  const referenceMap = ledgerMeta.reference;
+  // Guard against stale cache shapes from a previous build of this query.
+  const spendMap = ledgerMeta?.spend instanceof Map ? ledgerMeta.spend : new Map<string, number>();
+  const referenceMap = ledgerMeta?.reference instanceof Map ? ledgerMeta.reference : new Map<string, string>();
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
