@@ -1331,6 +1331,7 @@ serve(async (req) => {
     // marketplace mode. Any AI interaction that reads the Library of Data must
     // produce a Synapse consumption receipt.
     const touchedData = healthMetrics.length > 0 || lifestyleEvents.length > 0;
+    let synapseReceipt: Record<string, unknown> | null = null;
     if (touchedData) {
       if (isDataScientistMode) {
         // MARKETPLACE_RESEARCH: one representative aca_hash_key per unique
@@ -1395,6 +1396,9 @@ serve(async (req) => {
               `[CRITICAL FAILURE: BestFriendAI.ReceiptTransmission] Synapse Controller rejected receipt. HTTP ${synapseRes.status}: ${errText}`,
             );
           } else {
+            console.info("[BEGIN: BestFriendAI.ReceiptTransmission.Parse] Parsing receipt response.");
+            synapseReceipt = await synapseRes.json();
+            console.info("[END: BestFriendAI.ReceiptTransmission.Parse] Receipt response parsed.");
             console.info(
               `[STATUS: BestFriendAI.ReceiptTransmission] Synapse Controller acknowledged receipt successfully.`,
             );
@@ -1432,6 +1436,7 @@ serve(async (req) => {
       verificationIssues: verification.issues,
       orchestratorPlan: plan,
       consumed_records: consumedReceipt,
+      receipt: synapseReceipt,
     };
     console.info("[END: BestFriendAI.ResponseCompilation] Payload ready.");
 
@@ -1444,7 +1449,7 @@ serve(async (req) => {
     console.info(
       `[BEGIN: BestFriendAI.Diagnostics.Stall] Processing top-level catch block for error: ${error.message}`,
     );
-    console.error(`[FATAL STALL]: ${error.message}`);
+    console.error(`[FATAL STALL]: ${error.message}\n${error?.stack ?? ""}`);
     console.info(`[END: BestFriendAI.Diagnostics.Stall] Error handled. Exiting gracefully.`);
     logApiMetric(500, error?.message ?? "unknown_error", operatorId);
     return new Response(
