@@ -245,7 +245,8 @@ Deno.serve(async (req) => {
           country_of_origin,
           digiramp_anchor_id: digiRampAnchorId,
           egress_type: intent_type,
-          metadata: { ...metadata, sectorLabel },
+          data_points_count: verifiedHashes.length,
+          metadata: { ...metadata, sectorLabel, consumed_record_count: verifiedHashes.length },
         })
         .select("id")
         .single(),
