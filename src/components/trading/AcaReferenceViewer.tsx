@@ -18,6 +18,8 @@ interface AcaReferenceViewerProps {
   receiptId: string;
   /** Auditable Consent Artifact hashes captured by Best Friend AI for this yield. */
   references: string[];
+  /** True number of data records consumed in this yield (not the reference count). */
+  recordCount?: number | null;
   triggerClassName?: string;
 }
 
@@ -29,7 +31,7 @@ interface AcaReferenceViewerProps {
  * A single yield can carry tens of thousands of hashes, so the list is paged
  * (100 per page) and large exports are streamed to a file rather than rendered.
  */
-const AcaReferenceViewer = ({ receiptId, references, triggerClassName }: AcaReferenceViewerProps) => {
+const AcaReferenceViewer = ({ receiptId, references, recordCount, triggerClassName }: AcaReferenceViewerProps) => {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState("");
