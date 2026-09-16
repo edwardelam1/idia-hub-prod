@@ -814,15 +814,24 @@ function buildAcaPlainResponse(
 }
 // ───────────────────────────────────────────────────────────────────────────────
 
-function truncateRecords(health: any[], lifestyle: any[]): { health: any[]; lifestyle: any[] } {
+function truncateRecords(
+  health: any[],
+  lifestyle: any[],
+  ford: any[] = [],
+): { health: any[]; lifestyle: any[]; ford: any[] } {
   let h = health.slice(0, MAX_RECORDS_PER_TABLE);
   let l = lifestyle.slice(0, MAX_RECORDS_PER_TABLE);
+  let f = ford.slice(0, MAX_RECORDS_PER_TABLE);
   // Iteratively shrink until under byte budget (gpt-4o-mini TPM = 200k tokens).
-  while (JSON.stringify(h).length + JSON.stringify(l).length > MAX_PAYLOAD_BYTES && (h.length > 1 || l.length > 1)) {
+  while (
+    JSON.stringify(h).length + JSON.stringify(l).length + JSON.stringify(f).length > MAX_PAYLOAD_BYTES &&
+    (h.length > 1 || l.length > 1 || f.length > 1)
+  ) {
     h = h.slice(0, Math.max(1, Math.floor(h.length / 2)));
     l = l.slice(0, Math.max(1, Math.floor(l.length / 2)));
+    f = f.slice(0, Math.max(1, Math.floor(f.length / 2)));
   }
-  return { health: h, lifestyle: l };
+  return { health: h, lifestyle: l, ford: f };
 }
 
 function redactPII(text: string): string {
