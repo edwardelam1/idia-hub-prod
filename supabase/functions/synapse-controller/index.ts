@@ -208,21 +208,24 @@ Deno.serve(async (req) => {
     const aca_record_ids = Array.isArray(rawIds) ? rawIds : [rawIds].filter(Boolean);
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
-    // 1. DYNAMIC PRICING CALL
-    const { feeCR, sectorLabel, buyerWeight } = await calculateDynamicFee(
+    // 1. DATA OWNER RESOLUTION (must precede pricing: volume drives the fee)
+    const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
+
+    // 2. DYNAMIC PRICING CALL
+    const { feeCR, sectorLabel, buyerWeight, recordFactor } = await calculateDynamicFee(
       adminClient,
       user_id,
       sub_module_id,
       body?.jurisdiction ?? "USA",
       body?.cadence ?? "BATCH",
+      verifiedHashes.length,
     );
-    console.log(`[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight}`);
+    console.log(
+      `[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight} × records ${verifiedHashes.length} (factor ${recordFactor})`,
+    );
 
     const totalSynapseDeduction = -feeCR;
     const fiatEquivalentValue = feeCR * 0.75;
-
-    // 2. DATA OWNER RESOLUTION
-    const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
 
     // 3. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
