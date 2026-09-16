@@ -4,8 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
-import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
 import {
   ShieldCheck,
   Sparkles,
