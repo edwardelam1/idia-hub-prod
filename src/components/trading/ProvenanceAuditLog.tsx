@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,7 +14,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import ContributorSettlementHashes from "@/components/billing/ContributorSettlementHashes";
 import AcaReferenceViewer from "@/components/trading/AcaReferenceViewer";
 import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -204,57 +203,27 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const spendMap = ledgerMeta?.spend instanceof Map ? ledgerMeta.spend : new Map<string, number>();
   const referenceMap = ledgerMeta?.reference instanceof Map ? ledgerMeta.reference : new Map<string, string>();
 
-  const referenceIds = useMemo(
-    () => Array.from(new Set(Array.from(referenceMap.values()))).sort(),
-    [referenceMap],
-  );
-
-  // Exact per-settlement-run totals straight from the Synapse ledger: what the
-  // buyer was charged, and what was distributed to contributors on the run.
-  const { data: runTotals } = useQuery({
-    queryKey: ["egress-run-totals", referenceIds],
-    enabled: referenceIds.length > 0,
-    queryFn: async () => {
-      console.info(`[BEGIN: EgressLogs.RunTotals] references=${referenceIds.length}`);
-      try {
-        const { data, error } = await supabase
-          .from("synapse_credit_ledger")
-          .select("reference_id, amount, entry_type, transaction_type")
-          .in("reference_id", referenceIds)
-          .limit(5000);
-        if (error) throw error;
-        const totals = new Map<string, { charged: number; distributed: number; lines: number }>();
-        (data || []).forEach((r: any) => {
-          const ref = String(r.reference_id);
-          const entry = totals.get(ref) ?? { charged: 0, distributed: 0, lines: 0 };
-          const amount = Number(r.amount ?? 0);
-          if (amount < 0) entry.charged += Math.abs(amount);
-          else entry.distributed += amount;
-          entry.lines += 1;
-          totals.set(ref, entry);
-        });
-        console.info(
-          `[END: EgressLogs.RunTotals] rows=${data?.length ?? 0} runs=${totals.size}`,
-        );
-        return totals;
-      } catch (e) {
-        const err = e as Error;
-        console.error(`[END: EgressLogs.RunTotals] failed: ${err.message}\n${err.stack ?? ""}`);
-        throw err;
-      }
-    },
-  });
-  const runTotalsMap = runTotals instanceof Map ? runTotals : new Map<string, { charged: number; distributed: number; lines: number }>();
-
-  /** Exact credits charged for a receipt, preferring the settlement-run total. */
-  const receiptSpend = (log: ProvenanceLog): { charged: number | null; distributed: number | null } => {
+  /** Exact credits charged for a receipt, straight from its Synapse ledger entry. */
+  const receiptSpend = (log: ProvenanceLog): number | null => {
     const ledgerId = log.synapse_ledger_entry_id ?? null;
-    if (!ledgerId) return { charged: null, distributed: null };
-    const ref = referenceMap.get(ledgerId);
-    const run = ref ? runTotalsMap.get(ref) : undefined;
-    if (run) return { charged: run.charged, distributed: run.distributed };
+    if (!ledgerId) return null;
     const raw = spendMap.get(ledgerId);
-    return { charged: typeof raw === "number" ? Math.abs(raw) : null, distributed: null };
+    return typeof raw === "number" ? Math.abs(raw) : null;
+  };
+
+  /** Charges can be fractional now, so show up to 4 decimals without trailing noise. */
+  const formatCharge = (value: number) =>
+    value >= 1 || value === 0 ? value.toFixed(2) : String(Number(value.toFixed(4)));
+
+  /** "weight 0.80 · general" — how the Synapse Controller priced this receipt. */
+  const feeBreakdown = (log: ProvenanceLog): string | null => {
+    const meta = (log.metadata ?? {}) as Record<string, any>;
+    const weight = meta.buyer_weight ?? meta.buyerWeight;
+    const sector = meta.sector_label ?? meta.sectorLabel;
+    const parts: string[] = [];
+    if (typeof weight === "number") parts.push(`weight ${Number(weight.toFixed(2))}`);
+    if (typeof sector === "string" && sector) parts.push(sector);
+    return parts.length ? parts.join(" · ") : null;
   };
 
   const filteredAndSortedLogs = useMemo(() => {
@@ -421,7 +390,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
           ) : (
             filteredAndSortedLogs.map((log, index) => {
               const acaRefs = log.aca_record_references || [];
-              const { charged: spend, distributed } = receiptSpend(log);
+              const spend = receiptSpend(log);
               const minted = Boolean(log.nft_token_id);
               const records = recordsConsumed(log);
               const fields = [
@@ -441,12 +410,10 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                     </div>
                     <div className="shrink-0 text-right">
                       <span className="font-mono text-xs font-semibold text-primary">
-                        {spend !== null ? `${spend.toFixed(2)} CR` : "No ledger entry"}
+                        {spend !== null ? `${formatCharge(spend)} CR` : "No ledger entry"}
                       </span>
-                      {distributed !== null && distributed > 0 && (
-                        <p className="font-mono text-[9px] text-muted-foreground">
-                          {distributed.toFixed(2)} CR distributed
-                        </p>
+                      {feeBreakdown(log) && (
+                        <p className="font-mono text-[9px] text-muted-foreground">{feeBreakdown(log)}</p>
                       )}
                     </div>
                   </div>
@@ -515,12 +482,6 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       )}
                     </div>
                   </dl>
-                  {log.synapse_ledger_entry_id && referenceMap.get(log.synapse_ledger_entry_id) && (
-                    <ContributorSettlementHashes
-                      className="mt-2"
-                      referenceId={referenceMap.get(log.synapse_ledger_entry_id)}
-                    />
-                  )}
                 </article>
               );
             })
@@ -552,7 +513,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               ) : (
                 filteredAndSortedLogs.map((log) => {
                   const acaRefs = log.aca_record_references || [];
-                  const { charged: spend, distributed } = receiptSpend(log);
+                  const spend = receiptSpend(log);
                   const minted = Boolean(log.nft_token_id);
                   const records = recordsConsumed(log);
                   const mainRow = (
@@ -636,11 +597,11 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         {spend !== null ? (
                           <>
                             <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
-                              {spend.toFixed(2)} CR
+                              {formatCharge(spend)} CR
                             </span>
-                            {distributed !== null && distributed > 0 && (
+                            {feeBreakdown(log) && (
                               <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                                {distributed.toFixed(2)} CR distributed
+                                {feeBreakdown(log)}
                               </p>
                             )}
                           </>
@@ -650,21 +611,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </TableCell>
                     </TableRow>
                   );
-                  const settlementReference = log.synapse_ledger_entry_id
-                    ? referenceMap.get(log.synapse_ledger_entry_id)
-                    : undefined;
-                  return settlementReference ? (
-                    <Fragment key={log.id}>
-                      {mainRow}
-                      <TableRow className="bg-muted/10 hover:bg-muted/10">
-                        <TableCell colSpan={7} className="py-3">
-                          <ContributorSettlementHashes referenceId={settlementReference} />
-                        </TableCell>
-                      </TableRow>
-                    </Fragment>
-                  ) : (
-                    mainRow
-                  );
+                  return mainRow;
                 })
               )}
             </TableBody>

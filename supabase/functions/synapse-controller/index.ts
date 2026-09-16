@@ -88,17 +88,29 @@ async function resolveAcaLineage(adminClient: any, ids: string[]) {
   return { contributingUsers, verifiedHashes };
 }
 
+/** Volume factor: consumption scales the charge sub-linearly with record count. */
+function recordVolumeFactor(recordCount: number): number {
+  const safeCount = Number.isFinite(recordCount) && recordCount > 0 ? recordCount : 1;
+  return Math.max(1, Math.log10(1 + safeCount));
+}
+
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
 async function calculateDynamicFee(
   adminClient: any,
   userId: string,
   subModuleId: string,
   datasetJurisdiction = "USA",
   datasetCadence: "STREAMING" | "INTRADAY" | "BATCH" = "BATCH",
-): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number }> {
+  recordCount = 1,
+): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number; recordFactor: number }> {
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
   const marketBaseValue = SECTOR_VALUES[sectorLabel] ?? 1.0;
+  const recordFactor = round4(recordVolumeFactor(recordCount));
+  const priceOf = (weight: number) =>
+    Math.max(0.01, round4(marketBaseValue * weight * recordFactor));
 
   try {
     // 2. Fetch the buyer's diagnostic profile vector (server-calculated weights)
@@ -112,7 +124,7 @@ async function calculateDynamicFee(
 
     if (!vectorData) {
       console.warn(`[SYNAPSE_CONTROLLER:VECTOR_MISSING] No vector for ${userId}. Default weight 1.0`);
-      return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
+      return { feeCR: priceOf(1.0), sectorLabel, buyerWeight: 1.0, recordFactor };
     }
 
     const canonicalCat = resolveCanonicalCategory(`${sectorLabel} ${subModuleId ?? ""}`);
@@ -130,13 +142,15 @@ async function calculateDynamicFee(
     );
 
     console.log(
-      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor}`,
+      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor} records=${recordCount} factor=${recordFactor}`,
     );
 
-    return { feeCR: Math.ceil(1 * marketBaseValue * relevance), sectorLabel, buyerWeight: relevance };
+    return { feeCR: priceOf(relevance), sectorLabel, buyerWeight: relevance, recordFactor };
   } catch (e: any) {
-    console.error(`[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}`);
-    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
+    console.error(
+      `[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}\n${e?.stack ?? ""}`,
+    );
+    return { feeCR: priceOf(1.0), sectorLabel, buyerWeight: 1.0, recordFactor };
   }
 }
 
@@ -194,21 +208,24 @@ Deno.serve(async (req) => {
     const aca_record_ids = Array.isArray(rawIds) ? rawIds : [rawIds].filter(Boolean);
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
 
-    // 1. DYNAMIC PRICING CALL
-    const { feeCR, sectorLabel, buyerWeight } = await calculateDynamicFee(
+    // 1. DATA OWNER RESOLUTION (must precede pricing: volume drives the fee)
+    const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
+
+    // 2. DYNAMIC PRICING CALL
+    const { feeCR, sectorLabel, buyerWeight, recordFactor } = await calculateDynamicFee(
       adminClient,
       user_id,
       sub_module_id,
       body?.jurisdiction ?? "USA",
       body?.cadence ?? "BATCH",
+      verifiedHashes.length,
     );
-    console.log(`[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight}`);
+    console.log(
+      `[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight} × records ${verifiedHashes.length} (factor ${recordFactor})`,
+    );
 
     const totalSynapseDeduction = -feeCR;
     const fiatEquivalentValue = feeCR * 0.75;
-
-    // 2. DATA OWNER RESOLUTION
-    const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
 
     // 3. CRYPTOGRAPHIC TOKEN GENERATION
     const timestamp = new Date().toISOString();
@@ -230,6 +247,12 @@ Deno.serve(async (req) => {
           status: "settled",
           description: `Synapse Gas: ${intent_type} | Sector: ${sectorLabel} [${feeCR} CR]`,
           reference_id: referenceId,
+          metadata: {
+            buyer_weight: buyerWeight,
+            sector_label: sectorLabel,
+            record_factor: recordFactor,
+            consumed_record_count: verifiedHashes.length,
+          },
         })
         .select("id")
         .single(),
@@ -246,7 +269,14 @@ Deno.serve(async (req) => {
           digiramp_anchor_id: digiRampAnchorId,
           egress_type: intent_type,
           data_points_count: verifiedHashes.length,
-          metadata: { ...metadata, sectorLabel, consumed_record_count: verifiedHashes.length },
+          metadata: {
+            ...metadata,
+            sectorLabel,
+            sector_label: sectorLabel,
+            buyer_weight: buyerWeight,
+            record_factor: recordFactor,
+            consumed_record_count: verifiedHashes.length,
+          },
         })
         .select("id")
         .single(),
