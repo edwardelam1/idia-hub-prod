@@ -88,17 +88,29 @@ async function resolveAcaLineage(adminClient: any, ids: string[]) {
   return { contributingUsers, verifiedHashes };
 }
 
+/** Volume factor: consumption scales the charge sub-linearly with record count. */
+function recordVolumeFactor(recordCount: number): number {
+  const safeCount = Number.isFinite(recordCount) && recordCount > 0 ? recordCount : 1;
+  return Math.max(1, Math.log10(1 + safeCount));
+}
+
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
 async function calculateDynamicFee(
   adminClient: any,
   userId: string,
   subModuleId: string,
   datasetJurisdiction = "USA",
   datasetCadence: "STREAMING" | "INTRADAY" | "BATCH" = "BATCH",
-): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number }> {
+  recordCount = 1,
+): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number; recordFactor: number }> {
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
   const marketBaseValue = SECTOR_VALUES[sectorLabel] ?? 1.0;
+  const recordFactor = round4(recordVolumeFactor(recordCount));
+  const priceOf = (weight: number) =>
+    Math.max(0.01, round4(marketBaseValue * weight * recordFactor));
 
   try {
     // 2. Fetch the buyer's diagnostic profile vector (server-calculated weights)
@@ -112,7 +124,7 @@ async function calculateDynamicFee(
 
     if (!vectorData) {
       console.warn(`[SYNAPSE_CONTROLLER:VECTOR_MISSING] No vector for ${userId}. Default weight 1.0`);
-      return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
+      return { feeCR: priceOf(1.0), sectorLabel, buyerWeight: 1.0, recordFactor };
     }
 
     const canonicalCat = resolveCanonicalCategory(`${sectorLabel} ${subModuleId ?? ""}`);
@@ -130,13 +142,15 @@ async function calculateDynamicFee(
     );
 
     console.log(
-      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor}`,
+      `[SYNAPSE_CONTROLLER:VECTOR_APPLIED] cat=${canonicalCat} weight=${relevance} base=${breakdown.baseWeight} juris=${breakdown.jurisdictionFactor} lat=${breakdown.latencyFactor} records=${recordCount} factor=${recordFactor}`,
     );
 
-    return { feeCR: Math.ceil(1 * marketBaseValue * relevance), sectorLabel, buyerWeight: relevance };
+    return { feeCR: priceOf(relevance), sectorLabel, buyerWeight: relevance, recordFactor };
   } catch (e: any) {
-    console.error(`[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}`);
-    return { feeCR: Math.ceil(1 * marketBaseValue * 1.0), sectorLabel, buyerWeight: 1.0 };
+    console.error(
+      `[SYNAPSE_CONTROLLER:VECTOR_LOOKUP_ERROR] Fallback to 1.0: ${e?.message ?? String(e)}\n${e?.stack ?? ""}`,
+    );
+    return { feeCR: priceOf(1.0), sectorLabel, buyerWeight: 1.0, recordFactor };
   }
 }
 
