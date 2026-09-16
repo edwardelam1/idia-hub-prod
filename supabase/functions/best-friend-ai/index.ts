@@ -276,44 +276,47 @@ async function fetchBalancedRowsForReceipt(
   return rows;
 }
 
-// Marketplace mode: scan staged ACA lineage across ALL contributing owners so
-// payouts do not depend on the newest 500 rows belonging to a single user.
+// Marketplace / ecosystem mode: every staged row of EVERY staging table, from
+// every contributor, regardless of owner. Consent lineage is complete; the row
+// sample is bounded only because the model prompt cannot hold the whole pool.
 async function fetchMarketplaceRecords(
   supabase: ReturnType<typeof createClient>,
 ): Promise<MarketplaceFetchResult> {
   try {
-    console.info(`[BEGIN: MarketplaceFetch] Cross-owner retrieval initiated.`);
+    console.info(`[PHASE_START: MarketplaceFetch] Ecosystem-wide retrieval initiated.`);
 
-    const [healthHashes, lifestyleHashes] = await Promise.all([
-      collectStagedAcaHashes(supabase, "staged_health_data"),
-      collectStagedAcaHashes(supabase, "staged_lifestyle_data"),
-    ]);
-    const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes]);
+    const hashesByTable = await collectStagedAcaHashes(supabase);
+    const healthHashes = hashesByTable.staged_health_data;
+    const lifestyleHashes = hashesByTable.staged_lifestyle_data;
+    const fordHashes = hashesByTable.staged_ford_data;
+    const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes, ...fordHashes]);
     const hashToOwner = await resolveHashOwners(supabase, allHashes);
 
     // Sampling stays balanced (one representative stream per contributor) so the
     // model prompt keeps its row budget, but the RECEIPT must carry EVERY consent
     // reference behind the data that was read — not one sample per contributor.
-    const perContributor = new Map<string, { hash: string; table: "staged_health_data" | "staged_lifestyle_data" }>();
-    const registerHash = (hash: string, table: "staged_health_data" | "staged_lifestyle_data") => {
+    const perContributor = new Map<string, { hash: string; table: StagedTable }>();
+    const registerHash = (hash: string, table: StagedTable) => {
       const owner = hashToOwner.get(hash);
       if (owner && !perContributor.has(owner)) perContributor.set(owner, { hash, table });
     };
     healthHashes.forEach((hash) => registerHash(hash, "staged_health_data"));
     lifestyleHashes.forEach((hash) => registerHash(hash, "staged_lifestyle_data"));
+    fordHashes.forEach((hash) => registerHash(hash, "staged_ford_data"));
 
-    const healthReceiptHashes = Array.from(perContributor.values())
-      .filter((entry) => entry.table === "staged_health_data")
-      .map((entry) => entry.hash);
-    const lifestyleReceiptHashes = Array.from(perContributor.values())
-      .filter((entry) => entry.table === "staged_lifestyle_data")
-      .map((entry) => entry.hash);
+    const hashesFor = (table: StagedTable) =>
+      Array.from(perContributor.values())
+        .filter((entry) => entry.table === table)
+        .map((entry) => entry.hash);
+    const healthReceiptHashes = hashesFor("staged_health_data");
+    const lifestyleReceiptHashes = hashesFor("staged_lifestyle_data");
+    const fordReceiptHashes = hashesFor("staged_ford_data");
 
     // Full consent lineage: every staged hash that resolves to a known owner.
-    console.info(`[BEGIN: MarketplaceFetch.ReceiptLineage] Building full consent reference set.`);
+    console.info(`[PHASE_START: MarketplaceFetch.ReceiptLineage] Building full consent reference set.`);
     const receiptIds = uniqueStrings(allHashes.filter((hash) => hashToOwner.has(hash)));
     console.info(
-      `[END: MarketplaceFetch.ReceiptLineage] consent_references=${receiptIds.length} contributors=${perContributor.size} sampled_streams=${healthReceiptHashes.length + lifestyleReceiptHashes.length}`,
+      `[PHASE_END: MarketplaceFetch.ReceiptLineage] consent_references=${receiptIds.length} contributors=${perContributor.size} sampled_streams=${healthReceiptHashes.length + lifestyleReceiptHashes.length + fordReceiptHashes.length}`,
     );
 
     const rowsPerContributor = Math.max(
@@ -321,29 +324,35 @@ async function fetchMarketplaceRecords(
       Math.floor(MARKETPLACE_SAMPLE_ROW_BUDGET / Math.max(1, perContributor.size)),
     );
 
-    const [health, lifestyle] = await Promise.all([
+    const [health, lifestyle, ford] = await Promise.all([
       fetchBalancedRowsForReceipt(supabase, "staged_health_data", healthReceiptHashes, rowsPerContributor),
       fetchBalancedRowsForReceipt(supabase, "staged_lifestyle_data", lifestyleReceiptHashes, rowsPerContributor),
+      fetchBalancedRowsForReceipt(supabase, "staged_ford_data", fordReceiptHashes, rowsPerContributor),
     ]);
 
     const unresolvedHashCount = allHashes.filter((hash) => !hashToOwner.has(hash)).length;
     console.info(
-      `[END: MarketplaceFetch] candidate_hashes=${allHashes.length} resolved_contributors=${perContributor.size} receipt_ids=${receiptIds.length} unresolved_hashes=${unresolvedHashCount} sample_health=${health.length} sample_lifestyle=${lifestyle.length}`,
+      `[PHASE_END: MarketplaceFetch] candidate_hashes=${allHashes.length} resolved_contributors=${perContributor.size} receipt_ids=${receiptIds.length} unresolved_hashes=${unresolvedHashCount} sample_health=${health.length} sample_lifestyle=${lifestyle.length} sample_ford=${ford.length}`,
     );
     return {
       success: true,
       health,
       lifestyle,
+      ford,
       receiptIds,
       contributorCount: perContributor.size,
       unresolvedHashCount,
     };
   } catch (err) {
-    console.error("[CRITICAL FAILURE: MarketplaceFetch]", err);
+    console.error(
+      "[CRITICAL FAILURE: MarketplaceFetch]",
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+    );
     return {
       success: false,
       health: [],
       lifestyle: [],
+      ford: [],
       receiptIds: [],
       contributorCount: 0,
       unresolvedHashCount: 0,
