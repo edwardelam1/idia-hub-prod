@@ -10,16 +10,19 @@
 ## What will change
 
 ### 1. Receipts reference everything that was consumed
+
 Best Friend AI will hand the Synapse Controller **every consent reference behind the data it read** (all nine contributors, all their streams) instead of one sample per contributor. The Synapse Controller itself is untouched — it already stores whatever it is given and verifies it against the data vaults.
 
 The receipt line will read the true consumed record count (e.g. "46,409 records · 99 consent references") instead of "2 records", taken from the figures the receipt already stores.
 
 ### 2. Liability NFT: show what actually exists, honestly
+
 - The reconciler will stop relying solely on the on-chain receipt-id match. It will read the **actual NFT transfers into the buyer's wallet** from the live chain, record token id, mint time and mint transaction, and link a receipt to a mint when the receipt id matches.
 - Where no NFT was minted for a receipt, the row will say **"Not minted"** (not "Mint pending"), with a link to the wallet's Liability NFT collection on BaseScan so the auditor can still see the minted set.
 - Where a mint is matched, the row links straight to that token on BaseScan.
 
 ### 3. Exact credits from the ledger
+
 Each receipt row will show the credits taken from the **ledger lines for that settlement run**, not the single gas entry: the buyer charge as the headline figure, with the run's contributor distribution total shown underneath in the expanded detail. If a receipt has no ledger link, the row says so rather than showing a fabricated 1.00 CR.
 
 ## Technical notes
