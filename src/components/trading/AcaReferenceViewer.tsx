@@ -92,10 +92,12 @@ const AcaReferenceViewer = ({ receiptId, references, triggerClassName }: AcaRefe
           size="sm"
           disabled={total === 0}
           className={triggerClassName ?? "h-7 gap-1 px-2 font-mono text-xs"}
-          aria-label={`View ${total} ACA references`}
+          aria-label={`View ${total} consent references`}
         >
           <ListTree className="h-3.5 w-3.5" />
-          {total} record{total === 1 ? "" : "s"}
+          {typeof recordCount === "number" && recordCount > 0
+            ? `${recordCount.toLocaleString()} rec · ${total} ref${total === 1 ? "" : "s"}`
+            : `${total} ref${total === 1 ? "" : "s"}`}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
