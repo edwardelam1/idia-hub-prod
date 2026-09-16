@@ -105,22 +105,26 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
     : "";
 
   return (
-    <header className="sticky top-0 z-40 h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex items-center justify-between px-4 md:px-6 flex-shrink-0">
-      <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
+    <header className="sticky top-0 z-40 min-h-16 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex flex-wrap items-center gap-y-1.5 px-3 py-2 sm:h-16 sm:flex-nowrap sm:px-4 sm:py-0 md:px-6 flex-shrink-0">
+      <div className="order-1 flex flex-1 items-center space-x-1.5 sm:space-x-2 md:space-x-4 min-w-0">
         <SidebarTrigger className="flex-shrink-0" />
         <div className="min-w-0">
-          <h1 className="text-sm md:text-lg font-semibold text-foreground truncate">Welcome Back, {displayName}</h1>
+          <h1 className="text-[11px] sm:text-sm md:text-lg font-semibold text-foreground truncate">Welcome Back, {displayName}</h1>
           <p className="text-xs md:text-sm text-muted-foreground truncate hidden sm:block">{getOrganization()}</p>
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
-        <IdentityStatusPills />
+      <div className="contents sm:flex sm:order-2 sm:items-center sm:space-x-2 md:space-x-4 sm:flex-shrink-0">
+        <div className="order-3 basis-full sm:hidden" aria-hidden="true" />
 
-        <div className="hidden sm:flex items-center space-x-2">
+        <div className="order-4 ml-auto sm:order-none sm:ml-0">
+          <IdentityStatusPills />
+        </div>
+
+        <div className="order-4 flex items-center space-x-2 sm:order-none">
           <SynapsePurchaseModal
             trigger={
-              <button className="flex items-center space-x-2 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
+              <button className="flex items-center space-x-1 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
                 <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
                 <span className="text-xs md:text-sm font-medium text-primary">
                   {isLoading ? "..." : Math.floor(synapseCredits)}
@@ -131,11 +135,13 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           />
         </div>
 
-        <NotificationsCenter />
+        <div className="order-2 sm:order-none">
+          <NotificationsCenter />
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9">
+            <Button variant="ghost" className="order-2 sm:order-none flex items-center space-x-1 md:space-x-2 h-8 md:h-9 px-1.5 sm:px-3">
               <Avatar className="h-6 w-6 md:h-8 md:w-8">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
                 <AvatarFallback className="bg-primary/10 text-primary text-xs md:text-sm">

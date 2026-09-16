@@ -17,13 +17,13 @@ const IdentityStatusPills = ({ bioKeyStatus = "STABLE", kycTier = 1 }: IdentityS
   const currentBio = bioKeyMap[bioKeyStatus];
 
   return (
-    <div className="flex items-center gap-2 md:gap-3">
+    <div className="flex items-center gap-1.5 md:gap-3">
       {/* Bio-Key Indicator */}
       <div
-        className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-border ${currentBio.bg} transition-all`}
+        className={`flex items-center gap-1 px-2 py-1 md:gap-2 md:px-3 md:py-1.5 rounded-full border border-border ${currentBio.bg} transition-all`}
       >
-        <Fingerprint className={`w-3.5 h-3.5 ${currentBio.color}`} />
-        <span className={`text-[10px] font-bold uppercase tracking-wider ${currentBio.color}`}>{currentBio.label}</span>
+        <Fingerprint className={`w-3 h-3 md:w-3.5 md:h-3.5 ${currentBio.color}`} />
+        <span className={`text-[8px] md:text-[10px] font-bold uppercase tracking-wider ${currentBio.color}`}>{currentBio.label}</span>
         {bioKeyStatus === "STABLE" && <CircleDot className="w-2 h-2 text-emerald-500 animate-pulse" />}
       </div>
 
