@@ -26,6 +26,10 @@ export interface CartItem {
   bundleId: string;
   bundleName: string;
   quantity?: number;
+  /** Selected data streams when this line is a partial (à la carte) pick. */
+  streams?: string[];
+  /** Records covered by the selected streams. */
+  recordCount?: number;
 }
 
 export interface DataRecord {
