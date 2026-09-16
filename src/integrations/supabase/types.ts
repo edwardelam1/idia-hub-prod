@@ -12983,6 +12983,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      verify_aca_hashes: {
+        Args: { _hashes: string[] }
+        Returns: {
+          aca_hash_key: string
+          vault: string
+        }[]
+      }
     }
     Enums: {
       buyer_jurisdiction_type: "USA" | "SGP" | "IND" | "NGA_ZAF" | "UAE"
