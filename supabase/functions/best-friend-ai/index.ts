@@ -1072,6 +1072,7 @@ serve(async (req) => {
 
     let sourceHealth: any[] = context?.marketplace?.healthRecords ?? [];
     let sourceLifestyle: any[] = context?.marketplace?.lifestyleRecords ?? [];
+    let sourceFord: any[] = [];
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
