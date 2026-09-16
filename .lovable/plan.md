@@ -23,7 +23,7 @@ Everything staged, from every contributor, is the ecosystem-wide view: trading i
 - New database functions (SECURITY DEFINER, STABLE, granted to `service_role`):
   - `public.staged_aca_hashes()` — distinct `aca_hash_key` plus source table across `staged_health_data`, `staged_lifestyle_data`, `staged_ford_data`. Replaces the paged `collectStagedAcaHashes` scan.
   - `public.staged_marketplace_aggregates()` — ecosystem-wide (no owner filter): per-table count, metric sums/averages, distinct event types/categories, Ford metric types/vehicles, and min/max `processed_at`. Replaces `fetchMarketplaceAggregates`'s two client-side page loops; also available to the trading and marketplace surfaces so they report the same ecosystem numbers.
-  - `public.staged_user_aggregates(_pseudo_id text)` — same shape scoped to one operator across all three tables (Ford stays ecosystem-wide per existing policy), backing the personal path alongside the existing `get_omni_aggregates`.
+  - `public.staged_user_aggregates(_pseudo_id text)` — the only owner-scoped function, used solely by Best Friend with marketplace disabled; returns that operator's health and lifestyle figures, with Ford kept ecosystem-wide per existing policy.
 - `supabase/functions/best-friend-ai/index.ts`:
   - `collectStagedAcaHashes` → single `rpc("staged_aca_hashes")`; `MARKETPLACE_MAX_HASH_PAGES` and the page loops are removed.
   - `fetchMarketplaceRecords` gains a `staged_ford_data` branch for contributor registration, receipt hashes, and `fetchBalancedRowsForReceipt`; `MarketplaceFetchResult` gains `ford: any[]`; the widened union type replaces the two-table literal union.
