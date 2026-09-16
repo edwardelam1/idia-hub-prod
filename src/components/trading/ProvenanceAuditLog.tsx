@@ -150,7 +150,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   );
 
   const { data: ledgerMeta = { spend: new Map<string, number>(), reference: new Map<string, string>() } } = useQuery({
-    queryKey: ["egress-credit-spend", ledgerIds],
+    queryKey: ["egress-ledger-meta", ledgerIds],
     enabled: ledgerIds.length > 0,
     queryFn: async () => {
       console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs and settlement references.");
