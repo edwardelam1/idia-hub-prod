@@ -242,6 +242,7 @@ Deno.serve(async (req) => {
       body?.jurisdiction ?? "USA",
       body?.cadence ?? "BATCH",
       verifiedHashes.length,
+      intent_type,
     );
     console.log(
       `[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight} × records ${verifiedHashes.length} (factor ${recordFactor})`,
