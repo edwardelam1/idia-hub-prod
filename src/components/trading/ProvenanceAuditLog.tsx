@@ -174,8 +174,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
       return { spend, reference };
     },
   });
-  const spendMap = ledgerMeta.spend;
-  const referenceMap = ledgerMeta.reference;
+  // Guard against stale cache shapes from a previous build of this query.
+  const spendMap = ledgerMeta?.spend instanceof Map ? ledgerMeta.spend : new Map<string, number>();
+  const referenceMap = ledgerMeta?.reference instanceof Map ? ledgerMeta.reference : new Map<string, string>();
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
