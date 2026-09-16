@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { formatCredits } from "@/lib/utils";
+import ContributorSettlementHashes from "./ContributorSettlementHashes";
 
 export type LedgerRail = "tradfi" | "defi";
 
@@ -59,7 +60,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
       const { data, error } = await supabase
         .from("synapse_credit_ledger")
         .select(
-          "id, amount, amount_usdc, entry_type, transaction_type, status, description, funding_source, created_at, transaction_id, blockchain_tx_hash, circle_transfer_id"
+          "id, amount, amount_usdc, entry_type, transaction_type, status, description, funding_source, created_at, transaction_id, blockchain_tx_hash, circle_transfer_id, reference_id"
         )
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
@@ -82,6 +83,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
           blockchain_tx_hash: r.blockchain_tx_hash,
           transaction_id: r.transaction_id,
           status: r.status,
+          reference_id: r.reference_id ?? null,
           rail: classifyRail(r),
         };
 
@@ -174,6 +176,12 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
                 </div>
 
                 {expandedTx === tx.id && (
+                  <>
+                  {tx.reference_id && (
+                    <div className="px-4 md:px-14 pb-4">
+                      <ContributorSettlementHashes referenceId={tx.reference_id} />
+                    </div>
+                  )}
                   <div className="px-14 pb-6 pt-2 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-top-2">
                     <div className="space-y-4">
                       <div>
@@ -239,6 +247,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
                       </Button>
                     </div>
                   </div>
+                  </>
                 )}
               </div>
             ))

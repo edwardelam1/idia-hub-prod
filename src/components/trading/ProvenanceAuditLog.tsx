@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import ContributorSettlementHashes from "@/components/billing/ContributorSettlementHashes";
 import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -148,22 +149,33 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     [logs],
   );
 
-  const { data: spendMap = new Map<string, number>() } = useQuery({
+  const { data: ledgerMeta = { spend: new Map<string, number>(), reference: new Map<string, string>() } } = useQuery({
     queryKey: ["egress-credit-spend", ledgerIds],
     enabled: ledgerIds.length > 0,
     queryFn: async () => {
-      console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs.");
-      const { data, error } = await supabase.from("synapse_credit_ledger").select("id, amount").in("id", ledgerIds);
+      console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs and settlement references.");
+      const { data, error } = await supabase
+        .from("synapse_credit_ledger")
+        .select("id, amount, reference_id")
+        .in("id", ledgerIds);
       if (error) {
         console.error(`[PHASE_END: EgressLogs.LedgerQuery] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
-      const m = new Map<string, number>();
-      (data || []).forEach((r: any) => m.set(r.id, Number(r.amount ?? 0)));
-      console.info(`[PHASE_END: EgressLogs.LedgerQuery] rows=${data?.length ?? 0}`);
-      return m;
+      const spend = new Map<string, number>();
+      const reference = new Map<string, string>();
+      (data || []).forEach((r: any) => {
+        spend.set(r.id, Number(r.amount ?? 0));
+        if (r.reference_id) reference.set(r.id, String(r.reference_id));
+      });
+      console.info(
+        `[PHASE_END: EgressLogs.LedgerQuery] rows=${data?.length ?? 0} withReference=${reference.size}`,
+      );
+      return { spend, reference };
     },
   });
+  const spendMap = ledgerMeta.spend;
+  const referenceMap = ledgerMeta.reference;
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
@@ -400,6 +412,12 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       )}
                     </div>
                   </dl>
+                  {log.synapse_ledger_entry_id && referenceMap.get(log.synapse_ledger_entry_id) && (
+                    <ContributorSettlementHashes
+                      className="mt-2"
+                      referenceId={referenceMap.get(log.synapse_ledger_entry_id)}
+                    />
+                  )}
                 </article>
               );
             })
@@ -435,7 +453,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                   const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
                   const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
                   const minted = Boolean(log.nft_token_id);
-                  return (
+                  const mainRow = (
                     <TableRow
                       key={log.id}
                       id={`receipt-${log.id}`}
@@ -523,6 +541,21 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         )}
                       </TableCell>
                     </TableRow>
+                  );
+                  const settlementReference = log.synapse_ledger_entry_id
+                    ? referenceMap.get(log.synapse_ledger_entry_id)
+                    : undefined;
+                  return settlementReference ? (
+                    <Fragment key={log.id}>
+                      {mainRow}
+                      <TableRow className="bg-muted/10 hover:bg-muted/10">
+                        <TableCell colSpan={7} className="py-3">
+                          <ContributorSettlementHashes referenceId={settlementReference} />
+                        </TableCell>
+                      </TableRow>
+                    </Fragment>
+                  ) : (
+                    mainRow
                   );
                 })
               )}
