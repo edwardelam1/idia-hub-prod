@@ -470,9 +470,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </div>
                     ))}
                     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
-                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">ACA refs</dt>
+                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">Consent</dt>
                       <dd className="min-w-0">
-                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} recordCount={records} />
                       </dd>
                       <span />
                     </div>
@@ -491,7 +491,17 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         ) : (
-                          <span className="text-muted-foreground">Mint pending</span>
+                          <span className="text-muted-foreground">
+                            Not minted ·{" "}
+                            <a
+                              href={collectionUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              wallet NFTs
+                            </a>
+                          </span>
                         )}
                       </dd>
                       {minted && (
