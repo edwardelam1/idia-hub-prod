@@ -197,30 +197,35 @@ function chunkArray<T>(values: T[], size: number): T[][] {
   return chunks;
 }
 
+// Set-based: the database returns every distinct consent reference across all
+// three staging tables in one answer. No paging, no 1,000-row cap, no ceiling.
 async function collectStagedAcaHashes(
   supabase: ReturnType<typeof createClient>,
-  table: "staged_health_data" | "staged_lifestyle_data",
-): Promise<string[]> {
-  const hashes = new Set<string>();
-  let offset = 0;
+): Promise<Record<StagedTable, string[]>> {
+  console.info("[PHASE_START: StagedHashScan] Reading distinct consent references across all staged tables.");
+  const { data, error } = await supabase.rpc("staged_aca_hashes");
+  if (error) throw new Error(`staged_aca_hashes failed: ${error.message}`);
 
-  for (let page = 0; page < MARKETPLACE_MAX_HASH_PAGES; page++) {
-    const { data, error } = await supabase
-      .from(table)
-      .select("id, aca_hash_key")
-      .not("aca_hash_key", "is", null)
-      .order("id", { ascending: true })
-      .range(offset, offset + MARKETPLACE_HASH_PAGE_SIZE - 1);
-
-    if (error) throw new Error(`${table} hash scan failed: ${error.message}`);
-    for (const row of data ?? []) {
-      if ((row as any).aca_hash_key) hashes.add(String((row as any).aca_hash_key));
-    }
-    if (!data || data.length < MARKETPLACE_HASH_PAGE_SIZE) break;
-    offset += MARKETPLACE_HASH_PAGE_SIZE;
+  const byTable: Record<StagedTable, Set<string>> = {
+    staged_health_data: new Set<string>(),
+    staged_lifestyle_data: new Set<string>(),
+    staged_ford_data: new Set<string>(),
+  };
+  for (const row of (data ?? []) as any[]) {
+    const vault = String(row.vault) as StagedTable;
+    const hash = row.aca_hash_key ? String(row.aca_hash_key) : "";
+    if (hash && byTable[vault]) byTable[vault].add(hash);
   }
 
-  return Array.from(hashes);
+  const result = {
+    staged_health_data: Array.from(byTable.staged_health_data),
+    staged_lifestyle_data: Array.from(byTable.staged_lifestyle_data),
+    staged_ford_data: Array.from(byTable.staged_ford_data),
+  };
+  console.info(
+    `[PHASE_END: StagedHashScan] health=${result.staged_health_data.length} lifestyle=${result.staged_lifestyle_data.length} ford=${result.staged_ford_data.length}`,
+  );
+  return result;
 }
 
 async function resolveHashOwners(
