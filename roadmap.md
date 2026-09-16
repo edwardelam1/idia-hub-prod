@@ -26,3 +26,8 @@
 - Unified Trading Desk, Best Friend AI, and Marketplace activity with exact Liability Shield receipt links
 - Full input/result capture for new paid actions; honest receipt-only fallback for older egress records
 - Compact mobile Egress Logs list with all receipt fields visible without horizontal scrolling
+
+## Liquidity workspace redesign (in progress)
+- [ ] Build the tabbed liquidity slices and static Quick Actions bar
+- [ ] Match v3 position presentation to v4 and place it below v4
+- [ ] Remove the fee-tier panel and verify the page
