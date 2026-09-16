@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { WINDOW_OPTIONS } from "@/lib/bundle-freshness";
 import { Button } from "@/components/ui/button";
+import { recordActivity } from "@/lib/activity-history";
 
 interface DataMarketplaceProps {
   userRole: string;
@@ -125,6 +126,33 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         ),
       );
       const failed = results.filter((r) => r.error || (r.data as any)?.error);
+      console.info("[PHASE_START: Marketplace.ActivityHistory] Saving completed bundle purchases.");
+      await Promise.all(
+        results.map(async (response, index) => {
+          if (response.error || (response.data as any)?.error) return;
+          const item = cartItems[index];
+          const receipt = response.data as any;
+          await recordActivity({
+            source: "marketplace",
+            action: "MARKETPLACE_BUNDLE_ACCESS",
+            title: item.name,
+            input: {
+              bundle_id: item.bundleId ?? item.id,
+              bundle_name: item.name,
+              streams: item.streams ?? [],
+              quantity: item.quantity ?? 1,
+            },
+            result: receipt,
+            recordsConsumed: receipt?.consumed_records?.length ?? item.recordCount ?? 0,
+            synapseCreditCost: Number(receipt?.fee_cr ?? receipt?.quoted_price_cr ?? item.price),
+            egressLogId: receipt?.egress_log_id,
+            synapseLedgerEntryId: receipt?.synapse_ledger_entry_id,
+            referenceId: receipt?.reference_id,
+            idempotencyKey: receipt?.reference_id,
+          });
+        }),
+      );
+      console.info("[PHASE_END: Marketplace.ActivityHistory] Completed purchases saved.");
       if (failed.length > 0) {
         toast.error(`${failed.length} bundle(s) rejected by Liability Shield.`);
       } else {

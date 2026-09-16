@@ -196,6 +196,8 @@ Deno.serve(async (req) => {
         bundle_title: bundle.title,
         fee_cr: synapsePayload.fee,
         reference_id: synapsePayload.reference_id,
+        egress_log_id: synapsePayload.egress_log_id,
+        synapse_ledger_entry_id: synapsePayload.synapse_ledger_entry_id,
         consumed_records: synapsePayload.consumed_records,
         streams: selection.streams,
         quoted_price_cr: selection.price,
