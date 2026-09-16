@@ -46,6 +46,33 @@ const EarningsSettlement = () => {
 
   const { balance, loading: walletLoading, refreshBalance } = useWalletBalance();
 
+  /** Most recent settlement run this account participated in (buyer fee or contributor payout). */
+  const { data: latestRunReference = null } = useQuery({
+    queryKey: ["latest-settlement-reference", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      console.info(`[BEGIN: Settlement.LatestRun] user=${userId}`);
+      try {
+        const { data, error } = await supabase
+          .from("synapse_credit_ledger")
+          .select("reference_id, created_at")
+          .eq("user_id", userId!)
+          .not("reference_id", "is", null)
+          .in("transaction_type", ["data_sale_payout", "idia_royalty_yield", "hub_protocol_fee", "ecosystem_war_chest"])
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        const ref = (data?.[0]?.reference_id as string | undefined) ?? null;
+        console.info(`[END: Settlement.LatestRun] ref=${ref ?? "none"}`);
+        return ref;
+      } catch (e) {
+        const err = e as Error;
+        console.error(`[END: Settlement.LatestRun] failed: ${err.message}\n${err.stack ?? ""}`);
+        throw err;
+      }
+    },
+  });
+
   /** Opens MetaMask (extension or mobile/QR) so the user can move funds from their own wallet UI. */
   const handleLaunchMetaMask = async () => {
     setIsConnecting(true);
