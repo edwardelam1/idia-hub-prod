@@ -582,7 +582,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} recordCount={records} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -619,16 +619,33 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Mint pending</span>
+                          <span className="text-xs text-muted-foreground">
+                            Not minted ·{" "}
+                            <a
+                              href={collectionUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              wallet NFTs
+                            </a>
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         {spend !== null ? (
-                          <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
-                            {spend.toFixed(2)} CR
-                          </span>
+                          <>
+                            <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
+                              {spend.toFixed(2)} CR
+                            </span>
+                            {distributed !== null && distributed > 0 && (
+                              <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                                {distributed.toFixed(2)} CR distributed
+                              </p>
+                            )}
+                          </>
                         ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
+                          <span className="text-muted-foreground text-xs">No ledger entry</span>
                         )}
                       </TableCell>
                     </TableRow>
