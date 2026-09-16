@@ -893,15 +893,19 @@ function summarizeMarketplaceData(
   aggregates: OmniAggregates | null,
   sampleHealth: any[],
   sampleLifestyle: any[],
+  sampleFord: any[] = [],
 ) {
   const h = aggregates?.health;
   const l = aggregates?.lifestyle;
+  const f = aggregates?.ford;
   const healthCount = h?.count ?? sampleHealth.length;
   const lifestyleCount = l?.count ?? sampleLifestyle.length;
+  const fordCount = f?.count ?? sampleFord.length;
   return {
     health_records: healthCount,
     lifestyle_records: lifestyleCount,
-    total_samples: healthCount + lifestyleCount,
+    vehicle_records: fordCount,
+    total_samples: healthCount + lifestyleCount + fordCount,
     step_volume: h?.totals?.steps ?? null,
     active_energy_kcal: h?.totals?.active_energy_kcal ?? null,
     basal_energy_kcal: h?.totals?.basal_energy_kcal ?? null,
