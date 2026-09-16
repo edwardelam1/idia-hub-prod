@@ -715,6 +715,7 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
                 is_settled: yieldStatus === "completed",
                 settled_at: new Date().toISOString(),
                 description: `Pro-rata USDC yield for Ref: ${ingestionReference}`,
+                metadata: { reference_id: ingestionReference, contributor_wallet: lifeWallet, asset: "USDC" },
               },
             });
             yieldSettled = true;
