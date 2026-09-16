@@ -453,7 +453,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                   const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
                   const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
                   const minted = Boolean(log.nft_token_id);
-                  return (
+                  const mainRow = (
                     <TableRow
                       key={log.id}
                       id={`receipt-${log.id}`}
