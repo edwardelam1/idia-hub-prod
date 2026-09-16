@@ -20,6 +20,9 @@ interface QuoteItem {
   bundle_id: string;
   name: string;
   base_valuation: number;
+  streams?: string[];
+  stale?: boolean;
+  unavailable?: boolean;
 }
 
 const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchase }: ShoppingCartProps) => {
@@ -27,6 +30,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
   const [quoteState, setQuoteState] = useState<'idle' | 'quoting' | 'quoted' | 'error'>('idle');
   const [quotedItems, setQuotedItems] = useState<QuoteItem[]>([]);
   const [quotedTotal, setQuotedTotal] = useState(0);
+  const [quoteNonce, setQuoteNonce] = useState(0);
   const { checkCredits, showTopUp, shortfall, dismissTopUp } = useCreditCheck();
 
   const totalItems = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
