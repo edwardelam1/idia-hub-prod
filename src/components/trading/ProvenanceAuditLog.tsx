@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ContributorSettlementHashes from "@/components/billing/ContributorSettlementHashes";
+import AcaReferenceViewer from "@/components/trading/AcaReferenceViewer";
 import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -138,6 +139,12 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
         console.error(`[PHASE_END: EgressLogs.Query] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
+      console.info("[BEGIN: EgressLogs.AcaPayload] ACA hash counts per receipt (data consent, not settlement)");
+      (data || []).forEach((row: any) => {
+        const refs: string[] = row.aca_record_references || [];
+        console.info(`[EgressLogs.AcaPayload] receipt=${row.id} acaCount=${refs.length} first=${refs[0] ?? "none"}`);
+      });
+      console.info("[END: EgressLogs.AcaPayload]");
       console.info(`[PHASE_END: EgressLogs.Query] rows=${data?.length ?? 0}`);
       return (data || []) as unknown as ProvenanceLog[];
     },
@@ -342,13 +349,11 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
           ) : (
             filteredAndSortedLogs.map((log, index) => {
               const acaRefs = log.aca_record_references || [];
-              const acaJoined = acaRefs.join(", ");
               const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
               const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
               const minted = Boolean(log.nft_token_id);
               const fields = [
                 { key: "token", label: "Liability token", value: log.liability_token_hash },
-                { key: "aca", label: `ACA refs (${acaRefs.length})`, value: acaJoined },
                 { key: "anchor", label: "DigiRAMP anchor", value: log.digiramp_anchor_id },
               ];
               return (
@@ -385,6 +390,14 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         />
                       </div>
                     ))}
+                    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
+                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">ACA refs</dt>
+                      <dd className="min-w-0">
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                      </dd>
+                      <span />
+                    </div>
+
                     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
                       <dt className="text-[10px] font-medium uppercase text-muted-foreground">Liability NFT</dt>
                       <dd className="min-w-0 break-all font-mono text-[10px] leading-4">
@@ -450,7 +463,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               ) : (
                 filteredAndSortedLogs.map((log) => {
                   const acaRefs = log.aca_record_references || [];
-                  const acaJoined = acaRefs.join(", ");
+                  
                   const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
                   const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
                   const minted = Boolean(log.nft_token_id);
@@ -481,18 +494,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs whitespace-nowrap">
-                            {acaRefs.length} record{acaRefs.length === 1 ? "" : "s"}
-                          </span>
-                          {acaJoined && (
-                            <CopyButton
-                              copyKey={`${log.id}:aca`}
-                              value={acaJoined}
-                              label="all ACA references"
-                            />
-                          )}
-                        </div>
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
