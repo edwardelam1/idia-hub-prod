@@ -65,14 +65,14 @@ async function readWallet(w: ProtocolWallet): Promise<ProtocolHolding> {
       return null;
     }),
     client
-      .readContract({ address: getAddress(PROTOCOL.idiaToken) as Address, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [addr] })
+      .readContract({ address: getAddress(PROTOCOL.idiaToken) as Address, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [addr] } as never)
       .then((v) => Number(formatUnits(v as bigint, 18)))
       .catch((err: Error) => {
         console.error(`[ProtocolHoldings] idia read failed ${w.key}: ${err.message}`, err.stack);
         return null;
       }),
     client
-      .readContract({ address: getAddress(PROTOCOL.usdc) as Address, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [addr] })
+      .readContract({ address: getAddress(PROTOCOL.usdc) as Address, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [addr] } as never)
       .then((v) => Number(formatUnits(v as bigint, 6)))
       .catch((err: Error) => {
         console.error(`[ProtocolHoldings] usdc read failed ${w.key}: ${err.message}`, err.stack);
@@ -120,10 +120,10 @@ export function useIdiaTokenInfo() {
       try {
         const token = getAddress(PROTOCOL.idiaToken) as Address;
         const [name, symbol, decimals, supply] = await Promise.all([
-          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "name" }),
-          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "symbol" }),
-          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "decimals" }),
-          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "totalSupply" }),
+          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "name" } as never),
+          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "symbol" } as never),
+          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "decimals" } as never),
+          client.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "totalSupply" } as never),
         ]);
         const dec = Number(decimals as number);
         const info = {
