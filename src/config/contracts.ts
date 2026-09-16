@@ -27,6 +27,9 @@ interface ProtocolAddresses {
   registry: string;
   poolFactory: string;
   liabilityReceipt: string;
+  /** Settlement engine helpers — mirrored in idia-circular-settlement. */
+  systemCashRegister: string;
+  poolDeployerModule: string;
   escrow: {
     team: string;
     ecosystem: string;
@@ -48,6 +51,8 @@ const DEPLOYMENTS: Record<DeploymentEnv, ProtocolAddresses> = {
     registry: "0x137D913d89d0D6a5b2d1Db76173770C94d25387B",
     poolFactory: "0x0188FCB027D834E03DD0288D360937ceC4d267bb",
     liabilityReceipt: "0x5eA57335f7086f1C069d769a9012835B80a00BD3",
+    systemCashRegister: "0x649436db4d9352240d1132d9372293e5cc6af0e3",
+    poolDeployerModule: "0x8AF7C97B56282DF3Af8f9472a9938b0D6b33Bf09",
     escrow: {
       team: "0xF0E67683783ef5879b43ef99ab04Bc27A9a71074",
       ecosystem: "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708",
@@ -68,6 +73,8 @@ const DEPLOYMENTS: Record<DeploymentEnv, ProtocolAddresses> = {
     registry: "0xDf7e629eb6083FEe5c66DfF3D4b4A682C4cC1C08",
     poolFactory: "0xDf7e629eb6083FEe5c66DfF3D4b4A682C4cC1C08",
     liabilityReceipt: "0x9f7aA33e0Cb21252A7E00C570768a4fd72A06A36",
+    systemCashRegister: "0x649436db4d9352240d1132d9372293e5cc6af0e3",
+    poolDeployerModule: "0x8AF7C97B56282DF3Af8f9472a9938b0D6b33Bf09",
     escrow: {
       team: "0x5636a3fa473AceD6faaeEC7ebD24c85846A6638B",
       ecosystem: "0x465D3395bf827Cc06d366765d2CE2cBd1b54bBB2",
