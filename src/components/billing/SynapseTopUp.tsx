@@ -95,7 +95,7 @@ const SynapseTopUp = () => {
           await supabase.from("profiles").update({ wallet_address: connectedAddress }).eq("id", session.user.id);
         }
         await refreshWalletBalance?.();
-        toast({ title: "Wallet Connected", description: "Your IDIA Life wallet is now actively bridged." });
+        toast({ title: "Wallet Connected", description: "Your Life wallet is now actively bridged." });
       } else {
         toast({
           title: "Connection Cancelled",
@@ -172,7 +172,6 @@ const SynapseTopUp = () => {
     return () => document.removeEventListener("visibilitychange", onVisible);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
 
   const handlePurchase = async () => {
     console.log(
@@ -296,13 +295,14 @@ const SynapseTopUp = () => {
 
       rememberPendingPurchase(txReference);
       const invokeStart = performance.now();
-      const { data: topUpData, error: topUpError, timedOut } = await invokeWithTimeout(
-        "top-up-credits",
-        {
-          body: internalPayload,
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        },
-      );
+      const {
+        data: topUpData,
+        error: topUpError,
+        timedOut,
+      } = await invokeWithTimeout("top-up-credits", {
+        body: internalPayload,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
       console.log(
         `[SynapseTopUp][handlePurchase] [USDC_FLOW] [INVOKE_END] elapsed=${(performance.now() - invokeStart).toFixed(0)}ms hash=${(topUpData as any)?.hash ?? "none"} timedOut=${timedOut} error=${topUpError ? topUpError.message : "none"}`,
       );
@@ -332,7 +332,6 @@ const SynapseTopUp = () => {
       console.log("[SynapseTopUp][handlePurchase] [FINALLY] exit");
     }
   };
-
 
   return (
     <div className="max-w-4xl mx-auto p-6">
