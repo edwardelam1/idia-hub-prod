@@ -11,6 +11,7 @@ import {
   Search,
   Filter,
   ArrowUpDown,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { CONTRACTS } from "@/config/contracts";
 
 interface ProvenanceLog {
   id: string;
@@ -30,12 +32,20 @@ interface ProvenanceLog {
   client_id: string;
   user_id?: string;
   synapse_ledger_entry_id?: string | null;
+  nft_token_id?: string | null;
+  nft_minted?: boolean | null;
+  on_chain_status?: string | null;
 }
+
+const LOG_COLUMNS =
+  "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id, nft_token_id, nft_minted, on_chain_status";
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const { user } = useAuth();
   const userId = user?.user_id;
-  const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  // Copy state is keyed by row AND field so the confirmation only lights up on
+  // the exact button pressed (values repeat across rows).
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -44,6 +54,16 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const [searchParams] = useSearchParams();
   const receiptId = searchParams.get("receipt");
   const linkedSearch = searchParams.get("search");
+
+  const walletAddress = (user as any)?.wallet_address as string | undefined;
+  const liabilityContract = CONTRACTS.liabilityReceipt;
+
+  const nftUrl = (log: ProvenanceLog) => {
+    if (walletAddress) {
+      return `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`;
+    }
+    return `https://basescan.org/token/${liabilityContract}`;
+  };
 
   useEffect(() => {
     if (linkedSearch) setSearchTerm(linkedSearch);
@@ -70,6 +90,30 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     };
   }, [userId, queryClient]);
 
+  // Capture any Liability NFTs already minted on-chain for this buyer and
+  // attach them to the matching receipts.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      console.info("[PHASE_START: EgressLogs.NftReconcile]");
+      try {
+        const { data, error } = await supabase.functions.invoke("reconcile-liability-nfts", { body: {} });
+        if (error) throw error;
+        console.info(`[PHASE_END: EgressLogs.NftReconcile] updated=${(data as any)?.updated ?? 0}`);
+        if (!cancelled && (data as any)?.updated > 0) {
+          queryClient.invalidateQueries({ queryKey: ["provenance-logs", userId] });
+        }
+      } catch (e) {
+        const err = e as Error;
+        console.error(`[PHASE_END: EgressLogs.NftReconcile] failed: ${err.message}\n${err.stack ?? ""}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, queryClient]);
+
   const {
     data: logs = [],
     isLoading,
@@ -78,21 +122,16 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     queryKey: ["provenance-logs", userId, receiptId],
     queryFn: async () => {
       console.info("[PHASE_START: EgressLogs.Query] Loading user receipts.");
-      let query = supabase
-        .from("egress_logs")
-        .select(
-          "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id",
-        )
-        .order("created_at", { ascending: false });
+      let query = supabase.from("egress_logs").select(LOG_COLUMNS).order("created_at", { ascending: false });
       query = receiptId ? query.eq("id", receiptId).limit(1) : query.limit(500);
       const { data, error } = await query;
 
       if (error) {
-        console.error(`[PHASE_END: EgressLogs.Query] Failed: ${error.message}\n${error.stack ?? ""}`);
+        console.error(`[PHASE_END: EgressLogs.Query] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
       console.info(`[PHASE_END: EgressLogs.Query] rows=${data?.length ?? 0}`);
-      return (data || []) as ProvenanceLog[];
+      return (data || []) as unknown as ProvenanceLog[];
     },
     enabled: !!userId,
   });
@@ -107,12 +146,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     enabled: ledgerIds.length > 0,
     queryFn: async () => {
       console.info("[PHASE_START: EgressLogs.LedgerQuery] Resolving credit costs.");
-      const { data, error } = await supabase
-        .from("synapse_credit_ledger")
-        .select("id, amount")
-        .in("id", ledgerIds);
+      const { data, error } = await supabase.from("synapse_credit_ledger").select("id, amount").in("id", ledgerIds);
       if (error) {
-        console.error(`[PHASE_END: EgressLogs.LedgerQuery] Failed: ${error.message}\n${error.stack ?? ""}`);
+        console.error(`[PHASE_END: EgressLogs.LedgerQuery] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
       const m = new Map<string, number>();
@@ -131,6 +167,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
         (log) =>
           (log.liability_token_hash && log.liability_token_hash.toLowerCase().includes(lowerSearch)) ||
           (log.digiramp_anchor_id && log.digiramp_anchor_id.toLowerCase().includes(lowerSearch)) ||
+          (log.nft_token_id && log.nft_token_id.toLowerCase().includes(lowerSearch)) ||
           (log.aca_record_references &&
             log.aca_record_references.some((ref) => ref.toLowerCase().includes(lowerSearch))),
       );
@@ -149,10 +186,10 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     return result;
   }, [logs, searchTerm, sortOrder, egressFilter]);
 
-  const handleCopy = async (hash: string) => {
-    await navigator.clipboard.writeText(hash);
-    setCopiedHash(hash);
-    setTimeout(() => setCopiedHash(null), 2000);
+  const handleCopy = async (key: string, value: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 2000);
   };
 
   const truncateHash = (hash: string) => {
@@ -164,6 +201,35 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     const types = new Set(logs.map((log) => log.egress_type).filter(Boolean));
     return Array.from(types);
   }, [logs]);
+
+  const CopyButton = ({
+    copyKey,
+    value,
+    label,
+    className,
+    iconClassName,
+  }: {
+    copyKey: string;
+    value: string;
+    label: string;
+    className?: string;
+    iconClassName?: string;
+  }) => (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={className ?? "h-8 w-8"}
+      disabled={!value}
+      aria-label={`Copy ${label}`}
+      onClick={() => handleCopy(copyKey, value)}
+    >
+      {copiedKey === copyKey ? (
+        <CheckCircle2 className={`${iconClassName ?? "h-4 w-4"} text-emerald-500`} />
+      ) : (
+        <Copy className={iconClassName ?? "h-4 w-4"} />
+      )}
+    </Button>
+  );
 
   if (isLoading) {
     return (
@@ -189,7 +255,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
         <div className="relative w-full md:w-96 flex-shrink-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input
-            placeholder="Search hashes and anchors"
+            placeholder="Search hashes, anchors and NFT ids"
             className="h-9 w-full pl-9"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -253,51 +319,84 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
             <p className="px-3 py-12 text-center text-sm text-muted-foreground">
               {searchTerm ? "No records found matching your search." : "No Liability Shield transfers recorded yet."}
             </p>
-          ) : filteredAndSortedLogs.map((log, index) => {
-            const acaJoined = (log.aca_record_references || []).join(", ");
-            const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
-            const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
-            const fields = [
-              { label: "Liability token", value: log.liability_token_hash },
-              { label: "ACA references", value: acaJoined },
-              { label: "DigiRAMP anchor", value: log.digiramp_anchor_id },
-            ];
-            return (
-              <article
-                key={log.id}
-                id={`receipt-${log.id}`}
-                className={`px-2 py-2.5 ${index % 2 ? "bg-muted/20" : "bg-background"} ${receiptId === log.id ? "border-l-2 border-primary bg-primary/5" : ""}`}
-              >
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
-                    <p className="break-words text-xs font-semibold">{log.egress_type || "Standard"}</p>
-                  </div>
-                  <span className="shrink-0 font-mono text-xs font-semibold text-primary">
-                    {spend !== null ? `${spend.toFixed(2)} CR` : "—"}
-                  </span>
-                </div>
-                <dl className="space-y-1.5">
-                  {fields.map((field) => (
-                    <div key={field.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
-                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">{field.label}</dt>
-                      <dd className="min-w-0 break-all font-mono text-[10px] leading-4">{truncateHash(field.value)}</dd>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        disabled={!field.value}
-                        aria-label={`Copy ${field.label}`}
-                        onClick={() => handleCopy(field.value)}
-                      >
-                        {copiedHash === field.value ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                      </Button>
+          ) : (
+            filteredAndSortedLogs.map((log, index) => {
+              const acaRefs = log.aca_record_references || [];
+              const acaJoined = acaRefs.join(", ");
+              const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
+              const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
+              const minted = Boolean(log.nft_token_id);
+              const fields = [
+                { key: "token", label: "Liability token", value: log.liability_token_hash },
+                { key: "aca", label: `ACA refs (${acaRefs.length})`, value: acaJoined },
+                { key: "anchor", label: "DigiRAMP anchor", value: log.digiramp_anchor_id },
+              ];
+              return (
+                <article
+                  key={log.id}
+                  id={`receipt-${log.id}`}
+                  className={`px-2 py-2.5 ${index % 2 ? "bg-muted/20" : "bg-background"} ${receiptId === log.id ? "border-l-2 border-primary bg-primary/5" : ""}`}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                      <p className="break-words text-xs font-semibold">{log.egress_type || "Standard"}</p>
                     </div>
-                  ))}
-                </dl>
-              </article>
-            );
-          })}
+                    <span className="shrink-0 font-mono text-xs font-semibold text-primary">
+                      {spend !== null ? `${spend.toFixed(2)} CR` : "—"}
+                    </span>
+                  </div>
+                  <dl className="space-y-1.5">
+                    {fields.map((field) => (
+                      <div
+                        key={field.key}
+                        className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1"
+                      >
+                        <dt className="text-[10px] font-medium uppercase text-muted-foreground">{field.label}</dt>
+                        <dd className="min-w-0 break-all font-mono text-[10px] leading-4">
+                          {truncateHash(field.value)}
+                        </dd>
+                        <CopyButton
+                          copyKey={`${log.id}:${field.key}`}
+                          value={field.value}
+                          label={field.label}
+                          className="h-9 w-9"
+                          iconClassName="h-3.5 w-3.5"
+                        />
+                      </div>
+                    ))}
+                    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
+                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">Liability NFT</dt>
+                      <dd className="min-w-0 break-all font-mono text-[10px] leading-4">
+                        {minted ? (
+                          <a
+                            href={nftUrl(log)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                          >
+                            #{log.nft_token_id}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">Mint pending</span>
+                        )}
+                      </dd>
+                      {minted && (
+                        <CopyButton
+                          copyKey={`${log.id}:nft`}
+                          value={String(log.nft_token_id)}
+                          label="Liability NFT token id"
+                          className="h-9 w-9"
+                          iconClassName="h-3.5 w-3.5"
+                        />
+                      )}
+                    </div>
+                  </dl>
+                </article>
+              );
+            })
+          )}
         </div>
 
         <div className="hidden overflow-x-auto md:block">
@@ -309,13 +408,14 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                 <TableHead className="text-xs uppercase tracking-wider">Liability Token Hash</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">ACA References</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">DigiRAMP Anchor</TableHead>
+                <TableHead className="text-xs uppercase tracking-wider">Liability NFT</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider text-right">Credits Spent</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAndSortedLogs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                     {searchTerm
                       ? "No records found matching your search."
                       : "No Liability Shield transfers recorded yet."}
@@ -323,13 +423,17 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                 </TableRow>
               ) : (
                 filteredAndSortedLogs.map((log) => {
-                  const acaJoined = (log.aca_record_references || []).join(", ");
-                  const spendRaw = log.synapse_ledger_entry_id
-                    ? spendMap.get(log.synapse_ledger_entry_id)
-                    : undefined;
+                  const acaRefs = log.aca_record_references || [];
+                  const acaJoined = acaRefs.join(", ");
+                  const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
                   const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
+                  const minted = Boolean(log.nft_token_id);
                   return (
-                    <TableRow key={log.id} className={receiptId === log.id ? "bg-primary/5" : undefined}>
+                    <TableRow
+                      key={log.id}
+                      id={`receipt-${log.id}`}
+                      className={receiptId === log.id ? "bg-primary/5" : undefined}
+                    >
                       <TableCell className="text-foreground whitespace-nowrap">
                         {new Date(log.created_at).toLocaleString()}
                       </TableCell>
@@ -343,40 +447,24 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                           <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
                             {truncateHash(log.liability_token_hash)}
                           </span>
-                           <Button
-                             variant="ghost"
-                             size="icon"
-                             className="h-8 w-8"
-                             aria-label="Copy Liability Shield token"
-                            onClick={() => handleCopy(log.liability_token_hash)}
-                          >
-                            {copiedHash === log.liability_token_hash ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
-                            )}
-                           </Button>
+                          <CopyButton
+                            copyKey={`${log.id}:token`}
+                            value={log.liability_token_hash}
+                            label="Liability Shield token"
+                          />
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs">
-                            {truncateHash(acaJoined)}
+                          <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs whitespace-nowrap">
+                            {acaRefs.length} record{acaRefs.length === 1 ? "" : "s"}
                           </span>
                           {acaJoined && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label="Copy ACA references"
-                              onClick={() => handleCopy(acaJoined)}
-                            >
-                              {copiedHash === acaJoined ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-4 h-4" />
-                              )}
-                            </Button>
+                            <CopyButton
+                              copyKey={`${log.id}:aca`}
+                              value={acaJoined}
+                              label="all ACA references"
+                            />
                           )}
                         </div>
                       </TableCell>
@@ -386,21 +474,37 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             {truncateHash(log.digiramp_anchor_id)}
                           </span>
                           {log.digiramp_anchor_id && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label="Copy DigiRAMP anchor"
-                              onClick={() => handleCopy(log.digiramp_anchor_id)}
-                            >
-                              {copiedHash === log.digiramp_anchor_id ? (
-                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </Button>
+                            <CopyButton
+                              copyKey={`${log.id}:anchor`}
+                              value={log.digiramp_anchor_id}
+                              label="DigiRAMP anchor"
+                              iconClassName="h-3 w-3"
+                            />
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {minted ? (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={nftUrl(log)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-mono text-xs text-primary underline-offset-2 hover:underline"
+                            >
+                              #{log.nft_token_id}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <CopyButton
+                              copyKey={`${log.id}:nft`}
+                              value={String(log.nft_token_id)}
+                              label="Liability NFT token id"
+                              iconClassName="h-3 w-3"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Mint pending</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         {spend !== null ? (
