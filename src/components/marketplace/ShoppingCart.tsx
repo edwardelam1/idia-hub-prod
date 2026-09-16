@@ -41,32 +41,40 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
     const fetchQuote = async () => {
       setQuoteState('quoting');
       try {
-        const bundleIds = cartItems.map(item => item.id);
         const { data, error } = await supabase.functions.invoke('quote-bundle', {
-          body: { bundle_ids: bundleIds },
+          body: {
+            items: cartItems.map(item => ({
+              bundle_id: item.bundleId ?? item.id,
+              streams: item.streams ?? null,
+              quantity: item.quantity ?? 1,
+              price: item.price,
+            })),
+          },
         });
         if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
         setQuotedItems(data.items || []);
-        // Apply quantities
-        let total = 0;
-        cartItems.forEach(ci => {
-          const qi = (data.items || []).find((q: QuoteItem) => q.bundle_id === ci.id);
-          total += (qi?.base_valuation || ci.price) * (ci.quantity || 1);
-        });
-        setQuotedTotal(total);
+        setQuotedTotal(Number(data.total ?? 0));
         setQuoteState('quoted');
-      } catch {
-        // Fallback to cart prices
-        const total = cartItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
-        setQuotedTotal(total);
-        setQuoteState('quoted');
+      } catch (err) {
+        // Never silently fall back to a page price — the server is the authority.
+        console.error('[ShoppingCart][quote] failed:', err);
+        setQuotedItems([]);
+        setQuotedTotal(0);
+        setQuoteState('error');
       }
     };
     fetchQuote();
-  }, [isOpen, cartItems]);
+  }, [isOpen, cartItems, quoteNonce]);
 
   const getItemPrice = (item: CartItem) => {
-    const qi = quotedItems.find(q => q.bundle_id === item.id);
+    const key = item.bundleId ?? item.id;
+    const qi = quotedItems.find(q => {
+      if (q.bundle_id !== key) return false;
+      const qStreams = [...(q.streams ?? [])].sort().join('+');
+      const iStreams = [...(item.streams ?? [])].sort().join('+');
+      return qStreams === iStreams;
+    });
     return qi?.base_valuation ?? item.price;
   };
 
