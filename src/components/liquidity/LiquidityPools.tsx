@@ -67,7 +67,12 @@ const LiquidityPools = () => {
   const idiaUsdPrice = useMemo(() => deriveIdiaUsdPrice(pools), [pools]);
   const totalTVL = useMemo(() => pools.reduce((sum, pool) => sum + pool.tvlUSD, 0), [pools]);
   const total24hVol = useMemo(() => pools.reduce((sum, pool) => sum + pool.volume24hUSD, 0), [pools]);
-  const userValue = useMemo(() => userPositions.reduce((sum, position) => sum + position.valueUSD, 0), [userPositions]);
+  const userValue = useMemo(
+    () =>
+      userPositions.reduce((sum, position) => sum + position.valueUSD, 0) +
+      (v4Query.data?.positions ?? []).reduce((sum, position) => sum + position.valueUSD, 0),
+    [userPositions, v4Query.data?.positions],
+  );
   const hasUserWallet = Boolean(userWalletQuery.data);
 
   const slices: Array<{ id: Slice; label: string; value: string; icon: typeof CircleDollarSign }> = [
