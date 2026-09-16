@@ -80,10 +80,18 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     },
   });
 
-  const nftUrl = (_log: ProvenanceLog) =>
-    walletAddress
+  /** Link to the exact minted token when known, otherwise the wallet's collection. */
+  const nftUrl = (log: ProvenanceLog) => {
+    if (log.nft_mint_tx_hash) return `https://basescan.org/tx/${log.nft_mint_tx_hash}`;
+    if (log.nft_token_id) return `https://basescan.org/token/${liabilityContract}?a=${log.nft_token_id}`;
+    return walletAddress
       ? `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`
       : `https://basescan.org/token/${liabilityContract}`;
+  };
+
+  const collectionUrl = walletAddress
+    ? `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`
+    : `https://basescan.org/token/${liabilityContract}`;
 
   useEffect(() => {
     if (linkedSearch) setSearchTerm(linkedSearch);
