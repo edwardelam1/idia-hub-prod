@@ -439,9 +439,16 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       <p className="text-[11px] text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
                       <p className="break-words text-xs font-semibold">{log.egress_type || "Standard"}</p>
                     </div>
-                    <span className="shrink-0 font-mono text-xs font-semibold text-primary">
-                      {spend !== null ? `${spend.toFixed(2)} CR` : "—"}
-                    </span>
+                    <div className="shrink-0 text-right">
+                      <span className="font-mono text-xs font-semibold text-primary">
+                        {spend !== null ? `${spend.toFixed(2)} CR` : "No ledger entry"}
+                      </span>
+                      {distributed !== null && distributed > 0 && (
+                        <p className="font-mono text-[9px] text-muted-foreground">
+                          {distributed.toFixed(2)} CR distributed
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <dl className="space-y-1.5">
                     {fields.map((field) => (
