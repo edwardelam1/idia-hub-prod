@@ -106,8 +106,7 @@ Deno.serve(async (req) => {
     // Get updated balance
     const { data: newBalance } = await supabase.rpc("get_hub_balance", { uid: user_id });
 
-    return new Response(
-      JSON.stringify({
+    const responsePayload = {
         success: true,
         consumption_id: consumptionRow.id,
         settlement_id: settlementRow.id,
@@ -118,13 +117,39 @@ Deno.serve(async (req) => {
           user_liquidity_pool: userLiquidityPool,
           ecosystem_war_chest: ecosystemWarChest,
         },
-      }),
+      };
+
+    console.info("[PHASE_START: ExecuteHubQuery.ActivityHistory] Saving paid API activity.");
+    const { error: activityError } = await supabase.from("activity_history").upsert(
+      {
+        user_id,
+        source: "trading_desk",
+        action: query_type || "API_QUERY",
+        title: query_type || "Paid API query",
+        input_payload: { query_type, bundle_id, query_cost_credits },
+        result_payload: responsePayload,
+        status: "completed",
+        synapse_credit_cost: query_cost_credits,
+        synapse_ledger_entry_id: consumptionRow.id,
+        reference_id: consumptionRow.id,
+        idempotency_key: `hub-query-${consumptionRow.id}`,
+      },
+      { onConflict: "user_id,idempotency_key" },
+    );
+    if (activityError) {
+      console.error(`[PHASE_END: ExecuteHubQuery.ActivityHistory] Failed: ${activityError.message}\n${activityError.stack ?? ""}`);
+    } else {
+      console.info("[PHASE_END: ExecuteHubQuery.ActivityHistory] Saved.");
+    }
+
+    return new Response(
+      JSON.stringify(responsePayload),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   } catch (err: any) {
-    console.error("execute-hub-query error:", err);
+    console.error("execute-hub-query error:", `${err?.message ?? String(err)}\n${err?.stack ?? ""}`);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

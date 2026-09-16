@@ -308,6 +308,36 @@ serve(async (req) => {
       });
     }
     console.log(`[mcp-edge-relay][${reqId}] END downstream-invoke OK`);
+    console.log(`[PHASE_START: McpRelay.ActivityHistory] user=${userId} tool=${toolName}`);
+    const activityReference =
+      typeof (data as any)?.reference_id === "string" ? (data as any).reference_id : `mcp-${traceCtx.traceId}`;
+    const { error: activityError } = await supabase.from("activity_history").upsert(
+      {
+        user_id: userId,
+        source: "trading_desk",
+        action: `MCP:${toolName}`,
+        title: toolName,
+        input_payload: cleanArgs,
+        result_payload: data ?? {},
+        status: "completed",
+        records_consumed: Array.isArray((data as any)?.consumed_records)
+          ? (data as any).consumed_records.length
+          : 0,
+        synapse_credit_cost: Number((data as any)?.fee ?? (data as any)?.fee_cr ?? 0),
+        egress_log_id: (data as any)?.egress_log_id ?? null,
+        synapse_ledger_entry_id: (data as any)?.synapse_ledger_entry_id ?? null,
+        reference_id: activityReference,
+        idempotency_key: activityReference,
+      },
+      { onConflict: "user_id,idempotency_key" },
+    );
+    if (activityError) {
+      console.error(
+        `[PHASE_END: McpRelay.ActivityHistory] Failed: ${activityError.message}\n${activityError.stack ?? ""}`,
+      );
+    } else {
+      console.log("[PHASE_END: McpRelay.ActivityHistory] Saved.");
+    }
     deferTelemetry(
       supabase.from("mcp_relay_events").insert({
         user_id: userId,
@@ -323,7 +353,7 @@ serve(async (req) => {
       content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data) }],
     });
   } catch (err: any) {
-    console.log(`[mcp-edge-relay][${reqId}] ERROR downstream-invoke unhandled ${err?.message}`);
+    console.log(`[mcp-edge-relay][${reqId}] ERROR downstream-invoke unhandled ${err?.message}\n${err?.stack ?? ""}`);
     deferTelemetry(
       supabase.from("mcp_relay_events").insert({
         user_id: userId,

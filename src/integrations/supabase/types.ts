@@ -207,6 +207,78 @@ export type Database = {
           },
         ]
       }
+      activity_history: {
+        Row: {
+          action: string
+          created_at: string
+          egress_log_id: string | null
+          id: string
+          idempotency_key: string
+          input_payload: Json
+          records_consumed: number
+          reference_id: string | null
+          result_payload: Json
+          source: string
+          status: string
+          synapse_credit_cost: number
+          synapse_ledger_entry_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          egress_log_id?: string | null
+          id?: string
+          idempotency_key: string
+          input_payload?: Json
+          records_consumed?: number
+          reference_id?: string | null
+          result_payload?: Json
+          source: string
+          status?: string
+          synapse_credit_cost?: number
+          synapse_ledger_entry_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          egress_log_id?: string | null
+          id?: string
+          idempotency_key?: string
+          input_payload?: Json
+          records_consumed?: number
+          reference_id?: string | null
+          result_payload?: Json
+          source?: string
+          status?: string
+          synapse_credit_cost?: number
+          synapse_ledger_entry_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_history_egress_log_id_fkey"
+            columns: ["egress_log_id"]
+            isOneToOne: false
+            referencedRelation: "egress_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_history_synapse_ledger_entry_id_fkey"
+            columns: ["synapse_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "synapse_credit_ledger"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_campaigns: {
         Row: {
           budget: number | null

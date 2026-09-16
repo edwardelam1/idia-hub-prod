@@ -15,6 +15,7 @@ import { fetchApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { supabase } from "@/integrations/supabase/client";
+import { recordActivity } from "@/lib/activity-history";
 
 interface MarketplaceTerminalProps {
   synapseBalance?: number;
@@ -154,6 +155,21 @@ const MarketplaceTerminalImpl = ({
         fee_cr: (receipt as any)?.fee,
         consumed_records: (receipt as any)?.consumed_records,
       });
+      console.info("[PHASE_START: Terminal.ActivityHistory] Saving full query and result.");
+      await recordActivity({
+        source: "trading_desk",
+        action: "SQL_TERMINAL_QUERY",
+        title: sql.trim().split("\n")[0].slice(0, 120) || "SQL query",
+        input: { sql, estimated_cost_cr: estimatedCost },
+        result: receipt,
+        recordsConsumed: (receipt as any)?.consumed_records?.length ?? 0,
+        synapseCreditCost: Number((receipt as any)?.fee ?? estimatedCost),
+        egressLogId: (receipt as any)?.egress_log_id,
+        synapseLedgerEntryId: (receipt as any)?.synapse_ledger_entry_id,
+        referenceId: (receipt as any)?.reference_id,
+        idempotencyKey: (receipt as any)?.reference_id ?? queryRef,
+      });
+      console.info("[PHASE_END: Terminal.ActivityHistory] Full query and result saved.");
       await refreshBalance();
       console.log("[END: Terminal.RunQuery] OK");
     } catch (err: any) {

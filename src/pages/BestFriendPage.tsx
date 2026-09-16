@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useBrowserLocation } from "@/hooks/useBrowserLocation";
+import { recordActivity } from "@/lib/activity-history";
 
 // ERROR BOUNDARY WRAPPER
 const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
@@ -31,6 +32,7 @@ interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   liabilityTokenHash?: string | null;
+  egressLogId?: string | null;
   creditDeducted?: boolean;
 }
 
@@ -121,19 +123,46 @@ const BestFriendPage = () => {
       let digiRampAnchorId = null;
       if (rawTokenHash) digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
 
+      const assistantContent = chatResponse?.response || "Analysis complete.";
+      const receipt = chatResponse?.receipt ?? null;
       setConversation((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: chatResponse?.response || "Analysis complete.",
+          content: assistantContent,
           liabilityTokenHash: digiRampAnchorId,
+          egressLogId: receipt?.egress_log_id ?? null,
           creditDeducted: marketplaceMode,
         },
       ]);
 
+      console.info("[PHASE_START: BestFriend.ActivityHistory] Saving complete prompt and answer.");
+      await recordActivity({
+        source: "best_friend",
+        action: marketplaceMode ? "MARKETPLACE_RESEARCH" : "BEST_FRIEND_AI_CHAT",
+        title: currentMessage.trim().slice(0, 120),
+        input: {
+          prompt: currentMessage,
+          marketplace_mode: marketplaceMode,
+          conversation_context: conversation.slice(-5),
+        },
+        result: chatResponse,
+        recordsConsumed: chatResponse?.consumed_records?.length ?? 0,
+        synapseCreditCost: Number(receipt?.fee ?? 0),
+        egressLogId: receipt?.egress_log_id,
+        synapseLedgerEntryId: receipt?.synapse_ledger_entry_id,
+        referenceId: receipt?.reference_id,
+        idempotencyKey: receipt?.reference_id ?? `best-friend-${crypto.randomUUID()}`,
+      });
+      console.info("[PHASE_END: BestFriend.ActivityHistory] Prompt and answer saved.");
+
       if (marketplaceMode) await refreshBalance();
       setCurrentMessage("");
     } catch (error: any) {
+      console.error(
+        "[PHASE_END: BestFriend.Send] Failed:",
+        error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error),
+      );
       toast.error(error.message);
     } finally {
       setIsLoading(false);
@@ -188,7 +217,9 @@ const BestFriendPage = () => {
                           variant="ghost"
                           size="sm"
                           className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                          onClick={() => navigate(`/egress-logs?search=${msg.liabilityTokenHash}`)}
+                          onClick={() => navigate(msg.egressLogId
+                            ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
+                            : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`)}
                         >
                           <FileKey size={12} className="text-amber-500" />
                           {truncateHash(msg.liabilityTokenHash)}

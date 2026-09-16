@@ -30,6 +30,7 @@ import UpdateBankingDetails from "@/components/billing/UpdateBankingDetails";
 import UniversalPurchaseScreen from "@/components/billing/UniversalPurchaseScreen";
 import SettingsPage from "./SettingsPage";
 import BestFriendPage from "./BestFriendPage";
+import SavedActivityPage from "./SavedActivityPage";
 import { useAuth } from "@/contexts/AuthContext";
 import TermsAcceptanceModal from "@/components/legal/TermsAcceptanceModal";
 import BuyerDiagnosticLevel0 from "@/components/onboarding/BuyerDiagnosticLevel0";
@@ -124,7 +125,7 @@ const Index = () => {
         <Route path="/compliance" element={<ComplianceDashboard />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/my-team" element={<div>My Team (Coming Soon)</div>} />
-        <Route path="/saved-searches" element={<div>Saved Searches - Available in Data Viewer</div>} />
+        <Route path="/saved-searches" element={<SavedActivityPage />} />
         <Route path="/analytics" element={<div>Analytics (Coming Soon)</div>} />
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
         <Route path="/trading" element={<TradingDeskDashboard />} />

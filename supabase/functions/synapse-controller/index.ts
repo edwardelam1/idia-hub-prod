@@ -313,11 +313,51 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 7. UNIFIED ACTIVITY INDEX — generic receipt row. First-party clients
+    // enrich this same idempotent row with their complete visible input/result.
+    console.info("[PHASE_START: SynapseController.ActivityHistory] Indexing receipt.");
+    const source = client_id.includes("BEST_FRIEND")
+      ? "best_friend"
+      : client_id.includes("MARKETPLACE")
+        ? "marketplace"
+        : "trading_desk";
+    const { error: activityError } = await adminClient.from("activity_history").upsert(
+      {
+        user_id,
+        source,
+        action: intent_type,
+        title: metadata?.bundle_title ?? intent_type.replaceAll("_", " "),
+        input_payload: metadata ?? {},
+        result_payload: {
+          reference_id: referenceId,
+          consumed_records: verifiedHashes,
+          settlement_status: handoffAccepted ? "queued" : "stalled",
+        },
+        status: handoffAccepted ? "completed" : "stalled",
+        records_consumed: verifiedHashes.length,
+        synapse_credit_cost: feeCR,
+        egress_log_id: egressResult.data.id,
+        synapse_ledger_entry_id: ledgerResult.data.id,
+        reference_id: referenceId,
+        idempotency_key: referenceId,
+      },
+      { onConflict: "user_id,idempotency_key" },
+    );
+    if (activityError) {
+      console.error(
+        `[PHASE_END: SynapseController.ActivityHistory] Failed: ${activityError.message}\n${activityError.stack ?? ""}`,
+      );
+    } else {
+      console.info("[PHASE_END: SynapseController.ActivityHistory] Receipt indexed.");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         fee: feeCR,
         reference_id: referenceId,
+        egress_log_id: egressResult.data.id,
+        synapse_ledger_entry_id: ledgerResult.data.id,
         consumed_records: consumedReceipt,
         settlement_status: "queued",
       }),
