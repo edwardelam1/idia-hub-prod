@@ -250,7 +250,7 @@ async function resolveHashOwners(
 
 async function fetchBalancedRowsForReceipt(
   supabase: ReturnType<typeof createClient>,
-  table: "staged_health_data" | "staged_lifestyle_data",
+  table: StagedTable,
   hashes: string[],
   rowsPerContributor: number,
 ): Promise<any[]> {
