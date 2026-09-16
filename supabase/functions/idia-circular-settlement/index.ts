@@ -223,9 +223,12 @@ async function insertLedgerWithRepair(
 ): Promise<void> {
   const maxAttempts = 3;
   let lastError: any = null;
+  // Every ledger row carries the settlement run reference so the audit UI can
+  // group the individual contributor transfers back to their run.
+  const row = { reference_id: opts.reference_id, ...opts.row };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const { error } = await supabase.from("synapse_credit_ledger").insert(opts.row);
+      const { error } = await supabase.from("synapse_credit_ledger").insert(row);
       if (!error) return;
       lastError = error;
     } catch (err) {
