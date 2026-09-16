@@ -919,9 +919,14 @@ function summarizeMarketplaceData(
     avg_vo2_max: h?.totals?.avg_vo2_max ?? null,
     lifestyle_event_types: l?.totals?.event_types ?? null,
     lifestyle_event_categories: l?.totals?.event_categories ?? null,
+    vehicle_metric_types: f?.totals?.metric_types ?? null,
+    vehicle_count: f?.totals?.vehicles ?? null,
+    vehicle_avg_metric_value: f?.totals?.avg_metric_value ?? null,
     date_range_health: h?.range ?? null,
     date_range_lifestyle: l?.range ?? null,
-    sample_size: sampleHealth.length + sampleLifestyle.length,
+    date_range_vehicle: f?.range ?? null,
+    scope: (h as any)?.scope ?? "ecosystem",
+    sample_size: sampleHealth.length + sampleLifestyle.length + sampleFord.length,
     aggregates_source: aggregates ? "database" : "sample_fallback",
   };
 }
@@ -932,10 +937,12 @@ function buildOrchestratorPrompt(
   marketplaceSummary: Record<string, unknown> | null,
   healthRecords: any[],
   lifestyleRecords: any[],
+  fordRecords: any[] = [],
 ) {
   let compactData = "No marketplace dataset is attached to this request.";
   if (marketplaceSummary) {
     compactData =
+      "SCOPE: ecosystem-wide. Every staged record from every contributor is in view.\n\n" +
       "TRUE_TOTALS (from database, authoritative — use these for all counts/sums/averages):\n" +
       JSON.stringify(marketplaceSummary) +
       "\n\n" +
@@ -943,7 +950,10 @@ function buildOrchestratorPrompt(
       JSON.stringify(healthRecords) +
       "\n\n" +
       "SAMPLE_ROWS — LIFESTYLE (preview only, NOT representative of totals):\n" +
-      JSON.stringify(lifestyleRecords);
+      JSON.stringify(lifestyleRecords) +
+      "\n\n" +
+      "SAMPLE_ROWS — VEHICLE TELEMETRY (preview only, NOT representative of totals):\n" +
+      JSON.stringify(fordRecords);
   }
 
   return (
