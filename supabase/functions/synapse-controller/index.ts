@@ -247,6 +247,12 @@ Deno.serve(async (req) => {
           status: "settled",
           description: `Synapse Gas: ${intent_type} | Sector: ${sectorLabel} [${feeCR} CR]`,
           reference_id: referenceId,
+          metadata: {
+            buyer_weight: buyerWeight,
+            sector_label: sectorLabel,
+            record_factor: recordFactor,
+            consumed_record_count: verifiedHashes.length,
+          },
         })
         .select("id")
         .single(),
@@ -263,7 +269,14 @@ Deno.serve(async (req) => {
           digiramp_anchor_id: digiRampAnchorId,
           egress_type: intent_type,
           data_points_count: verifiedHashes.length,
-          metadata: { ...metadata, sectorLabel, consumed_record_count: verifiedHashes.length },
+          metadata: {
+            ...metadata,
+            sectorLabel,
+            sector_label: sectorLabel,
+            buyer_weight: buyerWeight,
+            record_factor: recordFactor,
+            consumed_record_count: verifiedHashes.length,
+          },
         })
         .select("id")
         .single(),
