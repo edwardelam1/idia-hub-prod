@@ -18,3 +18,11 @@
 ## Marketplace compact controls (done)
 - Mobile 2 × 2 marketplace tool grid
 - Title-only bundles with individual and bulk expand/collapse controls
+
+## Production custom selection (done)
+- Real stream selections, proportional record pricing, server-side quotes, and matching source-record access
+
+## Saved Searches and activity history (done)
+- Unified Trading Desk, Best Friend AI, and Marketplace activity with exact Liability Shield receipt links
+- Full input/result capture for new paid actions; honest receipt-only fallback for older egress records
+- Compact mobile Egress Logs list with all receipt fields visible without horizontal scrolling
