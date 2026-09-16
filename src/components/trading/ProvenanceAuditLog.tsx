@@ -411,6 +411,12 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       )}
                     </div>
                   </dl>
+                  {log.synapse_ledger_entry_id && referenceMap.get(log.synapse_ledger_entry_id) && (
+                    <ContributorSettlementHashes
+                      className="mt-2"
+                      referenceId={referenceMap.get(log.synapse_ledger_entry_id)}
+                    />
+                  )}
                 </article>
               );
             })
