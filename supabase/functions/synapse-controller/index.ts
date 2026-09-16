@@ -99,6 +99,18 @@ function recordVolumeFactor(recordCount: number): number {
 
 const round4 = (v: number) => Math.round(v * 10000) / 10000;
 
+/**
+ * Conversational Best Friend AI turns are billed as a flat 1.00 CR per chat,
+ * regardless of how many records the answer touched.
+ */
+const FLAT_CHAT_FEE_CR = 1.0;
+const FLAT_FEE_INTENTS = new Set([
+  "BEST_FRIEND_AI_CHAT",
+  "MARKETPLACE_RESEARCH",
+  "ACA_CATALOG_LOOKUP",
+  "ACA_FILE_INSPECT",
+]);
+
 async function calculateDynamicFee(
   adminClient: any,
   userId: string,
@@ -106,7 +118,15 @@ async function calculateDynamicFee(
   datasetJurisdiction = "USA",
   datasetCadence: "STREAMING" | "INTRADAY" | "BATCH" = "BATCH",
   recordCount = 1,
+  intentType = "",
 ): Promise<{ feeCR: number; sectorLabel: string; buyerWeight: number; recordFactor: number }> {
+  if (FLAT_FEE_INTENTS.has(intentType)) {
+    const flatSector = getRoute(subModuleId)?.industryId ?? "general";
+    console.log(
+      `[SYNAPSE_CONTROLLER:FLAT_CHAT_FEE] intent=${intentType} fee=${FLAT_CHAT_FEE_CR} CR records=${recordCount}`,
+    );
+    return { feeCR: FLAT_CHAT_FEE_CR, sectorLabel: flatSector, buyerWeight: 1.0, recordFactor: 1 };
+  }
   // 1. Resolve Industry ID from shared Routing Map
   const route = getRoute(subModuleId);
   const sectorLabel = route?.industryId ?? "general";
