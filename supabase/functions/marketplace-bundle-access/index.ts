@@ -168,6 +168,10 @@ Deno.serve(async (req) => {
           bundle_id: bundle.bundle_id,
           bundle_title: bundle.title,
           quantity,
+          window_key: (bundle as any).window_key ?? null,
+          streams: selection.streams,
+          selection_scope: selection.streams.length > 0 ? "partial" : "full",
+          quoted_price_cr: selection.price,
         },
       }),
     });
@@ -193,12 +197,14 @@ Deno.serve(async (req) => {
         fee_cr: synapsePayload.fee,
         reference_id: synapsePayload.reference_id,
         consumed_records: synapsePayload.consumed_records,
+        streams: selection.streams,
+        quoted_price_cr: selection.price,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: any) {
     console.info("[BEGIN: MarketplaceBundleAccess.Request.Stall]");
-    console.error("[FATAL: MarketplaceBundleAccess]", err?.message);
+    console.error("[FATAL: MarketplaceBundleAccess]", err instanceof Error ? `${err.message}\n${err.stack}` : String(err));
     return new Response(JSON.stringify({ error: err?.message ?? "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
