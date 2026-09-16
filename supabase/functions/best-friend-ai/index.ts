@@ -12,10 +12,13 @@ const MARKETPLACE_HASH_PAGE_SIZE = 1_000;
 const MARKETPLACE_MAX_HASH_PAGES = 75;
 const MARKETPLACE_SAMPLE_ROW_BUDGET = 150;
 
+type StagedTable = "staged_health_data" | "staged_lifestyle_data" | "staged_ford_data";
+
 type MarketplaceFetchResult = {
   success: boolean;
   health: any[];
   lifestyle: any[];
+  ford: any[];
   receiptIds: string[];
   contributorCount: number;
   unresolvedHashCount: number;
