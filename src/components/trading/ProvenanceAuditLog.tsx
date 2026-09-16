@@ -542,6 +542,21 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </TableCell>
                     </TableRow>
                   );
+                  const settlementReference = log.synapse_ledger_entry_id
+                    ? referenceMap.get(log.synapse_ledger_entry_id)
+                    : undefined;
+                  return settlementReference ? (
+                    <Fragment key={log.id}>
+                      {mainRow}
+                      <TableRow className="bg-muted/10 hover:bg-muted/10">
+                        <TableCell colSpan={7} className="py-3">
+                          <ContributorSettlementHashes referenceId={settlementReference} />
+                        </TableCell>
+                      </TableRow>
+                    </Fragment>
+                  ) : (
+                    mainRow
+                  );
                 })
               )}
             </TableBody>
