@@ -351,6 +351,9 @@ async function fetchMarketplaceRecords(
     const allHashes = uniqueStrings([...healthHashes, ...lifestyleHashes]);
     const hashToOwner = await resolveHashOwners(supabase, allHashes);
 
+    // Sampling stays balanced (one representative stream per contributor) so the
+    // model prompt keeps its row budget, but the RECEIPT must carry EVERY consent
+    // reference behind the data that was read — not one sample per contributor.
     const perContributor = new Map<string, { hash: string; table: "staged_health_data" | "staged_lifestyle_data" }>();
     const registerHash = (hash: string, table: "staged_health_data" | "staged_lifestyle_data") => {
       const owner = hashToOwner.get(hash);
@@ -365,10 +368,17 @@ async function fetchMarketplaceRecords(
     const lifestyleReceiptHashes = Array.from(perContributor.values())
       .filter((entry) => entry.table === "staged_lifestyle_data")
       .map((entry) => entry.hash);
-    const receiptIds = Array.from(perContributor.values()).map((entry) => entry.hash);
+
+    // Full consent lineage: every staged hash that resolves to a known owner.
+    console.info(`[BEGIN: MarketplaceFetch.ReceiptLineage] Building full consent reference set.`);
+    const receiptIds = uniqueStrings(allHashes.filter((hash) => hashToOwner.has(hash)));
+    console.info(
+      `[END: MarketplaceFetch.ReceiptLineage] consent_references=${receiptIds.length} contributors=${perContributor.size} sampled_streams=${healthReceiptHashes.length + lifestyleReceiptHashes.length}`,
+    );
+
     const rowsPerContributor = Math.max(
       1,
-      Math.floor(MARKETPLACE_SAMPLE_ROW_BUDGET / Math.max(1, receiptIds.length)),
+      Math.floor(MARKETPLACE_SAMPLE_ROW_BUDGET / Math.max(1, perContributor.size)),
     );
 
     const [health, lifestyle] = await Promise.all([
