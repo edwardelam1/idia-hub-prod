@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub as string;
 
     const body = await req.json().catch(() => ({}));
-    const { bundle_id, quantity = 1 } = body ?? {};
+    const { bundle_id, quantity = 1, streams: requestedStreams } = body ?? {};
     if (!bundle_id || typeof bundle_id !== "string") {
       console.info("[BEGIN: MarketplaceBundleAccess.Validation.Stall] bundle_id missing.");
       return new Response(JSON.stringify({ error: "bundle_id is required" }), {
