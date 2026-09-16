@@ -31,6 +31,7 @@ import {
 import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { useUniswapPoolStats } from "@/hooks/useUniswapPoolStats";
+import { deriveIdiaUsdPrice } from "@/lib/idia-price";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
@@ -64,30 +65,7 @@ const IndividualDashboard = () => {
   const silo3_IdiaTokens = walletBalance?.idia_balance ?? null;
 
   // Derive on-chain IDIA→USD price from the live IDIA/USDC Uniswap pool.
-  const idiaUsdPrice: number | null = (() => {
-    if (!uniswapPools || uniswapPools.length === 0) return null;
-    const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
-    const USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
-    const pool = uniswapPools.find((p) => {
-      const t0 = p.token0?.id?.toLowerCase();
-      const t1 = p.token1?.id?.toLowerCase();
-      return (t0 === IDIA && t1 === USDC) || (t0 === USDC && t1 === IDIA);
-    });
-    if (!pool?.sqrtPriceX96) return null;
-    try {
-      const sqrt = BigInt(pool.sqrtPriceX96);
-      const num = Number((sqrt * sqrt * 10_000n) >> 192n) / 10_000;
-      const t0IsIdia = pool.token0.id.toLowerCase() === IDIA;
-      const dec0 = Number(pool.token0.decimals);
-      const dec1 = Number(pool.token1.decimals);
-      // price of token0 in token1 = num * 10^(dec0 - dec1)
-      const priceT0inT1 = num * Math.pow(10, dec0 - dec1);
-      const idiaUsd = t0IsIdia ? priceT0inT1 : (priceT0inT1 !== 0 ? 1 / priceT0inT1 : 0);
-      return Number.isFinite(idiaUsd) && idiaUsd > 0 ? idiaUsd : null;
-    } catch {
-      return null;
-    }
-  })();
+  const idiaUsdPrice: number | null = deriveIdiaUsdPrice(uniswapPools);
 
   const silo3_IdiaUsd =
     silo3_IdiaTokens != null && idiaUsdPrice != null ? silo3_IdiaTokens * idiaUsdPrice : null;
