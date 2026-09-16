@@ -1334,20 +1334,23 @@ serve(async (req) => {
     let synapseReceipt: Record<string, unknown> | null = null;
     if (touchedData) {
       if (isDataScientistMode) {
-        // MARKETPLACE_RESEARCH: one representative aca_hash_key per unique
-        // contributing owner, so idia-circular-settlement pays every real
-        // contributor (not just the buyer).
-        consumedReceipt = marketplaceReceiptIds.length > 0
-          ? marketplaceReceiptIds
-          : uniqueStrings([...healthMetrics, ...lifestyleEvents].map((r: any) => r.aca_hash_key || r.id));
+        // MARKETPLACE_RESEARCH: the receipt must list EVERY record the model
+        // actually read. marketplaceReceiptIds (one hash per contributing
+        // owner) is unioned in so idia-circular-settlement still fans out to
+        // every real contributor even if a sampled row was trimmed.
+        const touchedHashes = uniqueStrings(
+          [...healthMetrics, ...lifestyleEvents].map((r: any) => r.aca_hash_key || r.id).filter(Boolean),
+        );
+        consumedReceipt = uniqueStrings([...touchedHashes, ...marketplaceReceiptIds]);
         console.info(
-          `[STATUS: BestFriendAI.Receipt] Marketplace lineage receipt hashes=${consumedReceipt.length}.`,
+          `[STATUS: BestFriendAI.Receipt] Marketplace lineage receipt hashes=${consumedReceipt.length} (touched=${touchedHashes.length}, contributors=${marketplaceReceiptIds.length}).`,
         );
       } else {
-        // BEST_FRIEND_AI_CHAT: personal chat, self-only receipt.
+        // BEST_FRIEND_AI_CHAT: personal chat, self-only receipt — every record read.
         const healthIds = healthMetrics.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
         const lifeIds = lifestyleEvents.map((r: any) => r.aca_hash_key || r.id).filter(Boolean);
-        consumedReceipt = [...healthIds, ...lifeIds];
+        consumedReceipt = uniqueStrings([...healthIds, ...lifeIds]);
+        console.info(`[STATUS: BestFriendAI.Receipt] Personal lineage receipt hashes=${consumedReceipt.length}.`);
       }
 
       // THE MISSING WIRE: Actually send the receipt to Synapse!
