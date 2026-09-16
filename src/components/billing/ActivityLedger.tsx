@@ -246,6 +246,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
                       </Button>
                     </div>
                   </div>
+                  </>
                 )}
               </div>
             ))
