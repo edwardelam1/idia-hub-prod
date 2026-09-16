@@ -1,6 +1,7 @@
 // Marketplace Bundle Access — Live egress via synapse-controller (no simulation).
 // Mirrors Best Friend AI's receipt transmission pattern.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { priceSelection } from "../_shared/stream-pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
     console.info(`[BEGIN: MarketplaceBundleAccess.BundleResolve] bundle_id=${bundle_id}`);
     const { data: bundle, error: bundleErr } = await admin
       .from("marketplace_bundles")
-      .select("bundle_id, title, category, data_json, is_active")
+      .select("bundle_id, title, category, data_json, is_active, price, window_key, window_start, window_end")
       .eq("bundle_id", bundle_id)
       .maybeSingle();
 
