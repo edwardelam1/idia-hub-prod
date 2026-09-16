@@ -1,27 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import { useBillingData, PLAN_PRICING } from "@/hooks/useBillingData";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
-import SynapseGasGauge from "@/components/billing/SynapseGasGauge";
-import FBOReservoirGauge from "@/components/billing/FBOReservoirGauge";
 import {
-  Activity,
   ShieldCheck,
-  Database,
-  BrainCircuit,
-  Eye,
   Sparkles,
-  BookOpen,
-  FileKey,
-  ArrowUpRight,
   Wallet,
   Zap,
   TrendingUp,
@@ -35,9 +20,7 @@ import { deriveIdiaUsdPrice } from "@/lib/idia-price";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
-  const { protocolState, isLoading: creditsLoading, refreshState } = useSynapseCredits();
-  const { currentUsage, subscription } = useBillingData();
-  const navigate = useNavigate();
+  const { protocolState, isLoading: creditsLoading } = useSynapseCredits();
   const { balance: walletBalance } = useWalletBalance();
   const { data: uniswapPools } = useUniswapPoolStats();
   const [guidCopied, setGuidCopied] = useState(false);
@@ -80,31 +63,6 @@ const IndividualDashboard = () => {
       );
     }
   }, [protocolState, rail1_Eth, rail2_Gas, rail3_USDC, silo3_IdiaTokens, silo3_IdiaUsd]);
-
-  // ─── DYNAMIC LEDGER INTERROGATION ─────────────────────
-  const { data: stats } = useQuery({
-    queryKey: ["hub-personal-stats", activeUserId],
-    queryFn: async () => {
-      if (!activeUserId) return { activeSources: 0, auditLogs: 0, dataAssets: 0 };
-      const [sourcesRes, auditsRes, assetsRes] = await Promise.all([
-        supabase
-          .from("data_connections")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", activeUserId)
-          .eq("is_active", true),
-        supabase.from("egress_logs").select("*", { count: "exact", head: true }).eq("user_id", activeUserId),
-        supabase.from("staged_health_data").select("*", { count: "exact", head: true }).eq("user_id", activeUserId),
-      ]);
-      return {
-        activeSources: sourcesRes.count || 0,
-        auditLogs: auditsRes.count || 0,
-        dataAssets: assetsRes.count || 0,
-      };
-    },
-    enabled: !!activeUserId,
-  });
-
-  const personalStats = stats || { activeSources: 0, auditLogs: 0, dataAssets: 0 };
 
   return (
     <div className="flex flex-col h-full font-sans max-w-full mx-auto w-full px-4 py-1 space-y-2 overflow-hidden">
@@ -222,76 +180,6 @@ const IndividualDashboard = () => {
         </Card>
       </div>
 
-      {/* TABS & LEDGER NAVIGATION */}
-      <Tabs defaultValue="overview" className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <TabsList className="w-fit bg-transparent border-b border-white/5 rounded-none h-7 p-0 gap-6">
-          <TabsTrigger value="overview" className="tab-trigger-idia">
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="usage" className="tab-trigger-idia">
-            Usage Stats
-          </TabsTrigger>
-          <TabsTrigger value="ledger" className="tab-trigger-idia">
-            Provenance
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="flex-1 mt-2 space-y-2 overflow-y-auto pr-1">
-          <div className="grid grid-cols-2 gap-2">
-            <Card className="border-foreground/5 bg-muted/5 p-2 flex flex-col justify-between h-[60px]">
-              <div className="flex justify-between items-center">
-                <span className="text-[8px] font-bold text-muted-foreground uppercase">Data Sources</span>
-                <Database className="h-3 w-3 opacity-20" />
-              </div>
-              <span className="text-lg font-mono font-bold">{personalStats.activeSources}</span>
-            </Card>
-            <Card className="border-foreground/5 bg-muted/5 p-2 flex flex-col justify-between h-[60px]">
-              <div className="flex justify-between items-center">
-                <span className="text-[8px] font-bold text-muted-foreground uppercase">Audit Logs</span>
-                <FileKey className="h-3 w-3 opacity-20" />
-              </div>
-              <span className="text-lg font-mono font-bold">{personalStats.auditLogs}</span>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="ledger" className="flex-1 mt-2">
-          <Card className="h-full bg-black/20 border-primary/5 flex flex-col items-center justify-center p-4">
-            <BookOpen className="h-6 w-6 text-primary/10 mb-2" />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[9px] uppercase font-bold tracking-widest"
-              onClick={() => navigate("/egress-logs")}
-            >
-              Access Provenance Ledger <ArrowUpRight className="ml-1 h-3 w-3" />
-            </Button>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        .tab-trigger-idia {
-          border-radius: 0;
-          border-bottom: 2px solid transparent;
-          background: transparent !important;
-          padding: 0 0 2px 0;
-          text-transform: uppercase;
-          font-size: 10px;
-          letter-spacing: 0.1em;
-          font-weight: 700;
-          color: hsl(var(--muted-foreground));
-          transition: all 0.2s ease;
-        }
-        .tab-trigger-idia[data-state="active"] {
-          border-bottom-color: hsl(var(--primary));
-          color: hsl(var(--foreground));
-        }
-      `,
-        }}
-      />
     </div>
   );
 };
