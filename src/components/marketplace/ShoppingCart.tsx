@@ -250,11 +250,13 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
                 <div className="space-y-2">
                   <Button 
                     onClick={handlePurchase}
-                    disabled={quoteState === 'quoting'}
+                    disabled={quoteState !== 'quoted'}
                     className="w-full"
                   >
                     {quoteState === 'quoting' ? (
                       <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Quoting...</>
+                    ) : quoteState === 'error' ? (
+                      'Pricing unavailable'
                     ) : !canAfford ? (
                       'Insufficient Credits'
                     ) : (
