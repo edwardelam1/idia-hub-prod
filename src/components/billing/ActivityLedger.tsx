@@ -175,6 +175,12 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
                 </div>
 
                 {expandedTx === tx.id && (
+                  <>
+                  {tx.reference_id && (
+                    <div className="px-4 md:px-14 pb-4">
+                      <ContributorSettlementHashes referenceId={tx.reference_id} />
+                    </div>
+                  )}
                   <div className="px-14 pb-6 pt-2 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-top-2">
                     <div className="space-y-4">
                       <div>
