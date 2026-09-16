@@ -5,6 +5,7 @@
 - Show v4 pools first in Pool Inspector, with version, fee, pair, liquidity, reserves, price state, and Uniswap link.
 - Keep any discovered v3 pools in a separate section and add clear loading, empty, and error states.
 - Keep the popup compact and usable on mobile.
+- Reflow Protocol Holdings totals into a mobile-safe grid so large IDIA balances cannot overlap.
 
 ## Technical details
 - Reuse the cached `useV4Positions` query so opening the inspector does not create a separate data source.

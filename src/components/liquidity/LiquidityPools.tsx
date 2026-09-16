@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,6 +25,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useUniswapPoolStats, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
+import { useV4Positions } from "@/hooks/useV4Positions";
 import { useWalletLpPositions, useUserWalletAddress } from "@/hooks/useWalletLpPositions";
 import ProtocolHoldings from "./ProtocolHoldings";
 import ContractInformation from "./ContractInformation";
@@ -45,13 +47,18 @@ const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 const formatUSD = (value: number) =>
   value >= 1000 ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${value.toFixed(2)}`;
 const formatAPR = (value: number) => `${(value * 100).toFixed(2)}%`;
+const formatAmount = (value: number) =>
+  value.toLocaleString(undefined, { maximumFractionDigits: value >= 1 ? 2 : 6 });
+const shortPoolId = (id: string) => `${id.slice(0, 8)}…${id.slice(-6)}`;
 
 type Slice = "pool" | "holdings" | "positions" | "contracts";
 
 const LiquidityPools = () => {
   const poolsQuery = useUniswapPoolStats();
   const userWalletQuery = useUserWalletAddress();
+  const v4Query = useV4Positions([userWalletQuery.data]);
   const pools = poolsQuery.data ?? [];
+  const v4Pools = v4Query.data?.pools ?? [];
   const [activeSlice, setActiveSlice] = useState<Slice>("pool");
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const selectedPool: UniswapPoolStat | undefined = pools.find((pool) => pool.id === selectedPoolId) ?? pools[0];
@@ -98,38 +105,81 @@ const LiquidityPools = () => {
                 <Settings className="h-3.5 w-3.5 mr-1.5" /> Pool Inspector
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl">
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle className="font-mono">Pool Inspector</DialogTitle>
-                <DialogDescription>Live IDIA/USDC v3 pools on Base.</DialogDescription>
+                <DialogDescription>Live IDIA/USDC Uniswap v4 and v3 pools on Base.</DialogDescription>
               </DialogHeader>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fee</TableHead><TableHead>Pool</TableHead><TableHead className="text-right">TVL</TableHead>
-                      <TableHead className="text-right">24h volume</TableHead><TableHead className="text-right">APR</TableHead><TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pools.map((pool) => (
-                      <TableRow key={pool.id}>
-                        <TableCell>{(pool.feeTier / 10_000).toFixed(2)}%</TableCell>
-                        <TableCell className="font-mono text-xs">{pool.id.slice(0, 8)}…{pool.id.slice(-6)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatUSD(pool.tvlUSD)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatUSD(pool.volume24hUSD)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatAPR(pool.feeApr)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="icon" variant="ghost" className="h-7 w-7">
-                            <a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer" aria-label="Open pool on Uniswap">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4">
+                <section aria-labelledby="v4-pools-heading" className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 id="v4-pools-heading" className="font-mono text-xs font-semibold">Uniswap v4</h3>
+                    <Badge variant="secondary" className="text-[10px]">{v4Pools.length} pool{v4Pools.length === 1 ? "" : "s"}</Badge>
+                  </div>
+                  {v4Query.isLoading && (
+                    <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading v4 pool state from Base…
+                    </div>
+                  )}
+                  {v4Query.isError && <p className="text-xs text-destructive">Could not read v4 pool state from Base.</p>}
+                  {!v4Query.isLoading && !v4Query.isError && v4Pools.length === 0 && (
+                    <p className="py-3 text-xs text-muted-foreground">No IDIA/USDC v4 pool was found for the connected wallet.</p>
+                  )}
+                  {v4Pools.map((pool) => (
+                    <div key={pool.id} className="rounded-md border border-border/60 p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold">{pool.token0.symbol} / {pool.token1.symbol}</span>
+                            <Badge className="text-[10px] px-1.5 py-0">v4</Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{(pool.feeTier / 10_000).toFixed(2)}% fee</Badge>
+                          </div>
+                          <p className="font-mono text-[10px] text-muted-foreground mt-1 truncate" title={pool.id}>{shortPoolId(pool.id)}</p>
+                        </div>
+                        <Button asChild size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label="Open v4 pool on Uniswap">
+                          <a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div><span className="block text-[10px] text-muted-foreground">Pool depth</span><span className="font-mono font-semibold">{formatUSD(pool.tvlUSD)}</span></div>
+                        <div><span className="block text-[10px] text-muted-foreground">Current tick</span><span className="font-mono font-semibold">{pool.tick.toLocaleString()}</span></div>
+                        <div className="col-span-2"><span className="block text-[10px] text-muted-foreground">Reserves</span><span className="font-mono font-semibold break-words">{formatAmount(pool.amount0)} {pool.token0.symbol} · {formatAmount(pool.amount1)} {pool.token1.symbol}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+
+                <section aria-labelledby="v3-pools-heading" className="space-y-2 border-t border-border/60 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 id="v3-pools-heading" className="font-mono text-xs font-semibold">Uniswap v3</h3>
+                    <Badge variant="outline" className="text-[10px]">{pools.length} pool{pools.length === 1 ? "" : "s"}</Badge>
+                  </div>
+                  {poolsQuery.isLoading ? (
+                    <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading v3 pools…</div>
+                  ) : pools.length === 0 ? (
+                    <p className="py-3 text-xs text-muted-foreground">No IDIA/USDC v3 pools exist on Base.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Pool</TableHead><TableHead className="text-right">TVL</TableHead><TableHead className="text-right">24h volume</TableHead><TableHead className="text-right">APR</TableHead><TableHead /></TableRow></TableHeader>
+                        <TableBody>
+                          {pools.map((pool) => (
+                            <TableRow key={pool.id}>
+                              <TableCell>{(pool.feeTier / 10_000).toFixed(2)}%</TableCell>
+                              <TableCell className="font-mono text-xs">{shortPoolId(pool.id)}</TableCell>
+                              <TableCell className="text-right font-mono">{formatUSD(pool.tvlUSD)}</TableCell>
+                              <TableCell className="text-right font-mono">{formatUSD(pool.volume24hUSD)}</TableCell>
+                              <TableCell className="text-right font-mono">{formatAPR(pool.feeApr)}</TableCell>
+                              <TableCell className="text-right"><Button asChild size="icon" variant="ghost" className="h-7 w-7" aria-label="Open v3 pool on Uniswap"><a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a></Button></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </section>
               </div>
             </DialogContent>
           </Dialog>

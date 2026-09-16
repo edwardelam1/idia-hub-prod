@@ -66,13 +66,15 @@ const ProtocolHoldings = ({ idiaUsdPrice }: Props) => {
           <h3 className="text-sm font-semibold">Protocol Holdings</h3>
           <p className="text-xs text-muted-foreground">Live balances across every protocol wallet on Base</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="default">Total: {isLoading ? "—" : usd(totals.value)}</Badge>
-          <Badge variant="outline" className="font-mono text-[10px]">
-            {amt(totals.idia, 2)} IDIA
+        <div className="grid w-full grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:items-center sm:gap-2">
+          <Badge variant="default" className="col-span-2 min-w-0 justify-center sm:col-span-1">
+            <span className="truncate">Total: {isLoading ? "—" : usd(totals.value)}</span>
           </Badge>
-          <Badge variant="outline" className="font-mono text-[10px]">
-            {amt(totals.usdc, 2)} USDC
+          <Badge variant="outline" className="min-w-0 justify-center overflow-hidden font-mono text-[10px]" title={`${amt(totals.idia, 2)} IDIA`}>
+            <span className="truncate">{amt(totals.idia, 2)} IDIA</span>
+          </Badge>
+          <Badge variant="outline" className="min-w-0 justify-center overflow-hidden font-mono text-[10px]" title={`${amt(totals.usdc, 2)} USDC`}>
+            <span className="truncate">{amt(totals.usdc, 2)} USDC</span>
           </Badge>
         </div>
       </div>
