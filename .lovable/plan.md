@@ -4,9 +4,14 @@ Today the assistant does not actually see everything when asked. Three concrete 
 
 1. **Vehicle data is skipped entirely in marketplace mode.** The cross-owner scan reads only the health and lifestyle staging tables. Ford vehicle telemetry — which is ecosystem-wide, not per-user — is never scanned for consent references, never sampled, and never counted in the marketplace totals.
 2. **A hard ceiling on rows.** The scan walks pages of 1,000 rows and stops after 75 pages. Beyond ~75,000 rows per table the rest is silently ignored. Health staging already holds 46,800+ rows and grows daily.
-3. **Personal (non-marketplace) mode reads only the newest 500 rows per table**, and also skips vehicle data rows.
+3. **Personal (marketplace off) mode reads only the newest 500 rows per table**, and also skips vehicle data rows.
+
+## Scope rule this locks in
+
+Everything staged, from every contributor, is the ecosystem-wide view: trading interface tools, data marketplace tools, and Best Friend with marketplace enabled all read the entire staged pool regardless of owner. The single exception is Best Friend with marketplace disabled, which is the only personal, owner-scoped view.
 
 ## What changes
+
 
 - **Totals come from the database, not from walking rows.** Counts, sums, averages, date ranges and the distinct consent-reference list are computed by the database in one set-based answer per table, so there is no page limit and no row ceiling — the answer covers 100% of rows however large the tables get.
 - **Vehicle telemetry is included everywhere** the other two staging tables are: consent references, contributor resolution, marketplace totals, sample rows shown to the model, and the personal-mode view.
