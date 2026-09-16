@@ -98,6 +98,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
   };
 
   const handlePurchase = () => {
+    if (quoteState !== 'quoted') return;
     if (!checkCredits(quotedTotal)) return;
     if (canAfford && cartItems.length > 0) {
       onPurchase(quotedTotal);
@@ -146,6 +147,17 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
                   <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     <span className="text-sm text-primary font-medium">Fetching live pricing...</span>
+                  </div>
+                )}
+
+                {quoteState === 'error' && (
+                  <div className="flex items-center justify-between gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <span className="text-sm text-destructive font-medium">
+                      We couldn't confirm live pricing. Please try again.
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setQuoteNonce(n => n + 1)}>
+                      Retry
+                    </Button>
                   </div>
                 )}
 
