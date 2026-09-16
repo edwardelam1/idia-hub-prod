@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CONTRACTS } from "@/config/contracts";
+import { PROTOCOL } from "@/config/contracts";
 
 interface ProvenanceLog {
   id: string;
