@@ -204,6 +204,59 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const spendMap = ledgerMeta?.spend instanceof Map ? ledgerMeta.spend : new Map<string, number>();
   const referenceMap = ledgerMeta?.reference instanceof Map ? ledgerMeta.reference : new Map<string, string>();
 
+  const referenceIds = useMemo(
+    () => Array.from(new Set(Array.from(referenceMap.values()))).sort(),
+    [referenceMap],
+  );
+
+  // Exact per-settlement-run totals straight from the Synapse ledger: what the
+  // buyer was charged, and what was distributed to contributors on the run.
+  const { data: runTotals } = useQuery({
+    queryKey: ["egress-run-totals", referenceIds],
+    enabled: referenceIds.length > 0,
+    queryFn: async () => {
+      console.info(`[BEGIN: EgressLogs.RunTotals] references=${referenceIds.length}`);
+      try {
+        const { data, error } = await supabase
+          .from("synapse_credit_ledger")
+          .select("reference_id, amount, entry_type, transaction_type")
+          .in("reference_id", referenceIds)
+          .limit(5000);
+        if (error) throw error;
+        const totals = new Map<string, { charged: number; distributed: number; lines: number }>();
+        (data || []).forEach((r: any) => {
+          const ref = String(r.reference_id);
+          const entry = totals.get(ref) ?? { charged: 0, distributed: 0, lines: 0 };
+          const amount = Number(r.amount ?? 0);
+          if (amount < 0) entry.charged += Math.abs(amount);
+          else entry.distributed += amount;
+          entry.lines += 1;
+          totals.set(ref, entry);
+        });
+        console.info(
+          `[END: EgressLogs.RunTotals] rows=${data?.length ?? 0} runs=${totals.size}`,
+        );
+        return totals;
+      } catch (e) {
+        const err = e as Error;
+        console.error(`[END: EgressLogs.RunTotals] failed: ${err.message}\n${err.stack ?? ""}`);
+        throw err;
+      }
+    },
+  });
+  const runTotalsMap = runTotals instanceof Map ? runTotals : new Map<string, { charged: number; distributed: number; lines: number }>();
+
+  /** Exact credits charged for a receipt, preferring the settlement-run total. */
+  const receiptSpend = (log: ProvenanceLog): { charged: number | null; distributed: number | null } => {
+    const ledgerId = log.synapse_ledger_entry_id ?? null;
+    if (!ledgerId) return { charged: null, distributed: null };
+    const ref = referenceMap.get(ledgerId);
+    const run = ref ? runTotalsMap.get(ref) : undefined;
+    if (run) return { charged: run.charged, distributed: run.distributed };
+    const raw = spendMap.get(ledgerId);
+    return { charged: typeof raw === "number" ? Math.abs(raw) : null, distributed: null };
+  };
+
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
 
