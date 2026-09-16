@@ -53,6 +53,7 @@ const LiquidityPools = () => {
   const userPositions = userPositionsQuery.data;
   const orgPositions = orgPositionsQuery.data;
 
+  const idiaUsdPrice = useMemo(() => deriveIdiaUsdPrice(pools), [pools]);
   const totalTVL = useMemo(() => pools.reduce((s, p) => s + p.tvlUSD, 0), [pools]);
   const total24hVol = useMemo(() => pools.reduce((s, p) => s + p.volume24hUSD, 0), [pools]);
   const userValue = sumValue(userPositions);
@@ -398,6 +399,9 @@ const LiquidityPools = () => {
           ))}
         </div>
       </Card>
+
+      <ProtocolHoldings idiaUsdPrice={idiaUsdPrice} />
+      <ContractInformation idiaUsdPrice={idiaUsdPrice} />
     </div>
   );
 };
