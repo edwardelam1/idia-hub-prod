@@ -59,7 +59,7 @@ const ActivityLedger = ({ rail, title, description }: ActivityLedgerProps) => {
       const { data, error } = await supabase
         .from("synapse_credit_ledger")
         .select(
-          "id, amount, amount_usdc, entry_type, transaction_type, status, description, funding_source, created_at, transaction_id, blockchain_tx_hash, circle_transfer_id"
+          "id, amount, amount_usdc, entry_type, transaction_type, status, description, funding_source, created_at, transaction_id, blockchain_tx_hash, circle_transfer_id, reference_id"
         )
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
