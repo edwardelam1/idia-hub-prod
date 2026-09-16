@@ -413,6 +413,8 @@ const EarningsSettlement = () => {
             </p>
           </div>
 
+          <ContributorSettlementHashes referenceId={latestRunReference} />
+
           <ActivityLedger rail="defi" />
         </TabsContent>
       </Tabs>
