@@ -75,7 +75,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["provenance-logs", userId],
+    queryKey: ["provenance-logs", userId, receiptId],
     queryFn: async () => {
       console.info("[PHASE_START: EgressLogs.Query] Loading user receipts.");
       let query = supabase

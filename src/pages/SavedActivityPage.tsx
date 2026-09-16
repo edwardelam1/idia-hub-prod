@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Bot,
   Check,
-  ChevronDown,
   Clock3,
   Coins,
   Copy,
@@ -124,7 +123,7 @@ const SavedActivityPage = () => {
             id: `legacy-${row.id}`,
             source: sourceFromReceipt(row.client_id ?? "", row.egress_type ?? ""),
             action: row.egress_type ?? "LIABILITY_SHIELD_RECEIPT",
-            title: (row.metadata as JsonRecord | null)?.bundle_title?.toString() ?? (row.egress_type ?? "Liability Shield receipt").replaceAll("_", " "),
+            title: (row.metadata as JsonRecord | null)?.bundle_title?.toString() ?? (row.egress_type ?? "Liability Shield receipt").replace(/_/g, " "),
             input_payload: {},
             result_payload: { receipt_only: true },
             status: "completed",
@@ -247,7 +246,7 @@ const SavedActivityPage = () => {
                 </AccordionTrigger>
                 <AccordionContent className="space-y-3 pb-4 pl-6 pr-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{row.action.replaceAll("_", " ")}</Badge>
+                    <Badge variant="secondary">{row.action.replace(/_/g, " ")}</Badge>
                     <Badge variant="outline">{row.status}</Badge>
                     <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3 w-3" />{row.records_consumed} records</span>
                     {row.egress_log_id && (
