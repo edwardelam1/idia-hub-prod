@@ -49,7 +49,7 @@ const V4PositionRow = ({ p, isUser }: { p: V4Position; isUser: boolean }) => (
         </div>
       </div>
       <div className="text-right shrink-0">
-        <div className="text-sm font-bold">{formatUSD(p.valueUSD)}</div>
+            <div className="font-mono text-sm font-bold">{formatUSD(p.valueUSD)}</div>
         <div className="text-[11px] text-muted-foreground">position value</div>
       </div>
     </div>
@@ -79,7 +79,7 @@ const V4Positions = ({ owners, userWallet }: Props) => {
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-muted-foreground" />
           <div>
-            <h3 className="text-sm font-semibold">Uniswap v4 Positions</h3>
+            <h3 className="font-mono text-sm font-semibold">Uniswap v4 Positions</h3>
             <p className="text-xs text-muted-foreground">
               Live on-chain · IDIA pools on Base
             </p>
@@ -123,11 +123,11 @@ const V4Positions = ({ owners, userWallet }: Props) => {
       {pool && (
         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/60 text-xs">
           <div>
-            <div className="font-semibold">{formatUSD(pool.tvlUSD)}</div>
+            <div className="font-mono font-semibold">{formatUSD(pool.tvlUSD)}</div>
             <div className="text-muted-foreground">Pool depth (active tick)</div>
           </div>
           <div>
-            <div className="font-semibold">
+            <div className="font-mono font-semibold">
               {formatAmount(pool.amount0)} {pool.token0.symbol} · {formatAmount(pool.amount1)}{" "}
               {pool.token1.symbol}
             </div>
