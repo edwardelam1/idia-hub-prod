@@ -16,7 +16,7 @@ Everything staged, from every contributor, is the ecosystem-wide view: trading i
 - **Totals come from the database, not from walking rows.** Counts, sums, averages, date ranges and the distinct consent-reference list are computed by the database in one set-based answer per table, so there is no page limit and no row ceiling — the answer covers 100% of rows however large the tables get.
 - **Vehicle telemetry is included everywhere** the other two staging tables are: consent references, contributor resolution, marketplace totals, sample rows shown to the model, and the personal-mode view.
 - **Row samples stay samples.** The model still receives a bounded, balanced set of example rows (the prompt cannot hold 46,000 rows), but every number it states — record counts, sums, contributor counts, consent references — comes from the full-table figures, not the sample. The receipt keeps carrying the complete consent reference set.
-- **Personal mode** keeps a bounded row sample but reports full-table counts and totals for that person, across all three staging tables.
+- **Personal mode (marketplace off)** stays owner-scoped — the only personal view — but keeps a bounded row sample while reporting full counts and totals for that person across all three staging tables.
 
 ## Technical notes
 
