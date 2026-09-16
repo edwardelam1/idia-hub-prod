@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,7 +14,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import ContributorSettlementHashes from "@/components/billing/ContributorSettlementHashes";
 import AcaReferenceViewer from "@/components/trading/AcaReferenceViewer";
 import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
