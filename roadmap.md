@@ -32,6 +32,7 @@
 - [x] Matched v3 position presentation to v4 and placed it below v4
 - [x] Removed the fee-tier panel and verified a clean build
 ## Liquidity inspector and mobile holdings (done)
+- [x] Include live v4 value in the Your Position total
 - [x] Show live Uniswap v4 and v3 pools in Pool Inspector
 - [x] Prevent large Protocol Holdings totals from overlapping on mobile
 
