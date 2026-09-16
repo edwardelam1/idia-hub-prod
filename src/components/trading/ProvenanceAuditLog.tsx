@@ -139,6 +139,12 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
         console.error(`[PHASE_END: EgressLogs.Query] Failed: ${error.message}\n${(error as any).stack ?? ""}`);
         throw error;
       }
+      console.info("[BEGIN: EgressLogs.AcaPayload] ACA hash counts per receipt (data consent, not settlement)");
+      (data || []).forEach((row: any) => {
+        const refs: string[] = row.aca_record_references || [];
+        console.info(`[EgressLogs.AcaPayload] receipt=${row.id} acaCount=${refs.length} first=${refs[0] ?? "none"}`);
+      });
+      console.info("[END: EgressLogs.AcaPayload]");
       console.info(`[PHASE_END: EgressLogs.Query] rows=${data?.length ?? 0}`);
       return (data || []) as unknown as ProvenanceLog[];
     },
