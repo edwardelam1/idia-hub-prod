@@ -487,18 +487,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-muted-foreground bg-muted px-2 py-1 rounded text-xs whitespace-nowrap">
-                            {acaRefs.length} record{acaRefs.length === 1 ? "" : "s"}
-                          </span>
-                          {acaJoined && (
-                            <CopyButton
-                              copyKey={`${log.id}:aca`}
-                              value={acaJoined}
-                              label="all ACA references"
-                            />
-                          )}
-                        </div>
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
