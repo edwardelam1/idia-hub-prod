@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CONTRACTS } from "@/config/contracts";
+import { PROTOCOL } from "@/config/contracts";
 
 interface ProvenanceLog {
   id: string;
@@ -55,15 +55,22 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const receiptId = searchParams.get("receipt");
   const linkedSearch = searchParams.get("search");
 
-  const walletAddress = (user as any)?.wallet_address as string | undefined;
-  const liabilityContract = CONTRACTS.liabilityReceipt;
+  const liabilityContract = PROTOCOL.liabilityReceipt;
 
-  const nftUrl = (log: ProvenanceLog) => {
-    if (walletAddress) {
-      return `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`;
-    }
-    return `https://basescan.org/token/${liabilityContract}`;
-  };
+  const { data: walletAddress } = useQuery({
+    queryKey: ["buyer-wallet", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles").select("wallet_address").eq("id", userId!).maybeSingle();
+      if (error) throw error;
+      return (data?.wallet_address as string | null) ?? null;
+    },
+  });
+
+  const nftUrl = (_log: ProvenanceLog) =>
+    walletAddress
+      ? `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`
+      : `https://basescan.org/token/${liabilityContract}`;
 
   useEffect(() => {
     if (linkedSearch) setSearchTerm(linkedSearch);
