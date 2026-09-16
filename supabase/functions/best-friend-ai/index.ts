@@ -37,12 +37,19 @@ export type OmniAggregates = {
     | null;
 };
 
+// Personal scope: the ONLY owner-scoped read path (Best Friend with marketplace
+// disabled). Ford telemetry stays ecosystem-wide by policy.
 async function fetchOmniAggregates(
   supabase: ReturnType<typeof createClient>,
   pseudoId: string,
 ): Promise<OmniAggregates> {
   try {
-    const { data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId });
+    console.info(`[PHASE_START: OmniAggregates] Personal full-table aggregates for ${pseudoId}.`);
+    let { data, error } = await supabase.rpc("staged_user_aggregates", { _pseudo_id: pseudoId });
+    if (error) {
+      console.error("[ERROR: OmniAggregates] staged_user_aggregates failed:", error.message);
+      ({ data, error } = await supabase.rpc("get_omni_aggregates", { pseudo_id: pseudoId }));
+    }
     if (error) {
       console.error("[ERROR: OmniAggregates] RPC failed:", error.message);
       return { health: null, lifestyle: null, ford: null };
