@@ -59,24 +59,27 @@ async function resolveAcaLineage(adminClient: any, ids: string[]) {
 
   const lineageHashes = uniqueRecords.map((record) => record.aca_hash_key);
 
-  // Verify lineage against EVERY staged vault, not just health — lifestyle and
-  // vehicle telemetry records were previously dropped from the receipt.
-  const STAGED_VAULTS = ["staged_health_data", "staged_lifestyle_data", "staged_ford_data"] as const;
+  // Verify lineage set-wise via RPC. Row-returning `.in()` scans were capped at
+  // 1000 rows by PostgREST, silently dropping consent hashes from the receipt.
   const stagedHashes = new Set<string>();
-  for (const vault of STAGED_VAULTS) {
-    console.info(`[PHASE_START: SynapseController.LineageVerify:${vault}] hashes=${lineageHashes.length}`);
-    const { data: stagedRows, error: stagedError } = await adminClient
-      .from(vault)
-      .select("aca_hash_key")
-      .in("aca_hash_key", lineageHashes);
-    if (stagedError) {
-      console.error(
-        `[PHASE_END: SynapseController.LineageVerify:${vault}] failed: ${stagedError.message}\n${stagedError.stack ?? ""}`,
-      );
-      continue;
-    }
-    (stagedRows ?? []).forEach((row: { aca_hash_key: string }) => stagedHashes.add(row.aca_hash_key));
-    console.info(`[PHASE_END: SynapseController.LineageVerify:${vault}] matched=${stagedRows?.length ?? 0}`);
+  console.info(`[PHASE_START: SynapseController.LineageVerify] hashes=${lineageHashes.length}`);
+  try {
+    const { data: verifyRows, error: verifyError } = await adminClient.rpc("verify_aca_hashes", {
+      _hashes: lineageHashes,
+    });
+    if (verifyError) throw verifyError;
+    const perVault: Record<string, number> = {};
+    (verifyRows ?? []).forEach((row: { aca_hash_key: string; vault: string }) => {
+      stagedHashes.add(row.aca_hash_key);
+      perVault[row.vault] = (perVault[row.vault] ?? 0) + 1;
+    });
+    console.info(
+      `[PHASE_END: SynapseController.LineageVerify] verified=${stagedHashes.size} breakdown=${JSON.stringify(perVault)}`,
+    );
+  } catch (verifyErr: any) {
+    console.error(
+      `[PHASE_END: SynapseController.LineageVerify] failed: ${verifyErr?.message ?? String(verifyErr)}\n${verifyErr?.stack ?? ""}`,
+    );
   }
 
   const verifiedHashes = lineageHashes.filter((hash) => stagedHashes.has(hash));
