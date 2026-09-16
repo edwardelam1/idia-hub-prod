@@ -36,11 +36,22 @@ interface ProvenanceLog {
   synapse_ledger_entry_id?: string | null;
   nft_token_id?: string | null;
   nft_minted?: boolean | null;
+  nft_mint_tx_hash?: string | null;
   on_chain_status?: string | null;
+  data_points_count?: number | null;
+  metadata?: Record<string, any> | null;
 }
 
 const LOG_COLUMNS =
-  "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id, nft_token_id, nft_minted, on_chain_status";
+  "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id, nft_token_id, nft_minted, nft_mint_tx_hash, on_chain_status, data_points_count, metadata";
+
+/** True number of data records consumed, as recorded on the receipt. */
+const recordsConsumed = (log: ProvenanceLog): number | null => {
+  const meta = Number(log.metadata?.consumed_record_count);
+  if (Number.isFinite(meta) && meta > 0) return meta;
+  const points = Number(log.data_points_count);
+  return Number.isFinite(points) && points > 0 ? points : null;
+};
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const { user } = useAuth();
@@ -69,10 +80,18 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
     },
   });
 
-  const nftUrl = (_log: ProvenanceLog) =>
-    walletAddress
+  /** Link to the exact minted token when known, otherwise the wallet's collection. */
+  const nftUrl = (log: ProvenanceLog) => {
+    if (log.nft_mint_tx_hash) return `https://basescan.org/tx/${log.nft_mint_tx_hash}`;
+    if (log.nft_token_id) return `https://basescan.org/token/${liabilityContract}?a=${log.nft_token_id}`;
+    return walletAddress
       ? `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`
       : `https://basescan.org/token/${liabilityContract}`;
+  };
+
+  const collectionUrl = walletAddress
+    ? `https://basescan.org/token/${liabilityContract}?a=${walletAddress}`
+    : `https://basescan.org/token/${liabilityContract}`;
 
   useEffect(() => {
     if (linkedSearch) setSearchTerm(linkedSearch);
@@ -184,6 +203,59 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   // Guard against stale cache shapes from a previous build of this query.
   const spendMap = ledgerMeta?.spend instanceof Map ? ledgerMeta.spend : new Map<string, number>();
   const referenceMap = ledgerMeta?.reference instanceof Map ? ledgerMeta.reference : new Map<string, string>();
+
+  const referenceIds = useMemo(
+    () => Array.from(new Set(Array.from(referenceMap.values()))).sort(),
+    [referenceMap],
+  );
+
+  // Exact per-settlement-run totals straight from the Synapse ledger: what the
+  // buyer was charged, and what was distributed to contributors on the run.
+  const { data: runTotals } = useQuery({
+    queryKey: ["egress-run-totals", referenceIds],
+    enabled: referenceIds.length > 0,
+    queryFn: async () => {
+      console.info(`[BEGIN: EgressLogs.RunTotals] references=${referenceIds.length}`);
+      try {
+        const { data, error } = await supabase
+          .from("synapse_credit_ledger")
+          .select("reference_id, amount, entry_type, transaction_type")
+          .in("reference_id", referenceIds)
+          .limit(5000);
+        if (error) throw error;
+        const totals = new Map<string, { charged: number; distributed: number; lines: number }>();
+        (data || []).forEach((r: any) => {
+          const ref = String(r.reference_id);
+          const entry = totals.get(ref) ?? { charged: 0, distributed: 0, lines: 0 };
+          const amount = Number(r.amount ?? 0);
+          if (amount < 0) entry.charged += Math.abs(amount);
+          else entry.distributed += amount;
+          entry.lines += 1;
+          totals.set(ref, entry);
+        });
+        console.info(
+          `[END: EgressLogs.RunTotals] rows=${data?.length ?? 0} runs=${totals.size}`,
+        );
+        return totals;
+      } catch (e) {
+        const err = e as Error;
+        console.error(`[END: EgressLogs.RunTotals] failed: ${err.message}\n${err.stack ?? ""}`);
+        throw err;
+      }
+    },
+  });
+  const runTotalsMap = runTotals instanceof Map ? runTotals : new Map<string, { charged: number; distributed: number; lines: number }>();
+
+  /** Exact credits charged for a receipt, preferring the settlement-run total. */
+  const receiptSpend = (log: ProvenanceLog): { charged: number | null; distributed: number | null } => {
+    const ledgerId = log.synapse_ledger_entry_id ?? null;
+    if (!ledgerId) return { charged: null, distributed: null };
+    const ref = referenceMap.get(ledgerId);
+    const run = ref ? runTotalsMap.get(ref) : undefined;
+    if (run) return { charged: run.charged, distributed: run.distributed };
+    const raw = spendMap.get(ledgerId);
+    return { charged: typeof raw === "number" ? Math.abs(raw) : null, distributed: null };
+  };
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
@@ -349,9 +421,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
           ) : (
             filteredAndSortedLogs.map((log, index) => {
               const acaRefs = log.aca_record_references || [];
-              const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
-              const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
+              const { charged: spend, distributed } = receiptSpend(log);
               const minted = Boolean(log.nft_token_id);
+              const records = recordsConsumed(log);
               const fields = [
                 { key: "token", label: "Liability token", value: log.liability_token_hash },
                 { key: "anchor", label: "DigiRAMP anchor", value: log.digiramp_anchor_id },
@@ -367,9 +439,16 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       <p className="text-[11px] text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
                       <p className="break-words text-xs font-semibold">{log.egress_type || "Standard"}</p>
                     </div>
-                    <span className="shrink-0 font-mono text-xs font-semibold text-primary">
-                      {spend !== null ? `${spend.toFixed(2)} CR` : "—"}
-                    </span>
+                    <div className="shrink-0 text-right">
+                      <span className="font-mono text-xs font-semibold text-primary">
+                        {spend !== null ? `${spend.toFixed(2)} CR` : "No ledger entry"}
+                      </span>
+                      {distributed !== null && distributed > 0 && (
+                        <p className="font-mono text-[9px] text-muted-foreground">
+                          {distributed.toFixed(2)} CR distributed
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <dl className="space-y-1.5">
                     {fields.map((field) => (
@@ -391,9 +470,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                       </div>
                     ))}
                     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_2.25rem] items-center gap-1">
-                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">ACA refs</dt>
+                      <dt className="text-[10px] font-medium uppercase text-muted-foreground">Consent</dt>
                       <dd className="min-w-0">
-                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} recordCount={records} />
                       </dd>
                       <span />
                     </div>
@@ -412,7 +491,17 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         ) : (
-                          <span className="text-muted-foreground">Mint pending</span>
+                          <span className="text-muted-foreground">
+                            Not minted ·{" "}
+                            <a
+                              href={collectionUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              wallet NFTs
+                            </a>
+                          </span>
                         )}
                       </dd>
                       {minted && (
@@ -463,10 +552,9 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
               ) : (
                 filteredAndSortedLogs.map((log) => {
                   const acaRefs = log.aca_record_references || [];
-                  
-                  const spendRaw = log.synapse_ledger_entry_id ? spendMap.get(log.synapse_ledger_entry_id) : undefined;
-                  const spend = typeof spendRaw === "number" ? Math.abs(spendRaw) : null;
+                  const { charged: spend, distributed } = receiptSpend(log);
                   const minted = Boolean(log.nft_token_id);
+                  const records = recordsConsumed(log);
                   const mainRow = (
                     <TableRow
                       key={log.id}
@@ -494,7 +582,7 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} />
+                        <AcaReferenceViewer receiptId={log.id} references={acaRefs} recordCount={records} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -531,16 +619,33 @@ const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Mint pending</span>
+                          <span className="text-xs text-muted-foreground">
+                            Not minted ·{" "}
+                            <a
+                              href={collectionUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              wallet NFTs
+                            </a>
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         {spend !== null ? (
-                          <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
-                            {spend.toFixed(2)} CR
-                          </span>
+                          <>
+                            <span className="font-mono text-primary bg-primary/10 px-2 py-1 rounded text-xs">
+                              {spend.toFixed(2)} CR
+                            </span>
+                            {distributed !== null && distributed > 0 && (
+                              <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                                {distributed.toFixed(2)} CR distributed
+                              </p>
+                            )}
+                          </>
                         ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
+                          <span className="text-muted-foreground text-xs">No ledger entry</span>
                         )}
                       </TableCell>
                     </TableRow>

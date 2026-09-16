@@ -94,33 +94,91 @@ Deno.serve(async (req) => {
     const rpcUrl = Deno.env.get("ALCHEMY_BASE_RPC_URL") ?? "https://mainnet.base.org";
     const client = createPublicClient({ chain: base, transport: http(rpcUrl) });
 
-    const tokenIds = (await client.readContract({
-      address: PROTOCOL.liabilityReceipt as `0x${string}`,
-      abi: LIABILITY_RECEIPT_ABI,
-      functionName: "getReceiptsByBuyer",
-      args: [wallet as `0x${string}`],
-    })) as bigint[];
-    console.info(`[PHASE_END: ReconcileNFT.CHAIN_READ] tokens=${tokenIds.length}`);
+    // Primary source of truth: the NFT transfers that actually landed in the
+    // buyer's wallet. This also gives us the mint transaction hash, which the
+    // contract read cannot provide.
+    const mintsByToken = new Map<string, { txHash: string; mintedAt: string | null }>();
+    try {
+      const resp = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "alchemy_getAssetTransfers",
+          params: [
+            {
+              fromBlock: "0x0",
+              toBlock: "latest",
+              toAddress: wallet,
+              contractAddresses: [PROTOCOL.liabilityReceipt],
+              category: ["erc721"],
+              withMetadata: true,
+              maxCount: "0x3e8",
+            },
+          ],
+        }),
+      });
+      const payload = await resp.json();
+      const transfers = payload?.result?.transfers ?? [];
+      for (const t of transfers) {
+        const raw = (t.tokenId ?? t.erc721TokenId ?? "").toString();
+        if (!raw) continue;
+        const tokenId = BigInt(raw).toString();
+        mintsByToken.set(tokenId, {
+          txHash: String(t.hash ?? ""),
+          mintedAt: t.metadata?.blockTimestamp ? String(t.metadata.blockTimestamp) : null,
+        });
+      }
+      console.info(`[PHASE_END: ReconcileNFT.CHAIN_READ] wallet_transfers=${mintsByToken.size}`);
+    } catch (e) {
+      const err = e as Error;
+      console.error(`[ERROR: ReconcileNFT.CHAIN_READ] transfer scan failed: ${err.message}\n${err.stack ?? ""}`);
+    }
+
+    // Secondary: the contract's own buyer index (covers RPCs without the
+    // Alchemy transfers extension).
+    let contractTokenIds: bigint[] = [];
+    try {
+      contractTokenIds = (await client.readContract({
+        address: PROTOCOL.liabilityReceipt as `0x${string}`,
+        abi: LIABILITY_RECEIPT_ABI,
+        functionName: "getReceiptsByBuyer",
+        args: [wallet as `0x${string}`],
+      })) as bigint[];
+    } catch (e) {
+      const err = e as Error;
+      console.error(`[ERROR: ReconcileNFT.CHAIN_READ] getReceiptsByBuyer failed: ${err.message}`);
+    }
+
+    const allTokenIds = Array.from(
+      new Set([...mintsByToken.keys(), ...contractTokenIds.map((t) => t.toString())]),
+    );
+    console.info(`[PHASE_END: ReconcileNFT.CHAIN_READ] candidate_tokens=${allTokenIds.length}`);
 
     phase = "MATCH";
     console.info(`[PHASE_START: ReconcileNFT.${phase}]`);
-    const byLiabilityHash = new Map<string, { tokenId: string; mintedAt: string | null }>();
-    for (const tokenId of tokenIds.slice(-200)) {
+    const byLiabilityHash = new Map<string, { tokenId: string; mintedAt: string | null; txHash: string | null }>();
+    for (const tokenId of allTokenIds.slice(-200)) {
       try {
         const receipt = (await client.readContract({
           address: PROTOCOL.liabilityReceipt as `0x${string}`,
           abi: LIABILITY_RECEIPT_ABI,
           functionName: "getReceipt",
-          args: [tokenId],
+          args: [BigInt(tokenId)],
         })) as {
           synapseReceiptId: `0x${string}`;
           mintedAt: bigint;
         };
         const hash = (receipt.synapseReceiptId ?? "").toString().replace(/^0x/, "").toLowerCase();
         if (!hash || /^0+$/.test(hash)) continue;
+        const transfer = mintsByToken.get(tokenId);
         byLiabilityHash.set(hash, {
-          tokenId: tokenId.toString(),
-          mintedAt: receipt.mintedAt > 0n ? new Date(Number(receipt.mintedAt) * 1000).toISOString() : null,
+          tokenId,
+          mintedAt:
+            transfer?.mintedAt ??
+            (receipt.mintedAt > 0n ? new Date(Number(receipt.mintedAt) * 1000).toISOString() : null),
+          txHash: transfer?.txHash ?? null,
         });
       } catch (e) {
         const err = e as Error;
@@ -149,6 +207,7 @@ Deno.serve(async (req) => {
             nft_token_id: mint.tokenId,
             nft_minted: true,
             nft_minted_at: mint.mintedAt,
+            nft_mint_tx_hash: mint.txHash,
             on_chain_status: "MINTED",
           })
           .eq("id", row.id);
@@ -159,14 +218,17 @@ Deno.serve(async (req) => {
         matched += 1;
       }
     }
-    console.info(`[PHASE_END: ReconcileNFT.PERSIST] updated=${matched}`);
+    console.info(
+      `[PHASE_END: ReconcileNFT.PERSIST] updated=${matched} unmatched_tokens=${allTokenIds.length - byLiabilityHash.size}`,
+    );
 
     return new Response(
       JSON.stringify({
         success: true,
         wallet,
         contract: PROTOCOL.liabilityReceipt,
-        on_chain_tokens: tokenIds.length,
+        on_chain_tokens: allTokenIds.length,
+        matched_receipt_ids: byLiabilityHash.size,
         updated: matched,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
