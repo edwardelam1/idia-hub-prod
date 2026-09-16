@@ -8,8 +8,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const MAX_OMNI_ROWS = 500;
-const MARKETPLACE_HASH_PAGE_SIZE = 1_000;
-const MARKETPLACE_MAX_HASH_PAGES = 75;
+// Hash scanning is set-based in the database now — no client-side paging limits.
 const MARKETPLACE_SAMPLE_ROW_BUDGET = 150;
 
 type StagedTable = "staged_health_data" | "staged_lifestyle_data" | "staged_ford_data";
