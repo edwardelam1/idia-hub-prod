@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -11,400 +10,236 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { ExternalLink, Plus, Minus, Eye, Settings, Loader2, AlertTriangle } from "lucide-react";
-import { useUniswapPoolStats, useOrgSafeAddress, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
-import { useWalletLpPositions, useUserWalletAddress, type WalletPosition } from "@/hooks/useWalletLpPositions";
-import { NoWalletState } from "./NoWalletState";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Building2,
+  CircleDollarSign,
+  ExternalLink,
+  FileCode2,
+  Loader2,
+  Settings,
+  WalletCards,
+} from "lucide-react";
+import { useUniswapPoolStats, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
+import { useWalletLpPositions, useUserWalletAddress } from "@/hooks/useWalletLpPositions";
 import ProtocolHoldings from "./ProtocolHoldings";
 import ContractInformation from "./ContractInformation";
 import V4Positions from "./V4Positions";
+import V3Positions from "./V3Positions";
 import { deriveIdiaUsdPrice } from "@/lib/idia-price";
+import { cn } from "@/lib/utils";
 
 const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 const uniswapAddUrl = (feeTier: number) => `https://app.uniswap.org/add/${USDC}/${IDIA}/${feeTier}?chain=base`;
 const uniswapPoolUrl = (poolAddress: string) => `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
-const basescanUrl = (addr: string) => `https://basescan.org/address/${addr}`;
-// Fallbacks used when live pool data is unavailable, so links never resolve to "#"
+const basescanUrl = (address: string) => `https://basescan.org/address/${address}`;
 const UNISWAP_ADD_FALLBACK = uniswapAddUrl(3000);
 const UNISWAP_TOKEN_FALLBACK = `https://app.uniswap.org/explore/tokens/base/${IDIA}`;
 const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 
-const formatUSD = (n: number) =>
-  n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${n.toFixed(2)}`;
-const formatAPR = (n: number) => `${(n * 100).toFixed(2)}%`;
-const sumValue = (positions: WalletPosition[] | undefined) => (positions ?? []).reduce((s, p) => s + p.valueUSD, 0);
-const sumFees = (positions: WalletPosition[] | undefined) =>
-  (positions ?? []).reduce((s, p) => s + p.uncollectedFeesUSD, 0);
+const formatUSD = (value: number) =>
+  value >= 1000 ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${value.toFixed(2)}`;
+const formatAPR = (value: number) => `${(value * 100).toFixed(2)}%`;
+
+type Slice = "pool" | "holdings" | "positions" | "contracts";
 
 const LiquidityPools = () => {
   const poolsQuery = useUniswapPoolStats();
-  const safeQuery = useOrgSafeAddress();
   const userWalletQuery = useUserWalletAddress();
-
   const pools = poolsQuery.data ?? [];
+  const [activeSlice, setActiveSlice] = useState<Slice>("pool");
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
-  const selectedPool: UniswapPoolStat | undefined = pools.find((p) => p.id === selectedPoolId) ?? pools[0];
-
+  const selectedPool: UniswapPoolStat | undefined = pools.find((pool) => pool.id === selectedPoolId) ?? pools[0];
   const userPositionsQuery = useWalletLpPositions(userWalletQuery.data, pools);
-  const orgPositionsQuery = useWalletLpPositions(safeQuery.data, pools);
-
-  const userPositions = userPositionsQuery.data;
-  const orgPositions = orgPositionsQuery.data;
-
+  const userPositions = userPositionsQuery.data ?? [];
   const idiaUsdPrice = useMemo(() => deriveIdiaUsdPrice(pools), [pools]);
-  const totalTVL = useMemo(() => pools.reduce((s, p) => s + p.tvlUSD, 0), [pools]);
-  const total24hVol = useMemo(() => pools.reduce((s, p) => s + p.volume24hUSD, 0), [pools]);
-  const userValue = sumValue(userPositions);
-  const orgValue = sumValue(orgPositions);
-  const userFees = sumFees(userPositions);
-  const hasUserWallet = !!userWalletQuery.data;
+  const totalTVL = useMemo(() => pools.reduce((sum, pool) => sum + pool.tvlUSD, 0), [pools]);
+  const total24hVol = useMemo(() => pools.reduce((sum, pool) => sum + pool.volume24hUSD, 0), [pools]);
+  const userValue = useMemo(() => userPositions.reduce((sum, position) => sum + position.valueUSD, 0), [userPositions]);
+  const hasUserWallet = Boolean(userWalletQuery.data);
 
-  const loading = poolsQuery.isLoading;
-  const errored = poolsQuery.isError;
+  const slices: Array<{ id: Slice; label: string; value: string; icon: typeof CircleDollarSign }> = [
+    { id: "pool", label: "Pool TVL", value: poolsQuery.isLoading ? "—" : formatUSD(totalTVL), icon: CircleDollarSign },
+    { id: "holdings", label: "Protocol Holdings", value: "All wallets", icon: Building2 },
+    { id: "positions", label: "Your Position", value: hasUserWallet ? formatUSD(userValue) : "No wallet", icon: WalletCards },
+    { id: "contracts", label: "Contract Info", value: "Base mainnet", icon: FileCode2 },
+  ];
 
   return (
-    <div className="p-3 space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="p-3 space-y-3 font-sans">
+      <header className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Liquidity Pools</h1>
-          <p className="text-sm text-muted-foreground">IDIA / USDC on Base · Uniswap v3 · live on-chain data</p>
+          <h1 className="font-mono text-2xl font-bold">Liquidity Pools</h1>
+          <p className="text-sm text-muted-foreground">IDIA / USDC on Base · Uniswap v4 and v3 · live on-chain data</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">Pool TVL: {formatUSD(totalTVL)}</Badge>
-          <Badge variant="default">Org Position: {formatUSD(orgValue)}</Badge>
-          {hasUserWallet && <Badge variant="outline">Your Position: {formatUSD(userValue)}</Badge>}
-        </div>
-      </div>
+      </header>
 
-      {errored && (
+      <section aria-label="Quick actions" className="border-y border-border/70 py-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+          <span className="font-mono text-[10px] font-semibold uppercase text-muted-foreground shrink-0 mr-1">Quick actions</span>
+          <Button asChild size="sm" className="h-8 shrink-0 text-xs">
+            <a href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK} target="_blank" rel="noopener noreferrer">
+              <ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Add Liquidity
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="h-8 shrink-0 text-xs">
+            <a href="https://app.uniswap.org/positions" target="_blank" rel="noopener noreferrer">
+              <ArrowUpFromLine className="h-3.5 w-3.5 mr-1.5" /> Remove Liquidity
+            </a>
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 shrink-0 text-xs">
+                <Settings className="h-3.5 w-3.5 mr-1.5" /> Pool Inspector
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle className="font-mono">Pool Inspector</DialogTitle>
+                <DialogDescription>Live IDIA/USDC v3 pools on Base.</DialogDescription>
+              </DialogHeader>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fee</TableHead><TableHead>Pool</TableHead><TableHead className="text-right">TVL</TableHead>
+                      <TableHead className="text-right">24h volume</TableHead><TableHead className="text-right">APR</TableHead><TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pools.map((pool) => (
+                      <TableRow key={pool.id}>
+                        <TableCell>{(pool.feeTier / 10_000).toFixed(2)}%</TableCell>
+                        <TableCell className="font-mono text-xs">{pool.id.slice(0, 8)}…{pool.id.slice(-6)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatUSD(pool.tvlUSD)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatUSD(pool.volume24hUSD)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatAPR(pool.feeApr)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button asChild size="icon" variant="ghost" className="h-7 w-7">
+                            <a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer" aria-label="Open pool on Uniswap">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 text-xs">
+            <a href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK} target="_blank" rel="noopener noreferrer">
+              Uniswap <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+            </a>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 text-xs">
+            <a href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK} target="_blank" rel="noopener noreferrer">
+              BaseScan <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+            </a>
+          </Button>
+        </div>
+      </section>
+
+      <nav aria-label="Liquidity views" className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {slices.map(({ id, label, value, icon: Icon }) => {
+          const active = activeSlice === id;
+          return (
+            <Button
+              key={id}
+              type="button"
+              variant={active ? "default" : "outline"}
+              onClick={() => setActiveSlice(id)}
+              aria-pressed={active}
+              className="h-14 justify-start px-3"
+            >
+              <Icon className="h-4 w-4 mr-2 shrink-0" />
+              <span className="min-w-0 text-left">
+                <span className="block text-xs font-medium truncate">{label}</span>
+                <span className={cn("block font-mono text-[10px] truncate", active ? "text-primary-foreground/75" : "text-muted-foreground")}>{value}</span>
+              </span>
+            </Button>
+          );
+        })}
+      </nav>
+
+      {poolsQuery.isError && (
         <Card className="p-3 border-destructive">
           <div className="flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4" />
-            Could not load Uniswap pool data. Verify the THEGRAPH_API_KEY secret.
+            <AlertTriangle className="h-4 w-4" /> Could not load Uniswap pool data. Verify the live data connection.
           </div>
         </Card>
       )}
 
-      {/* Stat tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="p-3">
-          <div className="text-lg font-bold">{loading ? "—" : formatUSD(totalTVL)}</div>
-          <div className="text-xs text-muted-foreground">Pool TVL (all fee tiers)</div>
-        </Card>
-        <Card className="p-3">
-          <div className="text-lg font-bold">{loading ? "—" : formatUSD(total24hVol)}</div>
-          <div className="text-xs text-muted-foreground">24h Volume</div>
-        </Card>
-        <Card className="p-3">
-          {hasUserWallet ? (
-            <>
-              <div className="text-lg font-bold">{formatUSD(userValue)}</div>
-              <div className="text-xs text-muted-foreground">
-                Your Position{userFees > 0 && ` · ${formatUSD(userFees)} uncollected fees`}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="text-lg font-bold text-muted-foreground">—</div>
-              <div className="text-xs text-muted-foreground">No wallet provisioned</div>
-            </>
-          )}
-        </Card>
-        <Card className="p-3">
-          <div className="text-lg font-bold">{selectedPool ? formatAPR(selectedPool.feeApr) : "—"}</div>
-          <div className="text-xs text-muted-foreground">
-            Fee APR (30d){selectedPool && ` · ${(selectedPool.feeTier / 10_000).toFixed(2)}% tier`}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        {/* Performance chart */}
-        <Card className="lg:col-span-2 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h3 className="text-sm font-semibold">Pool Performance</h3>
-              <p className="text-xs text-muted-foreground">30-day TVL & volume</p>
+      <main>
+        {activeSlice === "pool" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              {[
+                [poolsQuery.isLoading ? "—" : formatUSD(totalTVL), "Pool TVL"],
+                [poolsQuery.isLoading ? "—" : formatUSD(total24hVol), "24h Volume"],
+                [selectedPool ? formatAPR(selectedPool.feeApr) : "—", "Fee APR (30d)"],
+                [selectedPool ? `${(selectedPool.feeTier / 10_000).toFixed(2)}%` : "v4", "Active fee tier"],
+              ].map(([value, label]) => (
+                <Card key={label} className="p-3">
+                  <div className="font-mono text-lg font-bold">{value}</div>
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                </Card>
+              ))}
             </div>
-            {selectedPool && (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    <Eye className="h-3 w-3" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl">
-                  <DialogHeader>
-                    <DialogTitle>IDIA/USDC · {(selectedPool.feeTier / 10_000).toFixed(2)}% · 30d</DialogTitle>
-                    <DialogDescription>From Uniswap v3 subgraph on Base</DialogDescription>
-                  </DialogHeader>
-                  <div className="h-96">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={selectedPool.series}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip formatter={(v: number) => formatUSD(v)} />
-                        <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} name="TVL" />
-                        <Line
-                          type="monotone"
-                          dataKey="volume"
-                          stroke="hsl(var(--accent-foreground))"
-                          strokeWidth={2}
-                          name="Volume"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-          <div className="h-32">
-            {loading ? (
-              <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+            <Card className="p-3">
+              <div className="mb-2">
+                <h2 className="font-mono text-sm font-semibold">Pool Performance</h2>
+                <p className="text-xs text-muted-foreground">30-day TVL and volume</p>
               </div>
-            ) : selectedPool ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={selectedPool.series}>
-                  <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                  <Line
-                    type="monotone"
-                    dataKey="volume"
-                    stroke="hsl(var(--accent-foreground))"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-                No pool data available
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Manage on Uniswap */}
-        <Card className="p-3">
-          <h3 className="text-sm font-semibold mb-2">Manage on Uniswap</h3>
-          <div className="space-y-2">
-            <div className="p-2 bg-accent/50 rounded text-xs space-y-1">
-              <div className="flex justify-between">
-                <span>Selected tier:</span>
-                <span>{selectedPool ? `${(selectedPool.feeTier / 10_000).toFixed(2)}%` : "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Pool TVL:</span>
-                <span>{selectedPool ? formatUSD(selectedPool.tvlUSD) : "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Your position:</span>
-                <span>{hasUserWallet ? formatUSD(userValue) : "No wallet"}</span>
-              </div>
-            </div>
-            <Button asChild className="w-full h-8 text-xs">
-              <a
-                href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Plus className="h-3 w-3 mr-1" /> Add Liquidity <ExternalLink className="h-3 w-3 ml-1" />
-              </a>
-            </Button>
-            <Button asChild variant="destructive" className="w-full h-8 text-xs">
-              <a href="https://app.uniswap.org/pool" target="_blank" rel="noopener noreferrer">
-                <Minus className="h-3 w-3 mr-1" /> Remove Liquidity <ExternalLink className="h-3 w-3 ml-1" />
-              </a>
-            </Button>
-            {!hasUserWallet && (
-              <p className="text-[10px] text-muted-foreground">
-                Provision your wallet in Life by IDIA to interact directly.
-              </p>
-            )}
-          </div>
-        </Card>
-
-        {/* Quick actions */}
-        <Card className="p-3">
-          <h3 className="text-sm font-semibold mb-2">Quick Actions</h3>
-          <div className="space-y-2">
-            <Button asChild variant="outline" size="sm" className="w-full text-xs">
-              <a
-                href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Eye className="h-3 w-3 mr-1" /> View Pool on Uniswap
-              </a>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="w-full text-xs">
-              <a
-                href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" /> View on BaseScan
-              </a>
-            </Button>
-
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full text-xs">
-                  My Positions
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Your Liquidity Positions</DialogTitle>
-                  <DialogDescription>Live from Base mainnet via on-chain reads</DialogDescription>
-                </DialogHeader>
-                {!hasUserWallet ? (
-                  <NoWalletState />
-                ) : userPositionsQuery.isLoading ? (
-                  <div className="p-6 text-center text-xs text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Reading on-chain positions…
-                  </div>
-                ) : (userPositions ?? []).length === 0 ? (
-                  <div className="p-6 text-center text-xs text-muted-foreground">
-                    No IDIA/USDC v3 positions found for this wallet.
-                  </div>
+              <div className="h-44">
+                {poolsQuery.isLoading ? (
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…</div>
+                ) : selectedPool ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={selectedPool.series}>
+                      <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="volume" stroke="hsl(var(--accent-foreground))" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Fee</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Value</TableHead>
-                        <TableHead className="text-right">Uncollected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(userPositions ?? []).map((p) => (
-                        <TableRow key={p.tokenId}>
-                          <TableCell className="font-mono text-xs">#{p.tokenId}</TableCell>
-                          <TableCell>{(p.fee / 10_000).toFixed(2)}%</TableCell>
-                          <TableCell>
-                            <Badge variant={p.inRange ? "default" : "secondary"}>
-                              {p.inRange ? "In range" : "Out of range"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">{formatUSD(p.valueUSD)}</TableCell>
-                          <TableCell className="text-right text-green-600">{formatUSD(p.uncollectedFeesUSD)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No v3 pool history available. Your current IDIA liquidity is on v4.</div>
                 )}
-              </DialogContent>
-            </Dialog>
-          </div>
-        </Card>
-      </div>
-
-      {/* Fee tier strip + Pool Inspector */}
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">IDIA/USDC Fee Tiers</h3>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                <Settings className="h-3 w-3 mr-1" /> Pool Inspector
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-5xl">
-              <DialogHeader>
-                <DialogTitle>Pool Inspector</DialogTitle>
-                <DialogDescription>All IDIA/USDC pools on Base with org & user positions</DialogDescription>
-              </DialogHeader>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fee tier</TableHead>
-                    <TableHead>Pool address</TableHead>
-                    <TableHead className="text-right">TVL</TableHead>
-                    <TableHead className="text-right">24h vol</TableHead>
-                    <TableHead className="text-right">Fee APR</TableHead>
-                    <TableHead className="text-right">Org pos</TableHead>
-                    <TableHead className="text-right">Your pos</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pools.map((p) => {
-                    const orgVal = (orgPositions ?? [])
-                      .filter((pos) => pos.fee === p.feeTier)
-                      .reduce((s, pos) => s + pos.valueUSD, 0);
-                    const userVal = (userPositions ?? [])
-                      .filter((pos) => pos.fee === p.feeTier)
-                      .reduce((s, pos) => s + pos.valueUSD, 0);
-                    return (
-                      <TableRow key={p.id}>
-                        <TableCell>{(p.feeTier / 10_000).toFixed(2)}%</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {p.id.slice(0, 8)}…{p.id.slice(-6)}
-                        </TableCell>
-                        <TableCell className="text-right">{formatUSD(p.tvlUSD)}</TableCell>
-                        <TableCell className="text-right">{formatUSD(p.volume24hUSD)}</TableCell>
-                        <TableCell className="text-right">{formatAPR(p.feeApr)}</TableCell>
-                        <TableCell className="text-right">{formatUSD(orgVal)}</TableCell>
-                        <TableCell className="text-right">
-                          {hasUserWallet ? formatUSD(userVal) : <NoWalletState compact />}
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button asChild size="sm" variant="ghost" className="h-6 px-2">
-                            <a href={uniswapPoolUrl(p.id)} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </Button>
-                          <Button asChild size="sm" variant="ghost" className="h-6 px-2">
-                            <a href={basescanUrl(p.id)} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </DialogContent>
-          </Dialog>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {pools.length === 0 && !loading && (
-            <div className="col-span-full text-xs text-muted-foreground p-4 text-center">
-              No Uniswap v3 IDIA/USDC pools exist on Base. IDIA liquidity lives in Uniswap v4 — see
-              the v4 positions panel below.
-            </div>
-          )}
-          {pools.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setSelectedPoolId(p.id)}
-              className={`p-2 border rounded text-xs hover:bg-accent transition-colors text-left ${
-                selectedPool?.id === p.id ? "bg-accent border-primary" : ""
-              }`}
-            >
-              <div className="font-medium">IDIA/USDC · {(p.feeTier / 10_000).toFixed(2)}%</div>
-              <div className="text-green-600">{formatAPR(p.feeApr)} fee APR</div>
-              <div className="text-muted-foreground">
-                {formatUSD(p.tvlUSD)} TVL · {formatUSD(p.volume24hUSD)} 24h
               </div>
-            </button>
-          ))}
-        </div>
-      </Card>
+              {pools.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/60">
+                  {pools.map((pool) => (
+                    <Button key={pool.id} size="sm" variant={selectedPool?.id === pool.id ? "secondary" : "ghost"} onClick={() => setSelectedPoolId(pool.id)} className="h-7 text-xs">
+                      {(pool.feeTier / 10_000).toFixed(2)}% fee
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
 
-      <V4Positions owners={[userWalletQuery.data, safeQuery.data]} userWallet={userWalletQuery.data} />
-      <ProtocolHoldings idiaUsdPrice={idiaUsdPrice} />
-      <ContractInformation idiaUsdPrice={idiaUsdPrice} />
+        {activeSlice === "holdings" && <ProtocolHoldings idiaUsdPrice={idiaUsdPrice} />}
+
+        {activeSlice === "positions" && (
+          <div className="space-y-3">
+            <V4Positions owners={[userWalletQuery.data]} userWallet={userWalletQuery.data} />
+            <V3Positions
+              positions={userPositions}
+              hasWallet={hasUserWallet}
+              isLoading={userPositionsQuery.isLoading}
+              isError={userPositionsQuery.isError}
+            />
+          </div>
+        )}
+
+        {activeSlice === "contracts" && <ContractInformation idiaUsdPrice={idiaUsdPrice} />}
+      </main>
     </div>
   );
 };
