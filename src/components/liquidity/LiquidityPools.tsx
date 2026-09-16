@@ -16,6 +16,9 @@ import { ExternalLink, Plus, Minus, Eye, Settings, Loader2, AlertTriangle } from
 import { useUniswapPoolStats, useOrgSafeAddress, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
 import { useWalletLpPositions, useUserWalletAddress, type WalletPosition } from "@/hooks/useWalletLpPositions";
 import { NoWalletState } from "./NoWalletState";
+import ProtocolHoldings from "./ProtocolHoldings";
+import ContractInformation from "./ContractInformation";
+import { deriveIdiaUsdPrice } from "@/lib/idia-price";
 
 const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
