@@ -36,11 +36,22 @@ interface ProvenanceLog {
   synapse_ledger_entry_id?: string | null;
   nft_token_id?: string | null;
   nft_minted?: boolean | null;
+  nft_mint_tx_hash?: string | null;
   on_chain_status?: string | null;
+  data_points_count?: number | null;
+  metadata?: Record<string, any> | null;
 }
 
 const LOG_COLUMNS =
-  "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id, nft_token_id, nft_minted, on_chain_status";
+  "id, created_at, liability_token_hash, aca_record_references, country_of_origin, digiramp_anchor_id, egress_type, client_id, synapse_ledger_entry_id, nft_token_id, nft_minted, nft_mint_tx_hash, on_chain_status, data_points_count, metadata";
+
+/** True number of data records consumed, as recorded on the receipt. */
+const recordsConsumed = (log: ProvenanceLog): number | null => {
+  const meta = Number(log.metadata?.consumed_record_count);
+  if (Number.isFinite(meta) && meta > 0) return meta;
+  const points = Number(log.data_points_count);
+  return Number.isFinite(points) && points > 0 ? points : null;
+};
 
 const ProvenanceAuditLog = ({ clientId }: { clientId?: string }) => {
   const { user } = useAuth();
