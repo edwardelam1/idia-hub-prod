@@ -109,7 +109,7 @@ export async function chargeBuyerUsdc(opts: {
     const normalizedPk = (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`;
 
     const buyer = getAddress(opts.buyer_wallet);
-    const treasury = getTreasury();
+    const { address: treasury, source: receiverSource } = getSettlementReceiver();
     const amount = parseUnits(opts.usd_amount.toFixed(6), 6);
 
     const account = privateKeyToAccount(normalizedPk);
@@ -120,7 +120,7 @@ export async function chargeBuyerUsdc(opts: {
     const publicClient = createPublicClient({ chain: base, transport });
     const walletClient = createWalletClient({ chain: base, transport, account });
 
-    console.log(`[${stage}] relayer=${account.address} treasury=${treasury} amount=${amount.toString()}`);
+    console.log(`[${stage}] relayer=${account.address} receiver=${treasury} source=${receiverSource} amount=${amount.toString()}`);
 
     // Pre-flight: allowance + buyer balance to give the UI a precise error code.
     const [allowance, buyerBalance] = await Promise.all([
@@ -225,7 +225,8 @@ export async function dispatchBuyerUsdcCharge(opts: {
     const normalizedPk = (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`;
 
     const buyer = getAddress(opts.buyer_wallet);
-    const treasury = getTreasury();
+    const { address: treasury, source: receiverSource } = getSettlementReceiver();
+    console.log(`[${stage}] receiver=${treasury} source=${receiverSource}`);
     const amount = parseUnits(opts.usd_amount.toFixed(6), 6);
     const account = privateKeyToAccount(normalizedPk);
     const transport = http(getRpc());
