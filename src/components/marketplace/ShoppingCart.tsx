@@ -20,6 +20,9 @@ interface QuoteItem {
   bundle_id: string;
   name: string;
   base_valuation: number;
+  streams?: string[];
+  stale?: boolean;
+  unavailable?: boolean;
 }
 
 const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchase }: ShoppingCartProps) => {
@@ -27,6 +30,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
   const [quoteState, setQuoteState] = useState<'idle' | 'quoting' | 'quoted' | 'error'>('idle');
   const [quotedItems, setQuotedItems] = useState<QuoteItem[]>([]);
   const [quotedTotal, setQuotedTotal] = useState(0);
+  const [quoteNonce, setQuoteNonce] = useState(0);
   const { checkCredits, showTopUp, shortfall, dismissTopUp } = useCreditCheck();
 
   const totalItems = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
@@ -41,32 +45,40 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
     const fetchQuote = async () => {
       setQuoteState('quoting');
       try {
-        const bundleIds = cartItems.map(item => item.id);
         const { data, error } = await supabase.functions.invoke('quote-bundle', {
-          body: { bundle_ids: bundleIds },
+          body: {
+            items: cartItems.map(item => ({
+              bundle_id: item.bundleId ?? item.id,
+              streams: item.streams ?? null,
+              quantity: item.quantity ?? 1,
+              price: item.price,
+            })),
+          },
         });
         if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
         setQuotedItems(data.items || []);
-        // Apply quantities
-        let total = 0;
-        cartItems.forEach(ci => {
-          const qi = (data.items || []).find((q: QuoteItem) => q.bundle_id === ci.id);
-          total += (qi?.base_valuation || ci.price) * (ci.quantity || 1);
-        });
-        setQuotedTotal(total);
+        setQuotedTotal(Number(data.total ?? 0));
         setQuoteState('quoted');
-      } catch {
-        // Fallback to cart prices
-        const total = cartItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
-        setQuotedTotal(total);
-        setQuoteState('quoted');
+      } catch (err) {
+        // Never silently fall back to a page price — the server is the authority.
+        console.error('[ShoppingCart][quote] failed:', err);
+        setQuotedItems([]);
+        setQuotedTotal(0);
+        setQuoteState('error');
       }
     };
     fetchQuote();
-  }, [isOpen, cartItems]);
+  }, [isOpen, cartItems, quoteNonce]);
 
   const getItemPrice = (item: CartItem) => {
-    const qi = quotedItems.find(q => q.bundle_id === item.id);
+    const key = item.bundleId ?? item.id;
+    const qi = quotedItems.find(q => {
+      if (q.bundle_id !== key) return false;
+      const qStreams = [...(q.streams ?? [])].sort().join('+');
+      const iStreams = [...(item.streams ?? [])].sort().join('+');
+      return qStreams === iStreams;
+    });
     return qi?.base_valuation ?? item.price;
   };
 
@@ -86,6 +98,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
   };
 
   const handlePurchase = () => {
+    if (quoteState !== 'quoted') return;
     if (!checkCredits(quotedTotal)) return;
     if (canAfford && cartItems.length > 0) {
       onPurchase(quotedTotal);
@@ -134,6 +147,17 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
                   <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     <span className="text-sm text-primary font-medium">Fetching live pricing...</span>
+                  </div>
+                )}
+
+                {quoteState === 'error' && (
+                  <div className="flex items-center justify-between gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <span className="text-sm text-destructive font-medium">
+                      We couldn't confirm live pricing. Please try again.
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setQuoteNonce(n => n + 1)}>
+                      Retry
+                    </Button>
                   </div>
                 )}
 
@@ -226,11 +250,13 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
                 <div className="space-y-2">
                   <Button 
                     onClick={handlePurchase}
-                    disabled={quoteState === 'quoting'}
+                    disabled={quoteState !== 'quoted'}
                     className="w-full"
                   >
                     {quoteState === 'quoting' ? (
                       <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Quoting...</>
+                    ) : quoteState === 'error' ? (
+                      'Pricing unavailable'
                     ) : !canAfford ? (
                       'Insufficient Credits'
                     ) : (

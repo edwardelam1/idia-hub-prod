@@ -1,6 +1,7 @@
 // Marketplace Bundle Access — Live egress via synapse-controller (no simulation).
 // Mirrors Best Friend AI's receipt transmission pattern.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { priceSelection } from "../_shared/stream-pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
     const userId = claimsData.claims.sub as string;
 
     const body = await req.json().catch(() => ({}));
-    const { bundle_id, quantity = 1 } = body ?? {};
+    const { bundle_id, quantity = 1, streams: requestedStreams } = body ?? {};
     if (!bundle_id || typeof bundle_id !== "string") {
       console.info("[BEGIN: MarketplaceBundleAccess.Validation.Stall] bundle_id missing.");
       return new Response(JSON.stringify({ error: "bundle_id is required" }), {
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
     console.info(`[BEGIN: MarketplaceBundleAccess.BundleResolve] bundle_id=${bundle_id}`);
     const { data: bundle, error: bundleErr } = await admin
       .from("marketplace_bundles")
-      .select("bundle_id, title, category, data_json, is_active")
+      .select("bundle_id, title, category, data_json, is_active, price, window_key, window_start, window_end")
       .eq("bundle_id", bundle_id)
       .maybeSingle();
 
@@ -73,22 +74,80 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Pull the real ACA record keys backing this bundle.
     const dj: any = bundle.data_json ?? {};
-    const acaRecordIds: string[] = Array.isArray(dj.aca_record_ids)
+
+    // Price this purchase server-side. A partial (à la carte) pick pays exactly
+    // its share of the records; the client's number is never trusted.
+    console.info("[PHASE_START: MarketplaceBundleAccess.Price]");
+    const selection = priceSelection(
+      dj?.activity_mix,
+      Number((bundle as any).price ?? 0),
+      Array.isArray(requestedStreams) ? requestedStreams.map((s: unknown) => String(s)) : null,
+    );
+    if (Array.isArray(requestedStreams) && requestedStreams.length > 0 && selection.streams.length === 0) {
+      console.info("[PHASE_END: MarketplaceBundleAccess.Price] selected streams no longer in bundle");
+      return new Response(
+        JSON.stringify({ error: "The selected data streams are no longer part of this bundle." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    console.info(
+      `[PHASE_END: MarketplaceBundleAccess.Price] price=${selection.price} streams=${selection.streams.length}`,
+    );
+
+    // Resolve the real source records backing this purchase.
+    console.info("[PHASE_START: MarketplaceBundleAccess.Lineage]");
+    let acaRecordIds: string[] = Array.isArray(dj.aca_record_ids)
       ? dj.aca_record_ids
       : Array.isArray(dj.records)
         ? dj.records.map((r: any) => r?.aca_hash_key ?? r?.id).filter(Boolean)
         : [];
 
     if (acaRecordIds.length === 0) {
-      console.info("[BEGIN: MarketplaceBundleAccess.Lineage.Stall] No auditable lineage in bundle.");
-      return new Response(JSON.stringify({ error: "Bundle has no auditable lineage." }), {
+      const root = String(bundle.category ?? "").split(".")[0];
+      const LINEAGE_SOURCES: Record<string, { table: string; typeColumn: string | null; timeColumn: string }> = {
+        health: { table: "staged_health_data", typeColumn: "activity_type", timeColumn: "created_at" },
+        lifestyle: { table: "staged_lifestyle_data", typeColumn: "event_type", timeColumn: "created_at" },
+        business: { table: "staged_business_data", typeColumn: null, timeColumn: "created_at" },
+        vehicle: { table: "staged_ford_data", typeColumn: "metric_type", timeColumn: "recorded_at" },
+        ford: { table: "staged_ford_data", typeColumn: "metric_type", timeColumn: "recorded_at" },
+      };
+      const src = LINEAGE_SOURCES[root];
+      if (!src) {
+        console.info(`[PHASE_END: MarketplaceBundleAccess.Lineage] unknown source root=${root}`);
+        return new Response(JSON.stringify({ error: "Bundle has no auditable lineage." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let query = admin.from(src.table).select("aca_hash_key").limit(5000);
+      const windowStart = (bundle as any).window_start as string | null;
+      const windowEnd = (bundle as any).window_end as string | null;
+      if (windowStart && !windowStart.startsWith("-infinity")) query = query.gte(src.timeColumn, windowStart);
+      if (windowEnd) query = query.lte(src.timeColumn, windowEnd);
+
+      const lineageStreams =
+        selection.streams.length > 0 ? selection.streams : Object.keys(dj?.activity_mix ?? {});
+      if (src.typeColumn && lineageStreams.length > 0) query = query.in(src.typeColumn, lineageStreams);
+
+      const { data: lineageRows, error: lineageErr } = await query;
+      if (lineageErr) throw lineageErr;
+      acaRecordIds = (lineageRows ?? []).map((r: any) => r.aca_hash_key).filter(Boolean);
+      console.info(
+        `[PHASE_END: MarketplaceBundleAccess.Lineage] table=${src.table} streams=${lineageStreams.length} records=${acaRecordIds.length}`,
+      );
+    } else {
+      console.info(`[PHASE_END: MarketplaceBundleAccess.Lineage] embedded records=${acaRecordIds.length}`);
+    }
+
+    if (acaRecordIds.length === 0) {
+      console.info("[PHASE_END: MarketplaceBundleAccess.Lineage] empty after resolution");
+      return new Response(JSON.stringify({ error: "No source records remain for this selection." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.info(`[END: MarketplaceBundleAccess.BundleResolve] records=${acaRecordIds.length}`);
 
     // Hand off to synapse-controller — same contract Best Friend AI uses.
     console.info("[BEGIN: MarketplaceBundleAccess.SynapseHandoff]");
@@ -109,6 +168,10 @@ Deno.serve(async (req) => {
           bundle_id: bundle.bundle_id,
           bundle_title: bundle.title,
           quantity,
+          window_key: (bundle as any).window_key ?? null,
+          streams: selection.streams,
+          selection_scope: selection.streams.length > 0 ? "partial" : "full",
+          quoted_price_cr: selection.price,
         },
       }),
     });
@@ -134,12 +197,14 @@ Deno.serve(async (req) => {
         fee_cr: synapsePayload.fee,
         reference_id: synapsePayload.reference_id,
         consumed_records: synapsePayload.consumed_records,
+        streams: selection.streams,
+        quoted_price_cr: selection.price,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: any) {
     console.info("[BEGIN: MarketplaceBundleAccess.Request.Stall]");
-    console.error("[FATAL: MarketplaceBundleAccess]", err?.message);
+    console.error("[FATAL: MarketplaceBundleAccess]", err instanceof Error ? `${err.message}\n${err.stack}` : String(err));
     return new Response(JSON.stringify({ error: err?.message ?? "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
