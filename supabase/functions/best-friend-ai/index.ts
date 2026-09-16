@@ -128,16 +128,18 @@ async function fetchMarketplaceAggregates(supabase: ReturnType<typeof createClie
   }
 }
 
-// Pulls every relevant staged record for a user across BOTH staging tables.
+// Personal scope sample rows (marketplace disabled). Health and lifestyle are
+// owner-scoped; Ford telemetry is an ecosystem-wide shared pool. Row counts here
+// are only a bounded PREVIEW — true totals come from the aggregate RPC.
 async function fetchOmniRecords(
   supabase: ReturnType<typeof createClient>,
   pseudoId: string,
-): Promise<{ success: boolean; health: any[]; lifestyle: any[]; error?: string }> {
+): Promise<{ success: boolean; health: any[]; lifestyle: any[]; ford: any[]; error?: string }> {
   try {
-    console.info(`[BEGIN: OmniFetch] Initiating cross-table data retrieval for operator: ${pseudoId}`);
+    console.info(`[PHASE_START: OmniFetch] Personal sample retrieval for operator: ${pseudoId}`);
     const filter = `user_id.eq.${pseudoId},entity_id.eq.${pseudoId},pseudo_user_id.eq.${pseudoId}`;
 
-    const [healthRes, lifestyleRes] = await Promise.all([
+    const [healthRes, lifestyleRes, fordRes] = await Promise.all([
       supabase
         .from("staged_health_data")
         .select("*")
@@ -150,32 +152,38 @@ async function fetchOmniRecords(
         .or(filter)
         .order("processed_at", { ascending: false })
         .limit(MAX_OMNI_ROWS),
+      supabase
+        .from("staged_ford_data")
+        .select("*")
+        .order("processed_at", { ascending: false })
+        .limit(MAX_OMNI_ROWS),
     ]);
 
     if (healthRes.error) {
-      console.info(`[BEGIN: OmniFetch.Health.Error] Evaluating Health API error response.`);
-      console.error("[ERROR: OmniFetch.Health] Health table query failed:", healthRes.error.message);
-      console.info(`[END: OmniFetch.Health.Error] Error logged.`);
+      console.error("[ERROR: OmniFetch.Health]", healthRes.error.message);
     }
     if (lifestyleRes.error) {
-      console.info(`[BEGIN: OmniFetch.Lifestyle.Error] Evaluating Lifestyle API error response.`);
-      console.error("[ERROR: OmniFetch.Lifestyle] Lifestyle table query failed:", lifestyleRes.error.message);
-      console.info(`[END: OmniFetch.Lifestyle.Error] Error logged.`);
+      console.error("[ERROR: OmniFetch.Lifestyle]", lifestyleRes.error.message);
+    }
+    if (fordRes.error) {
+      console.error("[ERROR: OmniFetch.Ford]", fordRes.error.message);
     }
 
     console.info(
-      `[END: OmniFetch] Retrieval complete. Health: ${healthRes.data?.length || 0}, Lifestyle: ${lifestyleRes.data?.length || 0}`,
+      `[PHASE_END: OmniFetch] sample_health=${healthRes.data?.length || 0} sample_lifestyle=${lifestyleRes.data?.length || 0} sample_ford=${fordRes.data?.length || 0}`,
     );
     return {
       success: !healthRes.error && !lifestyleRes.error,
       health: healthRes.data ?? [],
       lifestyle: lifestyleRes.data ?? [],
+      ford: fordRes.data ?? [],
     };
   } catch (err) {
-    console.info(`[BEGIN: OmniFetch.Stall] Catch block triggered during parallel retrieval.`);
-    console.error("[CRITICAL FAILURE: OmniFetch] Fatal exception during parallel retrieval:", err);
-    console.info(`[END: OmniFetch.Stall] Returning empty result set following error.`);
-    return { success: false, health: [], lifestyle: [], error: String(err) };
+    console.error(
+      "[CRITICAL FAILURE: OmniFetch]",
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+    );
+    return { success: false, health: [], lifestyle: [], ford: [], error: String(err) };
   }
 }
 
