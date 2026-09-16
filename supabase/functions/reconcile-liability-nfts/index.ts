@@ -58,18 +58,19 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) throw new Error("Authentication required");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user?.id) throw new Error("Invalid authentication token");
+    // Validate the caller's JWT with the service-role client so this does not
+    // depend on which anon/publishable key env var happens to be present.
+    const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+    const token = authHeader.replace("Bearer ", "").trim();
+    const { data: userData, error: userError } = await admin.auth.getUser(token);
+    if (userError || !userData?.user?.id) {
+      console.error(`[PHASE_END: ReconcileNFT.AUTH] rejected: ${userError?.message ?? "no user on token"}`);
+      throw new Error("Invalid authentication token");
+    }
     const userId = userData.user.id;
     console.info(`[PHASE_END: ReconcileNFT.AUTH] user=${userId.slice(0, 8)}`);
-
-    const admin = createClient(supabaseUrl, serviceKey);
 
     phase = "WALLET";
     console.info(`[PHASE_START: ReconcileNFT.${phase}]`);
