@@ -185,7 +185,8 @@ Deno.serve(async (req: Request) => {
               .update({ compliance_rail: "on-chain" })
               .eq("user_id", user_id);
             if (railError) console.warn(`[BACKGROUND_CONFIRM] compliance_rail skip: ${railError.message}`);
-          } else {
+          } else if (confirmation.code === "TX_REVERTED") {
+            // Only the chain itself saying "reverted" is a real failure.
             console.error(`🚨 [BACKGROUND_CONFIRM] ${confirmation.code}: ${confirmation.message}`);
             await supabase
               .from("synapse_credit_ledger")
@@ -199,18 +200,37 @@ Deno.serve(async (req: Request) => {
                 },
               })
               .eq("id", ledgerId);
+          } else {
+            // Receipt read timed out / RPC hiccup. The transferFrom is already on
+            // the network — never mark it failed. Leave it pending for reconciliation.
+            console.warn(
+              `[BACKGROUND_CONFIRM] ${confirmation.code}: ${confirmation.message} — leaving ledger ${ledgerId} pending.`,
+            );
+            await supabase
+              .from("synapse_credit_ledger")
+              .update({
+                metadata: {
+                  ...baseMetadata,
+                  settlement_phase: "awaiting_confirmation",
+                  last_confirm_code: confirmation.code,
+                  last_confirm_message: confirmation.message,
+                  last_confirm_attempt_at: new Date().toISOString(),
+                },
+              })
+              .eq("id", ledgerId);
           }
         } catch (bgErr: any) {
           console.error(`🚨 [BACKGROUND_CONFIRM] unhandled: ${bgErr?.message ?? String(bgErr)}`);
+          // An exception in our own code is not proof the payment failed.
           await supabase
             .from("synapse_credit_ledger")
             .update({
-              status: "failed",
               metadata: {
                 ...baseMetadata,
-                settlement_phase: "failed",
-                failure_code: "BACKGROUND_EXCEPTION",
-                failure_reason: bgErr?.message ?? String(bgErr),
+                settlement_phase: "awaiting_confirmation",
+                last_confirm_code: "BACKGROUND_EXCEPTION",
+                last_confirm_message: bgErr?.message ?? String(bgErr),
+                last_confirm_attempt_at: new Date().toISOString(),
               },
             })
             .eq("id", ledgerId);
