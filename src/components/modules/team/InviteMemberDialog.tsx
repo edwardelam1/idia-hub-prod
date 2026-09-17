@@ -45,15 +45,21 @@ export const InviteMemberDialog = ({ open, onOpenChange, templates, onSubmit }: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5" /> Provision Team Member
           </DialogTitle>
           <DialogDescription>
-            Add an existing IDIA Life identity to this organization by their Platform GUID.
-            No PII is stored — only the anonymous identifier.
+            Add an existing Life by IDIA identity to this organization by their Platform GUID. No PII is stored — only
+            the anonymous identifier.
           </DialogDescription>
         </DialogHeader>
 
@@ -64,14 +70,12 @@ export const InviteMemberDialog = ({ open, onOpenChange, templates, onSubmit }: 
             </Label>
             <Input
               value={guid}
-              onChange={e => setGuid(e.target.value)}
+              onChange={(e) => setGuid(e.target.value)}
               placeholder="00000000-0000-0000-0000-000000000000"
               className="font-mono text-xs"
               autoFocus
             />
-            {guid && !guidValid && (
-              <p className="text-xs text-destructive">Not a valid UUID v4 format.</p>
-            )}
+            {guid && !guidValid && <p className="text-xs text-destructive">Not a valid UUID v4 format.</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -79,14 +83,16 @@ export const InviteMemberDialog = ({ open, onOpenChange, templates, onSubmit }: 
               <Label>Job Title</Label>
               <Input
                 value={jobTitle}
-                onChange={e => setJobTitle(e.target.value)}
+                onChange={(e) => setJobTitle(e.target.value)}
                 placeholder="e.g. Head of Operations"
               />
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
-              <Select value={role} onValueChange={v => setRole(v as typeof role)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={role} onValueChange={(v) => setRole(v as typeof role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
                   <SelectItem value="team_lead">Team Lead</SelectItem>
@@ -99,15 +105,23 @@ export const InviteMemberDialog = ({ open, onOpenChange, templates, onSubmit }: 
           <div className="space-y-2">
             <Label>Permission Template (optional)</Label>
             <Select value={templateId} onValueChange={setTemplateId}>
-              <SelectTrigger><SelectValue placeholder="Select template" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Select template" />
+              </SelectTrigger>
               <SelectContent>
-                {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={!guidValid}>
               <UserPlus className="w-4 h-4 mr-2" /> Provision via ACA
             </Button>
