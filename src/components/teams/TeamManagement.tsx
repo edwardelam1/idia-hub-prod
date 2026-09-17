@@ -193,7 +193,7 @@ export default function TeamManagement() {
         } catch (e: any) {
           const msg = e?.message ?? "Unknown error";
           const friendly = msg.includes("ACA_NOT_FOUND")
-            ? "This ACA is not registered with IDIA Life. Provisioning rejected."
+            ? "This ACA is not registered with Life by IDIA. Provisioning rejected."
             : msg.includes("ALREADY_PROVISIONED")
               ? "This identity is already on the team."
               : msg.includes("NOT_ORG_ADMIN")
@@ -310,7 +310,7 @@ export default function TeamManagement() {
                 <Nfc className="h-5 w-5 text-primary" /> Provision Access
               </DialogTitle>
               <DialogDescription>
-                Tap an IDIA Life-issued NFC card to bind an existing ACA. No PII is collected. For unauthenticated day
+                Tap an Life-issued NFC card to bind an existing ACA. No PII is collected. For unauthenticated day
                 workers, issue an Ephemeral Profile.
               </DialogDescription>
             </DialogHeader>
@@ -346,7 +346,7 @@ export default function TeamManagement() {
                 <div className="flex flex-col items-center justify-center gap-2 py-6 border rounded-lg bg-muted/30">
                   <Radio className="h-8 w-8 text-primary animate-pulse" />
                   <p className="text-sm font-medium">Listening for ACA tap…</p>
-                  <p className="text-xs text-muted-foreground">Hold the IDIA Life card to the device.</p>
+                  <p className="text-xs text-muted-foreground">Hold the Life by IDIA card to the device.</p>
                   <Button variant="ghost" size="sm" onClick={cancelNfc}>
                     Cancel
                   </Button>
@@ -382,7 +382,7 @@ export default function TeamManagement() {
             Active Profiles
           </CardTitle>
           <CardDescription>
-            All members in this organization. ACA-secured rows resolve to a verified IDIA Life identity.
+            All members in this organization. ACA-secured rows resolve to a verified Life by IDIA identity.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -424,7 +424,7 @@ export default function TeamManagement() {
                           <div>
                             <p className="font-medium text-foreground">{u.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {u.is_ephemeral ? "Guest Account" : "IDIA Life Member"}
+                              {u.is_ephemeral ? "Guest Account" : "Life Member"}
                             </p>
                           </div>
                         </div>
@@ -507,7 +507,9 @@ export default function TeamManagement() {
 
       <ApplyProvisionCodeDialog
         open={!!provisionCodeTarget}
-        onOpenChange={(o) => { if (!o) setProvisionCodeTarget(null); }}
+        onOpenChange={(o) => {
+          if (!o) setProvisionCodeTarget(null);
+        }}
         employeeId={provisionCodeTarget?.id ?? null}
         employeeName={provisionCodeTarget?.name ?? ""}
         businessId={businessId}
