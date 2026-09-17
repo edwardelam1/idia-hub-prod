@@ -47,7 +47,25 @@ export const clearPendingPurchase = () => {
 
 export const readPendingPurchase = (): string | null => {
   try {
-    return sessionStorage.getItem(PENDING_PURCHASE_KEY);
+    const raw = sessionStorage.getItem(PENDING_PURCHASE_KEY);
+    if (!raw) return null;
+    // Legacy format: a bare key string with no timestamp — treat as expired.
+    if (!raw.startsWith("{")) {
+      console.warn("[POLL_LEDGER_PERSIST] Legacy pending key found without timestamp — discarding.");
+      clearPendingPurchase();
+      return null;
+    }
+    const parsed = JSON.parse(raw) as { key?: string; ts?: number };
+    if (!parsed?.key || typeof parsed.ts !== "number") {
+      clearPendingPurchase();
+      return null;
+    }
+    if (Date.now() - parsed.ts > PENDING_PURCHASE_TTL_MS) {
+      console.warn(`[POLL_LEDGER_PERSIST] Pending purchase ${parsed.key} expired — discarding.`);
+      clearPendingPurchase();
+      return null;
+    }
+    return parsed.key;
   } catch {
     return null;
   }
