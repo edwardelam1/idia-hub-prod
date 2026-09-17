@@ -129,11 +129,11 @@ const SynapseTopUp = () => {
   };
 
   // Poll the ledger instead of holding a socket open through the chain wait.
-  const resolveSettlement = async (idempotencyKey: string) => {
-    console.log(`[SynapseTopUp][resolveSettlement] BEGIN key=${idempotencyKey}`);
-    setStep("processing");
+  const resolveSettlement = async (idempotencyKey: string, silent = false) => {
+    console.log(`[SynapseTopUp][resolveSettlement] BEGIN key=${idempotencyKey} silent=${silent}`);
+    if (!silent) setStep("processing");
     try {
-      const result = await pollLedgerStatus(idempotencyKey);
+      const result = await pollLedgerStatus(idempotencyKey, silent ? 4 : 15);
       if (result.outcome === "completed") {
         clearPendingPurchase();
         setNeedsApproval(false);
