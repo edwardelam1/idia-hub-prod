@@ -21,9 +21,15 @@ export interface LedgerPollResult {
 /** Storage key for a purchase left unresolved when the tab was killed. */
 export const PENDING_PURCHASE_KEY = "idia.pending_purchase_key";
 
+/** Unresolved purchases older than this are abandoned, never resumed. */
+export const PENDING_PURCHASE_TTL_MS = 10 * 60 * 1000;
+
 export const rememberPendingPurchase = (idempotencyKey: string) => {
   try {
-    sessionStorage.setItem(PENDING_PURCHASE_KEY, idempotencyKey);
+    sessionStorage.setItem(
+      PENDING_PURCHASE_KEY,
+      JSON.stringify({ key: idempotencyKey, ts: Date.now() }),
+    );
     console.log(`[POLL_LEDGER_PERSIST] Stored unresolved purchase key: ${idempotencyKey}`);
   } catch (err) {
     console.warn(`[POLL_LEDGER_PERSIST_FAULT] sessionStorage unavailable: ${String(err)}`);
