@@ -41,7 +41,7 @@ const UtilitiesIngestionPanel = () => {
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
 
-  const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
+  
 
   const gatewayStatus = useMemo(() => {
     if (isLoadingKeys) return { label: "Checking…", tone: "muted" as const };
@@ -412,8 +412,11 @@ const UtilitiesIngestionPanel = () => {
             <h3 className="text-sm font-semibold text-foreground">3. Required Headers</h3>
             <CodeBlock value={headersSample} label="Headers" />
             <p className="text-[11px] text-muted-foreground">
-              The gateway authenticates on the franchise key alone — no user login is required.
+              The Authorization bearer carries the public gateway key so the request can route through the API
+              gateway. Your private franchise key travels in its own x-api-key header, and your identity is resolved
+              from its cryptographic hash — never send identifying values in the body.
             </p>
+
           </section>
 
           <section className="space-y-2">
