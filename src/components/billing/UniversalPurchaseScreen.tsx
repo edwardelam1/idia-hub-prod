@@ -258,7 +258,7 @@ const UniversalPurchaseScreen = () => {
         if (profileErr) throw new Error(`Profile lookup failed: ${profileErr.message}`);
         const buyerWallet = profile?.wallet_address as string | undefined;
         if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
-          throw new Error("No IDIA Life wallet linked. Connect MetaMask first.");
+          throw new Error("No Life wallet linked. Connect MetaMask first.");
         }
 
         const txReference = `PLAN-${plan.id.toUpperCase()}-${crypto.randomUUID().slice(0, 8)}`;
@@ -539,7 +539,7 @@ const UniversalPurchaseScreen = () => {
                     ) : (
                       <ShieldCheck className="w-4 h-4" />
                     )}
-                    {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in Life (one-time)"}
+                    {isAuthorizingRelayer ? "Waiting for Life…" : "Authorize in Life (one-time)"}
                   </Button>
                   <p className="text-[10px] text-muted-foreground text-center">
                     Opens the Life by IDIA app to approve settlement with your own wallet. Return here when it's done.
