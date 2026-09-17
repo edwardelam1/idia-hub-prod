@@ -34,6 +34,8 @@ const UtilitiesIngestionPanel = () => {
   const { balanceData, refreshBalance } = useSynapseCredits();
   const [isSettleOpen, setIsSettleOpen] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
+  const availableCredits = Number(balanceData?.available_credits ?? 0);
+  const canCoverBalance = availableCredits >= unpaidBalance;
   const [unpaidBalance, setUnpaidBalance] = useState(0);
   const [eventCount, setEventCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
