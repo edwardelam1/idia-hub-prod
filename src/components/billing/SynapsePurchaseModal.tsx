@@ -618,7 +618,7 @@ const SynapsePurchaseModal = ({
                         {isAuthorizingRelayer ? "Waiting for Life…" : "Authorize in Life (one-time)"}
                       </Button>
                       <p className="text-[10px] text-muted-foreground text-center">
-                        Opens the IDIA Life app so you can approve settlement with your own wallet.
+                        Opens the Life by IDIA app so you can approve settlement with your own wallet.
                       </p>
                     </div>
                   )}

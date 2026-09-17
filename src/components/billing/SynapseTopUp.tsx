@@ -270,11 +270,11 @@ const SynapseTopUp = () => {
       if (profileError) throw new Error(`Profile lookup failed: ${profileError.message}`);
       const buyerWallet = profile?.wallet_address as string | undefined;
       if (!buyerWallet || !/^0x[a-fA-F0-9]{40}$/.test(buyerWallet)) {
-        throw new Error("No IDIA Life wallet linked to this account. Connect MetaMask first.");
+        throw new Error("No Life wallet linked to this account. Connect MetaMask first.");
       }
       setBuyerWalletForRecovery(buyerWallet);
       console.log(
-        "[SynapseTopUp][handlePurchase] [GASLESS_PATH] IDIA Life wallet covers amount; skipping MetaMask approval. Relayer will execute gasless transferFrom.",
+        "[SynapseTopUp][handlePurchase] [GASLESS_PATH] Life by IDIA wallet covers amount; skipping MetaMask approval. Relayer will execute gasless transferFrom.",
       );
 
       const txReference = `INT-${crypto.randomUUID().slice(0, 8)}`;
@@ -451,7 +451,7 @@ const SynapseTopUp = () => {
                     <span className="font-mono">${usdAmount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Available in IDIA Life</span>
+                    <span className="text-muted-foreground">Available in Life by IDIA</span>
                     <span className="font-mono">${availableUSDC.toFixed(2)}</span>
                   </div>
                   <div className="pt-2 border-t border-destructive/20 flex justify-between text-sm">
@@ -464,9 +464,9 @@ const SynapseTopUp = () => {
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 mb-4 flex gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    To find your recovery phrase, open IDIA Life, visit the Wallet page, tap Security, and press Reveal
-                    Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device that is
-                    not your own.
+                    To find your recovery phrase, open Life by IDIA, visit the Wallet page, tap Security, and press
+                    Reveal Recovery Phrase. Ensure no one is around you when you do this and do not do this on a device
+                    that is not your own.
                   </p>
                 </div>
               )}
@@ -532,7 +532,10 @@ const SynapseTopUp = () => {
                     onClick={async () => {
                       setIsAuthorizingRelayer(true);
                       try {
-                        toast({ title: "Opening IDIA Life", description: "Authorize settlement in your wallet app." });
+                        toast({
+                          title: "Opening Life by IDIA",
+                          description: "Authorize settlement in your wallet app.",
+                        });
                         const r = await authorizeRelayerViaLife({
                           owner: buyerWalletForRecovery,
                           requiredUsd: usdAmount,
@@ -565,10 +568,10 @@ const SynapseTopUp = () => {
                     ) : (
                       <ShieldCheck className="h-4 w-4" />
                     )}
-                    {isAuthorizingRelayer ? "Waiting for IDIA Life…" : "Authorize in IDIA Life (one-time)"}
+                    {isAuthorizingRelayer ? "Waiting for Life…" : "Authorize in Life (one-time)"}
                   </Button>
                   <p className="text-[10px] text-muted-foreground text-center">
-                    Opens the IDIA Life app so you can approve settlement with your own wallet.
+                    Opens the Life by IDIA app so you can approve settlement with your own wallet.
                   </p>
                 </div>
               )}
