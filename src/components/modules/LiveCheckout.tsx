@@ -230,7 +230,7 @@ export const LiveCheckout = ({ onClose }: LiveCheckoutProps) => {
             <Card>
               <CardContent className="pt-6">
                 <p className="text-center text-muted-foreground py-8">
-                  No active orders. Waiting for IDIA Life customers...
+                  No active orders. Waiting for Life by IDIA customers...
                 </p>
               </CardContent>
             </Card>
