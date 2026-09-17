@@ -84,26 +84,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // --- ANTI-PII BRIDGE ---
-  const fetchPiiData = useCallback(async (
-    session: Session,
-    profileRow?: { avatar_url?: string | null; platform_guid?: string | null } | null,
-  ): Promise<PiiData> => {
-    console.log("[PiiBridge] >>> START: Extracting PII from Auth Metadata");
-    const { user: authUser } = session;
+  const fetchPiiData = useCallback(
+    async (
+      session: Session,
+      profileRow?: { avatar_url?: string | null; platform_guid?: string | null } | null,
+    ): Promise<PiiData> => {
+      console.log("[PiiBridge] >>> START: Extracting PII from Auth Metadata");
+      const { user: authUser } = session;
 
-    const pii: PiiData = {
-      displayName: authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || "System Architect",
-      fullName: authUser.user_metadata?.full_name || null,
-      email: authUser.email || null,
-      // Source of truth for the avatar is profiles.avatar_url
-      avatarUrl: profileRow?.avatar_url || authUser.user_metadata?.avatar_url || null,
-      platformGuid: profileRow?.platform_guid || authUser.user_metadata?.platform_guid || null,
-      source: "auth_metadata_stub",
-    };
+      const pii: PiiData = {
+        displayName: authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || "System Architect",
+        fullName: authUser.user_metadata?.full_name || null,
+        email: authUser.email || null,
+        // Source of truth for the avatar is profiles.avatar_url
+        avatarUrl: profileRow?.avatar_url || authUser.user_metadata?.avatar_url || null,
+        platformGuid: profileRow?.platform_guid || authUser.user_metadata?.platform_guid || null,
+        source: "auth_metadata_stub",
+      };
 
-    console.log("[PiiBridge] <<< END: PII Extraction Complete");
-    return pii;
-  }, []);
+      console.log("[PiiBridge] <<< END: PII Extraction Complete");
+      return pii;
+    },
+    [],
+  );
 
   // --- MAIN INITIALIZATION ENGINE ---
   const fetchProfileAndSubscription = useCallback(
@@ -132,7 +135,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // --- THE FIX: REDIRECT TO SOVEREIGN ONBOARDING ---
         if (!profileRow || !profileRow.platform_guid) {
-          console.log("[AuthGate] !!! FATAL: No Sovereign Identity (platform_guid) found. Redirecting to IDIA Life.");
+          console.log(
+            "[AuthGate] !!! FATAL: No Sovereign Identity (platform_guid) found. Redirecting to Life by IDIA.",
+          );
           window.location.href = `https://life.thebigidia.com`;
           return;
         }

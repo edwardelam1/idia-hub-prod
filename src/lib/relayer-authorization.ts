@@ -77,9 +77,7 @@ export async function readUsdcWalletState(owner: string): Promise<UsdcWalletStat
 /** True when the wallet has already authorized the relayer for the given amount. */
 export function isAuthorized(state: UsdcWalletState, requiredUsd?: number): boolean {
   const required =
-    requiredUsd && requiredUsd > 0
-      ? BigInt(Math.ceil(requiredUsd * 1_000_000))
-      : MIN_MEANINGFUL_ALLOWANCE;
+    requiredUsd && requiredUsd > 0 ? BigInt(Math.ceil(requiredUsd * 1_000_000)) : MIN_MEANINGFUL_ALLOWANCE;
   return state.allowance >= required;
 }
 
@@ -236,7 +234,7 @@ export async function authorizeRelayerViaLife(opts: {
       ok: false,
       pending: true,
       reason:
-        "Still waiting on IDIA Life. Finish the authorization in the IDIA Life app, then return here and tap purchase again.",
+        "Still waiting on Life by IDIA. Finish the authorization in the IDIA Life app, then return here and tap purchase again.",
     };
   } finally {
     console.info(`[AUTH_RELAYER][END] owner=${owner}`);

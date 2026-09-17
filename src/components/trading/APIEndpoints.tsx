@@ -106,7 +106,8 @@ export const APIEndpoints = () => {
   }
 }`);
 
-  const [curlExample, setCurlExample] = useState<string>(`curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
+  const [curlExample, setCurlExample] =
+    useState<string>(`curl -X GET "https://api.idiahub.com/v1/features/market-data" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json"`);
 
@@ -217,8 +218,7 @@ axios.get('${origin}/v1/features/market-data', config)
       console.info("[APIEndpoints][executeLiveCall][preflight_identity] BEGIN");
       const u = user as any;
       const userId = u?.user_id ?? u?.id;
-      const isCsuite =
-        typeof u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(u.role);
+      const isCsuite = typeof u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(u.role);
       if (!userId) {
         console.error("[APIEndpoints][executeLiveCall][preflight_identity] FATAL: no authenticated user_id");
         toast.error("Sign in required to execute live calls");
@@ -255,11 +255,7 @@ axios.get('${origin}/v1/features/market-data', config)
 
       // Resolve buyer wallet (USDC source) from profile.
       console.info("[APIEndpoints][executeLiveCall][resolve_wallet] BEGIN");
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("wallet_address")
-        .eq("id", userId)
-        .maybeSingle();
+      const { data: profile } = await supabase.from("profiles").select("wallet_address").eq("id", userId).maybeSingle();
       const buyerWallet: string | undefined = profile?.wallet_address ?? undefined;
       const useOnChain = !!buyerWallet && buyerWallet.startsWith("0x");
       console.info(
@@ -316,13 +312,11 @@ axios.get('${origin}/v1/features/market-data', config)
       // ====================================================================
       if (result?.error === "APPROVAL_REQUIRED" && useOnChain && buyerWallet) {
         console.warn("[APIEndpoints][executeLiveCall][approval_flow] BEGIN — prompting wallet approval");
-        toast.message("One-time authorization required — approve in the IDIA Life app.");
+        toast.message("One-time authorization required — approve in the Life by IDIA app.");
         const approval = await authorizeRelayerViaLife({ owner: buyerWallet });
         if (approval.ok !== true) {
           const reason = approval.reason ?? "unknown";
-          console.error(
-            `[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${reason}`,
-          );
+          console.error(`[APIEndpoints][executeLiveCall][approval_flow] HALT reason=${reason}`);
           toast.error(reason);
           return;
         }
@@ -361,9 +355,7 @@ axios.get('${origin}/v1/features/market-data', config)
         data: result?.audit ?? {},
         financials: result?.financials ?? {},
         provenance: {
-          digiramp_anchor_id: result?.liability_token_hash
-            ? `0x${result.liability_token_hash}`
-            : "anchor_pending",
+          digiramp_anchor_id: result?.liability_token_hash ? `0x${result.liability_token_hash}` : "anchor_pending",
           blockchain: "ethereum",
           timestamp: new Date().toISOString(),
           immutable: true,
@@ -419,8 +411,7 @@ axios.get('${origin}/v1/features/market-data', config)
   };
 
   const _u = user as any;
-  const _isCsuite =
-    typeof _u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(_u.role);
+  const _isCsuite = typeof _u?.role === "string" && /csuite|c-suite|god|super[-_]?admin/i.test(_u.role);
   const visibleEndpoints = _isCsuite
     ? endpoints
     : currentTier
