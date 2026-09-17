@@ -189,11 +189,11 @@ const SynapsePurchaseModal = ({
   };
 
   // Poll the ledger instead of holding a socket open through the chain wait.
-  const resolveSettlement = async (idempotencyKey: string) => {
-    console.log(`[SynapsePurchaseModal][resolveSettlement] BEGIN key=${idempotencyKey}`);
-    setStep("processing");
+  const resolveSettlement = async (idempotencyKey: string, silent = false) => {
+    console.log(`[SynapsePurchaseModal][resolveSettlement] BEGIN key=${idempotencyKey} silent=${silent}`);
+    if (!silent) setStep("processing");
     try {
-      const result = await pollLedgerStatus(idempotencyKey);
+      const result = await pollLedgerStatus(idempotencyKey, silent ? 4 : 15);
       if (result.outcome === "completed") {
         clearPendingPurchase();
         setNeedsApproval(false);
@@ -214,7 +214,7 @@ const SynapsePurchaseModal = ({
         clearPendingPurchase();
         toast.error(result.reason || "The payment could not be completed. No credits were added.");
         setStep("payment");
-      } else {
+      } else if (!silent) {
         toast.warning("Payment still confirming on the network. Reopen this window shortly to see the result.");
         setStep("payment");
       }
@@ -235,11 +235,11 @@ const SynapsePurchaseModal = ({
   // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
   useEffect(() => {
     const pending = readPendingPurchase();
-    if (pending) void resolveSettlement(pending);
+    if (pending) void resolveSettlement(pending, true);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const key = readPendingPurchase();
-      if (key) void resolveSettlement(key);
+      if (key) void resolveSettlement(key, true);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);

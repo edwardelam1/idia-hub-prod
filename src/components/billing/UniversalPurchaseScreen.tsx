@@ -71,12 +71,14 @@ const UniversalPurchaseScreen = () => {
   }, []);
 
   // Resolve a settlement by polling the ledger — never by holding a socket open.
-  const resolveSettlement = async (idempotencyKey: string) => {
-    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey}`);
-    setStep("processing");
-    setIsProcessing(true);
+  const resolveSettlement = async (idempotencyKey: string, silent = false) => {
+    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey} silent=${silent}`);
+    if (!silent) {
+      setStep("processing");
+      setIsProcessing(true);
+    }
     try {
-      const result = await pollLedgerStatus(idempotencyKey);
+      const result = await pollLedgerStatus(idempotencyKey, silent ? 4 : 15);
       if (result.outcome === "completed") {
         clearPendingPurchase();
         toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);

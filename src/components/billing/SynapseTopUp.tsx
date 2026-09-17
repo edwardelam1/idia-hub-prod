@@ -150,7 +150,7 @@ const SynapseTopUp = () => {
         setError(result.reason || "The payment could not be completed. No credits were added.");
         setStep("payment");
         toast({ title: "Settlement Failed", description: result.reason ?? undefined, variant: "destructive" });
-      } else {
+      } else if (!silent) {
         setError("Payment still confirming on the network. Reopen this page shortly to see the result.");
         setStep("payment");
       }
@@ -162,11 +162,11 @@ const SynapseTopUp = () => {
   // Resume an unresolved purchase (tab killed / screen locked) and re-poll on foreground.
   useEffect(() => {
     const pending = readPendingPurchase();
-    if (pending) void resolveSettlement(pending);
+    if (pending) void resolveSettlement(pending, true);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const key = readPendingPurchase();
-      if (key) void resolveSettlement(key);
+      if (key) void resolveSettlement(key, true);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
