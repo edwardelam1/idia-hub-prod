@@ -139,27 +139,71 @@ const UtilitiesIngestionPanel = () => {
     void fetchBalance();
   }, [fetchBalance]);
 
-  const handleSettlementComplete = useCallback(async () => {
+  const settleWithCredits = useCallback(async () => {
     if (!user?.user_id) return;
-    console.log(`[LIDD_SETTLE_START] Marking staged extraction events as paid for ${user.user_id}`);
+    console.log(`[PHASE_START: LIDD_SETTLE] Settling utility balance with Synapse Credits.`);
+    setIsSettling(true);
     try {
-      const { error } = await supabase
-        .from("lidd_extraction_events")
-        .update({ payment_status: "paid" })
-        .eq("extractor_id", user.user_id)
-        .eq("payment_status", "unpaid");
+      const { data, error } = await supabase.functions.invoke("settle-utility-balance", { body: {} });
       if (error) {
-        console.error(`[LIDD_SETTLE_QUERY_ERROR] ${error.message}`);
+        console.error(`[LIDD_SETTLE_INVOKE_ERROR] ${error.message}`);
         throw error;
       }
-      console.log(`[LIDD_SETTLE_SUCCESS] Staged events settled.`);
-      await fetchBalance();
+      if (data?.error === "INSUFFICIENT_CREDITS") {
+        console.warn(`[LIDD_SETTLE_INSUFFICIENT] shortfall=${data.shortfall}`);
+        toast({
+          title: "Not enough credits",
+          description: `You need ${Number(data.shortfall ?? 0).toFixed(2)} more CR to settle this balance.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (data?.error) throw new Error(String(data.error));
+
+      const charged = Number(data?.amount_charged ?? 0);
+      console.log(`[LIDD_SETTLE_SUCCESS] charged=${charged} reference=${data?.reference_id}`);
+      toast({
+        title: "Balance settled",
+        description: `${charged.toFixed(2)} CR deducted for ${data?.events_settled ?? 0} identity matches.`,
+      });
+
+      if (data?.reference_id) {
+        void recordActivity({
+          source: "marketplace",
+          action: "LIDD_UTILITY_SETTLEMENT",
+          title: `Utility balance settled — ${charged.toFixed(2)} CR`,
+          input: { events_settled: data?.events_settled ?? 0 },
+          result: { reference_id: data.reference_id, amount_charged: charged },
+          recordsConsumed: Number(data?.events_settled ?? 0),
+          synapseCreditCost: charged,
+          synapseLedgerEntryId: data?.ledger_entry_id ?? null,
+          referenceId: data.reference_id,
+          idempotencyKey: String(data.reference_id),
+        });
+      }
+
+      setIsSettleOpen(false);
+      await Promise.all([fetchBalance(), refreshBalance()]);
     } catch (err) {
       console.error(`[LIDD_SETTLE_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({
+        title: "Settlement failed",
+        description: "The balance could not be settled. Please try again.",
+        variant: "destructive",
+      });
     } finally {
-      console.log(`[LIDD_SETTLE_END] Process terminated.`);
+      setIsSettling(false);
+      console.log(`[PHASE_END: LIDD_SETTLE] Process terminated.`);
     }
-  }, [user?.user_id, fetchBalance]);
+  }, [user?.user_id, fetchBalance, refreshBalance, toast]);
+
+  const handleSettlementComplete = useCallback(async () => {
+    console.log(`[PHASE_START: LIDD_TOPUP_COMPLETE] Credits purchased — returning to settlement step.`);
+    await refreshBalance();
+    setIsCheckoutOpen(false);
+    setIsSettleOpen(true);
+    console.log(`[PHASE_END: LIDD_TOPUP_COMPLETE] Settlement dialog reopened.`);
+  }, [refreshBalance]);
 
   const fetchKeys = useCallback(async () => {
     console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
