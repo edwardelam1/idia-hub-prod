@@ -39,7 +39,6 @@ export const SettingsProfile = () => {
     }
   };
 
-
   // PII comes from in-memory bridge (IDIA Life device), never from DB
   const displayName = piiData?.displayName || "—";
   const email = piiData?.email || "—";
@@ -87,7 +86,7 @@ export const SettingsProfile = () => {
                   Personal information is fetched securely from your{" "}
                   <span className="inline-flex items-center gap-1 font-medium text-foreground">
                     <Smartphone className="h-3.5 w-3.5" />
-                    IDIA Life device
+                    Life device
                   </span>{" "}
                   and held in-memory only. It is <strong>never stored</strong> in the Hub database.
                 </>
@@ -96,7 +95,7 @@ export const SettingsProfile = () => {
                   Connect your{" "}
                   <span className="inline-flex items-center gap-1 font-medium text-foreground">
                     <Smartphone className="h-3.5 w-3.5" />
-                    IDIA Life mobile application
+                    Life by IDIA mobile application
                   </span>{" "}
                   to view your identity information here.
                 </>
@@ -184,7 +183,11 @@ export const SettingsProfile = () => {
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={handleRecalibrate} disabled={saving}>
-                {saving ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                )}
                 Recalibrate Profile
               </Button>
             </div>
@@ -219,4 +222,3 @@ export const SettingsProfile = () => {
     </div>
   );
 };
-
