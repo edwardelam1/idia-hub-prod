@@ -452,21 +452,21 @@ const UtilitiesIngestionPanel = () => {
           hideCloseButton
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
-          className="w-[calc(100vw-2rem)] max-w-sm overflow-hidden p-4 sm:max-w-lg sm:p-6"
+          className="left-4 right-4 w-auto max-w-none translate-x-0 overflow-hidden p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:p-6"
         >
-          <DialogHeader>
+          <DialogHeader className="items-center text-center sm:items-start sm:text-left">
             <DialogTitle>Franchise Key Issued</DialogTitle>
             <DialogDescription>Copy this key now — it will not be shown again once dismissed.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
+          <div className="w-full min-w-0 space-y-3">
+            <div className="text-center sm:text-left">
               <p className="text-xs text-muted-foreground">Key label</p>
               <p className="break-words text-sm font-medium text-foreground">{issuedKeyName}</p>
             </div>
-            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+            <div className="flex min-w-0 flex-col items-center gap-2 sm:flex-row">
+              <div className="flex w-full min-w-0 items-center justify-center gap-2 rounded-md border bg-muted/30 px-3 py-2 sm:flex-1 sm:justify-start">
                 <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-mono text-xs text-foreground">{apiKey}</span>
+                <span className="min-w-0 break-all text-center font-mono text-xs text-foreground sm:text-left">{apiKey}</span>
               </div>
               <Button
                 variant="ghost"
@@ -479,7 +479,7 @@ const UtilitiesIngestionPanel = () => {
               </Button>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="items-center sm:items-end">
             <Button className="w-full sm:w-auto" onClick={() => setApiKey(null)}>
               Dismiss
             </Button>
