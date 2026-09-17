@@ -80,12 +80,13 @@ Deno.serve(async (req) => {
     );
 
     if (!Array.isArray(infractions) || infractions.length === 0) {
-      console.error(`[VALIDATION_ERROR] Missing extractor_id or empty infractions array.`);
+      console.error(`[VALIDATION_ERROR] Empty or missing infractions array.`);
       return json(
-        { error: "Invalid surveillance payload. Must include extractor_id and an array of infractions." },
+        { error: "Invalid surveillance payload. Must include a non-empty array of infractions." },
         400,
       );
     }
+
     if (extractor_id && extractor_id !== authenticatedExtractorId) {
       console.error(`[VALIDATION_ERROR] extractor_id in body does not match the presented credential owner.`);
       return json({ error: "extractor_id does not match the presented credential." }, 403);
