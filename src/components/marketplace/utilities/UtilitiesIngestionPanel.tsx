@@ -31,6 +31,9 @@ interface FranchiseKey {
 const UtilitiesIngestionPanel = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { balanceData, refreshBalance } = useSynapseCredits();
+  const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
   const [unpaidBalance, setUnpaidBalance] = useState(0);
   const [eventCount, setEventCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
