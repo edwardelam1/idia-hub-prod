@@ -48,12 +48,16 @@ Deno.serve(async (req) => {
       return json({ error: "Missing x-api-key header." }, 401);
     }
     const presentedHash = await sha256Hex(presentedKey);
+    console.log(`[API_KEY_ENV_SCOPE_START] Restricting credential lookup to the lidd environment.`);
     const { data: keyRow, error: keyError } = await supabase
       .from("api_keys")
-      .select("id, user_id, status")
+      .select("id, user_id, status, environment")
       .eq("key_hash", presentedHash)
       .eq("status", "active")
+      .eq("environment", "lidd")
       .maybeSingle();
+    console.log(`[API_KEY_ENV_SCOPE_END] Lookup complete.`);
+
 
     if (keyError) {
       console.error(`[API_KEY_AUTH_QUERY_ERROR] ${keyError.message}`);
@@ -76,12 +80,13 @@ Deno.serve(async (req) => {
     );
 
     if (!Array.isArray(infractions) || infractions.length === 0) {
-      console.error(`[VALIDATION_ERROR] Missing extractor_id or empty infractions array.`);
+      console.error(`[VALIDATION_ERROR] Empty or missing infractions array.`);
       return json(
-        { error: "Invalid surveillance payload. Must include extractor_id and an array of infractions." },
+        { error: "Invalid surveillance payload. Must include a non-empty array of infractions." },
         400,
       );
     }
+
     if (extractor_id && extractor_id !== authenticatedExtractorId) {
       console.error(`[VALIDATION_ERROR] extractor_id in body does not match the presented credential owner.`);
       return json({ error: "extractor_id does not match the presented credential." }, 403);

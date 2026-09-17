@@ -41,7 +41,7 @@ const UtilitiesIngestionPanel = () => {
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
 
-  const extractorId = user?.user_id ?? "YOUR_EXTRACTOR_UUID";
+  
 
   const gatewayStatus = useMemo(() => {
     if (isLoadingKeys) return { label: "Checking…", tone: "muted" as const };
@@ -61,10 +61,17 @@ const UtilitiesIngestionPanel = () => {
     return `${base}/functions/v1/surveillance-api-intake`;
   }, []);
 
+  const gatewayKey = useMemo(
+    () =>
+      ((import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ??
+        (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ??
+        "<your_supabase_anon_key>"),
+    [],
+  );
+
   const payloadSample = useMemo(
     () =>
       `{
-  "extractor_id": "${extractorId}",
   "infractions": [
     {
       "license_plate": "ABC1234",
@@ -72,22 +79,25 @@ const UtilitiesIngestionPanel = () => {
     }
   ]
 }`,
-    [extractorId],
+    [],
   );
 
   const headersSample = useMemo(
-    () => `x-api-key: ${apiKey ?? "<your franchise key>"}\nContent-Type: application/json`,
-    [apiKey],
+    () =>
+      `Authorization: Bearer ${gatewayKey}\nx-api-key: ${apiKey ?? "<your franchise key>"}\nContent-Type: application/json`,
+    [apiKey, gatewayKey],
   );
 
   const curlSample = useMemo(
     () =>
       `curl -X POST "${ingestionEndpoint}" \\
+  -H "Authorization: Bearer ${gatewayKey}" \\
   -H "x-api-key: ${apiKey ?? "<your franchise key>"}" \\
   -H "Content-Type: application/json" \\
   -d '${payloadSample.replace(/\n\s*/g, " ")}'`,
-    [ingestionEndpoint, apiKey, payloadSample],
+    [ingestionEndpoint, apiKey, gatewayKey, payloadSample],
   );
+
 
   const fetchBalance = useCallback(async () => {
     if (!user?.user_id) return;
@@ -402,8 +412,11 @@ const UtilitiesIngestionPanel = () => {
             <h3 className="text-sm font-semibold text-foreground">3. Required Headers</h3>
             <CodeBlock value={headersSample} label="Headers" />
             <p className="text-[11px] text-muted-foreground">
-              The gateway authenticates on the franchise key alone — no user login is required.
+              The Authorization bearer carries the public gateway key so the request can route through the API
+              gateway. Your private franchise key travels in its own x-api-key header, and your identity is resolved
+              from its cryptographic hash — never send identifying values in the body.
             </p>
+
           </section>
 
           <section className="space-y-2">
