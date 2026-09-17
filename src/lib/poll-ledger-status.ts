@@ -21,9 +21,15 @@ export interface LedgerPollResult {
 /** Storage key for a purchase left unresolved when the tab was killed. */
 export const PENDING_PURCHASE_KEY = "idia.pending_purchase_key";
 
+/** Unresolved purchases older than this are abandoned, never resumed. */
+export const PENDING_PURCHASE_TTL_MS = 10 * 60 * 1000;
+
 export const rememberPendingPurchase = (idempotencyKey: string) => {
   try {
-    sessionStorage.setItem(PENDING_PURCHASE_KEY, idempotencyKey);
+    sessionStorage.setItem(
+      PENDING_PURCHASE_KEY,
+      JSON.stringify({ key: idempotencyKey, ts: Date.now() }),
+    );
     console.log(`[POLL_LEDGER_PERSIST] Stored unresolved purchase key: ${idempotencyKey}`);
   } catch (err) {
     console.warn(`[POLL_LEDGER_PERSIST_FAULT] sessionStorage unavailable: ${String(err)}`);
@@ -41,7 +47,25 @@ export const clearPendingPurchase = () => {
 
 export const readPendingPurchase = (): string | null => {
   try {
-    return sessionStorage.getItem(PENDING_PURCHASE_KEY);
+    const raw = sessionStorage.getItem(PENDING_PURCHASE_KEY);
+    if (!raw) return null;
+    // Legacy format: a bare key string with no timestamp — treat as expired.
+    if (!raw.startsWith("{")) {
+      console.warn("[POLL_LEDGER_PERSIST] Legacy pending key found without timestamp — discarding.");
+      clearPendingPurchase();
+      return null;
+    }
+    const parsed = JSON.parse(raw) as { key?: string; ts?: number };
+    if (!parsed?.key || typeof parsed.ts !== "number") {
+      clearPendingPurchase();
+      return null;
+    }
+    if (Date.now() - parsed.ts > PENDING_PURCHASE_TTL_MS) {
+      console.warn(`[POLL_LEDGER_PERSIST] Pending purchase ${parsed.key} expired — discarding.`);
+      clearPendingPurchase();
+      return null;
+    }
+    return parsed.key;
   } catch {
     return null;
   }

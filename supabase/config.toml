@@ -48,3 +48,7 @@ verify_jwt = false
 
 [functions.issue-extractor-key]
 verify_jwt = false
+
+# Field mesh nodes authenticate with x-api-key only — no Supabase JWT.
+[functions.mesh-telemetry-intake]
+verify_jwt = false

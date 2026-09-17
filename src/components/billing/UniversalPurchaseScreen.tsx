@@ -71,12 +71,14 @@ const UniversalPurchaseScreen = () => {
   }, []);
 
   // Resolve a settlement by polling the ledger — never by holding a socket open.
-  const resolveSettlement = async (idempotencyKey: string) => {
-    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey}`);
-    setStep("processing");
-    setIsProcessing(true);
+  const resolveSettlement = async (idempotencyKey: string, silent = false) => {
+    console.log(`[UniversalPurchaseScreen][resolveSettlement] BEGIN key=${idempotencyKey} silent=${silent}`);
+    if (!silent) {
+      setStep("processing");
+      setIsProcessing(true);
+    }
     try {
-      const result = await pollLedgerStatus(idempotencyKey);
+      const result = await pollLedgerStatus(idempotencyKey, silent ? 4 : 15);
       if (result.outcome === "completed") {
         clearPendingPurchase();
         toast.success(`${plan.name} plan activated — ${plan.credits.toLocaleString()} CRD credited.`);
@@ -89,12 +91,12 @@ const UniversalPurchaseScreen = () => {
         clearPendingPurchase();
         toast.error(result.reason || "The payment could not be completed. No credits were added.");
         setStep("review");
-      } else {
+      } else if (!silent) {
         toast.warning("Payment still confirming on the network. Reopen this page shortly to see the result.");
         setStep("review");
       }
     } finally {
-      setIsProcessing(false);
+      if (!silent) setIsProcessing(false);
       console.log(`[UniversalPurchaseScreen][resolveSettlement] END key=${idempotencyKey}`);
     }
   };
@@ -105,14 +107,14 @@ const UniversalPurchaseScreen = () => {
     const pending = readPendingPurchase();
     if (pending) {
       console.log(`[UniversalPurchaseScreen][Lifecycle] Resuming unresolved purchase key=${pending}`);
-      void resolveSettlement(pending);
+      void resolveSettlement(pending, true);
     }
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const key = readPendingPurchase();
       if (key) {
         console.log(`[UniversalPurchaseScreen][Lifecycle] Foregrounded — re-polling key=${key}`);
-        void resolveSettlement(key);
+        void resolveSettlement(key, true);
       }
     };
     document.addEventListener("visibilitychange", onVisible);
