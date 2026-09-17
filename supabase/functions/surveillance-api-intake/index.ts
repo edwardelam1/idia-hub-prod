@@ -48,12 +48,16 @@ Deno.serve(async (req) => {
       return json({ error: "Missing x-api-key header." }, 401);
     }
     const presentedHash = await sha256Hex(presentedKey);
+    console.log(`[API_KEY_ENV_SCOPE_START] Restricting credential lookup to the lidd environment.`);
     const { data: keyRow, error: keyError } = await supabase
       .from("api_keys")
-      .select("id, user_id, status")
+      .select("id, user_id, status, environment")
       .eq("key_hash", presentedHash)
       .eq("status", "active")
+      .eq("environment", "lidd")
       .maybeSingle();
+    console.log(`[API_KEY_ENV_SCOPE_END] Lookup complete.`);
+
 
     if (keyError) {
       console.error(`[API_KEY_AUTH_QUERY_ERROR] ${keyError.message}`);
