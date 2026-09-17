@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { recordActivity } from "@/lib/activity-history";
 
 interface FranchiseKey {
   id: string;
