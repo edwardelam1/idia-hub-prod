@@ -360,7 +360,7 @@ const UtilitiesIngestionPanel = () => {
             <p className="mt-1 text-xs text-muted-foreground">Across {eventCount} specific identity infractions</p>
           </div>
           <Button
-            onClick={() => setIsCheckoutOpen(true)}
+            onClick={() => setIsSettleOpen(true)}
             disabled={isLoading || unpaidBalance === 0}
             className="w-full gap-2 sm:w-auto"
           >
