@@ -295,7 +295,7 @@ const UniversalPurchaseScreen = () => {
           if (/INSUFFICIENT_BUYER_BALANCE/i.test(detail)) {
             setStep("review");
             setIsProcessing(false);
-            toast.error(`Not enough USDC in your IDIA wallet for $${plan.price.toFixed(2)}. Add funds and try again.`);
+            toast.error(`Not enough USDC in your Life wallet for $${plan.price.toFixed(2)}. Add funds and try again.`);
             return;
           }
           throw new Error(detail);

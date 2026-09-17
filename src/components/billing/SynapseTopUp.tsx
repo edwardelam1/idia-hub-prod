@@ -509,7 +509,7 @@ const SynapseTopUp = () => {
                 {paymentRail === "usdc" ? (
                   <p>
                     By clicking confirm, you authorize the secure transfer of{" "}
-                    <strong>${usdAmount.toFixed(2)} USDC</strong> from your IDIA wallet to the Treasury.
+                    <strong>${usdAmount.toFixed(2)} USDC</strong> from your Life wallet to the Treasury.
                   </p>
                 ) : (
                   <p>Bypassing standard gateway API handshakes. You will be sent directly to the root Wix portal.</p>

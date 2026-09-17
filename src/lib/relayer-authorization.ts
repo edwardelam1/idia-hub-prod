@@ -207,7 +207,7 @@ export async function authorizeRelayerViaLife(opts: {
   console.info(`[AUTH_RELAYER][START] owner=${owner} requiredUsd=${requiredUsd ?? "n/a"}`);
   try {
     if (!/^0x[a-fA-F0-9]{40}$/.test(owner ?? "")) {
-      return { ok: false, reason: "No IDIA wallet is linked to this account yet." };
+      return { ok: false, reason: "No Life wallet is linked to this account yet." };
     }
 
     try {

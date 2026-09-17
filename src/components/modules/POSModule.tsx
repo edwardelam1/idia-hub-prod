@@ -570,9 +570,7 @@ export const POSModule = () => {
                         <span className="truncate pr-2">
                           {item.quantity}× {item.name}
                         </span>
-                        <span className="text-muted-foreground">
-                          ${(item.price * item.quantity).toFixed(2)}
-                        </span>
+                        <span className="text-muted-foreground">${(item.price * item.quantity).toFixed(2)}</span>
                       </div>
                     ))
                   )}
@@ -594,9 +592,7 @@ export const POSModule = () => {
                 </div>
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-dashed">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Transaction Type
-                </span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Transaction Type</span>
                 <Badge variant="secondary" className="text-[10px]">
                   {customerInfo.name ? "Customer Sale" : "Walk-In Sale"}
                 </Badge>
@@ -650,7 +646,7 @@ export const POSModule = () => {
             <div className="p-8 border-2 border-dashed border-primary/30 rounded-lg">
               <Nfc className="w-16 h-16 mx-auto text-primary mb-4 animate-pulse" />
               <p className="text-lg font-medium mb-2">Tap Device to Pay</p>
-              <p className="text-sm text-muted-foreground">Place your IDIA wallet device near the reader</p>
+              <p className="text-sm text-muted-foreground">Place your Life wallet device near the reader</p>
               <div className="mt-4 text-primary font-mono">≈ {(calculateGrandTotal() * 0.85).toFixed(2)} IDIA-USD</div>
             </div>
 
