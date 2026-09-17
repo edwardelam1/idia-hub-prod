@@ -1,37 +1,23 @@
-# LIDD Intake — Align to Cryptographic Key Auth
+# Settle Utility Balance With Existing Credits
 
-Most of this directive is already live. Verified against the project right now:
+Today the "Settle Balance" button on the Utilities tab always opens the buy-credits screen, even when the balance is already covered. It should behave like a Best Friend AI chat: confirm the charge, deduct the credits, mark the events paid. Buying credits stays as the fallback when the balance is short.
 
-- The buyer profile fields (`buyer_role`, `buyer_jurisdiction`, `buyer_latency`, `buyer_weights`, the four `diagnostic_*` fields) already exist on `profiles`.
-- `lidd_extraction_events` already exists with $2.50 default cost, unpaid status, and the extractor-only / service-role access rules.
-- The intake gateway already hashes the presented key with SHA-256, looks it up in `api_keys`, and derives the extractor from the stored record.
-- The Utilities tab already shows the unpaid balance, settles through the standard checkout, and issues franchise keys.
+## Behaviour
 
-So Phase 1 needs no migration. The remaining work is tightening the gateway and correcting the integration instructions.
-
-## Gateway hardening
-
-`surveillance-api-intake`:
-
-- Restrict the key lookup to `environment = 'lidd'`, so a mesh node key can never stage utility debt.
-- Treat `extractor_id` in the body as optional and ignored; identity comes only from the key hash. A mismatched value still returns a clear rejection.
-- Keep the Wix Identity Vault call on `WIX_SECURE_API_KEY` — the credential already saved and working for this vault.
-- Keep the existing per-phase `[PHASE_START]` / `[PHASE_END]` logging and full error + stack logging in every catch; add the same bracketing to the new environment check.
-- Key-only authentication stays: no bearer token required.
-
-`issue-extractor-key` is not touched, per the boundaries.
-
-## Utilities tab corrections
-
-Today's panel keeps all of its current behaviour — key history, revoke, delete, custom label, and the one-time key popup. Only the developer instructions change:
-
-- Drop `extractor_id` from the JSON payload example; the body is just `{ "infractions": [ { "license_plate", "timestamp" } ] }`.
-- Add a short note that identity is resolved from the key's cryptographic hash, so nothing identifying goes in the body.
-- Headers stay `x-api-key` plus `Content-Type` only.
-- The ready-to-run example is regenerated from the corrected payload.
+- Button opens a small confirmation dialog showing the amount due (e.g. 2.50 CR), the current credit balance, and the balance after paying.
+- If credits cover the amount: "Pay 2.50 CR" confirms, the credits are deducted, staged events are marked paid, balance refreshes, toast confirms settlement.
+- If credits are short: the dialog states the shortfall and its action button opens the existing buy-credits screen (current behaviour), which on completion returns to the settle step rather than silently marking events paid.
+- The button stays disabled while loading or when the balance is zero.
 
 ## Technical notes
 
-- Files: `supabase/functions/surveillance-api-intake/index.ts`, `src/components/marketplace/utilities/UtilitiesIngestionPanel.tsx`.
-- No database migration required — schema verified as already matching the directive.
-- `surveillance-api-intake` is already registered with JWT verification off in `supabase/config.toml`; it will be redeployed after the change.
+- New edge function `settle-utility-balance` (synapse-controller and issue-extractor-key untouched):
+  - authenticates the caller from the session JWT;
+  - re-reads unpaid `lidd_extraction_events` for that extractor server-side and computes the true total (client amount is never trusted);
+  - reads the live balance via the `get_synapse_balance` RPC and rejects with a structured `INSUFFICIENT_CREDITS` payload (amount due, available, shortfall) when short;
+  - inserts one `synapse_credit_ledger` row: `entry_type: "USAGE"`, `transaction_type: "fee"`, `status: "settled"`, negative amount, description naming the LIDD utility settlement, `reference_id` `LIDD-xxxxxxxx`, metadata carrying event count and event IDs;
+  - marks exactly those event IDs `paid` and stores the ledger entry id in their metadata, so a retry cannot double-charge;
+  - idempotency: settles only the event IDs read in the same call, and returns already-settled when no unpaid rows remain;
+  - CORS OPTIONS intercept plus `[PHASE_START]`/`[PHASE_END]` brackets on every fetch, query and loop, with exact error + stack in each catch.
+- `UtilitiesIngestionPanel.tsx`: add the confirmation dialog, read `available_credits` from `useSynapseCredits`, call the new function, then `refreshBalance()` and `fetchBalance()`. `handleSettlementComplete`'s direct client-side `payment_status` update is removed — settlement only happens through the edge function.
+- Record the settlement in `activity_history` in line with other paid activity.
