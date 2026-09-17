@@ -549,6 +549,54 @@ const UtilitiesIngestionPanel = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isSettleOpen} onOpenChange={(open) => !isSettling && setIsSettleOpen(open)}>
+        <DialogContent className="left-4 right-4 w-auto max-w-none translate-x-0 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
+          <DialogHeader>
+            <DialogTitle>Settle Utility Balance</DialogTitle>
+            <DialogDescription>
+              Pay the outstanding extraction balance with your Synapse Credits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Amount due</span>
+              <span className="font-semibold text-foreground">{unpaidBalance.toFixed(2)} CR</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Your balance</span>
+              <span className="font-semibold text-foreground">{availableCredits.toFixed(2)} CR</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t pt-2">
+              <span className="text-muted-foreground">{canCoverBalance ? "Balance after paying" : "Short by"}</span>
+              <span className={`font-semibold ${canCoverBalance ? "text-foreground" : "text-destructive"}`}>
+                {canCoverBalance
+                  ? `${(availableCredits - unpaidBalance).toFixed(2)} CR`
+                  : `${(unpaidBalance - availableCredits).toFixed(2)} CR`}
+              </span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            {canCoverBalance ? (
+              <Button className="w-full gap-2 sm:w-auto" disabled={isSettling} onClick={() => void settleWithCredits()}>
+                <CreditCard className="h-4 w-4" />
+                {isSettling ? "Processing…" : `Pay ${unpaidBalance.toFixed(2)} CR`}
+              </Button>
+            ) : (
+              <Button
+                className="w-full gap-2 sm:w-auto"
+                onClick={() => {
+                  setIsSettleOpen(false);
+                  setIsCheckoutOpen(true);
+                }}
+              >
+                <CreditCard className="h-4 w-4" />
+                Buy Credits
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {isCheckoutOpen && (
         <SynapsePurchaseModal
           defaultOpen
