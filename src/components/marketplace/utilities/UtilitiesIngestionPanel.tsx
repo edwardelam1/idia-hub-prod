@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { recordActivity } from "@/lib/activity-history";
 
 interface FranchiseKey {
   id: string;
@@ -29,7 +31,12 @@ interface FranchiseKey {
 const UtilitiesIngestionPanel = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { balanceData, refreshBalance } = useSynapseCredits();
+  const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
   const [unpaidBalance, setUnpaidBalance] = useState(0);
+  const availableCredits = Number(balanceData?.available_credits ?? 0);
+  const canCoverBalance = availableCredits >= unpaidBalance;
   const [eventCount, setEventCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -134,27 +141,71 @@ const UtilitiesIngestionPanel = () => {
     void fetchBalance();
   }, [fetchBalance]);
 
-  const handleSettlementComplete = useCallback(async () => {
+  const settleWithCredits = useCallback(async () => {
     if (!user?.user_id) return;
-    console.log(`[LIDD_SETTLE_START] Marking staged extraction events as paid for ${user.user_id}`);
+    console.log(`[PHASE_START: LIDD_SETTLE] Settling utility balance with Synapse Credits.`);
+    setIsSettling(true);
     try {
-      const { error } = await supabase
-        .from("lidd_extraction_events")
-        .update({ payment_status: "paid" })
-        .eq("extractor_id", user.user_id)
-        .eq("payment_status", "unpaid");
+      const { data, error } = await supabase.functions.invoke("settle-utility-balance", { body: {} });
       if (error) {
-        console.error(`[LIDD_SETTLE_QUERY_ERROR] ${error.message}`);
+        console.error(`[LIDD_SETTLE_INVOKE_ERROR] ${error.message}`);
         throw error;
       }
-      console.log(`[LIDD_SETTLE_SUCCESS] Staged events settled.`);
-      await fetchBalance();
+      if (data?.error === "INSUFFICIENT_CREDITS") {
+        console.warn(`[LIDD_SETTLE_INSUFFICIENT] shortfall=${data.shortfall}`);
+        toast({
+          title: "Not enough credits",
+          description: `You need ${Number(data.shortfall ?? 0).toFixed(2)} more CR to settle this balance.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (data?.error) throw new Error(String(data.error));
+
+      const charged = Number(data?.amount_charged ?? 0);
+      console.log(`[LIDD_SETTLE_SUCCESS] charged=${charged} reference=${data?.reference_id}`);
+      toast({
+        title: "Balance settled",
+        description: `${charged.toFixed(2)} CR deducted for ${data?.events_settled ?? 0} identity matches.`,
+      });
+
+      if (data?.reference_id) {
+        void recordActivity({
+          source: "marketplace",
+          action: "LIDD_UTILITY_SETTLEMENT",
+          title: `Utility balance settled — ${charged.toFixed(2)} CR`,
+          input: { events_settled: data?.events_settled ?? 0 },
+          result: { reference_id: data.reference_id, amount_charged: charged },
+          recordsConsumed: Number(data?.events_settled ?? 0),
+          synapseCreditCost: charged,
+          synapseLedgerEntryId: data?.ledger_entry_id ?? null,
+          referenceId: data.reference_id,
+          idempotencyKey: String(data.reference_id),
+        });
+      }
+
+      setIsSettleOpen(false);
+      await Promise.all([fetchBalance(), refreshBalance()]);
     } catch (err) {
       console.error(`[LIDD_SETTLE_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({
+        title: "Settlement failed",
+        description: "The balance could not be settled. Please try again.",
+        variant: "destructive",
+      });
     } finally {
-      console.log(`[LIDD_SETTLE_END] Process terminated.`);
+      setIsSettling(false);
+      console.log(`[PHASE_END: LIDD_SETTLE] Process terminated.`);
     }
-  }, [user?.user_id, fetchBalance]);
+  }, [user?.user_id, fetchBalance, refreshBalance, toast]);
+
+  const handleSettlementComplete = useCallback(async () => {
+    console.log(`[PHASE_START: LIDD_TOPUP_COMPLETE] Credits purchased — returning to settlement step.`);
+    await refreshBalance();
+    setIsCheckoutOpen(false);
+    setIsSettleOpen(true);
+    console.log(`[PHASE_END: LIDD_TOPUP_COMPLETE] Settlement dialog reopened.`);
+  }, [refreshBalance]);
 
   const fetchKeys = useCallback(async () => {
     console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
@@ -311,7 +362,7 @@ const UtilitiesIngestionPanel = () => {
             <p className="mt-1 text-xs text-muted-foreground">Across {eventCount} specific identity infractions</p>
           </div>
           <Button
-            onClick={() => setIsCheckoutOpen(true)}
+            onClick={() => setIsSettleOpen(true)}
             disabled={isLoading || unpaidBalance === 0}
             className="w-full gap-2 sm:w-auto"
           >
@@ -496,6 +547,54 @@ const UtilitiesIngestionPanel = () => {
             <Button className="w-full sm:w-auto" onClick={() => setApiKey(null)}>
               Dismiss
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSettleOpen} onOpenChange={(open) => !isSettling && setIsSettleOpen(open)}>
+        <DialogContent className="left-4 right-4 w-auto max-w-none translate-x-0 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
+          <DialogHeader>
+            <DialogTitle>Settle Utility Balance</DialogTitle>
+            <DialogDescription>
+              Pay the outstanding extraction balance with your Synapse Credits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Amount due</span>
+              <span className="font-semibold text-foreground">{unpaidBalance.toFixed(2)} CR</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Your balance</span>
+              <span className="font-semibold text-foreground">{availableCredits.toFixed(2)} CR</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t pt-2">
+              <span className="text-muted-foreground">{canCoverBalance ? "Balance after paying" : "Short by"}</span>
+              <span className={`font-semibold ${canCoverBalance ? "text-foreground" : "text-destructive"}`}>
+                {canCoverBalance
+                  ? `${(availableCredits - unpaidBalance).toFixed(2)} CR`
+                  : `${(unpaidBalance - availableCredits).toFixed(2)} CR`}
+              </span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            {canCoverBalance ? (
+              <Button className="w-full gap-2 sm:w-auto" disabled={isSettling} onClick={() => void settleWithCredits()}>
+                <CreditCard className="h-4 w-4" />
+                {isSettling ? "Processing…" : `Pay ${unpaidBalance.toFixed(2)} CR`}
+              </Button>
+            ) : (
+              <Button
+                className="w-full gap-2 sm:w-auto"
+                onClick={() => {
+                  setIsSettleOpen(false);
+                  setIsCheckoutOpen(true);
+                }}
+              >
+                <CreditCard className="h-4 w-4" />
+                Buy Credits
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
