@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    // --- ACA MANDATE GENERATION (MOVED TO FRONT) ---
+    // --- ACA MANDATE GENERATION ---
     console.log(`[ACA_GENERATION_START] Minting SHA-256 hash for vendor API key.`);
     const rawAcaString = `${userId}|VULTURE_EXTRACTOR_CDLA|${new Date().toISOString()}`;
     const acaHashKey = await sha256Hex(rawAcaString);
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
 
     console.log(`[ACA_INSERT_START] Registering CDLA consent record for vendor ${userId}.`);
     const { error: acaError } = await admin.from("user_aca_records").insert({
-      platform_guid: userId,
+      platform_guid: userId, // Exactly matches the CSV schema
       aca_hash_key: acaHashKey,
       consent_type: "CDLA",
       consent_scope: "ALPR_DATA_INGESTION",
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
       throw new Error(`ACA Mandate generation failed: ${acaError.message}`);
     }
     console.log(`[ACA_INSERT_END] Vendor ACA record successfully committed.`);
-    // ----------------------------------------------
+    // ------------------------------
 
     // --- API KEY MINTING ---
     console.log(`[KEY_CREATE_START] Minting franchise key for ${userId}`);
