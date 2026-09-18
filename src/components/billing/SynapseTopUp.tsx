@@ -33,7 +33,6 @@ import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { Wallet, AlertTriangle } from "lucide-react";
 
 const IDIA_SYNAPSE_WALLET = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
-const WIX_DOMAIN = "https://www.thebigidia.com";
 const BASE_RATE = 0.75;
 
 interface PricingTier {
@@ -60,7 +59,6 @@ const SynapseTopUp = () => {
   const [error, setError] = useState<string | null>(null);
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
-  const [paymentRail, setPaymentRail] = useState<"usdc" | "wix">("usdc");
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
   const [isAuthorizingRelayer, setIsAuthorizingRelayer] = useState(false);
@@ -174,9 +172,7 @@ const SynapseTopUp = () => {
   }, []);
 
   const handlePurchase = async () => {
-    console.log(
-      `[SynapseTopUp][handlePurchase] [START] rail=${paymentRail} credits=${displayCredits} usd=${usdAmount}`,
-    );
+    console.log(`[SynapseTopUp][handlePurchase] [START] credits=${displayCredits} usd=${usdAmount}`);
     if (!canProceed) {
       console.warn("[SynapseTopUp][handlePurchase] [BLOCKED] canProceed=false");
       return;
@@ -194,64 +190,7 @@ const SynapseTopUp = () => {
       if (!session) throw new Error("Authentication failed. Please re-login.");
 
       // ==========================================
-      // RAIL 1: WIX DIRECT PORT HANDSHAKE
-      // ==========================================
-      if (paymentRail === "wix") {
-        console.log("[SynapseTopUp][handlePurchase] [WIX_DIRECT] [START] minting paymentId");
-        const idempotencyKey = crypto.randomUUID();
-        console.log(
-          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [REQUEST] POST ${WIX_DOMAIN}/_functions/checkout idem=${idempotencyKey}`,
-        );
-
-        let wixResponse: Response;
-        try {
-          wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              amount: Number(usdAmount.toFixed(2)),
-              credits: Math.floor(displayCredits),
-              userId: session.user.id,
-              planId: "alacarte",
-              type: "alacarte",
-              idempotency_key: idempotencyKey,
-            }),
-          });
-        } catch (netErr: any) {
-          console.error(`🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [NETWORK_ERROR] ${netErr?.message}`);
-          throw new Error(`Wix checkout network error: ${netErr?.message}`);
-        }
-        console.log(
-          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [RESPONSE] status=${wixResponse.status} ok=${wixResponse.ok}`,
-        );
-
-        if (!wixResponse.ok) {
-          console.error(`🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
-          throw new Error(`Wix checkout failed: ${wixResponse.status}`);
-        }
-
-        console.log("[SynapseTopUp][handlePurchase] [WIX_DIRECT] [PARSE] reading JSON body");
-        const wixData = await wixResponse.json();
-        console.log(
-          `[SynapseTopUp][handlePurchase] [WIX_DIRECT] [PARSED] paymentId=${wixData?.paymentId ?? "<missing>"}`,
-        );
-
-        if (!wixData?.paymentId) {
-          console.error("🚨 [SynapseTopUp][handlePurchase] [WIX_DIRECT] [FAILED] Missing paymentId");
-          throw new Error("Failed to get payment ID from Wix");
-        }
-
-        const returnUrl = encodeURIComponent(
-          `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
-        );
-        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}`;
-        console.log(`[SynapseTopUp][handlePurchase] [WIX_DIRECT] [REDIRECT] ${target}`);
-        window.location.href = target;
-        return;
-      }
-
-      // ==========================================
-      // RAIL 2: INTERNAL USDC CUSTODIAL FLOW
+      // INTERNAL USDC CUSTODIAL FLOW
       // ==========================================
       console.log(
         `[SynapseTopUp][handlePurchase] [USDC_FLOW] [LIQUIDITY] required=$${usdAmount.toFixed(2)} available=$${availableUSDC.toFixed(2)}`,
@@ -426,7 +365,7 @@ const SynapseTopUp = () => {
             <div className="flex flex-col items-center py-12 gap-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="font-semibold text-center uppercase tracking-widest text-xs">
-                {paymentRail === "wix" ? "Redirecting to Wix Gateway..." : "Executing Internal Swap..."}
+                Executing Internal Swap...
               </p>
             </div>
           ) : step === "success" ? (
@@ -482,7 +421,7 @@ const SynapseTopUp = () => {
                     Settlement Rail
                   </p>
                   <p className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <CircleDollarSign className="h-4 w-4 text-primary" /> Verified dual-rail port
+                    <CircleDollarSign className="h-4 w-4 text-primary" /> On-chain USDC settlement
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-[10px]">
@@ -490,30 +429,11 @@ const SynapseTopUp = () => {
                 </Badge>
               </div>
 
-              <div className="flex rounded-lg border border-border overflow-hidden mb-4">
-                <button
-                  onClick={() => setPaymentRail("usdc")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "usdc" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
-                >
-                  <CircleDollarSign className="h-4 w-4" /> Internal USDC
-                </button>
-                <button
-                  onClick={() => setPaymentRail("wix")}
-                  className={`flex-1 flex items-center justify-center gap-2 text-xs py-3 ${paymentRail === "wix" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}
-                >
-                  <CreditCard className="h-4 w-4" /> Credit/Debit
-                </button>
-              </div>
-
               <div className="bg-muted/30 border border-border rounded-xl p-3 text-center text-[11px] text-muted-foreground leading-relaxed mb-4">
-                {paymentRail === "usdc" ? (
-                  <p>
-                    By clicking confirm, you authorize the secure transfer of{" "}
-                    <strong>${usdAmount.toFixed(2)} USDC</strong> from your Life wallet to the Treasury.
-                  </p>
-                ) : (
-                  <p>Bypassing standard gateway API handshakes. You will be sent directly to the root Wix portal.</p>
-                )}
+                <p>
+                  By clicking confirm, you authorize the secure transfer of{" "}
+                  <strong>${usdAmount.toFixed(2)} USDC</strong> from your Life wallet to the Treasury.
+                </p>
               </div>
 
               {error && (
@@ -581,13 +501,7 @@ const SynapseTopUp = () => {
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
                 <Button className="flex-1 gap-2" onClick={handlePurchase}>
-                  {paymentRail === "usdc" ? (
-                    <>
-                      <CircleDollarSign className="h-4 w-4" /> Confirm & Spend USDC
-                    </>
-                  ) : (
-                    <>Proceed to Wix</>
-                  )}
+                  <CircleDollarSign className="h-4 w-4" /> Confirm &amp; Spend USDC
                 </Button>
               </div>
             </>
