@@ -10,7 +10,6 @@ import {
   Loader2,
   CreditCard,
   Wallet,
-  Wallet,
   CircleDollarSign,
   AlertTriangle,
 } from "lucide-react";
