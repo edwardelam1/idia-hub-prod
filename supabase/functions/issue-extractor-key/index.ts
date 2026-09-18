@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false });
       if (error) {
         console.error(`[KEY_LIST_ERROR] ${error.message}`);
-        throw error;
+        throw new Error(error.message);
       }
       console.log(`[KEY_LIST_END] ${data?.length ?? 0} keys returned.`);
       return json({ keys: data ?? [] });
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
         .eq("environment", environment);
       if (error) {
         console.error(`[KEY_REVOKE_ERROR] ${error.message}`);
-        throw error;
+        throw new Error(error.message);
       }
       console.log(`[KEY_REVOKE_END] Key revoked.`);
       return json({ ok: true });
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
         .eq("environment", environment);
       if (error) {
         console.error(`[KEY_DELETE_ERROR] ${error.message}`);
-        throw error;
+        throw new Error(error.message);
       }
       console.log(`[KEY_DELETE_END] Key permanently deleted.`);
       return json({ ok: true });
@@ -138,8 +138,8 @@ Deno.serve(async (req) => {
       .single();
 
     if (insertError) {
-      console.error(`[KEY_CREATE_ERROR] ${insertError.message}`);
-      throw insertError;
+      console.error(`[KEY_CREATE_ERROR] Database insertion failed: ${JSON.stringify(insertError)}`);
+      throw new Error(`Key creation failed: ${insertError.message}`);
     }
     console.log(`[KEY_CREATE_END] Key minted (prefix ${keyPrefix}). Raw value returned once.`);
 
@@ -151,24 +151,33 @@ Deno.serve(async (req) => {
 
     console.log(`[ACA_INSERT_START] Registering CDLA consent record for vendor ${userId}.`);
     const { error: acaError } = await admin.from("user_aca_records").insert({
+      user_id: userId,
       platform_guid: userId,
       aca_hash_key: acaHashKey,
-      consent_type: "CDLA_VULTURE_EXTRACTOR",
+      consent_type: "CDLA",
       consent_scope: "ALPR_DATA_INGESTION",
       source_id: "vulture_gateway",
     });
 
     if (acaError) {
-      console.error(`[ACA_INSERT_FAULT] Database insertion failed: ${acaError.message} \n Stack: ${acaError.stack}`);
-      throw acaError;
+      console.error(`[ACA_INSERT_FAULT] Database insertion failed: ${JSON.stringify(acaError)}`);
+
+      console.log(`[ACA_ROLLBACK_START] Rolling back orphaned API key ${inserted.id} due to ACA failure.`);
+      await admin.from("api_keys").delete().eq("id", inserted.id);
+      console.log(`[ACA_ROLLBACK_END] Orphaned API key successfully removed.`);
+
+      // Throw standard Error so Deno stack trace functions correctly
+      throw new Error(`ACA Mandate generation failed: ${acaError.message}`);
     }
     console.log(`[ACA_INSERT_END] Vendor ACA record successfully committed.`);
     // ------------------------------
 
     return json({ key: rawKey, record: inserted });
   } catch (err) {
-    console.error(`[ISSUE_EXTRACTOR_KEY_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+    console.error(
+      `[ISSUE_EXTRACTOR_KEY_FAULT] Exception caught: ${err instanceof Error ? err.stack : JSON.stringify(err)}`,
+    );
     console.log(`[ISSUE_EXTRACTOR_KEY_END_WITH_ERROR] Process terminated abruptly.`);
-    return json({ error: "Key issuance failed." }, 500);
+    return json({ error: err instanceof Error ? err.message : "Key issuance failed." }, 500);
   }
 });
