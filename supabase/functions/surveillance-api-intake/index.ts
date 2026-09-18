@@ -58,7 +58,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     console.log(`[API_KEY_ENV_SCOPE_END] Lookup complete.`);
 
-
     if (keyError) {
       console.error(`[API_KEY_AUTH_QUERY_ERROR] ${keyError.message}`);
       console.log(`[API_KEY_AUTH_END] Rejected on query fault.`);
@@ -81,10 +80,7 @@ Deno.serve(async (req) => {
 
     if (!Array.isArray(infractions) || infractions.length === 0) {
       console.error(`[VALIDATION_ERROR] Empty or missing infractions array.`);
-      return json(
-        { error: "Invalid surveillance payload. Must include a non-empty array of infractions." },
-        400,
-      );
+      return json({ error: "Invalid surveillance payload. Must include a non-empty array of infractions." }, 400);
     }
 
     if (extractor_id && extractor_id !== authenticatedExtractorId) {
@@ -92,11 +88,13 @@ Deno.serve(async (req) => {
       return json({ error: "extractor_id does not match the presented credential." }, 403);
     }
 
-    const synapseCreditUnitCost = 2.50;
+    const synapseCreditUnitCost = 2.5;
     const stagedEvents: Record<string, unknown>[] = [];
     let matchCount = 0;
 
-    console.log(`[BATCH_PROCESSING_START] Processing ${infractions.length} captured plates against Wix Identity Vault.`);
+    console.log(
+      `[BATCH_PROCESSING_START] Processing ${infractions.length} captured plates against Wix Identity Vault.`,
+    );
 
     for (const infraction of infractions) {
       const { license_plate, timestamp } = infraction ?? {};
@@ -112,7 +110,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${WIX_API_KEY}`,
+            Authorization: `Bearer ${WIX_API_KEY}`,
           },
           body: JSON.stringify({ license_plate }),
         });
@@ -128,13 +126,16 @@ Deno.serve(async (req) => {
         if (wixData.isMatch && wixData.guid) {
           matchCount++;
           const targetGuid = wixData.guid;
-          console.log(`[MATCH_FOUND] Plate matched. PII dropped. Staging $2.50 debt for opaque platform_guid: ${targetGuid}`);
+          console.log(
+            `[MATCH_FOUND] Plate matched. PII dropped. Staging $2.50 debt for opaque platform_guid: ${targetGuid}`,
+          );
 
           stagedEvents.push({
             extractor_id: authenticatedExtractorId,
             citizen_guid: targetGuid,
             synapse_credit_cost: synapseCreditUnitCost,
-            payment_status: "unpaid",
+            payment_status: "pending_consent",
+            aca_hash_key: null,
             extraction_timestamp: timestamp || new Date().toISOString(),
           });
         }
@@ -144,17 +145,21 @@ Deno.serve(async (req) => {
         );
       }
     }
-    console.log(`[BATCH_PROCESSING_END] Processed ${infractions.length} records. Total valid GUID matches: ${matchCount}`);
+    console.log(
+      `[BATCH_PROCESSING_END] Processed ${infractions.length} records. Total valid GUID matches: ${matchCount}`,
+    );
 
     if (stagedEvents.length > 0) {
-      console.log(`[SUPABASE_INSERT_START] Writing ${stagedEvents.length} individual extraction events to lidd_extraction_events table.`);
+      console.log(
+        `[SUPABASE_INSERT_START] Writing ${stagedEvents.length} individual extraction events to lidd_extraction_events table.`,
+      );
       const { error: insertError } = await supabase.from("lidd_extraction_events").insert(stagedEvents);
 
       if (insertError) {
         console.error(`[SUPABASE_INSERT_ERROR] Database insertion failed. Details: ${insertError.message}`);
         throw insertError;
       }
-      console.log(`[SUPABASE_INSERT_END] Successfully staged ${stagedEvents.length} unpaid balances.`);
+      console.log(`[SUPABASE_INSERT_END] Successfully staged ${stagedEvents.length} pending_consent balances.`);
     } else {
       console.log(`[SUPABASE_INSERT_SKIP] No matches found in this batch. No debt staged.`);
     }
