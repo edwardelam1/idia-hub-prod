@@ -29,7 +29,10 @@ async function sha256Hex(value: string): Promise<string> {
 function mintKey(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
-  const body = [...bytes].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 40);
+  const body = [...bytes]
+    .map((b) => b.toString(36).padStart(2, "0"))
+    .join("")
+    .slice(0, 40);
   return `ext_live_${body}`;
 }
 
@@ -120,6 +123,7 @@ Deno.serve(async (req) => {
     const rawKey = mintKey();
     const keyHash = await sha256Hex(rawKey);
     const keyPrefix = rawKey.slice(0, 8);
+
     const { data: inserted, error: insertError } = await admin
       .from("api_keys")
       .insert({
@@ -132,16 +136,38 @@ Deno.serve(async (req) => {
       })
       .select("id, key_prefix, created_at")
       .single();
+
     if (insertError) {
       console.error(`[KEY_CREATE_ERROR] ${insertError.message}`);
       throw insertError;
     }
     console.log(`[KEY_CREATE_END] Key minted (prefix ${keyPrefix}). Raw value returned once.`);
+
+    // --- ACA MANDATE GENERATION ---
+    console.log(`[ACA_GENERATION_START] Minting SHA-256 hash for vendor API key.`);
+    const rawAcaString = `${userId}|VULTURE_EXTRACTOR_CDLA|${new Date().toISOString()}`;
+    const acaHashKey = await sha256Hex(rawAcaString);
+    console.log(`[ACA_GENERATION_END] Hash generated: ${acaHashKey}`);
+
+    console.log(`[ACA_INSERT_START] Registering CDLA consent record for vendor ${userId}.`);
+    const { error: acaError } = await admin.from("user_aca_records").insert({
+      platform_guid: userId,
+      aca_hash_key: acaHashKey,
+      consent_type: "CDLA_VULTURE_EXTRACTOR",
+      consent_scope: "ALPR_DATA_INGESTION",
+      source_id: "vulture_gateway",
+    });
+
+    if (acaError) {
+      console.error(`[ACA_INSERT_FAULT] Database insertion failed: ${acaError.message} \n Stack: ${acaError.stack}`);
+      throw acaError;
+    }
+    console.log(`[ACA_INSERT_END] Vendor ACA record successfully committed.`);
+    // ------------------------------
+
     return json({ key: rawKey, record: inserted });
   } catch (err) {
-    console.error(
-      `[ISSUE_EXTRACTOR_KEY_FAULT] ${err instanceof Error ? err.stack : String(err)}`,
-    );
+    console.error(`[ISSUE_EXTRACTOR_KEY_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
     console.log(`[ISSUE_EXTRACTOR_KEY_END_WITH_ERROR] Process terminated abruptly.`);
     return json({ error: "Key issuance failed." }, 500);
   }
