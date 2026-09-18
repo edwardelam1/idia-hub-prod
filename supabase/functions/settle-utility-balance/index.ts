@@ -17,11 +17,21 @@ const round4 = (v: number) => Math.round(v * 10000) / 10000;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  console.log("[PHASE_START: SettleUtility.Request] Utility balance settlement invoked.");
+  console.log(
+    "[PHASE_START: SettleUtility.Request] Utility balance settlement invoked via Synapse Controller integration.",
+  );
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     if (!supabaseUrl || !serviceRoleKey) throw new Error("Server configuration error: missing Supabase credentials.");
+
+    // Parse the incoming body safely to pass forward client identifiers
+    let reqBody: any = {};
+    try {
+      reqBody = await req.json();
+    } catch {
+      // Fallback for empty POST requests
+    }
 
     console.log("[PHASE_START: SettleUtility.Auth] Resolving caller identity from session token.");
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -30,6 +40,7 @@ Deno.serve(async (req) => {
       console.warn("[PHASE_END: SettleUtility.Auth] Missing bearer token.");
       return json({ error: "Authentication required", failed_at: "AUTH" }, 401);
     }
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
     const { data: userData, error: userError } = await adminClient.auth.getUser(token);
     if (userError || !userData?.user?.id) {
@@ -42,18 +53,25 @@ Deno.serve(async (req) => {
     console.log("[PHASE_START: SettleUtility.LoadDebt] Reading unpaid extraction events.");
     const { data: events, error: eventsError } = await adminClient
       .from("lidd_extraction_events")
-      .select("id, synapse_credit_cost")
+      // Selecting aca_hash_key to seamlessly mirror Best Friend AI's fallback mapping
+      .select("id, synapse_credit_cost, aca_hash_key")
       .eq("extractor_id", userId)
       .eq("payment_status", "unpaid");
+
     if (eventsError) {
       console.error(`[PHASE_END: SettleUtility.LoadDebt] Query failed: ${eventsError.message}`);
       throw eventsError;
     }
+
     const rows = events ?? [];
     const eventIds: string[] = [];
+    const consumedReceipt: string[] = [];
     let amountDue = 0;
-    for (const row of rows as Array<{ id: string; synapse_credit_cost: number | string }>) {
+
+    for (const row of rows as Array<{ id: string; synapse_credit_cost: number | string; aca_hash_key?: string }>) {
       eventIds.push(row.id);
+      // Mirrors Best Friend AI exactly: Extract the hash if available, fallback to the row ID
+      consumedReceipt.push(row.aca_hash_key || row.id);
       amountDue += Number(row.synapse_credit_cost);
     }
     amountDue = round4(amountDue);
@@ -64,66 +82,60 @@ Deno.serve(async (req) => {
       return json({ status: "already_settled", amount_due: 0, events_settled: 0 });
     }
 
-    console.log("[PHASE_START: SettleUtility.Balance] Reading live Synapse balance.");
-    const { data: balance, error: balanceError } = await adminClient.rpc("get_synapse_balance", { uid: userId });
-    if (balanceError) {
-      console.error(`[PHASE_END: SettleUtility.Balance] RPC failed: ${balanceError.message}`);
-      throw balanceError;
-    }
-    const available = round4(Number(balance ?? 0));
-    console.log(`[PHASE_END: SettleUtility.Balance] available=${available}`);
+    console.log(
+      `[PHASE_START: SettleUtility.SynapseController] Forwarding receipt array to native Synapse Controller.`,
+    );
+    const synapseUrl = `${supabaseUrl}/functions/v1/synapse-controller`;
 
-    if (available < amountDue) {
-      const shortfall = round4(amountDue - available);
-      console.warn(`[PHASE_END: SettleUtility.Request] Insufficient credits shortfall=${shortfall}`);
-      return json(
-        {
-          error: "INSUFFICIENT_CREDITS",
-          failed_at: "BALANCE",
-          amount_due: amountDue,
-          available_credits: available,
-          shortfall,
-        },
-        402,
-      );
-    }
-
-    const referenceId = `LIDD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-
-    console.log(`[PHASE_START: SettleUtility.Ledger] Writing usage debit reference=${referenceId}`);
-    const { data: ledgerRow, error: ledgerError } = await adminClient
-      .from("synapse_credit_ledger")
-      .insert({
+    const synapseRes = await fetch(synapseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+      },
+      body: JSON.stringify({
         user_id: userId,
-        amount: -amountDue,
-        entry_type: "USAGE",
-        transaction_type: "fee",
-        status: "settled",
-        description: `LIDD Utility Settlement | ${eventIds.length} identity matches [${amountDue} CR]`,
-        reference_id: referenceId,
-        metadata: {
-          settlement_kind: "lidd_utility",
-          event_count: eventIds.length,
-          event_ids: eventIds,
-        },
-      })
-      .select("id")
-      .single();
-    if (ledgerError) {
-      console.error(`[PHASE_END: SettleUtility.Ledger] Ledger rejection: ${ledgerError.message}`);
-      throw ledgerError;
+        client_id: reqBody.client_id || "IDIA_HUB_APP",
+        aca_record_ids: consumedReceipt,
+        intent_type: "VULTURE_ALPR_EXTRACTION",
+        location_string: reqBody.location_string || undefined,
+        // Match Best Friend AI telemetry shape
+        granularity: 1.0,
+        relevance: 1.0,
+        timeliness: 1.0,
+        completeness: 1.0,
+        origin_fidelity: 1.0,
+      }),
+    });
+
+    if (!synapseRes.ok) {
+      const errText = await synapseRes.text();
+      console.error(
+        `[CRITICAL FAILURE: SettleUtility.SynapseController] Synapse Controller rejected receipt. HTTP ${synapseRes.status}: ${errText}`,
+      );
+      throw new Error(`Synapse Controller HTTP ${synapseRes.status}: ${errText}`);
     }
-    console.log(`[PHASE_END: SettleUtility.Ledger] Ledger entry=${ledgerRow.id}`);
+
+    const synapseReceipt = await synapseRes.json();
+    console.log(
+      `[PHASE_END: SettleUtility.SynapseController] Synapse Controller acknowledged receipt successfully. Ref: ${synapseReceipt.reference_id}`,
+    );
 
     console.log("[PHASE_START: SettleUtility.MarkPaid] Marking the exact settled event ids as paid.");
+    // Because the Synapse Controller handles the balance checks and ledger math natively,
+    // we only mark the internal tracking table as paid upon a successful HTTP 200.
     const { error: markError } = await adminClient
       .from("lidd_extraction_events")
       .update({ payment_status: "paid" })
       .in("id", eventIds)
       .eq("extractor_id", userId)
       .eq("payment_status", "unpaid");
+
     if (markError) {
-      console.error(`[PHASE_END: SettleUtility.MarkPaid] Update failed: ${markError.message}`);
+      console.error(
+        `[PHASE_END: SettleUtility.MarkPaid] Update failed: ${markError.message}. Note: Synapse ledger successfully settled.`,
+      );
       throw markError;
     }
     console.log(`[PHASE_END: SettleUtility.MarkPaid] ${eventIds.length} events marked paid.`);
@@ -131,11 +143,9 @@ Deno.serve(async (req) => {
     console.log("[PHASE_END: SettleUtility.Request] Settlement complete.");
     return json({
       status: "settled",
-      amount_charged: amountDue,
+      amount_charged: amountDue, // Derived from local DB read
       events_settled: eventIds.length,
-      reference_id: referenceId,
-      ledger_entry_id: ledgerRow.id,
-      remaining_credits: round4(available - amountDue),
+      receipt: synapseReceipt, // Contains reference_id, consumed_records, and the Synapse execution state
     });
   } catch (error) {
     console.error(
