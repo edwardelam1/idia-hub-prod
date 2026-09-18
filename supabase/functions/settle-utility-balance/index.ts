@@ -53,7 +53,6 @@ Deno.serve(async (req) => {
     console.log("[PHASE_START: SettleUtility.LoadDebt] Reading unpaid extraction events.");
     const { data: events, error: eventsError } = await adminClient
       .from("lidd_extraction_events")
-      // Selecting aca_hash_key to seamlessly mirror Best Friend AI's fallback mapping
       .select("id, synapse_credit_cost, aca_hash_key")
       .eq("extractor_id", userId)
       .eq("payment_status", "unpaid");
@@ -66,19 +65,31 @@ Deno.serve(async (req) => {
     const rows = events ?? [];
     const eventIds: string[] = [];
     const consumedReceipt: string[] = [];
+    const legacyEventIds: string[] = [];
     let amountDue = 0;
 
     for (const row of rows as Array<{ id: string; synapse_credit_cost: number | string; aca_hash_key?: string }>) {
+      // Self-Healing Logic: Identify legacy test data that lacks a legal mandate
+      if (!row.aca_hash_key) {
+        legacyEventIds.push(row.id);
+        continue;
+      }
       eventIds.push(row.id);
-      // Mirrors Best Friend AI exactly: Extract the hash if available, fallback to the row ID
-      consumedReceipt.push(row.aca_hash_key || row.id);
+      consumedReceipt.push(row.aca_hash_key);
       amountDue += Number(row.synapse_credit_cost);
     }
+
+    // Purge the invalid rows so they stop jamming the UI's charge button
+    if (legacyEventIds.length > 0) {
+      console.warn(`[PHASE_WARN: SettleUtility] Dropping ${legacyEventIds.length} legacy events missing ACA hashes.`);
+      await adminClient.from("lidd_extraction_events").delete().in("id", legacyEventIds);
+    }
+
     amountDue = round4(amountDue);
-    console.log(`[PHASE_END: SettleUtility.LoadDebt] events=${eventIds.length} amount_due=${amountDue}`);
+    console.log(`[PHASE_END: SettleUtility.LoadDebt] valid_events=${eventIds.length} amount_due=${amountDue}`);
 
     if (eventIds.length === 0 || amountDue <= 0) {
-      console.log("[PHASE_END: SettleUtility.Request] Nothing outstanding — already settled.");
+      console.log("[PHASE_END: SettleUtility.Request] No valid outstanding events to settle.");
       return json({ status: "already_settled", amount_due: 0, events_settled: 0 });
     }
 
@@ -100,7 +111,6 @@ Deno.serve(async (req) => {
         aca_record_ids: consumedReceipt,
         intent_type: "VULTURE_ALPR_EXTRACTION",
         location_string: reqBody.location_string || undefined,
-        // Match Best Friend AI telemetry shape
         granularity: 1.0,
         relevance: 1.0,
         timeliness: 1.0,
@@ -123,8 +133,6 @@ Deno.serve(async (req) => {
     );
 
     console.log("[PHASE_START: SettleUtility.MarkPaid] Marking the exact settled event ids as paid.");
-    // Because the Synapse Controller handles the balance checks and ledger math natively,
-    // we only mark the internal tracking table as paid upon a successful HTTP 200.
     const { error: markError } = await adminClient
       .from("lidd_extraction_events")
       .update({ payment_status: "paid" })
@@ -143,9 +151,9 @@ Deno.serve(async (req) => {
     console.log("[PHASE_END: SettleUtility.Request] Settlement complete.");
     return json({
       status: "settled",
-      amount_charged: amountDue, // Derived from local DB read
+      amount_charged: amountDue,
       events_settled: eventIds.length,
-      receipt: synapseReceipt, // Contains reference_id, consumed_records, and the Synapse execution state
+      receipt: synapseReceipt,
     });
   } catch (error) {
     console.error(
