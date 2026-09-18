@@ -112,7 +112,6 @@ const SynapsePurchaseModal = ({
       setStep("select");
       setPurchaseMode("tier");
       setAlacarteAmount("");
-      setPaymentRail("usdc");
     }
   };
 
@@ -555,7 +554,6 @@ const SynapsePurchaseModal = ({
                               return;
                             }
                             setNeedsApproval(false);
-                            setPaymentRail("usdc");
                             await handlePurchase();
                           } catch (err: any) {
                             console.error("[AuthorizeRelayer] threw:", err);
@@ -582,14 +580,7 @@ const SynapsePurchaseModal = ({
                     <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
                       <ArrowLeft className="w-4 h-4" /> Back
                     </Button>
-                    <Button
-                      className="flex-1 gap-2"
-                      size="lg"
-                      onClick={() => {
-                        setPaymentRail("usdc");
-                        handlePurchase();
-                      }}
-                    >
+                    <Button className="flex-1 gap-2" size="lg" onClick={() => handlePurchase()}>
                       <CircleDollarSign className="h-4 w-4" /> Pay from Wallet
                     </Button>
                   </div>
