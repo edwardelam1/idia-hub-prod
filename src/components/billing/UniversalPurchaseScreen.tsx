@@ -9,7 +9,7 @@ import {
   CheckCircle2,
   Loader2,
   CreditCard,
-  ShoppingCart,
+  Wallet,
   Wallet,
   CircleDollarSign,
   AlertTriangle,
@@ -88,7 +88,6 @@ const UniversalPurchaseScreen = () => {
         queryClient.invalidateQueries({ queryKey: ["activity-ledger"] });
         queryClient.invalidateQueries({ queryKey: ["synapse-credits"] });
         setStep("success");
-        setVerifyState("verified");
       } else if (result.outcome === "failed") {
         clearPendingPurchase();
         toast.error(result.reason || "The payment could not be completed. No credits were added.");
