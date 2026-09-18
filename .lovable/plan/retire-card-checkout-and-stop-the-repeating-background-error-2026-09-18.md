@@ -12,7 +12,7 @@ After this, purchases are recorded exactly like today's USDC top-ups (deposit en
 
 ## 2. Turn off the failing five-minute job
 
-A scheduled job runs every five minutes and asks the ledger for rows of a payout type spelled in capitals, which the database does not accept — hence the repeating `invalid input value for enum idia_transaction_type: "DATA_SALE_PAYOUT"` entries. Its code is not in this project, so it cannot be corrected here.
+A scheduled job runs every five minutes and asks the ledger for rows of a payout type spelled in capitals, which the database does not accept — hence the repeating `invalid input value for enum idia_transaction_type: "DATA_SALE_PAYOUT"` entries. Its code is not in this project, so it cannot be corrected here. the data_sale_payout has been corrected, 
 
 - Unschedule the five-minute recovery job so the errors stop.
 - Confirm no further occurrences appear in the database logs after the next few minutes. If any remain, unschedule the other five-minute job on the same cadence and re-check.
