@@ -88,7 +88,6 @@ const SynapsePurchaseModal = ({
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [purchaseMode, setPurchaseMode] = useState<"tier" | "alacarte">("tier");
   const [alacarteAmount, setAlacarteAmount] = useState("");
-  const [paymentRail, setPaymentRail] = useState<"wix" | "usdc">("usdc");
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
   const [isAuthorizingRelayer, setIsAuthorizingRelayer] = useState(false);
@@ -113,7 +112,6 @@ const SynapsePurchaseModal = ({
       setStep("select");
       setPurchaseMode("tier");
       setAlacarteAmount("");
-      setPaymentRail("usdc");
     }
   };
 
@@ -247,7 +245,7 @@ const SynapsePurchaseModal = ({
   }, []);
 
   const handlePurchase = async () => {
-    console.log(`[SynapsePurchaseModal][handlePurchase] [START] Initiating settlement via ${paymentRail}.`);
+    console.log("[SynapsePurchaseModal][handlePurchase] [START] Initiating on-chain USDC settlement.");
     if (!canProceed) return;
 
     setStep("processing");
@@ -264,51 +262,7 @@ const SynapsePurchaseModal = ({
       }
 
       // ==========================================
-      // RAIL 1: WIX DIRECT PORT HANDSHAKE (CORS BYPASS)
-      // ==========================================
-      if (paymentRail === "wix") {
-        console.log("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [START] Requesting Wix paymentId.");
-
-        const WIX_DOMAIN = "https://www.thebigidia.com";
-        const idempotencyKey = crypto.randomUUID();
-
-        const wixResponse = await fetch(`${WIX_DOMAIN}/_functions/checkout`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: Number(usdAmount.toFixed(2)),
-            credits: Math.floor(displayCredits),
-            userId: session.user.id,
-            planId: "alacarte",
-            type: "alacarte",
-            idempotency_key: idempotencyKey,
-          }),
-        });
-
-        if (!wixResponse.ok) {
-          console.error(`[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] HTTP ${wixResponse.status}`);
-          throw new Error(`Wix checkout failed: ${wixResponse.status}`);
-        }
-
-        const wixData = await wixResponse.json();
-        if (!wixData?.paymentId) {
-          console.error("[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [FAILED] Missing paymentId.");
-          throw new Error("Failed to get payment ID from Wix");
-        }
-
-        const returnUrl = encodeURIComponent(
-          `${window.location.origin}/billing?success=true&paymentId=${wixData.paymentId}`,
-        );
-        const target = `${WIX_DOMAIN}/idia-checkout?paymentId=${wixData.paymentId}&returnUrl=${returnUrl}&uid=${session.user.id}&amount=${usdAmount}&credits=${Math.floor(displayCredits)}`;
-        console.log(
-          `[SynapsePurchaseModal][handlePurchase] [WIX_DIRECT] [REDIRECT] Routing to vault portal: ${target}`,
-        );
-        window.location.href = target;
-        return;
-      }
-
-      // ==========================================
-      // RAIL 2: INTERNAL USDC CUSTODIAL FLOW
+      // INTERNAL USDC CUSTODIAL FLOW
       // ==========================================
       console.log(
         `[SynapsePurchaseModal][handlePurchase] [USDC_FLOW] Checking liquidity. Required: $${usdAmount}, Available: $${availableUSDC}`,
@@ -423,7 +377,7 @@ const SynapsePurchaseModal = ({
           </DialogTitle>
           <DialogDescription>
             {step === "payment"
-              ? `Review hydration from ${paymentRail === "usdc" ? "On-Chain Wallet" : "Credit/Debit"}`
+              ? "Review hydration from On-Chain Wallet"
               : "Fuel your data operations with Synapse Credits"}
           </DialogDescription>
         </DialogHeader>
@@ -600,7 +554,6 @@ const SynapsePurchaseModal = ({
                               return;
                             }
                             setNeedsApproval(false);
-                            setPaymentRail("usdc");
                             await handlePurchase();
                           } catch (err: any) {
                             console.error("[AuthorizeRelayer] threw:", err);
@@ -627,14 +580,7 @@ const SynapsePurchaseModal = ({
                     <Button variant="outline" className="gap-2" onClick={() => setStep("select")}>
                       <ArrowLeft className="w-4 h-4" /> Back
                     </Button>
-                    <Button
-                      className="flex-1 gap-2"
-                      size="lg"
-                      onClick={() => {
-                        setPaymentRail("usdc");
-                        handlePurchase();
-                      }}
-                    >
+                    <Button className="flex-1 gap-2" size="lg" onClick={() => handlePurchase()}>
                       <CircleDollarSign className="h-4 w-4" /> Pay from Wallet
                     </Button>
                   </div>
@@ -687,17 +633,6 @@ const SynapsePurchaseModal = ({
                       Connect MetaMask
                     </Button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentRail("wix");
-                      handlePurchase();
-                    }}
-                    className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <CreditCard className="h-3 w-3" /> Pay with Card instead
-                  </button>
                 </>
               )}
             </div>
@@ -707,7 +642,7 @@ const SynapsePurchaseModal = ({
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <Loader2 className="w-12 h-12 text-primary animate-spin" />
               <p className="font-semibold text-center uppercase tracking-widest text-xs">
-                {paymentRail === "wix" ? "Redirecting to Gateway..." : "Executing Internal Swap..."}
+                Executing Internal Swap...
               </p>
             </div>
           )}
