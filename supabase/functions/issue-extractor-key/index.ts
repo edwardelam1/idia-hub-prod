@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       platform_guid: userId,
       aca_hash_key: acaHashKey,
       consent_type: "CDLA",
-      consent_scope: ["ALPR_DATA_INGESTION"], // Corrected to an array
+      consent_scope: '{"ALPR_DATA_INGESTION"}', // Bypassing JS array serialization
       source_id: "vulture_gateway",
     });
 
