@@ -119,6 +119,29 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // --- ACA MANDATE GENERATION (MOVED TO FRONT) ---
+    console.log(`[ACA_GENERATION_START] Minting SHA-256 hash for vendor API key.`);
+    const rawAcaString = `${userId}|VULTURE_EXTRACTOR_CDLA|${new Date().toISOString()}`;
+    const acaHashKey = await sha256Hex(rawAcaString);
+    console.log(`[ACA_GENERATION_END] Hash generated: ${acaHashKey}`);
+
+    console.log(`[ACA_INSERT_START] Registering CDLA consent record for vendor ${userId}.`);
+    const { error: acaError } = await admin.from("user_aca_records").insert({
+      platform_guid: userId,
+      aca_hash_key: acaHashKey,
+      consent_type: "CDLA",
+      consent_scope: "ALPR_DATA_INGESTION",
+      source_id: "vulture_gateway",
+    });
+
+    if (acaError) {
+      console.error(`[ACA_INSERT_FAULT] Database insertion failed: ${JSON.stringify(acaError)}`);
+      throw new Error(`ACA Mandate generation failed: ${acaError.message}`);
+    }
+    console.log(`[ACA_INSERT_END] Vendor ACA record successfully committed.`);
+    // ----------------------------------------------
+
+    // --- API KEY MINTING ---
     console.log(`[KEY_CREATE_START] Minting franchise key for ${userId}`);
     const rawKey = mintKey();
     const keyHash = await sha256Hex(rawKey);
@@ -142,35 +165,6 @@ Deno.serve(async (req) => {
       throw new Error(`Key creation failed: ${insertError.message}`);
     }
     console.log(`[KEY_CREATE_END] Key minted (prefix ${keyPrefix}). Raw value returned once.`);
-
-    // --- ACA MANDATE GENERATION ---
-    console.log(`[ACA_GENERATION_START] Minting SHA-256 hash for vendor API key.`);
-    const rawAcaString = `${userId}|VULTURE_EXTRACTOR_CDLA|${new Date().toISOString()}`;
-    const acaHashKey = await sha256Hex(rawAcaString);
-    console.log(`[ACA_GENERATION_END] Hash generated: ${acaHashKey}`);
-
-    console.log(`[ACA_INSERT_START] Registering CDLA consent record for vendor ${userId}.`);
-    const { error: acaError } = await admin.from("user_aca_records").insert({
-      user_id: userId,
-      platform_guid: userId,
-      aca_hash_key: acaHashKey,
-      consent_type: "CDLA",
-      consent_scope: "ALPR_DATA_INGESTION",
-      source_id: "vulture_gateway",
-    });
-
-    if (acaError) {
-      console.error(`[ACA_INSERT_FAULT] Database insertion failed: ${JSON.stringify(acaError)}`);
-
-      console.log(`[ACA_ROLLBACK_START] Rolling back orphaned API key ${inserted.id} due to ACA failure.`);
-      await admin.from("api_keys").delete().eq("id", inserted.id);
-      console.log(`[ACA_ROLLBACK_END] Orphaned API key successfully removed.`);
-
-      // Throw standard Error so Deno stack trace functions correctly
-      throw new Error(`ACA Mandate generation failed: ${acaError.message}`);
-    }
-    console.log(`[ACA_INSERT_END] Vendor ACA record successfully committed.`);
-    // ------------------------------
 
     return json({ key: rawKey, record: inserted });
   } catch (err) {
