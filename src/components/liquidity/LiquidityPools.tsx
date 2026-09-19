@@ -61,20 +61,22 @@ export const handleAddLiquidityRedirect = (
       return;
     }
 
+    // By forcing the address to lowercase, we bypass Uniswap's strict mixed-case checksum
+    // validation, preventing the 'Invalid currencyId format' crash.
     const formatCurrencyId = (address: string) => {
       const formatted = address.trim();
-      return formatted.toUpperCase() === "ETH" ? "ETH" : formatted;
+      return formatted.toUpperCase() === "ETH" ? "ETH" : formatted.toLowerCase();
     };
 
     const formattedTokenA = formatCurrencyId(tokenAAddress);
     const formattedTokenB = formatCurrencyId(tokenBAddress);
 
-    // The third path parameter (feeTier) is deprecated on current Uniswap frontends
-    // and triggers a "currencyId" exception. We use the safe two-parameter add liquidity path.
-    let targetUrl = `https://app.uniswap.org/add/${formattedTokenA}/${formattedTokenB}?chain=base`;
+    let targetUrl = `https://app.uniswap.org/add/${formattedTokenA}/${formattedTokenB}`;
 
     if (feeTier) {
-      targetUrl += `&feeTier=${feeTier}`;
+      targetUrl += `/${feeTier}?chain=base`;
+    } else {
+      targetUrl += `?chain=base`;
     }
 
     const newWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
