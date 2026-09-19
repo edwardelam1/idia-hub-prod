@@ -55,93 +55,35 @@ export const handleAddLiquidityRedirect = (
   tokenBAddress: string | undefined,
   feeTier?: string,
 ) => {
-  console.log("[START] handleAddLiquidityRedirect: Initiating function execution.");
-
   try {
-    console.log("[PROCESS] handleAddLiquidityRedirect: Evaluating tokenAAddress parameter.");
-    console.log(`[PROCESS] handleAddLiquidityRedirect: Raw tokenAAddress value: ${String(tokenAAddress)}`);
-
-    if (
-      !tokenAAddress ||
-      tokenAAddress === "undefined" ||
-      tokenAAddress === "null" ||
-      typeof tokenAAddress !== "string"
-    ) {
-      console.error(
-        "[ERROR] handleAddLiquidityRedirect: tokenAAddress failed validation. Value is falsy, non-string, or literally 'undefined'/'null'.",
-      );
-      throw new Error(`Invalid tokenAAddress provided: ${tokenAAddress}`);
+    if (!tokenAAddress || !tokenBAddress) {
+      console.warn("[handleAddLiquidityRedirect] Missing required token addresses.");
+      return;
     }
-
-    console.log("[PROCESS] handleAddLiquidityRedirect: Evaluating tokenBAddress parameter.");
-    console.log(`[PROCESS] handleAddLiquidityRedirect: Raw tokenBAddress value: ${String(tokenBAddress)}`);
-
-    if (
-      !tokenBAddress ||
-      tokenBAddress === "undefined" ||
-      tokenBAddress === "null" ||
-      typeof tokenBAddress !== "string"
-    ) {
-      console.error(
-        "[ERROR] handleAddLiquidityRedirect: tokenBAddress failed validation. Value is falsy, non-string, or literally 'undefined'/'null'.",
-      );
-      throw new Error(`Invalid tokenBAddress provided: ${tokenBAddress}`);
-    }
-
-    console.log("[PROCESS] handleAddLiquidityRedirect: Both token addresses passed basic string validation.");
 
     const formatCurrencyId = (address: string) => {
-      console.log(`[PROCESS] formatCurrencyId: Formatting address: ${address}`);
       const formatted = address.trim();
-      if (formatted.toUpperCase() === "ETH") {
-        console.log("[PROCESS] formatCurrencyId: Address identified as native ETH.");
-        return "ETH";
-      }
-      if (!formatted.startsWith("0x")) {
-        console.warn(`[WARNING] formatCurrencyId: Address does not start with '0x'. Provided: ${formatted}`);
-      }
-      return formatted;
+      return formatted.toUpperCase() === "ETH" ? "ETH" : formatted;
     };
 
-    console.log("[PROCESS] handleAddLiquidityRedirect: Formatting tokenA.");
     const formattedTokenA = formatCurrencyId(tokenAAddress);
-
-    console.log("[PROCESS] handleAddLiquidityRedirect: Formatting tokenB.");
     const formattedTokenB = formatCurrencyId(tokenBAddress);
 
-    console.log("[PROCESS] handleAddLiquidityRedirect: Constructing base Uniswap URL string.");
-    const baseUrl = "https://app.uniswap.org/add";
-
-    let targetUrl = `${baseUrl}/${formattedTokenA}/${formattedTokenB}`;
-    console.log(`[PROCESS] handleAddLiquidityRedirect: Base URL constructed: ${targetUrl}`);
+    // The third path parameter (feeTier) is deprecated on current Uniswap frontends
+    // and triggers a "currencyId" exception. We use the safe two-parameter add liquidity path.
+    let targetUrl = `https://app.uniswap.org/add/${formattedTokenA}/${formattedTokenB}?chain=base`;
 
     if (feeTier) {
-      console.log(`[PROCESS] handleAddLiquidityRedirect: Fee tier detected. Appending to URL. FeeTier: ${feeTier}`);
-      targetUrl += `/${feeTier}?chain=base`;
-    } else {
-      console.log(
-        "[PROCESS] handleAddLiquidityRedirect: No fee tier provided. Proceeding with default chain appending.",
-      );
-      targetUrl += `?chain=base`;
+      targetUrl += `&feeTier=${feeTier}`;
     }
 
-    console.log(`[PROCESS] handleAddLiquidityRedirect: Final Target URL generated successfully: ${targetUrl}`);
-
-    console.log("[PROCESS] handleAddLiquidityRedirect: Attempting window.open to redirect user.");
     const newWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
 
     if (!newWindow) {
-      console.warn(
-        "[WARNING] handleAddLiquidityRedirect: window.open returned null. A popup blocker may have intercepted the request.",
-      );
-    } else {
-      console.log("[PROCESS] handleAddLiquidityRedirect: window.open executed successfully.");
+      console.warn("Popup blocked. Could not redirect to Uniswap.");
     }
   } catch (error) {
-    console.error("[ERROR] handleAddLiquidityRedirect: Exception caught during execution.");
-    console.error(error);
-  } finally {
-    console.log("[END] handleAddLiquidityRedirect: Function execution terminated.");
+    console.error("Failed to execute Uniswap redirect:", error);
   }
 };
 
