@@ -37,21 +37,113 @@ import { cn } from "@/lib/utils";
 const IDIA = "0x6526f939d257e67896821c25b6c24daa404a01fb";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-const uniswapAddUrl = (feeTier: number) => `https://app.uniswap.org/add/${USDC}/${IDIA}/${feeTier}?chain=base`;
 const uniswapPoolUrl = (poolAddress: string) => `https://app.uniswap.org/explore/pools/base/${poolAddress}`;
 const basescanUrl = (address: string) => `https://basescan.org/address/${address}`;
-const UNISWAP_ADD_FALLBACK = uniswapAddUrl(3000);
 const UNISWAP_TOKEN_FALLBACK = `https://app.uniswap.org/explore/tokens/base/${IDIA}`;
 const BASESCAN_TOKEN_FALLBACK = `https://basescan.org/token/${IDIA}`;
 
 const formatUSD = (value: number) =>
   value >= 1000 ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${value.toFixed(2)}`;
 const formatAPR = (value: number) => `${(value * 100).toFixed(2)}%`;
-const formatAmount = (value: number) =>
-  value.toLocaleString(undefined, { maximumFractionDigits: value >= 1 ? 2 : 6 });
+const formatAmount = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: value >= 1 ? 2 : 6 });
 const shortPoolId = (id: string) => `${id.slice(0, 8)}…${id.slice(-6)}`;
 
 type Slice = "pool" | "holdings" | "positions" | "contracts";
+
+export const handleAddLiquidityRedirect = (
+  tokenAAddress: string | undefined,
+  tokenBAddress: string | undefined,
+  feeTier?: string,
+) => {
+  console.log("[START] handleAddLiquidityRedirect: Initiating function execution.");
+
+  try {
+    console.log("[PROCESS] handleAddLiquidityRedirect: Evaluating tokenAAddress parameter.");
+    console.log(`[PROCESS] handleAddLiquidityRedirect: Raw tokenAAddress value: ${String(tokenAAddress)}`);
+
+    if (
+      !tokenAAddress ||
+      tokenAAddress === "undefined" ||
+      tokenAAddress === "null" ||
+      typeof tokenAAddress !== "string"
+    ) {
+      console.error(
+        "[ERROR] handleAddLiquidityRedirect: tokenAAddress failed validation. Value is falsy, non-string, or literally 'undefined'/'null'.",
+      );
+      throw new Error(`Invalid tokenAAddress provided: ${tokenAAddress}`);
+    }
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Evaluating tokenBAddress parameter.");
+    console.log(`[PROCESS] handleAddLiquidityRedirect: Raw tokenBAddress value: ${String(tokenBAddress)}`);
+
+    if (
+      !tokenBAddress ||
+      tokenBAddress === "undefined" ||
+      tokenBAddress === "null" ||
+      typeof tokenBAddress !== "string"
+    ) {
+      console.error(
+        "[ERROR] handleAddLiquidityRedirect: tokenBAddress failed validation. Value is falsy, non-string, or literally 'undefined'/'null'.",
+      );
+      throw new Error(`Invalid tokenBAddress provided: ${tokenBAddress}`);
+    }
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Both token addresses passed basic string validation.");
+
+    const formatCurrencyId = (address: string) => {
+      console.log(`[PROCESS] formatCurrencyId: Formatting address: ${address}`);
+      const formatted = address.trim();
+      if (formatted.toUpperCase() === "ETH") {
+        console.log("[PROCESS] formatCurrencyId: Address identified as native ETH.");
+        return "ETH";
+      }
+      if (!formatted.startsWith("0x")) {
+        console.warn(`[WARNING] formatCurrencyId: Address does not start with '0x'. Provided: ${formatted}`);
+      }
+      return formatted;
+    };
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Formatting tokenA.");
+    const formattedTokenA = formatCurrencyId(tokenAAddress);
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Formatting tokenB.");
+    const formattedTokenB = formatCurrencyId(tokenBAddress);
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Constructing base Uniswap URL string.");
+    const baseUrl = "https://app.uniswap.org/add";
+
+    let targetUrl = `${baseUrl}/${formattedTokenA}/${formattedTokenB}`;
+    console.log(`[PROCESS] handleAddLiquidityRedirect: Base URL constructed: ${targetUrl}`);
+
+    if (feeTier) {
+      console.log(`[PROCESS] handleAddLiquidityRedirect: Fee tier detected. Appending to URL. FeeTier: ${feeTier}`);
+      targetUrl += `/${feeTier}?chain=base`;
+    } else {
+      console.log(
+        "[PROCESS] handleAddLiquidityRedirect: No fee tier provided. Proceeding with default chain appending.",
+      );
+      targetUrl += `?chain=base`;
+    }
+
+    console.log(`[PROCESS] handleAddLiquidityRedirect: Final Target URL generated successfully: ${targetUrl}`);
+
+    console.log("[PROCESS] handleAddLiquidityRedirect: Attempting window.open to redirect user.");
+    const newWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
+
+    if (!newWindow) {
+      console.warn(
+        "[WARNING] handleAddLiquidityRedirect: window.open returned null. A popup blocker may have intercepted the request.",
+      );
+    } else {
+      console.log("[PROCESS] handleAddLiquidityRedirect: window.open executed successfully.");
+    }
+  } catch (error) {
+    console.error("[ERROR] handleAddLiquidityRedirect: Exception caught during execution.");
+    console.error(error);
+  } finally {
+    console.log("[END] handleAddLiquidityRedirect: Function execution terminated.");
+  }
+};
 
 const LiquidityPools = () => {
   const poolsQuery = useUniswapPoolStats();
@@ -78,7 +170,12 @@ const LiquidityPools = () => {
   const slices: Array<{ id: Slice; label: string; value: string; icon: typeof CircleDollarSign }> = [
     { id: "pool", label: "Pool TVL", value: poolsQuery.isLoading ? "—" : formatUSD(totalTVL), icon: CircleDollarSign },
     { id: "holdings", label: "Protocol Holdings", value: "All wallets", icon: Building2 },
-    { id: "positions", label: "Your Position", value: hasUserWallet ? formatUSD(userValue) : "No wallet", icon: WalletCards },
+    {
+      id: "positions",
+      label: "Your Position",
+      value: hasUserWallet ? formatUSD(userValue) : "No wallet",
+      icon: WalletCards,
+    },
     { id: "contracts", label: "Contract Info", value: "Base mainnet", icon: FileCode2 },
   ];
 
@@ -93,11 +190,17 @@ const LiquidityPools = () => {
 
       <section aria-label="Quick actions" className="border-y border-border/70 py-2">
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-          <span className="font-mono text-[10px] font-semibold uppercase text-muted-foreground shrink-0 mr-1">Quick actions</span>
-          <Button asChild size="sm" className="h-8 shrink-0 text-xs">
-            <a href={selectedPool ? uniswapAddUrl(selectedPool.feeTier) : UNISWAP_ADD_FALLBACK} target="_blank" rel="noopener noreferrer">
-              <ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Add Liquidity
-            </a>
+          <span className="font-mono text-[10px] font-semibold uppercase text-muted-foreground shrink-0 mr-1">
+            Quick actions
+          </span>
+          <Button
+            onClick={() =>
+              handleAddLiquidityRedirect(USDC, IDIA, selectedPool ? selectedPool.feeTier.toString() : "3000")
+            }
+            size="sm"
+            className="h-8 shrink-0 text-xs"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Add Liquidity
           </Button>
           <Button asChild variant="outline" size="sm" className="h-8 shrink-0 text-xs">
             <a href="https://app.uniswap.org/positions" target="_blank" rel="noopener noreferrer">
@@ -118,39 +221,71 @@ const LiquidityPools = () => {
               <div className="space-y-4">
                 <section aria-labelledby="v4-pools-heading" className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 id="v4-pools-heading" className="font-mono text-xs font-semibold">Uniswap v4</h3>
-                    <Badge variant="secondary" className="text-[10px]">{v4Pools.length} pool{v4Pools.length === 1 ? "" : "s"}</Badge>
+                    <h3 id="v4-pools-heading" className="font-mono text-xs font-semibold">
+                      Uniswap v4
+                    </h3>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {v4Pools.length} pool{v4Pools.length === 1 ? "" : "s"}
+                    </Badge>
                   </div>
                   {v4Query.isLoading && (
                     <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading v4 pool state from Base…
                     </div>
                   )}
-                  {v4Query.isError && <p className="text-xs text-destructive">Could not read v4 pool state from Base.</p>}
+                  {v4Query.isError && (
+                    <p className="text-xs text-destructive">Could not read v4 pool state from Base.</p>
+                  )}
                   {!v4Query.isLoading && !v4Query.isError && v4Pools.length === 0 && (
-                    <p className="py-3 text-xs text-muted-foreground">No IDIA/USDC v4 pool was found for the connected wallet.</p>
+                    <p className="py-3 text-xs text-muted-foreground">
+                      No IDIA/USDC v4 pool was found for the connected wallet.
+                    </p>
                   )}
                   {v4Pools.map((pool) => (
                     <div key={pool.id} className="rounded-md border border-border/60 p-3 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-semibold">{pool.token0.symbol} / {pool.token1.symbol}</span>
+                            <span className="text-sm font-semibold">
+                              {pool.token0.symbol} / {pool.token1.symbol}
+                            </span>
                             <Badge className="text-[10px] px-1.5 py-0">v4</Badge>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{(pool.feeTier / 10_000).toFixed(2)}% fee</Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {(pool.feeTier / 10_000).toFixed(2)}% fee
+                            </Badge>
                           </div>
-                          <p className="font-mono text-[10px] text-muted-foreground mt-1 truncate" title={pool.id}>{shortPoolId(pool.id)}</p>
+                          <p className="font-mono text-[10px] text-muted-foreground mt-1 truncate" title={pool.id}>
+                            {shortPoolId(pool.id)}
+                          </p>
                         </div>
-                        <Button asChild size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label="Open v4 pool on Uniswap">
+                        <Button
+                          asChild
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          aria-label="Open v4 pool on Uniswap"
+                        >
                           <a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
                         </Button>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <div><span className="block text-[10px] text-muted-foreground">Pool depth</span><span className="font-mono font-semibold">{formatUSD(pool.tvlUSD)}</span></div>
-                        <div><span className="block text-[10px] text-muted-foreground">Current tick</span><span className="font-mono font-semibold">{pool.tick.toLocaleString()}</span></div>
-                        <div className="col-span-2"><span className="block text-[10px] text-muted-foreground">Reserves</span><span className="font-mono font-semibold break-words">{formatAmount(pool.amount0)} {pool.token0.symbol} · {formatAmount(pool.amount1)} {pool.token1.symbol}</span></div>
+                        <div>
+                          <span className="block text-[10px] text-muted-foreground">Pool depth</span>
+                          <span className="font-mono font-semibold">{formatUSD(pool.tvlUSD)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] text-muted-foreground">Current tick</span>
+                          <span className="font-mono font-semibold">{pool.tick.toLocaleString()}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="block text-[10px] text-muted-foreground">Reserves</span>
+                          <span className="font-mono font-semibold break-words">
+                            {formatAmount(pool.amount0)} {pool.token0.symbol} · {formatAmount(pool.amount1)}{" "}
+                            {pool.token1.symbol}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -158,17 +293,32 @@ const LiquidityPools = () => {
 
                 <section aria-labelledby="v3-pools-heading" className="space-y-2 border-t border-border/60 pt-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 id="v3-pools-heading" className="font-mono text-xs font-semibold">Uniswap v3</h3>
-                    <Badge variant="outline" className="text-[10px]">{pools.length} pool{pools.length === 1 ? "" : "s"}</Badge>
+                    <h3 id="v3-pools-heading" className="font-mono text-xs font-semibold">
+                      Uniswap v3
+                    </h3>
+                    <Badge variant="outline" className="text-[10px]">
+                      {pools.length} pool{pools.length === 1 ? "" : "s"}
+                    </Badge>
                   </div>
                   {poolsQuery.isLoading ? (
-                    <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading v3 pools…</div>
+                    <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading v3 pools…
+                    </div>
                   ) : pools.length === 0 ? (
                     <p className="py-3 text-xs text-muted-foreground">No IDIA/USDC v3 pools exist on Base.</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
-                        <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Pool</TableHead><TableHead className="text-right">TVL</TableHead><TableHead className="text-right">24h volume</TableHead><TableHead className="text-right">APR</TableHead><TableHead /></TableRow></TableHeader>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Fee</TableHead>
+                            <TableHead>Pool</TableHead>
+                            <TableHead className="text-right">TVL</TableHead>
+                            <TableHead className="text-right">24h volume</TableHead>
+                            <TableHead className="text-right">APR</TableHead>
+                            <TableHead />
+                          </TableRow>
+                        </TableHeader>
                         <TableBody>
                           {pools.map((pool) => (
                             <TableRow key={pool.id}>
@@ -177,7 +327,19 @@ const LiquidityPools = () => {
                               <TableCell className="text-right font-mono">{formatUSD(pool.tvlUSD)}</TableCell>
                               <TableCell className="text-right font-mono">{formatUSD(pool.volume24hUSD)}</TableCell>
                               <TableCell className="text-right font-mono">{formatAPR(pool.feeApr)}</TableCell>
-                              <TableCell className="text-right"><Button asChild size="icon" variant="ghost" className="h-7 w-7" aria-label="Open v3 pool on Uniswap"><a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a></Button></TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  asChild
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  aria-label="Open v3 pool on Uniswap"
+                                >
+                                  <a href={uniswapPoolUrl(pool.id)} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -189,12 +351,20 @@ const LiquidityPools = () => {
             </DialogContent>
           </Dialog>
           <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 text-xs">
-            <a href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK} target="_blank" rel="noopener noreferrer">
+            <a
+              href={selectedPool ? uniswapPoolUrl(selectedPool.id) : UNISWAP_TOKEN_FALLBACK}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Uniswap <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
             </a>
           </Button>
           <Button asChild variant="ghost" size="sm" className="h-8 shrink-0 text-xs">
-            <a href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK} target="_blank" rel="noopener noreferrer">
+            <a
+              href={selectedPool ? basescanUrl(selectedPool.id) : BASESCAN_TOKEN_FALLBACK}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               BaseScan <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
             </a>
           </Button>
@@ -216,7 +386,14 @@ const LiquidityPools = () => {
               <Icon className="h-4 w-4 mr-2 shrink-0" />
               <span className="min-w-0 text-left">
                 <span className="block text-xs font-medium truncate">{label}</span>
-                <span className={cn("block font-mono text-[10px] truncate", active ? "text-primary-foreground/75" : "text-muted-foreground")}>{value}</span>
+                <span
+                  className={cn(
+                    "block font-mono text-[10px] truncate",
+                    active ? "text-primary-foreground/75" : "text-muted-foreground",
+                  )}
+                >
+                  {value}
+                </span>
               </span>
             </Button>
           );
@@ -254,22 +431,38 @@ const LiquidityPools = () => {
               </div>
               <div className="h-44">
                 {poolsQuery.isLoading ? (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…</div>
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+                  </div>
                 ) : selectedPool ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={selectedPool.series}>
                       <Line type="monotone" dataKey="tvl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="volume" stroke="hsl(var(--accent-foreground))" strokeWidth={2} dot={false} />
+                      <Line
+                        type="monotone"
+                        dataKey="volume"
+                        stroke="hsl(var(--accent-foreground))"
+                        strokeWidth={2}
+                        dot={false}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">No v3 pool history available. Your current IDIA liquidity is on v4.</div>
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                    No v3 pool history available. Your current IDIA liquidity is on v4.
+                  </div>
                 )}
               </div>
               {pools.length > 1 && (
                 <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/60">
                   {pools.map((pool) => (
-                    <Button key={pool.id} size="sm" variant={selectedPool?.id === pool.id ? "secondary" : "ghost"} onClick={() => setSelectedPoolId(pool.id)} className="h-7 text-xs">
+                    <Button
+                      key={pool.id}
+                      size="sm"
+                      variant={selectedPool?.id === pool.id ? "secondary" : "ghost"}
+                      onClick={() => setSelectedPoolId(pool.id)}
+                      className="h-7 text-xs"
+                    >
                       {(pool.feeTier / 10_000).toFixed(2)}% fee
                     </Button>
                   ))}
