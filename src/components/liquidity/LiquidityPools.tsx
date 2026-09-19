@@ -61,22 +61,13 @@ export const handleAddLiquidityRedirect = (
       return;
     }
 
-    // By forcing the address to lowercase, we bypass Uniswap's strict mixed-case checksum
-    // validation, preventing the 'Invalid currencyId format' crash.
-    const formatCurrencyId = (address: string) => {
-      const formatted = address.trim();
-      return formatted.toUpperCase() === "ETH" ? "ETH" : formatted.toLowerCase();
-    };
-
-    const formattedTokenA = formatCurrencyId(tokenAAddress);
-    const formattedTokenB = formatCurrencyId(tokenBAddress);
-
-    let targetUrl = `https://app.uniswap.org/add/${formattedTokenA}/${formattedTokenB}`;
+    // Uniswap's frontend router frequently crashes when parsing mixed-case contract addresses
+    // directly inside the URL path. Bypassing the path segments in favor of query parameters
+    // ensures stability.
+    let targetUrl = `https://app.uniswap.org/add/?chain=base&inputCurrency=${tokenAAddress}&outputCurrency=${tokenBAddress}`;
 
     if (feeTier) {
-      targetUrl += `/${feeTier}?chain=base`;
-    } else {
-      targetUrl += `?chain=base`;
+      targetUrl += `&feeAmount=${feeTier}`;
     }
 
     const newWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
