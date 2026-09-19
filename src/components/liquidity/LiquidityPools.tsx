@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,8 @@ import {
   Loader2,
   Settings,
   WalletCards,
+  Radio,
+  Timer,
 } from "lucide-react";
 import { useUniswapPoolStats, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
 import { useV4Positions } from "@/hooks/useV4Positions";
@@ -61,10 +65,15 @@ export const handleAddLiquidityRedirect = (
       return;
     }
 
-    // Uniswap's frontend router frequently crashes when parsing mixed-case contract addresses
-    // directly inside the URL path. Bypassing the path segments in favor of query parameters
-    // ensures stability.
-    let targetUrl = `https://app.uniswap.org/add/?chain=base&inputCurrency=${tokenAAddress}&outputCurrency=${tokenBAddress}`;
+    const formatCurrencyId = (address: string) => {
+      const formatted = address.trim();
+      return formatted.toUpperCase() === "ETH" ? "ETH" : formatted.toLowerCase();
+    };
+
+    const formattedTokenA = formatCurrencyId(tokenAAddress);
+    const formattedTokenB = formatCurrencyId(tokenBAddress);
+
+    let targetUrl = `https://app.uniswap.org/add/?chain=base&inputCurrency=${formattedTokenA}&outputCurrency=${formattedTokenB}`;
 
     if (feeTier) {
       targetUrl += `&feeAmount=${feeTier}`;
@@ -80,10 +89,55 @@ export const handleAddLiquidityRedirect = (
   }
 };
 
+const useLiquidityLocks = (walletAddress: string | undefined | null) => {
+  return useQuery({
+    queryKey: ["liquidity-locks", walletAddress],
+    queryFn: async () => {
+      console.log("[START] useLiquidityLocks: Initiating fetch for lock data.");
+      try {
+        console.log(`[PROCESS] useLiquidityLocks: Evaluating wallet address: ${walletAddress}`);
+        if (!walletAddress) {
+          console.log("[PROCESS] useLiquidityLocks: Wallet address is falsy. Returning empty array.");
+          return [];
+        }
+
+        const formattedWallet = walletAddress.toLowerCase();
+        console.log(`[PROCESS] useLiquidityLocks: Executing Supabase query for wallet: ${formattedWallet}`);
+
+        const { data, error } = await supabase
+          .from("liquidity_locks")
+          .select("*")
+          .eq("wallet_address", formattedWallet)
+          .order("maturity_date", { ascending: true });
+
+        if (error) {
+          console.error(
+            `[ERROR] useLiquidityLocks: Supabase query returned an error. Code: ${error.code}, Message: ${error.message}`,
+          );
+          throw new Error(`Database query failed: ${error.message}`);
+        }
+
+        console.log(`[PROCESS] useLiquidityLocks: Query successful. Retrieved ${data?.length || 0} locked positions.`);
+        return data || [];
+      } catch (error) {
+        console.error("[ERROR] useLiquidityLocks: Exception caught during execution.");
+        console.error(error);
+        throw error;
+      } finally {
+        console.log("[END] useLiquidityLocks: Fetch execution terminated.");
+      }
+    },
+    enabled: !!walletAddress,
+    refetchInterval: 60000, // Poll every minute to keep timers fresh
+  });
+};
+
 const LiquidityPools = () => {
   const poolsQuery = useUniswapPoolStats();
   const userWalletQuery = useUserWalletAddress();
   const v4Query = useV4Positions([userWalletQuery.data]);
+  const locksQuery = useLiquidityLocks(userWalletQuery.data);
+
   const pools = poolsQuery.data ?? [];
   const v4Pools = v4Query.data?.pools ?? [];
   const [activeSlice, setActiveSlice] = useState<Slice>("pool");
@@ -411,6 +465,57 @@ const LiquidityPools = () => {
 
         {activeSlice === "positions" && (
           <div className="space-y-3">
+            {locksQuery.isLoading && (
+              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching NFT Radio maturity status...
+              </div>
+            )}
+
+            {locksQuery.data && locksQuery.data.length > 0 && (
+              <Card className="p-4 border-primary/30 bg-primary/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Radio className="h-4 w-4 text-primary" />
+                  <h3 className="font-mono text-sm font-semibold">NFT Radio Maturation Tracker</h3>
+                </div>
+                <div className="space-y-3">
+                  {locksQuery.data.map((lock: any) => {
+                    const maturityDate = new Date(lock.maturity_date);
+                    const now = new Date();
+                    const isUnlocked = now >= maturityDate;
+
+                    return (
+                      <div
+                        key={lock.token_id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-md bg-background/50 border border-border/50"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold">Position #{lock.token_id}</span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {formatUSD(lock.usd_value)}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <Timer className="h-3 w-3" />
+                            {isUnlocked ? "Matured on " : "Unlocks "}
+                            {maturityDate.toLocaleDateString()} at {maturityDate.toLocaleTimeString()}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={isUnlocked ? "default" : "secondary"}
+                          disabled={!isUnlocked}
+                          className="h-8 text-xs shrink-0"
+                        >
+                          {isUnlocked ? "Pick Mystery NFT" : "Tuning In..."}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
             <V4Positions owners={[userWalletQuery.data]} userWallet={userWalletQuery.data} />
             <V3Positions
               positions={userPositions}
