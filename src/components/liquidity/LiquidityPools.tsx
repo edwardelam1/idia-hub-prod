@@ -110,7 +110,7 @@ const useLiquidityLocks = (walletAddress: string | undefined | null) => {
         const formattedWallet = walletAddress.toLowerCase();
         console.log(`[PROCESS] useLiquidityLocks: Querying locks table for: ${formattedWallet}`);
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from("liquidity_locks")
           .select("*")
           .eq("wallet_address", formattedWallet)
