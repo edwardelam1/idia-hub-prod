@@ -23,6 +23,14 @@ export default {
 				mono: ['"JetBrains Mono Variable"', 'monospace']
 			},
 			colors: {
+				radio: {
+					panel: 'hsl(var(--radio-panel))',
+					raised: 'hsl(var(--radio-panel-raised))',
+					display: 'hsl(var(--radio-display))',
+					cyan: 'hsl(var(--radio-cyan))',
+					amber: 'hsl(var(--radio-amber))',
+					steel: 'hsl(var(--radio-steel))'
+				},
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
