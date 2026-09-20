@@ -2470,6 +2470,7 @@ export type Database = {
           credits_spent: number
           id: string
           proposal_id: string
+          proposal_ref: string | null
           snapshot_block: number | null
           snapshot_voting_power: number | null
           user_id: string | null
@@ -2483,6 +2484,7 @@ export type Database = {
           credits_spent: number
           id?: string
           proposal_id: string
+          proposal_ref?: string | null
           snapshot_block?: number | null
           snapshot_voting_power?: number | null
           user_id?: string | null
@@ -2496,6 +2498,7 @@ export type Database = {
           credits_spent?: number
           id?: string
           proposal_id?: string
+          proposal_ref?: string | null
           snapshot_block?: number | null
           snapshot_voting_power?: number | null
           user_id?: string | null
@@ -5845,6 +5848,7 @@ export type Database = {
       }
       lidd_extraction_events: {
         Row: {
+          aca_hash_key: string | null
           citizen_guid: string
           created_at: string
           extraction_timestamp: string
@@ -5854,6 +5858,7 @@ export type Database = {
           synapse_credit_cost: number
         }
         Insert: {
+          aca_hash_key?: string | null
           citizen_guid: string
           created_at?: string
           extraction_timestamp: string
@@ -5863,6 +5868,7 @@ export type Database = {
           synapse_credit_cost?: number
         }
         Update: {
+          aca_hash_key?: string | null
           citizen_guid?: string
           created_at?: string
           extraction_timestamp?: string
@@ -5920,6 +5926,39 @@ export type Database = {
           retry_count?: number | null
           source?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      liquidity_locks: {
+        Row: {
+          created_at: string
+          id: string
+          maturity_date: string
+          status: string
+          token_id: string
+          tx_hash: string
+          usd_value: number
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          maturity_date: string
+          status?: string
+          token_id: string
+          tx_hash: string
+          usd_value: number
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          maturity_date?: string
+          status?: string
+          token_id?: string
+          tx_hash?: string
+          usd_value?: number
+          wallet_address?: string
         }
         Relationships: []
       }
@@ -6771,6 +6810,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      nft_radio_tiers: {
+        Row: {
+          annual_nps_max_usd: number
+          annual_nps_min_usd: number
+          artist_profile: string
+          category: string
+          created_at: string
+          description: string
+          display_order: number
+          id: string
+          lock_duration_days: number
+          name: string
+          required_usd_staked: number
+          rwa_level: string
+          rwa_max_usd: number
+          rwa_min_usd: number
+        }
+        Insert: {
+          annual_nps_max_usd?: number
+          annual_nps_min_usd?: number
+          artist_profile: string
+          category: string
+          created_at?: string
+          description: string
+          display_order: number
+          id: string
+          lock_duration_days?: number
+          name: string
+          required_usd_staked: number
+          rwa_level: string
+          rwa_max_usd?: number
+          rwa_min_usd?: number
+        }
+        Update: {
+          annual_nps_max_usd?: number
+          annual_nps_min_usd?: number
+          artist_profile?: string
+          category?: string
+          created_at?: string
+          description?: string
+          display_order?: number
+          id?: string
+          lock_duration_days?: number
+          name?: string
+          required_usd_staked?: number
+          rwa_level?: string
+          rwa_max_usd?: number
+          rwa_min_usd?: number
+        }
+        Relationships: []
       }
       organization_capabilities: {
         Row: {
