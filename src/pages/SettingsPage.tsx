@@ -1,10 +1,9 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/contexts/AuthContext";
-import { SettingsProfile } from "@/components/settings/SettingsProfile";
-import { SettingsBusinessProfile } from "@/components/settings/SettingsBusinessProfile";
-import { SettingsBilling } from "@/components/settings/SettingsBilling";
-import SettingsMusicPub from "@/components/settings/SettingsMusicPub";
-import { User, Building2, CreditCard, Music } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
+import { SettingsProfile } from '@/components/settings/SettingsProfile';
+import { SettingsBusinessProfile } from '@/components/settings/SettingsBusinessProfile';
+import { SettingsBilling } from '@/components/settings/SettingsBilling';
+import { User, Building2, CreditCard } from 'lucide-react';
 
 const SettingsPage = () => {
   const { isAdminRole } = useAuth();
@@ -13,7 +12,9 @@ const SettingsPage = () => {
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account, billing, and data access preferences.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Manage your account, billing, and data access preferences.
+        </p>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
@@ -32,12 +33,6 @@ const SettingsPage = () => {
             <CreditCard className="h-3.5 w-3.5" />
             Billing & Data Access
           </TabsTrigger>
-          {isAdminRole && (
-            <TabsTrigger value="music-pub" className="flex items-center gap-2 text-xs sm:text-sm">
-              <Music className="h-3.5 w-3.5" />
-              Music Pub
-            </TabsTrigger>
-          )}
         </TabsList>
 
         <TabsContent value="profile">
@@ -53,12 +48,6 @@ const SettingsPage = () => {
         <TabsContent value="billing">
           <SettingsBilling />
         </TabsContent>
-
-        {isAdminRole && (
-          <TabsContent value="music-pub">
-            <SettingsMusicPub />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );
