@@ -27,10 +27,12 @@ import {
   WalletCards,
   Radio,
   Timer,
+  Sparkles,
 } from "lucide-react";
 import { useUniswapPoolStats, type UniswapPoolStat } from "@/hooks/useUniswapPoolStats";
 import { useV4Positions } from "@/hooks/useV4Positions";
 import { useWalletLpPositions, useUserWalletAddress } from "@/hooks/useWalletLpPositions";
+import { useNftRadioTiers, resolveTierForAmount, type NFTRadioTierRecord } from "@/hooks/useNftRadioTiers";
 import ProtocolHoldings from "./ProtocolHoldings";
 import ContractInformation from "./ContractInformation";
 import V4Positions from "./V4Positions";
@@ -59,9 +61,10 @@ export const handleAddLiquidityRedirect = (
   tokenBAddress: string | undefined,
   feeTier?: string,
 ) => {
+  console.log("[START] handleAddLiquidityRedirect: Initiating redirect.");
   try {
     if (!tokenAAddress || !tokenBAddress) {
-      console.warn("[handleAddLiquidityRedirect] Missing required token addresses.");
+      console.warn("[WARNING] handleAddLiquidityRedirect: Missing required token addresses.");
       return;
     }
 
@@ -79,13 +82,17 @@ export const handleAddLiquidityRedirect = (
       targetUrl += `&feeAmount=${feeTier}`;
     }
 
+    console.log(`[PROCESS] handleAddLiquidityRedirect: Opening target URL: ${targetUrl}`);
     const newWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
 
     if (!newWindow) {
-      console.warn("Popup blocked. Could not redirect to Uniswap.");
+      console.warn("[WARNING] handleAddLiquidityRedirect: Popup blocked by browser.");
     }
   } catch (error) {
-    console.error("Failed to execute Uniswap redirect:", error);
+    console.error("[ERROR] handleAddLiquidityRedirect: Failure executing redirect.");
+    console.error(error);
+  } finally {
+    console.log("[END] handleAddLiquidityRedirect: Redirect finished.");
   }
 };
 
@@ -93,16 +100,15 @@ const useLiquidityLocks = (walletAddress: string | undefined | null) => {
   return useQuery({
     queryKey: ["liquidity-locks", walletAddress],
     queryFn: async () => {
-      console.log("[START] useLiquidityLocks: Initiating fetch for lock data.");
+      console.log("[START] useLiquidityLocks: Fetching active user locks.");
       try {
-        console.log(`[PROCESS] useLiquidityLocks: Evaluating wallet address: ${walletAddress}`);
         if (!walletAddress) {
-          console.log("[PROCESS] useLiquidityLocks: Wallet address is falsy. Returning empty array.");
+          console.log("[PROCESS] useLiquidityLocks: No wallet address provided. Returning empty set.");
           return [];
         }
 
         const formattedWallet = walletAddress.toLowerCase();
-        console.log(`[PROCESS] useLiquidityLocks: Executing Supabase query for wallet: ${formattedWallet}`);
+        console.log(`[PROCESS] useLiquidityLocks: Querying locks table for: ${formattedWallet}`);
 
         const { data, error } = await supabase
           .from("liquidity_locks")
@@ -112,23 +118,23 @@ const useLiquidityLocks = (walletAddress: string | undefined | null) => {
 
         if (error) {
           console.error(
-            `[ERROR] useLiquidityLocks: Supabase query returned an error. Code: ${error.code}, Message: ${error.message}`,
+            `[ERROR] useLiquidityLocks: Database query failed. Code: ${error.code}, Message: ${error.message}`,
           );
-          throw new Error(`Database query failed: ${error.message}`);
+          throw new Error(`Database error: ${error.message}`);
         }
 
-        console.log(`[PROCESS] useLiquidityLocks: Query successful. Retrieved ${data?.length || 0} locked positions.`);
+        console.log(`[PROCESS] useLiquidityLocks: Loaded ${data?.length || 0} active locks.`);
         return data || [];
       } catch (error) {
-        console.error("[ERROR] useLiquidityLocks: Exception caught during execution.");
+        console.error("[ERROR] useLiquidityLocks: Exception in query function.");
         console.error(error);
         throw error;
       } finally {
-        console.log("[END] useLiquidityLocks: Fetch execution terminated.");
+        console.log("[END] useLiquidityLocks: Query execution ended.");
       }
     },
     enabled: !!walletAddress,
-    refetchInterval: 60000, // Poll every minute to keep timers fresh
+    refetchInterval: 60000,
   });
 };
 
@@ -137,9 +143,12 @@ const LiquidityPools = () => {
   const userWalletQuery = useUserWalletAddress();
   const v4Query = useV4Positions([userWalletQuery.data]);
   const locksQuery = useLiquidityLocks(userWalletQuery.data);
+  const tiersQuery = useNftRadioTiers();
 
   const pools = poolsQuery.data ?? [];
   const v4Pools = v4Query.data?.pools ?? [];
+  const dbTiers = tiersQuery.data ?? [];
+
   const [activeSlice, setActiveSlice] = useState<Slice>("pool");
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
   const selectedPool: UniswapPoolStat | undefined = pools.find((pool) => pool.id === selectedPoolId) ?? pools[0];
@@ -148,6 +157,7 @@ const LiquidityPools = () => {
   const idiaUsdPrice = useMemo(() => deriveIdiaUsdPrice(pools), [pools]);
   const totalTVL = useMemo(() => pools.reduce((sum, pool) => sum + pool.tvlUSD, 0), [pools]);
   const total24hVol = useMemo(() => pools.reduce((sum, pool) => sum + pool.volume24hUSD, 0), [pools]);
+
   const userValue = useMemo(
     () =>
       userPositions.reduce((sum, position) => sum + position.valueUSD, 0) +
@@ -155,6 +165,12 @@ const LiquidityPools = () => {
     [userPositions, v4Query.data?.positions],
   );
   const hasUserWallet = Boolean(userWalletQuery.data);
+
+  // Derive qualified NFT Radio tier dynamically from total staked value
+  const qualifiedTier: NFTRadioTierRecord | null = useMemo(() => {
+    if (!dbTiers.length) return null;
+    return resolveTierForAmount(userValue, dbTiers);
+  }, [userValue, dbTiers]);
 
   const slices: Array<{ id: Slice; label: string; value: string; icon: typeof CircleDollarSign }> = [
     { id: "pool", label: "Pool TVL", value: poolsQuery.isLoading ? "—" : formatUSD(totalTVL), icon: CircleDollarSign },
@@ -465,19 +481,48 @@ const LiquidityPools = () => {
 
         {activeSlice === "positions" && (
           <div className="space-y-3">
-            {locksQuery.isLoading && (
-              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching NFT Radio maturity status...
-              </div>
-            )}
-
-            {locksQuery.data && locksQuery.data.length > 0 && (
-              <Card className="p-4 border-primary/30 bg-primary/5">
-                <div className="flex items-center gap-2 mb-3">
+            {/* Lightweight NFT Radio Tier Status Banner */}
+            <Card className="p-3 border-border/70">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
                   <Radio className="h-4 w-4 text-primary" />
-                  <h3 className="font-mono text-sm font-semibold">NFT Radio Maturation Tracker</h3>
+                  <div>
+                    <span className="text-xs font-semibold">NFT Radio Status: </span>
+                    <span className="font-mono text-xs font-bold text-primary">
+                      {qualifiedTier ? qualifiedTier.name : "Free"}
+                    </span>
+                    {qualifiedTier && qualifiedTier.rwa_level !== "None" && (
+                      <Badge variant="outline" className="ml-2 text-[10px]">
+                        {qualifiedTier.rwa_level} Eligible
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-3">
+                {qualifiedTier && qualifiedTier.rwa_level !== "None" ? (
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    Buyout: ${qualifiedTier.rwa_min_usd} –${qualifiedTier.rwa_max_usd} ($
+                    {qualifiedTier.annual_nps_min_usd}–${qualifiedTier.annual_nps_max_usd}/yr NPS)
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    Stake $750+ (Sapphire) to unlock Mystery NFT access
+                  </span>
+                )}
+              </div>
+            </Card>
+
+            {/* Active Lock Timers */}
+            {locksQuery.data && locksQuery.data.length > 0 && (
+              <Card className="p-3 border-primary/30 bg-primary/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-semibold flex items-center gap-1.5">
+                    <Timer className="h-3.5 w-3.5 text-primary" /> Active 30-Day Liquidity Locks
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {locksQuery.data.length} Position{locksQuery.data.length === 1 ? "" : "s"}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
                   {locksQuery.data.map((lock: any) => {
                     const maturityDate = new Date(lock.maturity_date);
                     const now = new Date();
@@ -486,28 +531,30 @@ const LiquidityPools = () => {
                     return (
                       <div
                         key={lock.token_id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-md bg-background/50 border border-border/50"
+                        className="flex items-center justify-between gap-2 p-2 rounded border border-border/50 bg-background/50 text-xs"
                       >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold">Position #{lock.token_id}</span>
-                            <Badge variant="outline" className="text-[10px]">
-                              {formatUSD(lock.usd_value)}
-                            </Badge>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold">#{lock.token_id}</span>
+                            <span className="font-mono text-muted-foreground">({formatUSD(lock.usd_value)})</span>
                           </div>
-                          <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                            <Timer className="h-3 w-3" />
-                            {isUnlocked ? "Matured on " : "Unlocks "}
-                            {maturityDate.toLocaleDateString()} at {maturityDate.toLocaleTimeString()}
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {isUnlocked ? "Matured" : `Unlocks ${maturityDate.toLocaleDateString()}`}
                           </p>
                         </div>
                         <Button
                           size="sm"
-                          variant={isUnlocked ? "default" : "secondary"}
                           disabled={!isUnlocked}
-                          className="h-8 text-xs shrink-0"
+                          className="h-7 text-[11px] shrink-0"
+                          variant={isUnlocked ? "default" : "secondary"}
                         >
-                          {isUnlocked ? "Pick Mystery NFT" : "Tuning In..."}
+                          {isUnlocked ? (
+                            <>
+                              <Sparkles className="h-3 w-3 mr-1" /> Pick Mystery NFT
+                            </>
+                          ) : (
+                            "Tuning In…"
+                          )}
                         </Button>
                       </div>
                     );
