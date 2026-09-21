@@ -6722,6 +6722,75 @@ export type Database = {
         }
         Relationships: []
       }
+      music_catalog: {
+        Row: {
+          album_title: string | null
+          artist_name: string
+          artwork_url: string | null
+          assigned_to: string | null
+          buyout_valuation: number | null
+          created_at: string
+          duration_ms: number | null
+          external_url: string | null
+          id: string
+          is_available: boolean
+          isrc: string | null
+          last_synced_at: string
+          preview_audio_url: string | null
+          provider: string
+          provider_metadata: Json
+          provider_track_id: string
+          source_playlist_id: string
+          track_title: string
+          ttm_nps_yield: number | null
+          updated_at: string
+        }
+        Insert: {
+          album_title?: string | null
+          artist_name: string
+          artwork_url?: string | null
+          assigned_to?: string | null
+          buyout_valuation?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          external_url?: string | null
+          id?: string
+          is_available?: boolean
+          isrc?: string | null
+          last_synced_at?: string
+          preview_audio_url?: string | null
+          provider: string
+          provider_metadata?: Json
+          provider_track_id: string
+          source_playlist_id: string
+          track_title: string
+          ttm_nps_yield?: number | null
+          updated_at?: string
+        }
+        Update: {
+          album_title?: string | null
+          artist_name?: string
+          artwork_url?: string | null
+          assigned_to?: string | null
+          buyout_valuation?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          external_url?: string | null
+          id?: string
+          is_available?: boolean
+          isrc?: string | null
+          last_synced_at?: string
+          preview_audio_url?: string | null
+          provider?: string
+          provider_metadata?: Json
+          provider_track_id?: string
+          source_playlist_id?: string
+          track_title?: string
+          ttm_nps_yield?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       nano_bite_executions: {
         Row: {
           action: string
@@ -12643,6 +12712,22 @@ export type Database = {
       }
       get_average_rating: { Args: { p_ratee_id: string }; Returns: number }
       get_hub_balance: { Args: { uid: string }; Returns: number }
+      get_nft_radio_tracks: {
+        Args: { _limit?: number }
+        Returns: {
+          album_title: string
+          artist_name: string
+          artwork_url: string
+          buyout_valuation: number
+          duration_ms: number
+          external_url: string
+          id: string
+          preview_audio_url: string
+          provider: string
+          track_title: string
+          ttm_nps_yield: number
+        }[]
+      }
       get_omni_aggregates: { Args: { pseudo_id: string }; Returns: Json }
       get_real_library_yield: {
         Args: never
