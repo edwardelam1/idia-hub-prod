@@ -6740,6 +6740,7 @@ export type Database = {
           provider: string
           provider_metadata: Json
           provider_track_id: string
+          reserved_until: string | null
           source_playlist_id: string
           track_title: string
           ttm_nps_yield: number | null
@@ -6762,6 +6763,7 @@ export type Database = {
           provider: string
           provider_metadata?: Json
           provider_track_id: string
+          reserved_until?: string | null
           source_playlist_id: string
           track_title: string
           ttm_nps_yield?: number | null
@@ -6784,6 +6786,7 @@ export type Database = {
           provider?: string
           provider_metadata?: Json
           provider_track_id?: string
+          reserved_until?: string | null
           source_playlist_id?: string
           track_title?: string
           ttm_nps_yield?: number | null
