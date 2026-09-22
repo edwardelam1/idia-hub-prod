@@ -8,6 +8,7 @@ import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Ale
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
+import { useBrowserLocation } from "@/hooks/useBrowserLocation";
 import { recordActivity } from "@/lib/activity-history";
 
 // ERROR BOUNDARY WRAPPER
@@ -51,10 +52,12 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
+  const [confirmedLocation, setConfirmedLocation] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
   const isProcessing = useRef(false);
+  const { locationString } = useBrowserLocation();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -65,6 +68,32 @@ const BestFriendPage = () => {
 
     isProcessing.current = true;
     setIsLoading(true);
+
+    // 1. LOCATION PROMPT & CONFIRMATION (Halts execution until user confirms)
+    let finalLocation = confirmedLocation;
+    if (!finalLocation) {
+      console.info("[BEGIN: UI.BestFriend.LocationPrompt] Halting to request user location confirmation.");
+
+      // Fallback to Louisville, KY if the useBrowserLocation hook hasn't resolved yet
+      const suggestedLocation = locationString && locationString.trim() !== "" ? locationString : "Louisville, KY";
+
+      const userConfirmed = window.prompt(
+        "Please confirm your city and state for regional smart-contract routing:",
+        suggestedLocation,
+      );
+
+      if (!userConfirmed || userConfirmed.trim() === "") {
+        console.error("[ERROR: UI.BestFriend.LocationPrompt] User cancelled or provided empty location.");
+        toast.error("Location confirmation is required for regional routing.");
+        setIsLoading(false);
+        isProcessing.current = false;
+        return;
+      }
+
+      finalLocation = userConfirmed.trim();
+      setConfirmedLocation(finalLocation);
+      console.info(`[SUCCESS: UI.BestFriend.LocationPrompt] Location manually locked to: ${finalLocation}`);
+    }
 
     setConversation((prev) => [...prev, { role: "user", content: currentMessage }]);
 
@@ -82,41 +111,12 @@ const BestFriendPage = () => {
         .single();
 
       if (profileError || !profile?.platform_guid) {
-        console.error(`[ERROR: UI.BestFriend.ProfileFetch] Failed to resolve identity.`);
+        console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
         throw new Error("Identity resolution failure.");
       }
 
-      console.info("[BEGIN: UI.BestFriend.LocationFetch] Capturing raw coordinates for backend resolution...");
-
-      let rawCoordinates = null;
-      try {
-        rawCoordinates = await new Promise<string | null>((resolve) => {
-          if (!navigator.geolocation) {
-            console.error("[ERROR: UI.BestFriend.LocationFetch] Geolocation not supported by browser.");
-            resolve(null);
-            return;
-          }
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              // Capture raw coordinates. The Edge Function will handle the Reverse Geocoding.
-              const lat = position.coords.latitude;
-              const lon = position.coords.longitude;
-              console.info(`[SUCCESS: UI.BestFriend.LocationFetch] Coordinates captured: ${lat}, ${lon}`);
-              resolve(`${lat}, ${lon}`);
-            },
-            (error) => {
-              console.error(`[ERROR: UI.BestFriend.LocationFetch] Native resolution failed: ${error.message}`);
-              resolve(null);
-            },
-            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 },
-          );
-        });
-      } catch (err) {
-        console.error(`[ERROR: UI.BestFriend.LocationFetch] Hardware pipeline error: ${err}`);
-      }
-
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, coordinates: ${rawCoordinates ?? "<none>"}`,
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, routing location: ${finalLocation}`,
       );
 
       let realPipelineData: any[] = [];
@@ -130,7 +130,6 @@ const BestFriendPage = () => {
         realPipelineData = healthData || [];
       }
 
-      console.info("[BEGIN: UI.BestFriend.InvokeAI] Passing payload to Edge Function.");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -138,8 +137,7 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: profile.platform_guid,
             userId: user.id,
-            // We pass the raw coordinates to the Edge Function. The Edge Function MUST resolve these.
-            location_string: rawCoordinates,
+            location_string: finalLocation, // Passes the strictly confirmed UI string
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
@@ -184,12 +182,13 @@ const BestFriendPage = () => {
         referenceId: receipt?.reference_id,
         idempotencyKey: receipt?.reference_id ?? `best-friend-${crypto.randomUUID()}`,
       });
+      console.info("[PHASE_END: BestFriend.ActivityHistory] Prompt and answer saved.");
 
       if (marketplaceMode) await refreshBalance();
       setCurrentMessage("");
     } catch (error: any) {
       console.error(
-        "[ERROR: UI.BestFriend.Send] Transaction Failed:",
+        "[PHASE_END: BestFriend.Send] Failed:",
         error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error),
       );
       toast.error(error.message);
