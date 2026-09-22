@@ -8,7 +8,6 @@ import { Send, Bot, User, Brain, Search, Shield, Loader2, FileKey, Activity, Ale
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
-import { useBrowserLocation } from "@/hooks/useBrowserLocation";
 import { recordActivity } from "@/lib/activity-history";
 
 // ERROR BOUNDARY WRAPPER
@@ -56,7 +55,6 @@ const BestFriendPage = () => {
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
   const isProcessing = useRef(false);
-  const { locationString, status: locationStatus } = useBrowserLocation();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -88,88 +86,23 @@ const BestFriendPage = () => {
         throw new Error("Identity resolution failure.");
       }
 
-      console.info("[BEGIN: UI.BestFriend.LocationFetch] Awaiting fresh location triangulation...");
+      console.info("[BEGIN: UI.BestFriend.LocationFetch] Capturing raw coordinates for backend resolution...");
 
-      let freshLocation = null;
+      let rawCoordinates = null;
       try {
-        freshLocation = await new Promise<string | null>((resolve) => {
+        rawCoordinates = await new Promise<string | null>((resolve) => {
           if (!navigator.geolocation) {
             console.error("[ERROR: UI.BestFriend.LocationFetch] Geolocation not supported by browser.");
             resolve(null);
             return;
           }
           navigator.geolocation.getCurrentPosition(
-            async (position) => {
+            (position) => {
+              // Capture raw coordinates. The Edge Function will handle the Reverse Geocoding.
               const lat = position.coords.latitude;
               const lon = position.coords.longitude;
-              // CRITICAL FIX: Truncate precision to 4 decimals to prevent NWS 400 Bad Request crash
-              const safeLat = lat.toFixed(4);
-              const safeLon = lon.toFixed(4);
-
-              console.info(
-                `[BEGIN: UI.BestFriend.Geocode.NWS] Normalizing coords (${safeLat}, ${safeLon}) via US Govt NWS API...`,
-              );
-              try {
-                const nwsResponse = await fetch(`https://api.weather.gov/points/${safeLat},${safeLon}`);
-                if (nwsResponse.ok) {
-                  const nwsData = await nwsResponse.json();
-                  const city = nwsData?.properties?.relativeLocation?.properties?.city;
-                  const state = nwsData?.properties?.relativeLocation?.properties?.state;
-
-                  if (city && state) {
-                    console.info(`[SUCCESS: UI.BestFriend.Geocode.NWS] Normalized to USPS standard: ${city}, ${state}`);
-                    resolve(`${city}, ${state}`);
-                    return;
-                  }
-                }
-              } catch (e) {
-                console.warn(`[WARN: UI.BestFriend.Geocode.NWS] NWS API failed or timed out.`);
-              }
-
-              console.info(`[BEGIN: UI.BestFriend.Geocode.OSM] Attempting OpenStreetMap Nominatim fallback...`);
-              try {
-                // Secondary Fallback: Nominatim (Bypasses strict ad-blockers that kill BigDataCloud)
-                const osmResponse = await fetch(
-                  `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10`,
-                );
-                if (osmResponse.ok) {
-                  const osmData = await osmResponse.json();
-                  const city = osmData?.address?.city || osmData?.address?.town || osmData?.address?.county;
-                  const state = osmData?.address?.state;
-
-                  if (city && state) {
-                    console.info(
-                      `[SUCCESS: UI.BestFriend.Geocode.OSM] Normalized via OpenStreetMap: ${city}, ${state}`,
-                    );
-                    resolve(`${city}, ${state}`);
-                    return;
-                  }
-                }
-              } catch (e) {
-                console.warn(`[WARN: UI.BestFriend.Geocode.OSM] Nominatim API failed.`);
-              }
-
-              console.info(`[BEGIN: UI.BestFriend.Geocode.BigDataCloud] Attempting final BigDataCloud fallback...`);
-              try {
-                const response = await fetch(
-                  `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
-                );
-                if (!response.ok) throw new Error(`BigDataCloud HTTP error ${response.status}`);
-                const data = await response.json();
-
-                const fallbackLocation = data.city || data.locality || data.principalSubdivision;
-                if (fallbackLocation) {
-                  console.info(`[SUCCESS: UI.BestFriend.Geocode.BigDataCloud] Resolved to: ${fallbackLocation}`);
-                  resolve(fallbackLocation);
-                  return;
-                }
-                throw new Error("No usable region data in BigDataCloud payload");
-              } catch (bdcError) {
-                console.error(
-                  `[ERROR: UI.BestFriend.Geocode.All] All geocoders failed. Falling back to raw coordinates.`,
-                );
-                resolve(`${lat}, ${lon}`);
-              }
+              console.info(`[SUCCESS: UI.BestFriend.LocationFetch] Coordinates captured: ${lat}, ${lon}`);
+              resolve(`${lat}, ${lon}`);
             },
             (error) => {
               console.error(`[ERROR: UI.BestFriend.LocationFetch] Native resolution failed: ${error.message}`);
@@ -179,11 +112,12 @@ const BestFriendPage = () => {
           );
         });
       } catch (err) {
-        console.error(`[ERROR: UI.BestFriend.LocationFetch] Forced resolution pipeline error: ${err}`);
+        console.error(`[ERROR: UI.BestFriend.LocationFetch] Hardware pipeline error: ${err}`);
       }
 
-      const normalizedLocation = freshLocation || locationString || null;
-      console.info(`[STATUS: UI.BestFriend.LocationContext] Final location payload: ${normalizedLocation ?? "<none>"}`);
+      console.info(
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, coordinates: ${rawCoordinates ?? "<none>"}`,
+      );
 
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
@@ -196,6 +130,7 @@ const BestFriendPage = () => {
         realPipelineData = healthData || [];
       }
 
+      console.info("[BEGIN: UI.BestFriend.InvokeAI] Passing payload to Edge Function.");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -203,7 +138,8 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: profile.platform_guid,
             userId: user.id,
-            location_string: normalizedLocation,
+            // We pass the raw coordinates to the Edge Function. The Edge Function MUST resolve these.
+            location_string: rawCoordinates,
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
