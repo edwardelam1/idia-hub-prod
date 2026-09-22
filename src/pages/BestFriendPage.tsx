@@ -52,12 +52,11 @@ const BestFriendPage = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [marketplaceMode, setMarketplaceMode] = useState(false);
-  const [confirmedLocation, setConfirmedLocation] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { refreshBalance } = useSynapseCredits();
   const navigate = useNavigate();
   const isProcessing = useRef(false);
-  const { locationString } = useBrowserLocation();
+  const { locationString, status: locationStatus } = useBrowserLocation();
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -68,32 +67,6 @@ const BestFriendPage = () => {
 
     isProcessing.current = true;
     setIsLoading(true);
-
-    // 1. LOCATION PROMPT & CONFIRMATION (Halts execution until user confirms)
-    let finalLocation = confirmedLocation;
-    if (!finalLocation) {
-      console.info("[BEGIN: UI.BestFriend.LocationPrompt] Halting to request user location confirmation.");
-
-      // Fallback to Louisville, KY if the useBrowserLocation hook hasn't resolved yet
-      const suggestedLocation = locationString && locationString.trim() !== "" ? locationString : "Louisville, KY";
-
-      const userConfirmed = window.prompt(
-        "Please confirm your city and state for regional smart-contract routing:",
-        suggestedLocation,
-      );
-
-      if (!userConfirmed || userConfirmed.trim() === "") {
-        console.error("[ERROR: UI.BestFriend.LocationPrompt] User cancelled or provided empty location.");
-        toast.error("Location confirmation is required for regional routing.");
-        setIsLoading(false);
-        isProcessing.current = false;
-        return;
-      }
-
-      finalLocation = userConfirmed.trim();
-      setConfirmedLocation(finalLocation);
-      console.info(`[SUCCESS: UI.BestFriend.LocationPrompt] Location manually locked to: ${finalLocation}`);
-    }
 
     setConversation((prev) => [...prev, { role: "user", content: currentMessage }]);
 
@@ -116,7 +89,41 @@ const BestFriendPage = () => {
       }
 
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, routing location: ${finalLocation}`,
+        "[BEGIN: UI.BestFriend.LocationFetch] Triggering native browser permission popup for coordinates...",
+      );
+
+      let rawCoordinates = null;
+      try {
+        rawCoordinates = await new Promise<string | null>((resolve) => {
+          if (!navigator.geolocation) {
+            console.error("[ERROR: UI.BestFriend.LocationFetch] Geolocation not supported by browser.");
+            resolve(null);
+            return;
+          }
+          // This invokes the browser's native "Allow site to access your location" prompt.
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const lat = position.coords.latitude;
+              const lon = position.coords.longitude;
+              console.info(`[SUCCESS: UI.BestFriend.LocationFetch] Native coordinates captured: ${lat}, ${lon}`);
+              resolve(`${lat}, ${lon}`);
+            },
+            (error) => {
+              console.error(`[ERROR: UI.BestFriend.LocationFetch] Native resolution failed: ${error.message}`);
+              resolve(null);
+            },
+            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 },
+          );
+        });
+      } catch (err) {
+        console.error("[ERROR: UI.BestFriend.LocationFetch] Hardware pipeline error: ", err);
+      }
+
+      // Default to the native coordinates, fall back to the hook's background state, then null
+      const normalizedLocation = rawCoordinates || locationString || null;
+
+      console.info(
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location payload: ${normalizedLocation ?? "<none>"}`,
       );
 
       let realPipelineData: any[] = [];
@@ -130,6 +137,7 @@ const BestFriendPage = () => {
         realPipelineData = healthData || [];
       }
 
+      console.info("[BEGIN: UI.BestFriend.InvokeAI] Passing payload to Edge Function.");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -137,7 +145,7 @@ const BestFriendPage = () => {
             isMarketplaceMode: marketplaceMode,
             platformGuid: profile.platform_guid,
             userId: user.id,
-            location_string: finalLocation, // Passes the strictly confirmed UI string
+            location_string: normalizedLocation, // Passing raw numbers; Edge Function MUST reverse geocode
             marketplace: marketplaceMode ? { healthRecords: realPipelineData, lifestyleRecords: [] } : null,
           },
           history: conversation.slice(-5).map((m) => ({ role: m.role, content: m.content })),
@@ -182,13 +190,12 @@ const BestFriendPage = () => {
         referenceId: receipt?.reference_id,
         idempotencyKey: receipt?.reference_id ?? `best-friend-${crypto.randomUUID()}`,
       });
-      console.info("[PHASE_END: BestFriend.ActivityHistory] Prompt and answer saved.");
 
       if (marketplaceMode) await refreshBalance();
       setCurrentMessage("");
     } catch (error: any) {
       console.error(
-        "[PHASE_END: BestFriend.Send] Failed:",
+        "[ERROR: UI.BestFriend.Send] Transaction Failed:",
         error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error),
       );
       toast.error(error.message);
