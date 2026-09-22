@@ -2,7 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.7";
 import { privateKeyToAccount } from "https://esm.sh/viem@2.9.20/accounts";
 import { base } from "https://esm.sh/viem@2.9.20/chains";
-import { createWalletClient, http, parseUnits, publicActions } from "https://esm.sh/viem@2.9.20";
+import {
+  createWalletClient,
+  encodeFunctionData,
+  http,
+  keccak256,
+  parseUnits,
+  publicActions,
+  toHex,
+} from "https://esm.sh/viem@2.9.20";
 
 // 🚨 BIGINT SERIALIZATION PATCH 🚨
 // Teaches JSON.stringify how to natively parse blockchain BigInt values into strings
@@ -31,8 +39,8 @@ if (!ALCHEMY_BASE_RPC_URL) {
 }
 
 // Protocol contracts — Base Mainnet (mirrors src/config/contracts.ts)
-const REGISTRY_ADDRESS = "0x137D913d89d0D6a5b2d1Db76173770C94d25387B";
-const POOL_FACTORY_ADDRESS = "0x0188FCB027D834E03DD0288D360937ceC4d267bb";
+const REGISTRY_ADDRESS = "0x45BC46e0C52f2d1d2c22BC267Eb5D27c42B8E5f8";
+const POOL_FACTORY_ADDRESS = "0x18306e920946FA7e42990C5D6F9402750407bF4B";
 const ESCROW_ECOSYSTEM = Deno.env.get("ESCROW_ECOSYSTEM") ?? "0xd052C6F3846b4Fe56E579880Ec9ea2764ABDe708";
 // Wallet-as-Source-of-Truth: when location is null/blank, route to the DAO Safe
 // (Global War Chest). Funds remain in cryptographically-verifiable governance custody
@@ -57,7 +65,7 @@ const IDIA_TOKEN_ADDRESS = "0x6526F939D257E67896821c25B6C24Daa404a01FB";
 // pool-theft path). ACTIVATION REQUIRED: one-time Safe tx
 // PoolDeployerModule.authorizeOperator(relayer) — until executed, module calls
 // revert NotAuthorized() and regional funds fall back to GLOBAL_WAR_CHEST.
-const POOL_DEPLOYER_MODULE = "0x8AF7C97B56282DF3Af8f9472a9938b0D6b33Bf09";
+const POOL_DEPLOYER_MODULE = "0xc91f062d37f178b766F4424df544c3CA1AC3D7FD";
 
 // System wallets
 const SYSTEM_CASH_REGISTER = "0x649436db4d9352240d1132d9372293e5cc6af0e3";
@@ -145,8 +153,16 @@ const corsHeaders = {
 
 // ══════════════════════════════════════════════════════════════════════
 // PLANCK-SCALE ATOMIC EXECUTOR
-// Replaces viem's writeContract wrapper to expose every micro-op
-// (Nonce → Simulate → Prepare → Sign → Broadcast) for sequencer diagnostics.
+// Exposes every micro-op (Nonce → Simulate → Encode → Prepare → Sign →
+// Broadcast) for sequencer diagnostics.
+//
+// 🚨 REGRESSION GUARD (2026-09-16): this helper previously handed the
+// simulateContract `request` (address/abi/functionName/args) straight to
+// prepareTransactionRequest. That preparer does NOT encode contract calls,
+// so `to` and `data` were dropped and the relayer broadcast BARE, EMPTY
+// transactions — mined successfully, zero logs, zero USDC moved. Corporate
+// and war-chest revenue silently stayed in the relayer for months.
+// The call MUST be encoded to raw calldata and `to` set explicitly.
 // ══════════════════════════════════════════════════════════════════════
 async function executePlanckScaleTransaction(
   client: any,
@@ -162,7 +178,7 @@ async function executePlanckScaleTransaction(
   console.info(`[END: ${stepName}.Planck.NonceCheck] Sequencer assigned Nonce: ${nextNonce}`);
 
   console.info(`[BEGIN: ${stepName}.Planck.Simulate] Executing dry-run simulation on EVM...`);
-  const { request } = await client.simulateContract({
+  await client.simulateContract({
     account,
     address: contractAddress as `0x${string}`,
     abi,
@@ -171,12 +187,30 @@ async function executePlanckScaleTransaction(
   });
   console.info(`[END: ${stepName}.Planck.Simulate] Simulation successful. No reverts detected.`);
 
+  console.info(`[BEGIN: ${stepName}.Planck.Encode] Encoding ${funcName} calldata...`);
+  const callData = encodeFunctionData({ abi, functionName: funcName, args });
+  if (!callData || callData === "0x") {
+    throw new Error(`ENCODE_GUARD: ${stepName} produced empty calldata for ${funcName} — refusing to broadcast.`);
+  }
+  console.info(`[END: ${stepName}.Planck.Encode] calldata=${callData.slice(0, 10)} len=${callData.length}`);
+
   console.info(`[BEGIN: ${stepName}.Planck.Prepare] Constructing raw transaction payload...`);
   const preparedTx = await client.prepareTransactionRequest({
-    ...request,
+    account,
+    chain: base,
+    to: contractAddress as `0x${string}`,
+    data: callData,
+    value: 0n,
     nonce: nextNonce,
   });
-  console.info(`[END: ${stepName}.Planck.Prepare] Payload constructed. Gas Limit: ${preparedTx.gas}`);
+  if (!preparedTx.to || !preparedTx.data || preparedTx.data === "0x") {
+    throw new Error(
+      `PAYLOAD_GUARD: ${stepName} prepared an empty transaction (to=${preparedTx.to} data=${preparedTx.data}) — refusing to broadcast.`,
+    );
+  }
+  console.info(
+    `[END: ${stepName}.Planck.Prepare] Payload constructed. to=${preparedTx.to} gas=${preparedTx.gas} dataLen=${String(preparedTx.data).length}`,
+  );
 
   console.info(`[BEGIN: ${stepName}.Planck.Sign] Applying cryptographic signature...`);
   const signedTx = await account.signTransaction(preparedTx);
@@ -197,6 +231,47 @@ async function executePlanckScaleTransaction(
     console.error(`[END: ${stepName}.Planck.FatalDump]`);
     throw broadcastError;
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// PROOF-OF-PAYMENT ASSERTION
+// A success receipt is NOT proof of payment. Every USDC leg must be
+// confirmed by an actual ERC-20 Transfer event to the intended address for
+// at least the intended amount. Anything else throws.
+// ══════════════════════════════════════════════════════════════════════
+const TRANSFER_TOPIC = keccak256(toHex("Transfer(address,address,uint256)"));
+
+function assertTransferLanded(
+  receipt: any,
+  token: string,
+  to: string,
+  amountMicro: number | bigint,
+  label: string,
+): void {
+  console.info(`[BEGIN: ${label}.ProofOfPayment] Verifying Transfer event → ${to} amount=${amountMicro}`);
+  const expected = BigInt(amountMicro);
+  const logs = Array.isArray(receipt?.logs) ? receipt.logs : [];
+  const match = logs.find((log: any) => {
+    if (String(log.address).toLowerCase() !== token.toLowerCase()) return false;
+    if (!log.topics || log.topics.length < 3) return false;
+    if (String(log.topics[0]).toLowerCase() !== TRANSFER_TOPIC.toLowerCase()) return false;
+    const recipient = "0x" + String(log.topics[2]).slice(-40);
+    if (recipient.toLowerCase() !== to.toLowerCase()) return false;
+    try {
+      return BigInt(log.data) >= expected;
+    } catch {
+      return false;
+    }
+  });
+  if (!match) {
+    console.error(
+      `[END: ${label}.ProofOfPayment] FAILED — no Transfer event of ${expected} to ${to} in tx ${receipt?.transactionHash}. logs=${logs.length}`,
+    );
+    throw new Error(
+      `PROOF_OF_PAYMENT_FAILED: ${label} — receipt ${receipt?.transactionHash} contains no USDC Transfer of ${expected} to ${to}.`,
+    );
+  }
+  console.info(`[END: ${label}.ProofOfPayment] Verified in tx ${receipt?.transactionHash}.`);
 }
 
 // Brief mempool clear between sequential transactions in the same execution.
@@ -223,12 +298,9 @@ async function insertLedgerWithRepair(
 ): Promise<void> {
   const maxAttempts = 3;
   let lastError: any = null;
-  // Every ledger row carries the settlement run reference so the audit UI can
-  // group the individual contributor transfers back to their run.
-  const row = { reference_id: opts.reference_id, ...opts.row };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const { error } = await supabase.from("synapse_credit_ledger").insert(row);
+      const { error } = await supabase.from("synapse_credit_ledger").insert(opts.row);
       if (!error) return;
       lastError = error;
     } catch (err) {
@@ -307,12 +379,16 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     queueRefId = ingestionReference;
 
     // Stamp attempt counter on the settlement_queue row BEFORE any chain work.
+    let queueCreatedAt: string | null = null;
+    let queueAlreadyCompleted = false;
     try {
       const { data: existing } = await supabase
         .from("settlement_queue")
-        .select("attempts")
+        .select("attempts, status, created_at")
         .eq("reference_id", ingestionReference)
         .maybeSingle();
+      queueCreatedAt = (existing?.created_at as string | undefined) ?? null;
+      queueAlreadyCompleted = existing?.status === "completed";
       const nextAttempts = ((existing?.attempts as number | undefined) ?? 0) + 1;
       await supabase
         .from("settlement_queue")
@@ -325,6 +401,135 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
     } catch (stampErr: any) {
       console.error(`[WARNING: QueueStamp] Could not stamp queue row for ${ingestionReference}: ${stampErr?.message}`);
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // IDEMPOTENCY_CHECK — a sale is settled exactly once, ever.
+    // Two independent reads: the queue row's terminal status, and the
+    // presence of contributor ledger rows for this reference.
+    // ═══════════════════════════════════════════════════════════════════
+    currentStep = "IDEMPOTENCY_CHECK";
+    console.info(`[BEGIN: IDEMPOTENCY_CHECK] runId=${runCorrelationId} ref=${ingestionReference}`);
+    console.info(`[IDEMPOTENCY_CHECK.Query1] queue status completed=${queueAlreadyCompleted}`);
+    let priorLedgerRows = 0;
+    try {
+      const { data: priorRows, error: priorErr } = await supabase
+        .from("synapse_credit_ledger")
+        .select("id")
+        .eq("transaction_type", "data_sale_payout")
+        .ilike("description", `%${ingestionReference}%`)
+        .limit(1);
+      if (priorErr) {
+        console.error(`[ERROR: IDEMPOTENCY_CHECK.Query2] ledger probe failed: ${priorErr.message}`);
+      }
+      priorLedgerRows = priorRows?.length ?? 0;
+      console.info(`[IDEMPOTENCY_CHECK.Query2] prior contributor ledger rows=${priorLedgerRows}`);
+    } catch (idemErr: any) {
+      console.error(`[ERROR: IDEMPOTENCY_CHECK.Query2] ${idemErr?.message ?? idemErr}`);
+    }
+    if (queueAlreadyCompleted || priorLedgerRows > 0) {
+      console.warn(
+        `[HALT: IDEMPOTENCY_CHECK] ref=${ingestionReference} already settled (queueCompleted=${queueAlreadyCompleted}, ledgerRows=${priorLedgerRows}). No chain work performed.`,
+      );
+      console.info(`[END: IDEMPOTENCY_CHECK] duplicate dispatch suppressed.`);
+      return;
+    }
+    console.info(`[END: IDEMPOTENCY_CHECK] ref=${ingestionReference} is unsettled — proceeding.`);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RESOLVE_CONTRIBUTORS — pay the owners of the consent records that
+    // this sale actually consumed. The Hub-supplied contributing_users
+    // list is NEVER trusted for payment; it is logged for discrepancy.
+    // ═══════════════════════════════════════════════════════════════════
+    currentStep = "RESOLVE_CONTRIBUTORS";
+    console.info(
+      `[BEGIN: RESOLVE_CONTRIBUTORS] runId=${runCorrelationId} ref=${ingestionReference} buyer=${buyer_id} payloadCount=${contributing_users?.length ?? 0}`,
+    );
+    let matchedEgressId: string | null = null;
+    const resolvedOwners: string[] = [];
+    try {
+      const anchor = queueCreatedAt ? new Date(queueCreatedAt) : new Date();
+      const windowStart = new Date(anchor.getTime() - 120_000).toISOString();
+      const windowEnd = new Date(anchor.getTime() + 120_000).toISOString();
+      console.info(`[RESOLVE_CONTRIBUTORS.Query1] egress window ${windowStart} → ${windowEnd}`);
+      const { data: egressRows, error: egressErr } = await supabase
+        .from("egress_logs")
+        .select("id, aca_record_references, aca_record_ids, created_at, settlement_status")
+        .eq("user_id", buyer_id)
+        .gte("created_at", windowStart)
+        .lte("created_at", windowEnd)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (egressErr) throw new Error(`egress_logs query failed: ${egressErr.message}`);
+      console.info(`[RESOLVE_CONTRIBUTORS.Query1] matched ${egressRows?.length ?? 0} egress row(s)`);
+
+      const egressRow = (egressRows ?? []).find((r: any) => (r.settlement_status ?? "PENDING") !== "SETTLED");
+      if (!egressRow) throw new Error("no unsettled egress record matched this sale window");
+      matchedEgressId = egressRow.id as string;
+      const refs: string[] = [
+        ...((egressRow.aca_record_references as string[] | null) ?? []),
+        ...((egressRow.aca_record_ids as string[] | null) ?? []),
+      ].filter(Boolean);
+      console.info(`[RESOLVE_CONTRIBUTORS.Query1] egress=${matchedEgressId} consentRefs=${refs.length}`);
+      if (refs.length === 0) throw new Error(`egress record ${matchedEgressId} lists no consent references`);
+
+      console.info(`[BEGIN: RESOLVE_CONTRIBUTORS.Query2] consent-record → owner lookup`);
+      const { data: acaRows, error: acaErr } = await supabase
+        .from("user_aca_records")
+        .select("platform_guid, aca_hash_key")
+        .in("aca_hash_key", refs);
+      if (acaErr) throw new Error(`user_aca_records query failed: ${acaErr.message}`);
+      console.info(`[END: RESOLVE_CONTRIBUTORS.Query2] rows=${acaRows?.length ?? 0}`);
+
+      console.info(`[BEGIN: RESOLVE_CONTRIBUTORS.Dedupe]`);
+      for (const row of acaRows ?? []) {
+        const owner = row.platform_guid as string | null;
+        if (owner && !resolvedOwners.includes(owner)) resolvedOwners.push(owner);
+      }
+      console.info(`[END: RESOLVE_CONTRIBUTORS.Dedupe] distinctOwners=${resolvedOwners.length}`);
+      if (resolvedOwners.length === 0) throw new Error("consent references resolved to zero known owners");
+    } catch (resolveErr: any) {
+      const reason = resolveErr?.message ?? String(resolveErr);
+      console.error(`[FATAL STALL: RESOLVE_CONTRIBUTORS] ${reason} — refusing to pay a guessed contributor set.`);
+      try {
+        await supabase
+          .from("settlement_queue")
+          .update({ status: "failed", last_error: `RESOLVE_CONTRIBUTORS: ${reason}` })
+          .eq("reference_id", ingestionReference);
+      } catch (_) {
+        /* queue write failure already logged upstream */
+      }
+      console.info(`[END: RESOLVE_CONTRIBUTORS] halted.`);
+      return;
+    }
+    const settlementContributors = resolvedOwners.map((user_id) => ({ user_id }));
+    const payloadOwnerCount = contributing_users?.length ?? 0;
+    if (payloadOwnerCount !== settlementContributors.length) {
+      console.warn(
+        `[DISCREPANCY: RESOLVE_CONTRIBUTORS] Hub payload listed ${payloadOwnerCount} contributor(s); consent records resolve to ${settlementContributors.length}. Paying the resolved set.`,
+      );
+    }
+    console.info(
+      `[END: RESOLVE_CONTRIBUTORS] payable owners=${settlementContributors.length} egress=${matchedEgressId}`,
+    );
+
+    // Integer allocation guard — every EVM amount is validated before broadcast.
+    const assertPayable = (amountMicro: number, remainingMicro: number, label: string) => {
+      console.info(
+        `[BEGIN: Guard.assertPayable] label=${label} amountMicro=${amountMicro} remainingMicro=${remainingMicro}`,
+      );
+      if (!Number.isFinite(amountMicro) || !Number.isInteger(amountMicro)) {
+        throw new Error(`ZERO_VALUE_GUARD: ${label} amount is not a finite integer (${amountMicro})`);
+      }
+      if (amountMicro <= 0) {
+        throw new Error(`ZERO_VALUE_GUARD: ${label} amount <= 0 (${amountMicro}) — refusing to broadcast`);
+      }
+      if (amountMicro > remainingMicro) {
+        throw new Error(
+          `OVER_ALLOCATION_GUARD: ${label} amount ${amountMicro} exceeds remaining pool ${remainingMicro}`,
+        );
+      }
+      console.info(`[END: Guard.assertPayable] label=${label} approved.`);
+    };
 
     // ═══════════════════════════════════════════════════════════════════
     // RELAYER SINGLE-WRITER MUTEX
@@ -382,31 +587,37 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
       // PHASE 1: CORPORATE SETTLEMENT (60%)
       currentStep = "PHASE_1_CORPORATE_SETTLEMENT";
       const corporateRevenue = total_fiat_amount * REVENUE_SPLIT.CORPORATE;
+      const corporateMicro = Math.floor(corporateRevenue * 1_000_000);
+      assertPayable(corporateMicro, corporateMicro, "Phase_1_Corporate");
 
-      console.info(`[BEGIN: Phase_1_Corporate.Transfer] amount=${corporateRevenue}`);
+      console.info(`[BEGIN: Phase_1_Corporate.Transfer] amount=${corporateRevenue} micro=${corporateMicro}`);
       const { txHash: corporateHash } = await executePlanckScaleTransaction(
         client,
         account,
         USDC_ADDRESS,
         ERC20_ABI,
         "transfer",
-        [SYSTEM_CASH_REGISTER, parseUnits(corporateRevenue.toFixed(6), 6)],
+        [SYSTEM_CASH_REGISTER, BigInt(corporateMicro)],
+
         "Phase_1_Corporate",
       );
       console.info(
         `[STATUS: Phase_1_Corporate.Transfer] TX Broadcasted. Hash: ${corporateHash}. Awaiting network confirmation...`,
       );
       const corporateReceipt = await client.waitForTransactionReceipt({ hash: corporateHash, confirmations: 1 });
-      if (corporateReceipt.status === "success") {
-        console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
-        await forceSequencerDelay();
-      } else {
+      if (corporateReceipt.status !== "success") {
         console.error(`[ERROR: Phase_1_Corporate.Transfer] Transaction reverted on-chain. Hash: ${corporateHash}`);
+        throw new Error(`Phase_1_Corporate reverted on-chain (${corporateHash}).`);
       }
+      assertTransferLanded(corporateReceipt, USDC_ADDRESS, SYSTEM_CASH_REGISTER, corporateMicro, "Phase_1_Corporate");
+      console.info(`[END: Phase_1_Corporate.Transfer] Transfer successful. Block: ${corporateReceipt.blockNumber}`);
+      await forceSequencerDelay();
 
       // PHASE 2: REGIONAL ROUTING (10%) — Wallet-as-Source-of-Truth
       currentStep = "PHASE_2_REGIONAL_ROUTING";
       const regionalRevenue = total_fiat_amount * REVENUE_SPLIT.WAR_CHEST;
+      const regionalMicro = Math.floor(regionalRevenue * 1_000_000);
+      assertPayable(regionalMicro, regionalMicro, "Phase_2_Regional");
 
       let finalRegionalAddress: string = GLOBAL_WAR_CHEST;
       let routingMode: "war_chest_null" | "existing_pool" | "deployed_pool" | "war_chest_fallback" = "war_chest_null";
@@ -492,19 +703,20 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
         USDC_ADDRESS,
         ERC20_ABI,
         "transfer",
-        [finalRegionalAddress as `0x${string}`, parseUnits(regionalRevenue.toFixed(6), 6)],
+        [finalRegionalAddress as `0x${string}`, BigInt(regionalMicro)],
         "Phase_2_Regional",
       );
       console.info(
         `[STATUS: Phase_2_Regional.Transfer] TX Broadcasted. Hash: ${regionalHash}. Awaiting network confirmation...`,
       );
       const regionalReceipt = await client.waitForTransactionReceipt({ hash: regionalHash, confirmations: 1 });
-      if (regionalReceipt.status === "success") {
-        console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
-        await forceSequencerDelay();
-      } else {
+      if (regionalReceipt.status !== "success") {
         console.error(`[ERROR: Phase_2_Regional.Transfer] Transaction reverted on-chain. Hash: ${regionalHash}`);
+        throw new Error(`Phase_2_Regional reverted on-chain (${regionalHash}).`);
       }
+      assertTransferLanded(regionalReceipt, USDC_ADDRESS, finalRegionalAddress, regionalMicro, "Phase_2_Regional");
+      console.info(`[END: Phase_2_Regional.Transfer] Transfer successful. Block: ${regionalReceipt.blockNumber}`);
+      await forceSequencerDelay();
 
       // LEDGER HYDRATION (with retry + repair-queue fallback)
       await Promise.all([
@@ -546,13 +758,24 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
 
       // PHASE 3 & 5: ON-CHAIN ROYALTY & AUTONOMOUS IDIA PROPOSAL
       currentStep = "PHASE_3_AND_5_CONTRIBUTOR_DISTRIBUTION";
-      const totalRoyaltyPool = total_fiat_amount * REVENUE_SPLIT.DATA_YIELD;
-      const perContributorYield = totalRoyaltyPool / contributing_users.length;
+      const ownerCount = settlementContributors.length;
+      const poolMicro = Math.floor(total_fiat_amount * REVENUE_SPLIT.DATA_YIELD * 1_000_000);
+      const baseMicro = Math.floor(poolMicro / ownerCount);
+      const remainderMicro = poolMicro % ownerCount;
+      let allocatedMicro = 0;
       const contributorPayouts = [];
-      // 1:1 IDIA award mirrors each contributor's USDC yield (18-decimal IDIA vs 6-decimal USDC).
-      const idiaAwardAmount = parseUnits(perContributorYield.toFixed(6), 18);
+      console.info(
+        `[BEGIN: Phase_3_Contributor.PoolArithmetic] poolMicro=${poolMicro} owners=${ownerCount} baseMicro=${baseMicro} remainderMicro=${remainderMicro}`,
+      );
+      if (poolMicro <= 0 || baseMicro <= 0) {
+        throw new Error(
+          `ZERO_VALUE_GUARD: contributor pool not divisible — poolMicro=${poolMicro}, owners=${ownerCount}, baseMicro=${baseMicro}`,
+        );
+      }
+      console.info(`[END: Phase_3_Contributor.PoolArithmetic] allocation plan validated.`);
 
       console.info("[BEGIN: Phase_3_Contributor.BatchExecution] Initializing sequential transaction pipeline.");
+
       try {
         // Concurrency-safe helper: refetches pending nonce every attempt and retries on
         // nonce/underpriced/in-flight collisions caused by parallel Edge Function containers.
@@ -614,8 +837,27 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           throw new Error(`Max transient-error retries exhausted for ${label}.`);
         };
 
-        for (let i = 0; i < contributing_users.length; i++) {
-          const contributor = contributing_users[i];
+        for (let i = 0; i < settlementContributors.length; i++) {
+          const contributor = settlementContributors[i];
+          // Per-iteration allocation — scoped to this loop body ONLY. The pool
+          // total never reaches a transfer call; each owner receives exactly
+          // their integer share (base + one micro-unit of remainder).
+          const remainingMicro = poolMicro - allocatedMicro;
+          const shareMicro = baseMicro + (i < remainderMicro ? 1 : 0);
+          console.info(
+            `[BEGIN: Batch.Item.Allocate] ${i + 1}/${settlementContributors.length} owner=${contributor.user_id} shareMicro=${shareMicro} remainingMicro=${remainingMicro} allocatedMicro=${allocatedMicro}`,
+          );
+          assertPayable(shareMicro, remainingMicro, `contributor[${i}] ${contributor.user_id}`);
+          allocatedMicro += shareMicro;
+          const perContributorYield = shareMicro / 1_000_000;
+          const yieldAmountWei = BigInt(shareMicro);
+          // 1:1 IDIA award mirrors the USDC share (18-decimal IDIA vs 6-decimal USDC).
+          const idiaAwardAmount = BigInt(shareMicro) * 10n ** 12n;
+          console.info(
+            `[END: Batch.Item.Allocate] owner=${contributor.user_id} usdc=${perContributorYield} idiaWei=${idiaAwardAmount}`,
+          );
+
+          console.info(`[BEGIN: Batch.Item.WalletLookup] owner=${contributor.user_id}`);
           const { data: profile } = await supabase
             .from("profiles")
             .select("wallet_address")
@@ -623,6 +865,8 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
             .maybeSingle();
 
           const lifeWallet = profile?.wallet_address;
+          console.info(`[END: Batch.Item.WalletLookup] owner=${contributor.user_id} wallet=${lifeWallet ?? "none"}`);
+
           if (!lifeWallet) {
             console.warn(
               `[SKIP: Batch.Item] contributor ${contributor.user_id} has no wallet_address — recording pending_wallet rows for recovery.`,
@@ -666,7 +910,7 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
             continue;
           }
           console.info(
-            `[BEGIN: Batch.Item] Processing transfer ${i + 1}/${contributing_users.length} to ${lifeWallet}`,
+            `[BEGIN: Batch.Item] Processing transfer ${i + 1}/${settlementContributors.length} to ${lifeWallet}`,
           );
 
           // Per-phase progress flags — used by the catch block to route the
@@ -683,23 +927,30 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
                   address: USDC_ADDRESS,
                   abi: ERC20_ABI,
                   functionName: "transfer",
-                  args: [lifeWallet as `0x${string}`, parseUnits(perContributorYield.toFixed(6), 6)],
+                  args: [lifeWallet as `0x${string}`, yieldAmountWei],
                   account,
                   nonce,
                 }),
               "yield",
             );
             console.info(`[STATUS: Batch.Item] Yield TX Broadcasted. Hash: ${yieldHash}. Confirmed.`);
-            if (yieldReceipt.status === "success") {
-              console.info(`[END: Batch.Item] Yield transfer successful. Block: ${yieldReceipt.blockNumber}`);
-            } else {
+            let yieldVerified = yieldReceipt.status === "success";
+            if (!yieldVerified) {
               console.error(`[ERROR: Batch.Item] Yield transaction reverted on-chain. Hash: ${yieldHash}`);
+            } else {
+              try {
+                assertTransferLanded(yieldReceipt, USDC_ADDRESS, lifeWallet, yieldAmountWei, "Batch.Item.Yield");
+                console.info(`[END: Batch.Item] Yield transfer successful. Block: ${yieldReceipt.blockNumber}`);
+              } catch (proofError: any) {
+                yieldVerified = false;
+                console.error(`[ERROR: Batch.Item] ${proofError.message}`);
+              }
             }
 
             // Ledger insert for the USDC yield row FIRST — once it lands (or
             // is queued for repair), we mark yieldSettled so a subsequent
             // IDIA failure cannot cause a duplicate data_sale_payout row.
-            const yieldStatus = yieldReceipt.status === "success" ? "completed" : "failed";
+            const yieldStatus = yieldVerified ? "completed" : "failed";
             await insertLedgerWithRepair(supabase, {
               reference_id: ingestionReference,
               user_id: contributor.user_id,
@@ -715,7 +966,6 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
                 is_settled: yieldStatus === "completed",
                 settled_at: new Date().toISOString(),
                 description: `Pro-rata USDC yield for Ref: ${ingestionReference}`,
-                metadata: { reference_id: ingestionReference, contributor_wallet: lifeWallet, asset: "USDC" },
               },
             });
             yieldSettled = true;
@@ -762,7 +1012,6 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
                 is_settled: idiaStatus === "completed",
                 settled_at: new Date().toISOString(),
                 description: `1:1 IDIA royalty yield for Ref: ${ingestionReference}`,
-                metadata: { reference_id: ingestionReference, contributor_wallet: lifeWallet, asset: "IDIA" },
               },
             });
             idiaSettled = true;
@@ -827,6 +1076,32 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
           }
         }
         console.info("[END: Phase_3_Contributor.BatchExecution] Pipeline cleared.");
+
+        // Reconcile the allocation against the pool.
+        console.info(`[BEGIN: Phase_3_Contributor.Reconcile] poolMicro=${poolMicro} allocatedMicro=${allocatedMicro}`);
+        const driftMicro = poolMicro - allocatedMicro;
+        if (driftMicro !== 0) {
+          console.error(`[ERROR: Phase_3_Contributor.Reconcile] allocation drift ${driftMicro} micro-USDC`);
+          queueFinalError = `allocation_drift:${driftMicro}`;
+        }
+        console.info(`[END: Phase_3_Contributor.Reconcile] driftMicro=${driftMicro}`);
+
+        // Stamp the sale's egress record so it can never be re-matched.
+        if (matchedEgressId) {
+          console.info(`[BEGIN: Egress.MarkSettled] egress=${matchedEgressId}`);
+          try {
+            const { error: stampErr } = await supabase
+              .from("egress_logs")
+              .update({ settlement_status: "SETTLED", settled_at: new Date().toISOString() })
+              .eq("id", matchedEgressId);
+            if (stampErr) throw new Error(stampErr.message);
+            console.info(`[END: Egress.MarkSettled] egress=${matchedEgressId} marked SETTLED.`);
+          } catch (egressStampErr: any) {
+            console.error(
+              `[ERROR: Egress.MarkSettled] egress=${matchedEgressId} could not be stamped: ${egressStampErr?.message ?? egressStampErr}`,
+            );
+          }
+        }
       } catch (globalError: any) {
         console.error(`[FATAL STALL: Phase_3_Contributor.Global] ${globalError.message}`);
         queueFinalError = globalError?.message ?? String(globalError);
@@ -836,7 +1111,7 @@ async function executeSettlement(payoutData: any, runCorrelationId: string): Pro
         `[COMPLETE: circular-settlement] runId=${runCorrelationId} corporateHash=${corporateHash} regionalHash=${regionalHash} regionalTarget=${finalRegionalAddress} mode=${routingMode} payouts=${contributorPayouts.length}`,
       );
 
-      if (contributorPayouts.length === 0 && contributing_users.length > 0) {
+      if (contributorPayouts.length === 0 && settlementContributors.length > 0) {
         queueFinalStatus = "failed";
       } else if (skippedContributors.length > 0) {
         queueFinalStatus = "partial";
