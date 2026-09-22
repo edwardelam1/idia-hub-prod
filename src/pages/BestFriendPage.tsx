@@ -85,18 +85,16 @@ const BestFriendPage = () => {
 
       if (profileError || !profile?.platform_guid) {
         console.error(`[ERROR: UI.BestFriend.ProfileFetch] Failed to resolve identity.`);
-        console.info(`[END: UI.BestFriend.ProfileFetch] Identity resolution failure.`);
         throw new Error("Identity resolution failure.");
       }
-      console.info(`[END: UI.BestFriend.ProfileFetch] Profile retrieved successfully.`);
 
       console.info("[BEGIN: UI.BestFriend.LocationFetch] Awaiting fresh location triangulation...");
+
       let freshLocation = null;
       try {
         freshLocation = await new Promise<string | null>((resolve) => {
           if (!navigator.geolocation) {
             console.error("[ERROR: UI.BestFriend.LocationFetch] Geolocation not supported by browser.");
-            console.info("[END: UI.BestFriend.LocationFetch] Returning null.");
             resolve(null);
             return;
           }
@@ -104,93 +102,100 @@ const BestFriendPage = () => {
             async (position) => {
               const lat = position.coords.latitude;
               const lon = position.coords.longitude;
+              // CRITICAL FIX: Truncate precision to 4 decimals to prevent NWS 400 Bad Request crash
+              const safeLat = lat.toFixed(4);
+              const safeLon = lon.toFixed(4);
 
               console.info(
-                `[BEGIN: UI.BestFriend.Geocode.NWS] Normalizing coords (${lat}, ${lon}) via US Govt NWS API...`,
+                `[BEGIN: UI.BestFriend.Geocode.NWS] Normalizing coords (${safeLat}, ${safeLon}) via US Govt NWS API...`,
               );
               try {
-                // Primary: Official US National Weather Service API for standardized USPS City, State
-                const nwsResponse = await fetch(`https://api.weather.gov/points/${lat},${lon}`);
+                const nwsResponse = await fetch(`https://api.weather.gov/points/${safeLat},${safeLon}`);
                 if (nwsResponse.ok) {
                   const nwsData = await nwsResponse.json();
                   const city = nwsData?.properties?.relativeLocation?.properties?.city;
                   const state = nwsData?.properties?.relativeLocation?.properties?.state;
 
                   if (city && state) {
-                    const uspsLocation = `${city}, ${state}`;
-                    console.info(`[SUCCESS: UI.BestFriend.Geocode.NWS] Normalized to USPS standard: ${uspsLocation}`);
-                    console.info("[END: UI.BestFriend.Geocode.NWS] Resolution complete.");
-                    resolve(uspsLocation);
+                    console.info(`[SUCCESS: UI.BestFriend.Geocode.NWS] Normalized to USPS standard: ${city}, ${state}`);
+                    resolve(`${city}, ${state}`);
                     return;
                   }
                 }
-                console.warn(
-                  `[WARN: UI.BestFriend.Geocode.NWS] Payload missing city/state data. HTTP Status: ${nwsResponse.status}`,
-                );
-              } catch (nwsError) {
-                console.error(`[ERROR: UI.BestFriend.Geocode.NWS] NWS API failed: ${nwsError}`);
+              } catch (e) {
+                console.warn(`[WARN: UI.BestFriend.Geocode.NWS] NWS API failed or timed out.`);
               }
-              console.info("[END: UI.BestFriend.Geocode.NWS] Moving to fallback.");
 
-              console.info(`[BEGIN: UI.BestFriend.Geocode.BigDataCloud] Attempting fallback resolution...`);
+              console.info(`[BEGIN: UI.BestFriend.Geocode.OSM] Attempting OpenStreetMap Nominatim fallback...`);
               try {
-                // Fallback: BigDataCloud (For international coordinates or NWS downtime)
+                // Secondary Fallback: Nominatim (Bypasses strict ad-blockers that kill BigDataCloud)
+                const osmResponse = await fetch(
+                  `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10`,
+                );
+                if (osmResponse.ok) {
+                  const osmData = await osmResponse.json();
+                  const city = osmData?.address?.city || osmData?.address?.town || osmData?.address?.county;
+                  const state = osmData?.address?.state;
+
+                  if (city && state) {
+                    console.info(
+                      `[SUCCESS: UI.BestFriend.Geocode.OSM] Normalized via OpenStreetMap: ${city}, ${state}`,
+                    );
+                    resolve(`${city}, ${state}`);
+                    return;
+                  }
+                }
+              } catch (e) {
+                console.warn(`[WARN: UI.BestFriend.Geocode.OSM] Nominatim API failed.`);
+              }
+
+              console.info(`[BEGIN: UI.BestFriend.Geocode.BigDataCloud] Attempting final BigDataCloud fallback...`);
+              try {
                 const response = await fetch(
                   `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
                 );
                 if (!response.ok) throw new Error(`BigDataCloud HTTP error ${response.status}`);
                 const data = await response.json();
-                const fallbackLocation = data.city || data.locality;
 
+                const fallbackLocation = data.city || data.locality || data.principalSubdivision;
                 if (fallbackLocation) {
                   console.info(`[SUCCESS: UI.BestFriend.Geocode.BigDataCloud] Resolved to: ${fallbackLocation}`);
-                  console.info("[END: UI.BestFriend.Geocode.BigDataCloud] Resolution complete.");
                   resolve(fallbackLocation);
                   return;
                 }
-                throw new Error("No city or locality in BigDataCloud payload");
+                throw new Error("No usable region data in BigDataCloud payload");
               } catch (bdcError) {
-                console.error(`[ERROR: UI.BestFriend.Geocode.BigDataCloud] Fallback failed: ${bdcError}`);
-                console.info("[END: UI.BestFriend.Geocode.BigDataCloud] Returning raw coordinates.");
+                console.error(
+                  `[ERROR: UI.BestFriend.Geocode.All] All geocoders failed. Falling back to raw coordinates.`,
+                );
                 resolve(`${lat}, ${lon}`);
               }
             },
             (error) => {
-              console.error(
-                `[ERROR: UI.BestFriend.LocationFetch] Native resolution failed. Code: ${error.code} Message: ${error.message}`,
-              );
-              console.info("[END: UI.BestFriend.LocationFetch] Returning null.");
+              console.error(`[ERROR: UI.BestFriend.LocationFetch] Native resolution failed: ${error.message}`);
               resolve(null);
             },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 },
           );
         });
       } catch (err) {
-        console.error(`[ERROR: UI.BestFriend.LocationFetch] Forced resolution pipeline threw an error: ${err}`);
+        console.error(`[ERROR: UI.BestFriend.LocationFetch] Forced resolution pipeline error: ${err}`);
       }
 
       const normalizedLocation = freshLocation || locationString || null;
-      console.info(
-        `[STATUS: UI.BestFriend.LocationContext] Final location payload established: ${normalizedLocation ?? "<none>"}`,
-      );
+      console.info(`[STATUS: UI.BestFriend.LocationContext] Final location payload: ${normalizedLocation ?? "<none>"}`);
 
       let realPipelineData: any[] = [];
       if (marketplaceMode) {
-        console.info("[BEGIN: UI.BestFriend.HealthDataFetch] Retrieving staged health data.");
         const { data: healthData, error: healthError } = await supabase
           .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id)
           .limit(1000);
-        if (healthError) {
-          console.error(`[ERROR: UI.BestFriend.HealthDataFetch] Database error: ${healthError.message}`);
-          throw healthError;
-        }
+        if (healthError) throw healthError;
         realPipelineData = healthData || [];
-        console.info("[END: UI.BestFriend.HealthDataFetch] Data retrieved successfully.");
       }
 
-      console.info("[BEGIN: UI.BestFriend.InvokeAI] Calling best-friend-ai Edge Function.");
       const { data: chatResponse, error: aiError } = await supabase.functions.invoke("best-friend-ai", {
         body: {
           message: currentMessage,
@@ -205,19 +210,11 @@ const BestFriendPage = () => {
         },
       });
 
-      if (aiError) {
-        console.error(`[ERROR: UI.BestFriend.InvokeAI] Edge function failed: ${aiError.message}`);
-        throw aiError;
-      }
-      console.info("[END: UI.BestFriend.InvokeAI] Response received.");
+      if (aiError) throw aiError;
 
       const rawTokenHash = chatResponse?.liability_token || null;
       let digiRampAnchorId = null;
-      if (rawTokenHash) {
-        console.info("[BEGIN: UI.BestFriend.GenerateAnchor] Generating DigiRamp anchor hash.");
-        digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
-        console.info("[END: UI.BestFriend.GenerateAnchor] Hash generated successfully.");
-      }
+      if (rawTokenHash) digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
 
       const assistantContent = chatResponse?.response || "Analysis complete.";
       const receipt = chatResponse?.receipt ?? null;
@@ -233,7 +230,7 @@ const BestFriendPage = () => {
         },
       ]);
 
-      console.info("[BEGIN: UI.BestFriend.ActivityHistory] Saving complete prompt and answer.");
+      console.info("[PHASE_START: BestFriend.ActivityHistory] Saving complete prompt and answer.");
       await recordActivity({
         source: "best_friend",
         action: marketplaceMode ? "MARKETPLACE_RESEARCH" : "BEST_FRIEND_AI_CHAT",
@@ -251,7 +248,6 @@ const BestFriendPage = () => {
         referenceId: receipt?.reference_id,
         idempotencyKey: receipt?.reference_id ?? `best-friend-${crypto.randomUUID()}`,
       });
-      console.info("[END: UI.BestFriend.ActivityHistory] Prompt and answer saved.");
 
       if (marketplaceMode) await refreshBalance();
       setCurrentMessage("");
