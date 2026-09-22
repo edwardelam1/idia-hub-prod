@@ -87,9 +87,41 @@ const BestFriendPage = () => {
         console.info(`[BEGIN: UI.BestFriend.ProfileFetch.Stall] Failed to resolve identity.`);
         throw new Error("Identity resolution failure.");
       }
-      const normalizedLocation = locationString;
+
+      console.info("[BEGIN: UI.BestFriend.LocationFetch] Awaiting fresh location triangulation...");
+
+      let freshLocation = null;
+      try {
+        freshLocation = await new Promise<string | null>((resolve) => {
+          if (!navigator.geolocation) {
+            resolve(null);
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              try {
+                const response = await fetch(
+                  `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`,
+                );
+                if (!response.ok) throw new Error("Reverse geocode failed");
+                const data = await response.json();
+                resolve(data.city || data.locality || `${position.coords.latitude}, ${position.coords.longitude}`);
+              } catch {
+                resolve(`${position.coords.latitude}, ${position.coords.longitude}`);
+              }
+            },
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+          );
+        });
+      } catch (err) {
+        console.error("[ERROR: UI.BestFriend.LocationFetch] Forced resolution failed.", err);
+      }
+
+      const normalizedLocation = freshLocation || locationString || null;
+
       console.info(
-        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"} (browser status: ${locationStatus})`,
+        `[END: UI.BestFriend.ProfileFetch] Resolved platform_guid: ${profile.platform_guid}, location: ${normalizedLocation ?? "<none>"}`,
       );
 
       let realPipelineData: any[] = [];
@@ -98,7 +130,7 @@ const BestFriendPage = () => {
           .from("staged_health_data")
           .select("*")
           .eq("user_id", user.id)
-          .limit(1000); // Truncated for safety
+          .limit(1000);
         if (healthError) throw healthError;
         realPipelineData = healthData || [];
       }
@@ -125,6 +157,7 @@ const BestFriendPage = () => {
 
       const assistantContent = chatResponse?.response || "Analysis complete.";
       const receipt = chatResponse?.receipt ?? null;
+
       setConversation((prev) => [
         ...prev,
         {
@@ -217,9 +250,13 @@ const BestFriendPage = () => {
                           variant="ghost"
                           size="sm"
                           className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                          onClick={() => navigate(msg.egressLogId
-                            ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
-                            : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`)}
+                          onClick={() =>
+                            navigate(
+                              msg.egressLogId
+                                ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
+                                : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`,
+                            )
+                          }
                         >
                           <FileKey size={12} className="text-amber-500" />
                           {truncateHash(msg.liabilityTokenHash)}
