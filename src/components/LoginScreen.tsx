@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveOAuthRedirect } from "@/lib/auth-redirect";
 
-
 interface LoginScreenProps {
   onLogin: (role: string) => void;
   onRealLogin?: () => void;
@@ -94,7 +93,6 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
       // Native shells (iOS / Android / macOS) return via idialife://auth-callback.
       const redirectTo = resolveOAuthRedirect(nextPath);
       const { error } = await supabase.auth.signInWithOAuth({
-
         provider,
         options: {
           // Honor ?next= so MCP OAuth-consent visitors return to the consent screen.
@@ -121,7 +119,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
         <div className="text-center mb-8">
           <img src="/images/hub-logo.png" alt="IDIA Hub Logo" className="w-16 h-16 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900">The IDIA Hub</h1>
-          <p className="text-gray-600 mt-2">Professional Data Intelligence Platform</p>
+          <p className="text-gray-600 mt-2">Living Vault & Marketplace</p>
         </div>
 
         <Card>
