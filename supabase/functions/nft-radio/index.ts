@@ -53,7 +53,7 @@ async function fetchAppleTracks() {
     for (const item of body.data ?? []) {
       const a = item.attributes ?? {};
       rows.push({
-        provider: "apple",
+        provider: "apple_music",
         source_playlist_id: APPLE_PLAYLIST_ID,
         provider_track_id: String(item.id),
         isrc: a.isrc ?? null,
