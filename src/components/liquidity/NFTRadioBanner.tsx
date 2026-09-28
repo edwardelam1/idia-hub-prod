@@ -5,12 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import NFTRadioBoard from "./NFTRadioBoard";
 
 interface Props {
-  tierName: string;
+  tierName?: string;
 }
 
 const BARS = [0.35, 0.7, 0.45, 0.9, 0.55, 0.8, 0.4];
 
-const NFTRadioBanner = ({ tierName }: Props) => {
+const NFTRadioBanner = ({ tierName = "Free" }: Props) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -18,7 +18,7 @@ const NFTRadioBanner = ({ tierName }: Props) => {
       <Card
         role="button"
         tabIndex={0}
-        aria-label="Launch NFT Radio"
+        aria-label="Launch BIG IDIA Radio"
         onClick={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -37,7 +37,7 @@ const NFTRadioBanner = ({ tierName }: Props) => {
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">Listen to NFT Radio – Curated Catalog Streams</p>
+            <p className="truncate text-sm font-semibold">Listen to BIG IDIA Radio – Curated Catalog Streams</p>
             <div className="mt-0.5 flex items-center gap-2">
               <Badge variant="outline" className="text-[10px]">
                 Tier: {tierName}

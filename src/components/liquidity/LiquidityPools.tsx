@@ -34,7 +34,6 @@ import { useV4Positions } from "@/hooks/useV4Positions";
 import { useWalletLpPositions, useUserWalletAddress } from "@/hooks/useWalletLpPositions";
 import { useNftRadioTiers, resolveTierForAmount, type NFTRadioTierRecord } from "@/hooks/useNftRadioTiers";
 import ProtocolHoldings from "./ProtocolHoldings";
-import NFTRadioBanner from "./NFTRadioBanner";
 import ContractInformation from "./ContractInformation";
 import V4Positions from "./V4Positions";
 import V3Positions from "./V3Positions";
@@ -481,7 +480,6 @@ const LiquidityPools = () => {
         {activeSlice === "holdings" && (
           <div className="space-y-3">
             <ProtocolHoldings idiaUsdPrice={idiaUsdPrice} />
-            <NFTRadioBanner tierName={qualifiedTier?.name ?? "Free"} />
           </div>
         )}
 
@@ -493,7 +491,7 @@ const LiquidityPools = () => {
                 <div className="flex items-center gap-2">
                   <Radio className="h-4 w-4 text-primary" />
                   <div>
-                    <span className="text-xs font-semibold">NFT Radio Status: </span>
+                    <span className="text-xs font-semibold">BIG IDIA Radio Status: </span>
                     <span className="font-mono text-xs font-bold text-primary">
                       {qualifiedTier ? qualifiedTier.name : "Free"}
                     </span>

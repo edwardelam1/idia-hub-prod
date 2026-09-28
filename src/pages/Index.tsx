@@ -8,6 +8,7 @@ import OrganizationAdminDashboard from "@/components/dashboards/OrganizationAdmi
 import TeamLeadDashboard from "@/components/dashboards/TeamLeadDashboard";
 import TeamMemberDashboard from "@/components/dashboards/TeamMemberDashboard";
 import IndividualDashboard from "@/components/dashboards/IndividualDashboard";
+import NFTRadioBanner from "@/components/liquidity/NFTRadioBanner";
 import DataMarketplace from "@/components/marketplace/DataMarketplace";
 import OrganizationManagement from "@/components/management/OrganizationManagement";
 import AIManagement from "@/components/ai/AIManagement";
@@ -78,19 +79,29 @@ const Index = () => {
       return <IndividualDashboard />;
     }
     const role = user?.role || userRole;
-    switch (role) {
-      case "csuite":
-      case "super-admin":
-        return <SuperAdminDashboard />;
-      case "organization-admin":
-        return <OrganizationAdminDashboard />;
-      case "team-lead":
-        return <TeamLeadDashboard />;
-      case "team-member":
-        return <TeamMemberDashboard />;
-      default:
-        return <TeamMemberDashboard />;
-    }
+    const businessDashboard = (() => {
+      switch (role) {
+        case "csuite":
+        case "super-admin":
+          return <SuperAdminDashboard />;
+        case "organization-admin":
+          return <OrganizationAdminDashboard />;
+        case "team-lead":
+          return <TeamLeadDashboard />;
+        case "team-member":
+          return <TeamMemberDashboard />;
+        default:
+          return <TeamMemberDashboard />;
+      }
+    })();
+    return (
+      <>
+        {businessDashboard}
+        <div className="px-3 pb-4">
+          <NFTRadioBanner />
+        </div>
+      </>
+    );
   };
 
   if (currentView === "splash" && !isAuthenticated) return <SplashScreen onComplete={handleSplashComplete} />;
