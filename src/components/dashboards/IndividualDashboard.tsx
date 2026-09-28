@@ -17,6 +17,7 @@ import SynapseVisualizer from "@/components/visualizer/SynapseVisualizer";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { useUniswapPoolStats } from "@/hooks/useUniswapPoolStats";
 import { deriveIdiaUsdPrice } from "@/lib/idia-price";
+import NFTRadioBanner from "@/components/liquidity/NFTRadioBanner";
 
 const IndividualDashboard = () => {
   const { user, piiData } = useAuth();
@@ -179,6 +180,9 @@ const IndividualDashboard = () => {
           <Progress value={100} className="h-0.5 mt-2 bg-emerald-500/20" />
         </Card>
       </div>
+
+      {/* BIG IDIA RADIO */}
+      <NFTRadioBanner />
 
     </div>
   );

@@ -125,7 +125,7 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[100dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto border-border/70 bg-zinc-950 p-4 text-zinc-100 sm:p-6">
         <DialogHeader className="space-y-1 text-left">
-          <DialogTitle className="text-base font-semibold">NFT Radio Console</DialogTitle>
+          <DialogTitle className="text-base font-semibold">BIG IDIA Radio Console</DialogTitle>
           <DialogDescription className="text-xs text-zinc-400">
             Curated catalog previews · Tier {tierName}
           </DialogDescription>

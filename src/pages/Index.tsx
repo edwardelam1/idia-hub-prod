@@ -78,19 +78,29 @@ const Index = () => {
       return <IndividualDashboard />;
     }
     const role = user?.role || userRole;
-    switch (role) {
-      case "csuite":
-      case "super-admin":
-        return <SuperAdminDashboard />;
-      case "organization-admin":
-        return <OrganizationAdminDashboard />;
-      case "team-lead":
-        return <TeamLeadDashboard />;
-      case "team-member":
-        return <TeamMemberDashboard />;
-      default:
-        return <TeamMemberDashboard />;
-    }
+    const businessDashboard = (() => {
+      switch (role) {
+        case "csuite":
+        case "super-admin":
+          return <SuperAdminDashboard />;
+        case "organization-admin":
+          return <OrganizationAdminDashboard />;
+        case "team-lead":
+          return <TeamLeadDashboard />;
+        case "team-member":
+          return <TeamMemberDashboard />;
+        default:
+          return <TeamMemberDashboard />;
+      }
+    })();
+    return (
+      <>
+        {businessDashboard}
+        <div className="px-3 pb-4">
+          <NFTRadioBanner />
+        </div>
+      </>
+    );
   };
 
   if (currentView === "splash" && !isAuthenticated) return <SplashScreen onComplete={handleSplashComplete} />;
