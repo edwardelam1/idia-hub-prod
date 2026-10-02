@@ -38,6 +38,8 @@
 
 ## BIG IDIA Radio (done)
 - [x] Display official Apple Music and Spotify playlist players side by side in the Master Console with the supplied logos and no client-side secrets.
+- [x] Keep the console mounted across signed-in Hub pages so closing it does not stop playback.
+- [x] Replace the dashboard banner with the supplied responsive artwork and a launch button; match the console surface to the artwork.
 
 
 ## Music account linking (Radio console)

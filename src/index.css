@@ -97,6 +97,26 @@ All colors MUST be HSL.
   }
 }
 
+/* Local radio theme, sampled from the supplied BIG IDIA Radio artwork. */
+.radio-console {
+  --radio-surface: 264 81% 19%;
+  --radio-deck: 264 69% 15%;
+  --foreground: 210 40% 98%;
+  --muted-foreground: 215 20% 78%;
+  --border: 264 38% 43%;
+  --muted: 264 45% 25%;
+  --secondary: 264 45% 30%;
+  --secondary-foreground: 210 40% 98%;
+  --accent: 264 45% 32%;
+  --accent-foreground: 210 40% 98%;
+  --primary: 38 100% 65%;
+  --primary-foreground: 264 81% 19%;
+  background: hsl(var(--radio-surface));
+  color: hsl(var(--foreground));
+}
+.radio-console::backdrop { background: hsl(var(--background) / 0.84); }
+.radio-console-deck { background: hsl(var(--radio-deck)); }
+
 @layer base {
   * {
     @apply border-border;
