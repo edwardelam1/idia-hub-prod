@@ -41,5 +41,5 @@
 
 
 ## Music account linking (Radio console)
-- [ ] Spotify sign-in: listening history, top artists/tracks, playlists & saved songs, full-song playback (Premium)
-- [ ] Apple Music sign-in with the same data capture where Apple allows it
+- [x] Spotify sign-in: listening history, top artists/tracks, playlists & saved songs, full-song playback (Premium)
+- [x] Apple Music sign-in with the same data capture where Apple allows it
