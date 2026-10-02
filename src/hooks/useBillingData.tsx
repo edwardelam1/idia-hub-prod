@@ -277,21 +277,41 @@ export const useBillingData = () => {
   });
 
   const downloadInvoice = (invoiceId: string) => {
-    const inv = invoices.find((i: any) => i.id === invoiceId);
-    if (inv?.pdf_url) {
-      window.open(inv.pdf_url, '_blank');
-    } else {
-      toast.info('Invoice PDF not yet available');
-    }
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return;
+    if (inv.pdf_url) { window.open(inv.pdf_url, '_blank'); return; }
+    const lines = [
+      'IDIA Hub Statement',
+      `Statement #: ${inv.invoice_number}`,
+      `Type: ${inv.kind === 'purchase' ? 'Synapse Credit Purchase' : inv.kind === 'usage' ? 'Monthly Credit Usage' : 'Invoice'}`,
+      `Period: ${inv.period}`,
+      `Date: ${new Date(inv.created_at).toISOString()}`,
+      `Amount: ${inv.amount.toFixed(inv.unit === 'CR' ? 4 : 2)} ${inv.unit}`,
+      `Status: ${inv.status}`,
+      inv.line_count ? `Charges: ${inv.line_count}` : '',
+      inv.tx_hash ? `Transaction: https://basescan.org/tx/${inv.tx_hash}` : '',
+      `Account: ${userId}`,
+    ].filter(Boolean).join('\n');
+    const url = URL.createObjectURL(new Blob([lines], { type: 'text/plain' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `${inv.invoice_number}.txt`; a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const isLoading = subLoading || pmLoading || invLoading;
+  const isLoading = subLoading || pmLoading || invLoading || ledgerLoading;
 
   return {
     currentUsage,
     subscriptionPlan,
     subscription,
+    subscriptionStatus,
+    isExpired,
+    cycleEnd,
+    tier,
     daysRemaining,
+    dailyBurn,
+    projectedBurn,
+    projectionDays,
     paymentMethods,
     invoices,
     isLoading,
