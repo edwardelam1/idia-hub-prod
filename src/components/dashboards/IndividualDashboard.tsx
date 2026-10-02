@@ -66,7 +66,7 @@ const IndividualDashboard = () => {
   }, [protocolState, rail1_Eth, rail2_Gas, rail3_USDC, silo3_IdiaTokens, silo3_IdiaUsd]);
 
   return (
-    <div className="flex flex-col h-full font-sans max-w-full mx-auto w-full px-4 py-1 space-y-2 overflow-hidden">
+    <div className="flex min-h-full flex-col font-sans max-w-full mx-auto w-full px-4 py-1 space-y-2">
       {/* COMPACT HEADER */}
       <div className="flex justify-between items-center border-b border-white/5 pb-1.5">
         <div>
