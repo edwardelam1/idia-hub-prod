@@ -7,6 +7,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import FloatingBestFriend from '@/components/ai/FloatingBestFriend';
 import { SynapseCreditsProvider } from '@/contexts/SynapseCreditsContext';
 import NotificationsBridge from '@/components/notifications/NotificationsBridge';
+import NFTRadioBoard from '@/components/liquidity/NFTRadioBoard';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -42,6 +43,7 @@ const AppLayout = ({ children, userRole, onLogout }: AppLayoutProps) => {
           {/* Floating Best Friend - hidden */}
           {/* <FloatingBestFriend userRole={userRole} /> */}
         </div>
+        <NFTRadioBoard />
       </SidebarProvider>
     </SynapseCreditsProvider>
   );

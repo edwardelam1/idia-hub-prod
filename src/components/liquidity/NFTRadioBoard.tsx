@@ -1,23 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ExternalLink } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ExternalLink, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import appleLogo from "@/assets/apple-music-logo.png.asset.json";
 import spotifyLogo from "@/assets/spotify-logo.svg.asset.json";
 import { supabase } from "@/integrations/supabase/client";
 import MusicAccountControls, { type MusicConnection, type MusicProvider } from "./MusicAccountControls";
-
-interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  tierName: string;
-}
 
 // Official playlist embeds play previews; signed-in users get full playback and data sync
 // through the music-accounts function, which keeps provider secrets and tokens server-side.
@@ -47,7 +35,10 @@ const PLAYERS: {
   },
 ];
 
-const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
+const NFTRadioBoard = () => {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [open, setOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
   const [connections, setConnections] = useState<MusicConnection[]>([]);
   const [fullPlayback, setFullPlayback] = useState<Record<string, boolean>>({});
 
@@ -59,6 +50,22 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
   useEffect(() => {
     if (open) refresh();
   }, [open, refresh]);
+
+  useEffect(() => {
+    const launch = () => {
+      setHasOpened(true);
+      setOpen(true);
+    };
+    window.addEventListener("big-idia-radio:open", launch);
+    return () => window.removeEventListener("big-idia-radio:open", launch);
+  }, []);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    else if (!open && dialog.open) dialog.close();
+  }, [open]);
 
   // Spotify sign-in returns to this page with ?music=...; reopen feedback and clean the URL.
   useEffect(() => {
@@ -78,22 +85,24 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto border-border bg-background p-4 text-foreground sm:p-6">
-        <DialogHeader className="space-y-1 pr-8 text-left">
-          <DialogTitle className="text-lg font-semibold">BIG IDIA Radio · Master Console</DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">Curated streams · {tierName} tier</DialogDescription>
-        </DialogHeader>
+    <dialog ref={dialogRef} onClose={() => setOpen(false)} onClick={(event) => { if (event.target === dialogRef.current) setOpen(false); }} aria-labelledby="big-idia-radio-title" className="radio-console m-auto max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto border border-border p-4 shadow-xl sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="big-idia-radio-title" className="text-lg font-semibold">BIG IDIA Radio · Master Console</h2>
+            <p className="text-xs text-muted-foreground">Curated streams</p>
+          </div>
+          <Button type="button" size="icon" variant="ghost" onClick={() => setOpen(false)} aria-label="Close radio console" title="Close radio console" className="shrink-0"><X className="h-4 w-4" /></Button>
+        </div>
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {PLAYERS.map((player) => (
-            <section key={player.id} className="min-w-0 space-y-3 rounded-md border border-border bg-card p-3 sm:p-4" aria-label={`${player.name} player`}>
+            <section key={player.id} className="radio-console-deck min-w-0 space-y-3 rounded-md border border-border p-3 sm:p-4" aria-label={`${player.name} player`}>
               <div className="flex h-9 items-center justify-between gap-3">
                 <img src={player.logo} alt={player.name} className={`h-7 max-w-[150px] object-contain object-left ${player.logoClass}`} />
                 <a href={player.link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" aria-label={`Open ${player.name} playlist`} title={`Open in ${player.name}`}>
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </div>
-              {open && (
+              {hasOpened && (
                 <MusicAccountControls
                   provider={player.id}
                   connection={connections.find((c) => c.provider === player.id)}
@@ -101,7 +110,7 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
                   onPlayingChange={handlers[player.id]}
                 />
               )}
-              {open && !fullPlayback[player.id] && (
+              {hasOpened && !fullPlayback[player.id] && (
                 <iframe
                   title={`${player.name} curated playlist player`}
                   src={player.embed}
@@ -114,8 +123,7 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
             </section>
           ))}
         </div>
-      </DialogContent>
-    </Dialog>
+    </dialog>
   );
 };
 
