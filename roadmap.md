@@ -39,3 +39,7 @@
 ## BIG IDIA Radio (done)
 - [x] Display official Apple Music and Spotify playlist players side by side in the Master Console with the supplied logos and no client-side secrets.
 
+
+## Music account linking (Radio console)
+- [ ] Spotify sign-in: listening history, top artists/tracks, playlists & saved songs, full-song playback (Premium)
+- [ ] Apple Music sign-in with the same data capture where Apple allows it
