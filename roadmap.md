@@ -36,3 +36,6 @@
 - [x] Show live Uniswap v4 and v3 pools in Pool Inspector
 - [x] Prevent large Protocol Holdings totals from overlapping on mobile
 
+## BIG IDIA Radio (done)
+- [x] Display official Apple Music and Spotify playlist players side by side in the Master Console with the supplied logos and no client-side secrets.
+
