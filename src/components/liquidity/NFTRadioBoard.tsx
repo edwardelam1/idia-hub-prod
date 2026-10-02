@@ -85,44 +85,79 @@ const NFTRadioBoard = () => {
   };
 
   return (
-    <dialog ref={dialogRef} onClose={() => setOpen(false)} onClick={(event) => { if (event.target === dialogRef.current) setOpen(false); }} aria-labelledby="big-idia-radio-title" className="radio-console m-auto max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto border border-border p-4 shadow-xl sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="big-idia-radio-title" className="text-lg font-semibold">BIG IDIA Radio · Master Console</h2>
-            <p className="text-xs text-muted-foreground">Curated streams</p>
-          </div>
-          <Button type="button" size="icon" variant="ghost" onClick={() => setOpen(false)} aria-label="Close radio console" title="Close radio console" className="shrink-0"><X className="h-4 w-4" /></Button>
+    <dialog
+      ref={dialogRef}
+      onClose={() => setOpen(false)}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) setOpen(false);
+      }}
+      aria-labelledby="big-idia-radio-title"
+      className="radio-console m-auto max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto border border-border p-4 shadow-xl sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="big-idia-radio-title" className="text-lg font-semibold">
+            BIG IDIA Radio · Master Console
+          </h2>
+          <p className="text-xs text-muted-foreground">PREVIEW - COMING SOON</p>
         </div>
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-          {PLAYERS.map((player) => (
-            <section key={player.id} className="radio-console-deck min-w-0 space-y-3 rounded-md border border-border p-3 sm:p-4" aria-label={`${player.name} player`}>
-              <div className="flex h-9 items-center justify-between gap-3">
-                <img src={player.logo} alt={player.name} className={`h-7 max-w-[150px] object-contain object-left ${player.logoClass}`} />
-                <a href={player.link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" aria-label={`Open ${player.name} playlist`} title={`Open in ${player.name}`}>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </div>
-              {hasOpened && (
-                <MusicAccountControls
-                  provider={player.id}
-                  connection={connections.find((c) => c.provider === player.id)}
-                  onChanged={refresh}
-                  onPlayingChange={handlers[player.id]}
-                />
-              )}
-              {hasOpened && !fullPlayback[player.id] && (
-                <iframe
-                  title={`${player.name} curated playlist player`}
-                  src={player.embed}
-                  className="h-[352px] w-full rounded-md border-0 bg-muted"
-                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-                  loading="eager"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              )}
-            </section>
-          ))}
-        </div>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          aria-label="Close radio console"
+          title="Close radio console"
+          className="shrink-0"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+        {PLAYERS.map((player) => (
+          <section
+            key={player.id}
+            className="radio-console-deck min-w-0 space-y-3 rounded-md border border-border p-3 sm:p-4"
+            aria-label={`${player.name} player`}
+          >
+            <div className="flex h-9 items-center justify-between gap-3">
+              <img
+                src={player.logo}
+                alt={player.name}
+                className={`h-7 max-w-[150px] object-contain object-left ${player.logoClass}`}
+              />
+              <a
+                href={player.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={`Open ${player.name} playlist`}
+                title={`Open in ${player.name}`}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+            {hasOpened && (
+              <MusicAccountControls
+                provider={player.id}
+                connection={connections.find((c) => c.provider === player.id)}
+                onChanged={refresh}
+                onPlayingChange={handlers[player.id]}
+              />
+            )}
+            {hasOpened && !fullPlayback[player.id] && (
+              <iframe
+                title={`${player.name} curated playlist player`}
+                src={player.embed}
+                className="h-[352px] w-full rounded-md border-0 bg-muted"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                loading="eager"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            )}
+          </section>
+        ))}
+      </div>
     </dialog>
   );
 };
