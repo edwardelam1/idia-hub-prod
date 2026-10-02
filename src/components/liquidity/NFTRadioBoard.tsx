@@ -21,12 +21,14 @@ const PLAYERS = [
   {
     name: "Apple Music",
     logo: appleLogo.url,
+    logoClass: "dark:invert",
     embed: "https://embed.music.apple.com/us/playlist/pl.u-EdAVz5rtXJ1lN0",
     link: "https://music.apple.com/us/playlist/pl.u-EdAVz5rtXJ1lN0",
   },
   {
     name: "Spotify",
     logo: spotifyLogo.url,
+    logoClass: "",
     embed: "https://open.spotify.com/embed/playlist/6p649dsAFP213xvwPjGkhq?utm_source=generator",
     link: "https://open.spotify.com/playlist/6p649dsAFP213xvwPjGkhq",
   },
@@ -44,7 +46,7 @@ const NFTRadioBoard = ({ open, onOpenChange, tierName }: Props) => {
           {PLAYERS.map((player) => (
             <section key={player.name} className="min-w-0 space-y-3 rounded-md border border-border bg-card p-3 sm:p-4" aria-label={`${player.name} player`}>
               <div className="flex h-9 items-center justify-between gap-3">
-                <img src={player.logo} alt={player.name} className="h-7 max-w-[150px] object-contain object-left dark:first:invert" />
+                <img src={player.logo} alt={player.name} className={`h-7 max-w-[150px] object-contain object-left ${player.logoClass}`} />
                 <a href={player.link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" aria-label={`Open ${player.name} playlist`} title={`Open in ${player.name}`}>
                   <ExternalLink className="h-4 w-4" />
                 </a>
