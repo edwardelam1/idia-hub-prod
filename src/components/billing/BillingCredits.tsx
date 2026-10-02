@@ -19,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useBillingData } from "@/hooks/useBillingData";
+import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import AvailablePlansDialog from "./AvailablePlansDialog";
 import { formatCredits } from "@/lib/utils";
@@ -31,20 +32,26 @@ const BillingCredits = () => {
     currentUsage,
     subscriptionPlan,
     subscription,
+    subscriptionStatus,
+    cycleEnd,
+    tier,
     daysRemaining,
+    dailyBurn,
+    projectedBurn,
+    projectionDays,
     invoices,
     isLoading,
     downloadInvoice,
   } = useBillingData();
-  const { user } = useAuth();
-  const userId = user?.user_id;
+  const { balanceData } = useSynapseCredits();
   const queryClient = useQueryClient();
 
   const [showPlans, setShowPlans] = useState(false);
 
-  const usagePercentage = currentUsage.limit > 0 ? (currentUsage.used / currentUsage.limit) * 100 : 0;
-  const projectedUsage = new Date().getDate() > 0 ? Math.round(currentUsage.used * (30 / new Date().getDate())) : 0;
-  const currentTier = subscription?.tier?.toLowerCase() ?? "base";
+  const balance = Number(balanceData?.available_credits ?? 0);
+  const usagePercentage = currentUsage.limit > 0 ? Math.min(100, (currentUsage.used / currentUsage.limit) * 100) : 0;
+  const projectedUsage = projectedBurn;
+  const currentTier = tier;
 
 
   if (isLoading) {
@@ -94,9 +101,11 @@ const BillingCredits = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold font-mono">
-                  {formatCredits(currentUsage.limit - currentUsage.used)}
+                  {formatCredits(balance)}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">Operational Capacity</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {currentUsage.limit > 0 ? `${formatCredits(currentUsage.used)} of ${formatCredits(currentUsage.limit)} used this cycle` : `${formatCredits(currentUsage.used)} used (30 days)`}
+                </div>
                 <Progress value={usagePercentage} className="mt-4 h-1.5" />
               </CardContent>
             </Card>
@@ -109,7 +118,7 @@ const BillingCredits = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-primary">{subscriptionPlan.name}</div>
-                <div className="text-sm font-mono text-muted-foreground mt-1">{subscriptionPlan.cost} / Year</div>
+                <div className="text-sm font-mono text-muted-foreground mt-1">{subscriptionPlan.cost}</div>
               </CardContent>
             </Card>
 
@@ -118,17 +127,20 @@ const BillingCredits = () => {
                 <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">Projected Burn</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono">{projectedUsage.toLocaleString()}</div>
+                <div className="text-2xl font-bold font-mono">{formatCredits(projectedUsage)}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {formatCredits(dailyBurn)} CR/day · next {projectionDays} days
+                </div>
                 <div
-                  className={`text-xs flex items-center mt-1 ${projectedUsage > currentUsage.limit ? "text-destructive" : "text-emerald-500"}`}
+                  className={`text-xs flex items-center mt-1 ${projectedUsage > balance ? "text-destructive" : "text-primary"}`}
                 >
-                  {projectedUsage > currentUsage.limit ? (
+                  {projectedUsage > balance ? (
                     <>
-                      <AlertTriangle className="h-3 w-3 mr-1" /> Provisioning Required
+                      <AlertTriangle className="h-3 w-3 mr-1" /> Exceeds balance — top up
                     </>
                   ) : (
                     <>
-                      <TrendingUp className="h-3 w-3 mr-1" /> Safe Operational Margin
+                      <TrendingUp className="h-3 w-3 mr-1" /> Covered by balance
                     </>
                   )}
                 </div>
@@ -142,8 +154,25 @@ const BillingCredits = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{daysRemaining > 0 ? daysRemaining : "—"} Days</div>
-                <div className="text-xs text-muted-foreground mt-1">Remaining in cycle</div>
+                {subscriptionStatus === "active" && cycleEnd ? (
+                  <>
+                    <div className="text-2xl font-bold">{daysRemaining} Days</div>
+                    <div className="text-xs text-muted-foreground mt-1">Renews {cycleEnd.toLocaleDateString()}</div>
+                  </>
+                ) : subscriptionStatus === "expired" ? (
+                  <>
+                    <div className="text-2xl font-bold text-destructive">Expired</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      on {subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : "—"}
+                    </div>
+                    <Button size="sm" variant="outline" className="mt-2 h-7" onClick={() => setShowPlans(true)}>Renew</Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">No cycle</div>
+                    <div className="text-xs text-muted-foreground mt-1">Pay-as-you-go, no renewal</div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -184,34 +213,42 @@ const BillingCredits = () => {
                   <p>No invoices generated for this cycle.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {invoices.map((invoice: any) => (
+                <div className="space-y-2">
+                  {invoices.map((invoice) => (
                     <div
                       key={invoice.id}
-                      className="flex items-center justify-between p-4 rounded-xl border bg-card hover:bg-muted/20 transition-colors"
+                      className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-card hover:bg-muted/20 transition-colors"
                     >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <FileText className="h-5 w-5" />
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                          <FileText className="h-4 w-4" />
                         </div>
-                        <div>
-                          <div className="font-medium">Annual Statement #{invoice.invoice_number}</div>
-                          <div className="text-xs text-muted-foreground">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {invoice.kind === "purchase" ? "Credit Purchase" : invoice.kind === "usage" ? "Usage Statement" : "Invoice"} #{invoice.invoice_number}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
                             {new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}
+                            {invoice.line_count ? ` • ${invoice.line_count} charges` : ""}
+                            {invoice.tx_hash && (
+                              <> • <a className="text-primary underline" href={`https://basescan.org/tx/${invoice.tx_hash}`} target="_blank" rel="noreferrer">BaseScan</a></>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-6">
+                      <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
-                          <div className="font-bold font-mono">${Number(invoice.amount).toLocaleString()}</div>
+                          <div className="font-bold font-mono text-sm">
+                            {invoice.unit === "USDC" ? `$${invoice.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${formatCredits(invoice.amount)} CR`}
+                          </div>
                           <Badge
                             className="h-5 text-[10px] uppercase tracking-tighter"
-                            variant={invoice.status === "paid" ? "default" : "destructive"}
+                            variant={["paid", "settled", "completed", "confirmed"].includes(invoice.status) ? "default" : invoice.status === "failed" ? "destructive" : "secondary"}
                           >
                             {invoice.status}
                           </Badge>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => downloadInvoice(invoice.id)}>
+                        <Button size="icon" variant="ghost" aria-label="Download statement" onClick={() => downloadInvoice(invoice.id)}>
                           <Download className="h-4 w-4" />
                         </Button>
                       </div>
@@ -229,7 +266,7 @@ const BillingCredits = () => {
               <CardTitle className="text-lg">Network Protocol Status</CardTitle>
             </div>
             <CardContent className="p-6 space-y-8">
-              {!subscription ? (
+              {subscriptionStatus === "none" && tier === "base" ? (
                 <div className="text-center py-12">
                   <p className="mb-6 text-muted-foreground">
                     No active network subscription detected. Genesis status pending.
@@ -247,16 +284,16 @@ const BillingCredits = () => {
                           {subscriptionPlan.name} TIER
                         </div>
                         <Badge
-                          variant="secondary"
-                          className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border-none"
+                          variant={subscriptionStatus === "expired" ? "destructive" : "secondary"}
+                          className="border-none uppercase"
                         >
-                          ACTIVE
+                          {subscriptionStatus === "active" ? "Active" : subscriptionStatus === "expired" ? "Expired" : "Account tier"}
                         </Badge>
                       </div>
                       <div className="text-muted-foreground mt-1 max-w-md">{subscriptionPlan.description}</div>
                       <div className="text-xs font-mono text-muted-foreground mt-4">
-                        UID: {subscription.id.slice(0, 18).toUpperCase()} | EXPIRES:{" "}
-                        {new Date(subscription.expires_at).toLocaleDateString()}
+                        {subscription ? `UID: ${subscription.id.slice(0, 18).toUpperCase()} | ${subscriptionStatus === "expired" ? "EXPIRED" : "EXPIRES"}: ` : "No subscription record"}
+                        {subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : ""}
                       </div>
                     </div>
                     <div className="text-right">
