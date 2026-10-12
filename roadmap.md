@@ -18,6 +18,8 @@
 ## Marketplace compact controls (done)
 - Mobile 2 × 2 marketplace tool grid
 - Title-only bundles with individual and bulk expand/collapse controls
+- Trading Desk API Access moved into a fifth Marketplace panel; standalone sidebar entry retired
+- Trading Desk summary reduced to compact side-by-side Staged Data and Active Bundles metrics
 
 ## Production custom selection (done)
 - Real stream selections, proportional record pricing, server-side quotes, and matching source-record access
