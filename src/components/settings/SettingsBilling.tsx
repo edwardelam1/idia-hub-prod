@@ -81,7 +81,7 @@ const BusinessBilling = () => {
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-xs">
-              {daysRemaining} days remaining
+              {daysRemaining > 0 ? `${daysRemaining} days remaining` : "No active period"}
             </Badge>
           </div>
         </CardHeader>
