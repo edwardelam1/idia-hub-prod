@@ -9,21 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Download,
-  TrendingUp,
-  AlertTriangle,
-  FileText,
-  CheckCircle2,
-  History,
-  Loader2,
-} from "lucide-react";
+import { Download, TrendingUp, AlertTriangle, FileText, CheckCircle2, History, Loader2 } from "lucide-react";
 import { useBillingData } from "@/hooks/useBillingData";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import AvailablePlansDialog from "./AvailablePlansDialog";
 import { formatCredits } from "@/lib/utils";
-
 
 import { toast } from "sonner";
 
@@ -53,7 +44,6 @@ const BillingCredits = () => {
   const projectedUsage = projectedBurn;
   const currentTier = tier;
 
-
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
@@ -74,7 +64,7 @@ const BillingCredits = () => {
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b px-6 pt-6 pb-4 space-y-4">
         <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Financial Hub</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Subscription</h1>
             <p className="text-muted-foreground">Settlement ledger, credit provisioning, and subscription management</p>
           </div>
           <Badge variant="outline" className="mb-1 py-1 px-3 border-primary/30 bg-primary/5 text-primary">
@@ -90,7 +80,6 @@ const BillingCredits = () => {
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-6">
-
         <TabsContent value="overview" className="space-y-6 mt-0">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <Card className="border-primary/10 bg-gradient-to-br from-card to-primary/5">
@@ -100,11 +89,11 @@ const BillingCredits = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold font-mono">
-                  {formatCredits(balance)}
-                </div>
+                <div className="text-3xl font-bold font-mono">{formatCredits(balance)}</div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {currentUsage.limit > 0 ? `${formatCredits(currentUsage.used)} of ${formatCredits(currentUsage.limit)} used this cycle` : `${formatCredits(currentUsage.used)} used (30 days)`}
+                  {currentUsage.limit > 0
+                    ? `${formatCredits(currentUsage.used)} of ${formatCredits(currentUsage.limit)} used this cycle`
+                    : `${formatCredits(currentUsage.used)} used (30 days)`}
                 </div>
                 <Progress value={usagePercentage} className="mt-4 h-1.5" />
               </CardContent>
@@ -165,7 +154,9 @@ const BillingCredits = () => {
                     <div className="text-xs text-muted-foreground mt-1">
                       on {subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : "—"}
                     </div>
-                    <Button size="sm" variant="outline" className="mt-2 h-7" onClick={() => setShowPlans(true)}>Renew</Button>
+                    <Button size="sm" variant="outline" className="mt-2 h-7" onClick={() => setShowPlans(true)}>
+                      Renew
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -192,12 +183,7 @@ const BillingCredits = () => {
               <Link to="/earnings">Open Earnings &amp; Settlement</Link>
             </Button>
           </Card>
-
         </TabsContent>
-
-
-
-
 
         <TabsContent value="invoices" className="space-y-4 mt-0">
           {/* Keep your existing Invoice Logic here but with the new styling */}
@@ -225,13 +211,29 @@ const BillingCredits = () => {
                         </div>
                         <div className="min-w-0">
                           <div className="font-medium text-sm truncate">
-                            {invoice.kind === "purchase" ? "Credit Purchase" : invoice.kind === "usage" ? "Usage Statement" : "Invoice"} #{invoice.invoice_number}
+                            {invoice.kind === "purchase"
+                              ? "Credit Purchase"
+                              : invoice.kind === "usage"
+                                ? "Usage Statement"
+                                : "Invoice"}{" "}
+                            #{invoice.invoice_number}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
                             {new Date(invoice.created_at).toLocaleDateString()} • {invoice.period}
                             {invoice.line_count ? ` • ${invoice.line_count} charges` : ""}
                             {invoice.tx_hash && (
-                              <> • <a className="text-primary underline" href={`https://basescan.org/tx/${invoice.tx_hash}`} target="_blank" rel="noreferrer">BaseScan</a></>
+                              <>
+                                {" "}
+                                •{" "}
+                                <a
+                                  className="text-primary underline"
+                                  href={`https://basescan.org/tx/${invoice.tx_hash}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  BaseScan
+                                </a>
+                              </>
                             )}
                           </div>
                         </div>
@@ -239,16 +241,29 @@ const BillingCredits = () => {
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
                           <div className="font-bold font-mono text-sm">
-                            {invoice.unit === "USDC" ? `$${invoice.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${formatCredits(invoice.amount)} CR`}
+                            {invoice.unit === "USDC"
+                              ? `$${invoice.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                              : `${formatCredits(invoice.amount)} CR`}
                           </div>
                           <Badge
                             className="h-5 text-[10px] uppercase tracking-tighter"
-                            variant={["paid", "settled", "completed", "confirmed"].includes(invoice.status) ? "default" : invoice.status === "failed" ? "destructive" : "secondary"}
+                            variant={
+                              ["paid", "settled", "completed", "confirmed"].includes(invoice.status)
+                                ? "default"
+                                : invoice.status === "failed"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
                           >
                             {invoice.status}
                           </Badge>
                         </div>
-                        <Button size="icon" variant="ghost" aria-label="Download statement" onClick={() => downloadInvoice(invoice.id)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Download statement"
+                          onClick={() => downloadInvoice(invoice.id)}
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
                       </div>
@@ -287,12 +302,18 @@ const BillingCredits = () => {
                           variant={subscriptionStatus === "expired" ? "destructive" : "secondary"}
                           className="border-none uppercase"
                         >
-                          {subscriptionStatus === "active" ? "Active" : subscriptionStatus === "expired" ? "Expired" : "Account tier"}
+                          {subscriptionStatus === "active"
+                            ? "Active"
+                            : subscriptionStatus === "expired"
+                              ? "Expired"
+                              : "Account tier"}
                         </Badge>
                       </div>
                       <div className="text-muted-foreground mt-1 max-w-md">{subscriptionPlan.description}</div>
                       <div className="text-xs font-mono text-muted-foreground mt-4">
-                        {subscription ? `UID: ${subscription.id.slice(0, 18).toUpperCase()} | ${subscriptionStatus === "expired" ? "EXPIRED" : "EXPIRES"}: ` : "No subscription record"}
+                        {subscription
+                          ? `UID: ${subscription.id.slice(0, 18).toUpperCase()} | ${subscriptionStatus === "expired" ? "EXPIRED" : "EXPIRES"}: `
+                          : "No subscription record"}
                         {subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : ""}
                       </div>
                     </div>
