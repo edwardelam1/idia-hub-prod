@@ -30,7 +30,7 @@ const NotificationsBridge = () => {
             body: `${row.egress_type || "EGRESS"} · ${truncated}`,
             category: "shield",
             severity: "success",
-            link: "/trading",
+            link: "/marketplace?panel=trading",
             metadata: { egress_id: row.id, hash },
           });
         },

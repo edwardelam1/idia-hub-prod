@@ -64,7 +64,6 @@ const getRoleItems = (userRole: string): NavItem[] => {
     { title: "Subscriptions", url: "/billing", icon: DollarSign },
     { title: "Top Up Wallet", url: "/top-up", icon: Zap },
     { title: "Best Friend AI", url: "/best-friend", icon: Bot },
-    { title: "Trading Interface", url: "/trading", icon: TrendingUp },
     { title: "Saved Searches", url: "/saved-searches", icon: Search },
     { title: "Data Marketplace", url: "/marketplace", icon: Database },
     { title: "Earnings & Settlement", url: "/earnings", icon: Landmark },

@@ -16,8 +16,6 @@ import DataViewer from "@/components/data/DataViewer";
 import MyReports from "@/components/reports/MyReports";
 import SecurityPage from "./SecurityPage";
 import { SystemHealthDashboard } from "@/components/system/SystemHealthDashboard";
-import TradingInterface from "@/components/trading/TradingInterface";
-import { TradingDeskDashboard } from "@/components/trading/TradingDeskDashboard";
 import PayAppBlueprint from "@/components/trading/PayAppBlueprint";
 import LiquidityPools from "@/components/liquidity/LiquidityPools";
 import BillingCredits from "@/components/billing/BillingCredits";
@@ -139,7 +137,7 @@ const Index = () => {
         <Route path="/saved-searches" element={<SavedActivityPage />} />
         <Route path="/analytics" element={<div>Analytics (Coming Soon)</div>} />
         <Route path="/my-lists" element={<div>My Lists - Available in Data Viewer</div>} />
-        <Route path="/trading" element={<TradingDeskDashboard />} />
+        <Route path="/trading" element={<Navigate to="/marketplace?panel=trading" replace />} />
         <Route path="/pay-blueprint" element={<PayAppBlueprint />} />
         <Route path="/liquidity" element={<LiquidityPools />} />
         <Route path="/egress-logs" element={<ProvenanceAuditLog />} />

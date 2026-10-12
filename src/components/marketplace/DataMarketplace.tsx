@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useResponsive } from "@/hooks/useResponsive";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
-import { Loader2, Bot, Terminal, Boxes, Bird, Radar, ChevronsDown, ChevronsUp } from "lucide-react";
+import { Loader2, Bot, Terminal, Boxes, Bird, Radar, ChevronsDown, ChevronsUp, ChartNoAxesCombined } from "lucide-react";
 import MarketplaceHeader from "./MarketplaceHeader";
 import MarketplaceFilters from "./MarketplaceFilters";
 import ResultsHeader from "./ResultsHeader";
@@ -12,6 +12,7 @@ import ShoppingCartComponent from "./ShoppingCart";
 import MarketplaceTerminal from "./MarketplaceTerminal";
 import VultureIngestionPanel from "./vulture/VultureIngestionPanel";
 import UtilitiesIngestionPanel from "./utilities/UtilitiesIngestionPanel";
+import { TradingDeskDashboard } from "@/components/trading/TradingDeskDashboard";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { CartItem } from "@/types/marketplace";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,10 +25,14 @@ interface DataMarketplaceProps {
   userRole: string;
 }
 
-type ToolTile = "sql" | "bundles" | "vulture" | "utilities";
+type ToolTile = "sql" | "bundles" | "vulture" | "utilities" | "trading";
+
+const isToolTile = (value: string | null): value is ToolTile =>
+  value === "sql" || value === "bundles" || value === "vulture" || value === "utilities" || value === "trading";
 
 const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile, isTablet } = useResponsive();
   const { bundles, isLoading, error } = useMarketplaceBundles();
   const { balanceData, refreshBalance } = useSynapseCredits();
@@ -38,7 +43,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [appliedFilters, setAppliedFilters] = useState<any>({});
   const [windowFilter, setWindowFilter] = useState<string>("any");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [activeTile, setActiveTile] = useState<ToolTile>("bundles");
+  const requestedTile = searchParams.get("panel");
+  const [activeTile, setActiveTile] = useState<ToolTile>(() => isToolTile(requestedTile) ? requestedTile : "bundles");
   const [expandedBundleIds, setExpandedBundleIds] = useState<Set<string>>(() => new Set());
 
   const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
@@ -203,6 +209,14 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     });
   };
 
+  const selectTile = (tile: ToolTile) => {
+    setActiveTile(tile);
+    const next = new URLSearchParams(searchParams);
+    if (tile === "bundles") next.delete("panel");
+    else next.set("panel", tile);
+    setSearchParams(next, { replace: true });
+  };
+
   if (error) {
     return (
       <div className={`space-y-4 ${containerPadding} bg-gray-50 min-h-screen`}>
@@ -222,6 +236,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     { id: "bundles", title: "AI Bundles", icon: Boxes, show: true },
     { id: "vulture", title: "The Vulture", icon: Bird, show: isAdmin },
     { id: "utilities", title: "Utilities", icon: Radar, show: true },
+    { id: "trading", title: "Trading Desk API", icon: ChartNoAxesCombined, show: true },
   ];
 
   return (
@@ -237,14 +252,14 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       </div>
 
       {/* ─── Tool Tile Panel ─── */}
-      <div className={`grid grid-cols-2 gap-2 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+      <div className={`grid grid-cols-2 gap-2 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         {tiles.filter((t) => t.show).map((t) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
           return (
             <button
               key={t.id}
-              onClick={() => setActiveTile(t.id)}
+              onClick={() => selectTile(t.id)}
               className={`min-w-0 rounded-lg border-2 p-3 text-left transition-all sm:p-4 ${
                 active
                   ? "border-primary bg-white shadow-md"
@@ -262,6 +277,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
                 {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
                 {t.id === "utilities" && "Commercial intake gateway and staged data dividend balances."}
+                {t.id === "trading" && "API keys, endpoints, MCP, monitoring, and feature feeds."}
               </p>
             </button>
           );
@@ -370,6 +386,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         {activeTile === "vulture" && <VultureIngestionPanel userRole={userRole} />}
 
         {activeTile === "utilities" && <UtilitiesIngestionPanel />}
+
+        {activeTile === "trading" && <TradingDeskDashboard />}
       </div>
     </div>
   );

@@ -1,21 +1,15 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { 
   Activity, 
   Key, 
-  TrendingUp, 
+  Boxes, 
   Database, 
   Clock, 
   Shield,
-  Zap,
   BarChart3,
   FileCode,
-  Lock,
-  Copy,
-  Eye,
-  EyeOff,
   Plug
 } from "lucide-react";
 import { APIKeyManagement } from "./APIKeyManagement";
@@ -33,7 +27,7 @@ export const TradingDeskDashboard = () => {
   const { pipelineHealth, activeBundlesCount, stagedDataCount, isLoading } = useDashboardStats();
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 min-w-0 overflow-x-hidden">
+    <div className="min-w-0 space-y-4 overflow-x-hidden">
       {/* Header Section */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Trading Desk API Access</h1>
@@ -44,69 +38,35 @@ export const TradingDeskDashboard = () => {
 
 
       {/* Key Metrics Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Records Processed</CardTitle>
-            <Database className="h-4 w-4 text-primary" />
+      <div className="grid grid-cols-2 gap-2">
+        <Card className="min-w-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1 sm:p-3 sm:pb-1">
+            <CardTitle className="text-xs font-medium sm:text-sm">Staged Data</CardTitle>
+            <Activity className="h-3.5 w-3.5 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-foreground">
-                {(pipelineHealth?.processed_raw_data ?? 0).toLocaleString()}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {pipelineHealth?.total_raw_data ?? 0} total raw records
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Staged Data</CardTitle>
-            <Activity className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-foreground">
+          <CardContent className="p-2 pt-0 sm:p-3 sm:pt-0">
+            {isLoading ? <Skeleton className="h-6 w-16" /> : (
+              <div className="text-lg font-bold text-foreground sm:text-xl">
                 {stagedDataCount.toLocaleString()}
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
               {pipelineHealth?.unrewarded_staged_data ?? 0} pending rewards
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Bundles</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
+        <Card className="min-w-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1 sm:p-3 sm:pb-1">
+            <CardTitle className="text-xs font-medium sm:text-sm">Active Bundles</CardTitle>
+            <Boxes className="h-3.5 w-3.5 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-foreground">{activeBundlesCount}</div>
+          <CardContent className="p-2 pt-0 sm:p-3 sm:pt-0">
+            {isLoading ? <Skeleton className="h-6 w-16" /> : (
+              <div className="text-lg font-bold text-foreground sm:text-xl">{activeBundlesCount}</div>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
               Marketplace listings
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-            <Key className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-foreground">
-                {(pipelineHealth?.total_transactions ?? 0).toLocaleString()}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">Live</Badge>
             </p>
           </CardContent>
         </Card>
