@@ -1,214 +1,228 @@
 // Edge function: mesh-telemetry-intake
-// Production ingest door for autonomous Vulture mesh edge nodes.
-// Authenticated with a mesh franchise key (x-api-key). Refuses everything while the
-// gateway is sealed. PII is hashed with the vault salt before anything is persisted.
-
+// Production ingest door for The Vulture. Pipeline:
+//   auth (SHA-256 node key → mesh_nodes, IP allowlist) → gateway check → raw SHA-256
+//   → sanitize (PII hash, injection strip, UTC timestamps) → quarantine (422) or
+//   append-only vulture_ledger row with status 'staged_for_notarization'.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_EVENTS = 500;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-api-key, authorization, apikey, x-client-info",
+  "Access-Control-Allow-Headers": "content-type, x-api-key, authorization, apikey, x-client-info, x-node-id",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const PII_KEYS = new Set([
-  "ssn",
-  "social_security",
-  "name",
-  "first_name",
-  "last_name",
-  "full_name",
-  "email",
-  "email_address",
-  "issuer_id",
-  "source_id",
-  "target_name_pseudonym",
-  "target_biometric_hash",
-  "license_plate",
-  "phone",
-  "phone_number",
+  "ssn", "social_security", "name", "first_name", "last_name", "full_name", "email", "email_address",
+  "issuer_id", "source_id", "target_name_pseudonym", "target_biometric_hash", "license_plate", "phone", "phone_number",
 ]);
+const TS_KEYS = new Set(["timestamp", "created_at", "date", "datetime", "event_time", "timestamp_issued", "observed_at"]);
+const INJECTION_RE = /<\s*\/?\s*script\b|javascript:|on\w+\s*=|\$\{|;\s*(drop|delete|truncate|update|insert)\s|--\s|\/\*|\u0000/i;
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+async function sha256Hex(v: string | Uint8Array) {
+  const data = typeof v === "string" ? new TextEncoder().encode(v) : v;
+  const d = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Deterministic canonical JSON (sorted keys) so the sanitized hash is a stable Merkle leaf.
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v as Record<string, unknown>).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+function ipv4ToInt(ip: string) {
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+}
+function ipAllowed(ip: string, list: string[]) {
+  if (!list || list.length === 0) return true;
+  return list.some((entry) => {
+    if (!entry.includes("/")) return entry === ip;
+    const [base, bitsRaw] = entry.split("/");
+    const a = ipv4ToInt(ip), b = ipv4ToInt(base), bits = Number(bitsRaw);
+    if (a === null || b === null || !(bits >= 0 && bits <= 32)) return false;
+    const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+    return (a & mask) === (b & mask);
   });
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function stripPII(row: Record<string, unknown>, salt: string): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) {
-    const lk = k.toLowerCase();
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-      out[k] = await stripPII(v as Record<string, unknown>, salt);
-      continue;
+interface SanitizeIssue { path: string; reason: string }
+async function sanitize(v: unknown, salt: string, path: string, issues: SanitizeIssue[], key = ""): Promise<unknown> {
+  const lk = key.toLowerCase();
+  if (Array.isArray(v)) return Promise.all(v.map((x, i) => sanitize(x, salt, `${path}[${i}]`, issues)));
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (INJECTION_RE.test(k)) { issues.push({ path: `${path}.${k}`, reason: "INJECTION_KEY" }); continue; }
+      out[k] = await sanitize(val, salt, `${path}.${k}`, issues, k);
     }
-    if (PII_KEYS.has(lk) && v != null && v !== "") {
-      out[k] = await sha256Hex(salt + String(v));
-    } else {
-      out[k] = v;
-    }
+    return out;
   }
-  return out;
+  if (PII_KEYS.has(lk) && v != null && v !== "") return sha256Hex(salt + String(v));
+  if (TS_KEYS.has(lk) && v != null) {
+    const d = typeof v === "number" ? new Date(v < 1e12 ? v * 1000 : v) : new Date(String(v));
+    if (isNaN(d.getTime())) { issues.push({ path, reason: "MALFORMED_TIMESTAMP" }); return null; }
+    return d.toISOString();
+  }
+  if (typeof v === "string") {
+    if (INJECTION_RE.test(v)) { issues.push({ path, reason: "INJECTION_VECTOR" }); return null; }
+    return v.slice(0, 4096);
+  }
+  if (typeof v === "number" && !Number.isFinite(v)) { issues.push({ path, reason: "NON_FINITE_NUMBER" }); return null; }
+  return v;
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const traceId = crypto.randomUUID();
+  const startTime = Date.now();
+  const sourceIp = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  console.log(`[VULTURE_INTAKE_START][Trace: ${traceId}] Inbound connection from ${sourceIp}`);
+  if (req.method !== "POST") return json({ error: "Method not allowed", trace_id: traceId }, 405);
 
-  console.log(`[MESH_INTAKE_START] Inbound mesh telemetry request received.`);
-
+  const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
   try {
-    console.log(`[SUPABASE_INIT_START] Opening privileged connection.`);
-    const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-    console.log(`[SUPABASE_INIT_END] Connection established.`);
+    // ---- Auth ----
+    console.log(`[VULTURE_AUTH_START][Trace: ${traceId}] Verifying node credential.`);
+    const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const presented = req.headers.get("x-api-key") ?? (bearer.startsWith("vnk_") ? bearer : "");
+    if (!presented) {
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: missing node key`);
+      return json({ error: "Missing node key (x-api-key).", trace_id: traceId }, 401);
+    }
+    const presentedHash = await sha256Hex(presented);
 
-    console.log(`[API_KEY_AUTH_START] Validating mesh node credential.`);
-    const presentedKey = req.headers.get("x-api-key") ?? "";
-    if (!presentedKey) {
-      console.error(`[API_KEY_AUTH_ERROR] Missing x-api-key header.`);
-      console.log(`[API_KEY_AUTH_END] Rejected.`);
-      return json({ error: "Missing x-api-key header." }, 401);
+    let nodeId: string, tenantId: string | null, nodeRowId: string | null = null, legacyKeyId: string | null = null;
+    const { data: node, error: nodeErr } = await supabase
+      .from("mesh_nodes").select("id, node_id, tenant_id, status, ip_allowlist")
+      .eq("token_hash", presentedHash).maybeSingle();
+    if (nodeErr) {
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Node lookup error: ${nodeErr.message}`);
+      return json({ error: "Credential verification failed.", trace_id: traceId }, 500);
     }
-    const presentedHash = await sha256Hex(presentedKey);
-    const { data: keyRow, error: keyError } = await supabase
-      .from("api_keys")
-      .select("id, user_id, status")
-      .eq("key_hash", presentedHash)
-      .eq("environment", "mesh")
-      .eq("status", "active")
-      .maybeSingle();
-    if (keyError) {
-      console.error(`[API_KEY_AUTH_QUERY_ERROR] ${keyError.message}`);
-      return json({ error: "Credential verification failed." }, 500);
+    if (node) {
+      if (node.status !== "active") {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: node ${node.node_id} is ${node.status}`);
+        return json({ error: "Node key revoked.", trace_id: traceId }, 401);
+      }
+      if (!ipAllowed(sourceIp, node.ip_allowlist ?? [])) {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: IP ${sourceIp} not on allowlist for ${node.node_id}`);
+        return json({ error: "Origin IP not permitted for this node.", trace_id: traceId }, 401);
+      }
+      nodeId = node.node_id; tenantId = node.tenant_id; nodeRowId = node.id;
+    } else {
+      // Legacy mesh keys issued before mesh_nodes existed.
+      const { data: legacy } = await supabase.from("api_keys").select("id, user_id")
+        .eq("key_hash", presentedHash).eq("environment", "mesh").eq("status", "active").maybeSingle();
+      if (!legacy) {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: unknown credential`);
+        return json({ error: "Invalid or revoked node key.", trace_id: traceId }, 401);
+      }
+      nodeId = `legacy_${legacy.id.slice(0, 8)}`; tenantId = legacy.user_id; legacyKeyId = legacy.id;
     }
-    if (!keyRow) {
-      console.error(`[API_KEY_AUTH_ERROR] Unknown or revoked mesh credential presented.`);
-      console.log(`[API_KEY_AUTH_END] Rejected.`);
-      return json({ error: "Invalid or revoked mesh key." }, 401);
-    }
-    console.log(`[API_KEY_AUTH_END] Credential valid. Node operator: ${keyRow.user_id}`);
+    console.log(`[VULTURE_AUTH_SUCCESS][Trace: ${traceId}] Authenticated Node: ${nodeId}`);
 
-    console.log(`[GATEWAY_STATE_START] Checking mesh gateway authorization state.`);
-    const { data: gateway, error: gatewayError } = await supabase
-      .from("mesh_gateway_state")
-      .select("is_open")
-      .eq("id", "singleton")
-      .maybeSingle();
-    if (gatewayError) {
-      console.error(`[GATEWAY_STATE_QUERY_ERROR] ${gatewayError.message}`);
-      return json({ error: "Gateway state unavailable." }, 500);
-    }
+    // ---- Gateway ----
+    console.log(`[VULTURE_GATEWAY_START][Trace: ${traceId}] Checking gateway state.`);
+    const { data: gateway, error: gwErr } = await supabase.from("mesh_gateway_state").select("is_open").eq("id", "singleton").maybeSingle();
+    if (gwErr) { console.error(`[VULTURE_GATEWAY_ERROR][Trace: ${traceId}] ${gwErr.message}`); return json({ error: "Gateway state unavailable.", trace_id: traceId }, 500); }
     if (!gateway?.is_open) {
-      console.error(`[GATEWAY_STATE_SEALED] Gateway is sealed. Refusing ingest.`);
-      console.log(`[GATEWAY_STATE_END] Rejected.`);
-      return json({ error: "Mesh gateway is sealed. Ingest refused." }, 503);
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Gateway sealed.`);
+      return json({ error: "Mesh gateway is sealed. Ingest refused.", trace_id: traceId }, 503);
     }
-    console.log(`[GATEWAY_STATE_END] Gateway open. Proceeding.`);
+    console.log(`[VULTURE_GATEWAY_END][Trace: ${traceId}] Gateway open.`);
 
-    console.log(`[PAYLOAD_PARSE_START] Reading telemetry payload.`);
-    const body = await req.json().catch(() => null);
+    // ---- Raw fingerprint (before any parsing) ----
+    const rawBytes = new Uint8Array(await req.arrayBuffer());
+    if (rawBytes.byteLength > MAX_BYTES) {
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Payload ${rawBytes.byteLength} bytes exceeds limit.`);
+      return json({ error: "Payload exceeds 5 MB.", trace_id: traceId }, 413);
+    }
+    console.log(`[VULTURE_HASHING_START][Trace: ${traceId}] Computing SHA-256 raw wire digest...`);
+    const rawHash = await sha256Hex(rawBytes);
+    console.log(`[VULTURE_HASHING_COMPLETE][Trace: ${traceId}] Raw Digest: ${rawHash}`);
+    const rawText = new TextDecoder("utf-8", { fatal: false }).decode(rawBytes);
+
+    const quarantine = async (reason: string, detail: unknown) => {
+      console.warn(`[VULTURE_SANITIZE_QUARANTINE][Trace: ${traceId}] ${reason} — routing to quarantine.`);
+      const { error: qErr } = await supabase.from("vulture_quarantine").insert({
+        trace_id: traceId, node_id: nodeId, tenant_id: tenantId, raw_hash: rawHash,
+        raw_payload: rawText.slice(0, 1_000_000), reason_code: reason,
+        reason_detail: { detail }, contractor_metadata: { source_ip: sourceIp, user_agent: req.headers.get("user-agent"), bytes: rawBytes.byteLength },
+      });
+      if (qErr) console.error(`[VULTURE_QUARANTINE_ERROR][Trace: ${traceId}] ${qErr.message}`);
+      return json({ status: "quarantined", reason_code: reason, raw_hash: rawHash, trace_id: traceId }, 422);
+    };
+
+    // ---- Parse + sanitize ----
+    console.log(`[VULTURE_SANITIZE_START][Trace: ${traceId}] Initiating sanitization pass...`);
+    let body: any;
+    try { body = JSON.parse(rawText); } catch (e) { return await quarantine("MALFORMED_JSON", String((e as Error).message)); }
     const events = Array.isArray(body?.events) ? body.events : Array.isArray(body) ? body : null;
-    if (!events || events.length === 0) {
-      console.error(`[PAYLOAD_VALIDATION_ERROR] Missing or empty events array.`);
-      return json({ error: "Payload must include a non-empty 'events' array." }, 400);
-    }
-    if (events.length > 500) {
-      console.error(`[PAYLOAD_VALIDATION_ERROR] Batch exceeds 500 events.`);
-      return json({ error: "Maximum 500 events per batch." }, 400);
-    }
-    console.log(`[PAYLOAD_PARSE_END] ${events.length} events accepted for shaping.`);
+    if (!events || events.length === 0) return await quarantine("MISSING_EVENTS", "Payload must include a non-empty 'events' array.");
+    if (events.length > MAX_EVENTS) return await quarantine("BATCH_TOO_LARGE", `Maximum ${MAX_EVENTS} events per batch.`);
+    if (events.some((e: unknown) => !e || typeof e !== "object" || Array.isArray(e))) return await quarantine("NON_OBJECT_EVENT", "Every event must be a JSON object.");
 
-    console.log(`[VAULT_ACCESS_START] Retrieving anonymization salt.`);
-    const { data: saltData, error: saltError } = await supabase.rpc("get_vulture_salt");
-    if (saltError) {
-      console.error(`[VAULT_ACCESS_ERROR] ${saltError.message}`);
-      throw saltError;
-    }
+    const { data: saltData, error: saltErr } = await supabase.rpc("get_vulture_salt");
+    if (saltErr) throw saltErr;
     const salt = String(saltData ?? "");
-    console.log(`[VAULT_ACCESS_END] Salt acquired.`);
 
-    console.log(`[SHAPING_LOOP_START] Stripping PII and shaping ${events.length} events.`);
-    const nodeId = String(body?.node_id ?? keyRow.id);
+    const issues: SanitizeIssue[] = [];
+    const sanitizedEvents = (await sanitize(events, salt, "events", issues)) as Record<string, unknown>[];
+    if (issues.length > 0) return await quarantine("SANITIZATION_FAILED", issues.slice(0, 50));
+    const tagged = sanitizedEvents.map((e) => ({ ...e, origin_status: "ACQUIRED_REHABILITATED" }));
+    console.log(`[VULTURE_SANITIZE_COMPLETE][Trace: ${traceId}] ${tagged.length} events cleaned and normalized.`);
+
+    const sanitizedHash = await sha256Hex(canonical(tagged));
+
+    // ---- Commit ----
+    console.log(`[VULTURE_DB_STAGING_START][Trace: ${traceId}] Writing to vulture_ledger with status 'staged_for_notarization'...`);
+    const { data: ledgerRow, error: dbError } = await supabase.from("vulture_ledger").insert({
+      trace_id: traceId, node_id: nodeId, tenant_id: tenantId, source: "mesh",
+      raw_hash: rawHash, sanitized_hash: sanitizedHash, payload: tagged,
+      record_count: tagged.length, status: "staged_for_notarization",
+    }).select("id").single();
+    if (dbError) {
+      console.error(`[VULTURE_DB_STAGING_ERROR][Trace: ${traceId}] Insert failed: ${dbError.message}`);
+      return json({ error: "Storage failure", trace_id: traceId }, 500);
+    }
+    console.log(`[VULTURE_DB_STAGING_END][Trace: ${traceId}] Ledger row ${ledgerRow.id}.`);
+
+    // Analytics fan-out (non-authoritative copy for marketplace aggregates).
     const pseudoNodeId = (await sha256Hex(salt + nodeId)).slice(0, 32);
-    const rows: Record<string, unknown>[] = [];
-    for (const event of events) {
-      try {
-        if (typeof event !== "object" || event === null) {
-          console.error(`[SHAPING_LOOP_SKIP] Non-object event encountered. Skipping.`);
-          continue;
-        }
-        const clean = await stripPII(event as Record<string, unknown>, salt);
-        rows.push({
-          pseudo_node_id: pseudoNodeId,
-          telemetry_category: String((event as Record<string, unknown>).event_type ?? "MESH_TELEMETRY"),
-          payload_data: { ...clean, origin_status: "ACQUIRED_REHABILITATED" },
-          data_quality_score: typeof (event as Record<string, unknown>).hdop === "number"
-            ? 1 / Math.max(Number((event as Record<string, unknown>).hdop), 1)
-            : 0.99,
-          processed_at: new Date().toISOString(),
-        });
-      } catch (shapeError) {
-        console.error(
-          `[SHAPING_LOOP_FAULT] ${shapeError instanceof Error ? shapeError.stack : String(shapeError)}`,
-        );
-      }
-    }
-    console.log(`[SHAPING_LOOP_END] ${rows.length} events shaped.`);
+    const { error: fanErr } = await supabase.from("mesh_telemetry_events").insert(tagged.map((e) => ({
+      pseudo_node_id: pseudoNodeId,
+      telemetry_category: String((e as any).event_type ?? "MESH_TELEMETRY"),
+      payload_data: e,
+      data_quality_score: typeof (e as any).hdop === "number" ? 1 / Math.max(Number((e as any).hdop), 1) : 0.99,
+      processed_at: new Date().toISOString(),
+    })));
+    if (fanErr) console.error(`[VULTURE_FANOUT_ERROR][Trace: ${traceId}] ${fanErr.message}`);
 
-    console.log(`[TELEMETRY_INSERT_START] Writing ${rows.length} rows to mesh_telemetry_events.`);
-    if (rows.length > 0) {
-      const { error: insertError } = await supabase.from("mesh_telemetry_events").insert(rows);
-      if (insertError) {
-        console.error(`[TELEMETRY_INSERT_ERROR] ${insertError.message}`);
-        throw insertError;
-      }
-    }
-    console.log(`[TELEMETRY_INSERT_END] Insert complete.`);
+    const now = new Date().toISOString();
+    if (nodeRowId) await supabase.from("mesh_nodes").update({ last_used_at: now }).eq("id", nodeRowId);
+    if (legacyKeyId) await supabase.from("api_keys").update({ last_used_at: now }).eq("id", legacyKeyId);
 
-    console.log(`[LEDGER_WRITE_START] Recording provenance ledger entry.`);
-    const batchHash = await sha256Hex(JSON.stringify(rows));
-    const { error: ledgerError } = await supabase.from("vulture_provenance_ledger").insert({
-      original_file_name: `mesh-node/${pseudoNodeId}`,
-      bucket_path: null,
-      record_count: rows.length,
-      action: "mesh_ingest",
-      status: "success",
-      sanitized_hash: batchHash,
-    });
-    if (ledgerError) console.error(`[LEDGER_WRITE_ERROR] ${ledgerError.message}`);
-    console.log(`[LEDGER_WRITE_END] Ledger entry recorded.`);
-
-    console.log(`[API_KEY_TOUCH_START] Stamping credential last_used_at.`);
-    const { error: touchError } = await supabase
-      .from("api_keys")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("id", keyRow.id);
-    if (touchError) console.error(`[API_KEY_TOUCH_ERROR] ${touchError.message}`);
-    console.log(`[API_KEY_TOUCH_END] Stamp complete.`);
-
-    console.log(`[MESH_INTAKE_END] Execution complete. Accepted ${rows.length} events.`);
+    console.log(`[VULTURE_INTAKE_COMPLETE][Trace: ${traceId}] Ingestion completed in ${Date.now() - startTime}ms. Receipt emitted.`);
     return json({
-      status: "success",
-      events_received: events.length,
-      events_committed: rows.length,
-      batch_hash: batchHash,
+      status: "staged_for_notarization", ledger_id: ledgerRow.id, trace_id: traceId, node_id: nodeId,
+      events_committed: tagged.length, raw_hash: rawHash, sanitized_hash: sanitizedHash,
     });
   } catch (err) {
-    console.error(
-      `[CRITICAL_SYSTEM_FAULT] Unhandled exception in mesh intake. Stack: ${err instanceof Error ? err.stack : String(err)}`,
-    );
-    console.log(`[MESH_INTAKE_END_WITH_ERROR] Process terminated abruptly.`);
-    return json({ error: "Internal Server Error" }, 500);
+    console.error(`[VULTURE_INTAKE_FAULT][Trace: ${traceId}] ${err instanceof Error ? err.stack : String(err)}`);
+    return json({ error: "Internal Server Error", trace_id: traceId }, 500);
   }
 });
