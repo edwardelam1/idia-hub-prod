@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { processLock } from "@supabase/auth-js";
 import type { Database } from "./types";
 import { brokeredPreviewStorage } from "./previewAuthStorage";
 
@@ -12,6 +13,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // In-tab queue instead of the browser-wide lock: concurrent session reads
+    // wait their turn rather than "stealing" the lock and rejecting.
+    lock: processLock,
   },
   global: {
     // 🎯 THE PERMANENT FIX: This header is MANDATORY for Supabase Gateway clearance.
