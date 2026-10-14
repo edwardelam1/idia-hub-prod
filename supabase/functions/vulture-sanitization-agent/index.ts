@@ -276,6 +276,25 @@ Deno.serve(async (req) => {
     });
     console.info("[END: Vulture.LedgerFinalize]");
 
+    console.info("[BEGIN: Vulture.StagingLedgerCommit] status=staged_for_notarization");
+    const { error: stageErr } = await supabase.from("vulture_ledger").insert({
+      trace_id: crypto.randomUUID(),
+      node_id: "upload",
+      tenant_id: body.owner ?? null,
+      source: "upload",
+      original_file_name: fileName,
+      raw_hash: originalHash,
+      sanitized_hash: sanitizedHash,
+      payload: tagged,
+      record_count: tagged.length,
+      status: "staged_for_notarization",
+    });
+    if (stageErr) {
+      console.error("[BEGIN: Vulture.StagingLedgerCommit.Stall]", stageErr);
+      throw stageErr;
+    }
+    console.info("[END: Vulture.StagingLedgerCommit]");
+
     console.info("[END: Vulture.Handler]");
     return new Response(JSON.stringify({ ok: true, records: tagged.length, originalHash, sanitizedHash }), {
       status: 200,

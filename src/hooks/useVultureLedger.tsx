@@ -3,18 +3,33 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface VultureLedgerRow {
   id: string;
-  original_file_name: string;
-  bucket_path: string | null;
+  kind: "ledger" | "quarantine";
+  node_id: string | null;
+  source: string;
+  original_file_name: string | null;
   record_count: number | null;
-  action: string;
-  status: "processing" | "success" | "failed" | string;
+  status: string;
   error_message: string | null;
-  original_hash: string | null;
+  raw_hash: string | null;
   sanitized_hash: string | null;
-  manifest_path: string | null;
+  tx_hash: string | null;
   created_at: string;
 }
 
+const fromLedger = (r: any): VultureLedgerRow => ({
+  id: r.id, kind: "ledger", node_id: r.node_id, source: r.source, original_file_name: r.original_file_name,
+  record_count: r.record_count, status: r.status, error_message: null, raw_hash: r.raw_hash,
+  sanitized_hash: r.sanitized_hash, tx_hash: r.tx_hash, created_at: r.created_at,
+});
+const fromQuarantine = (r: any): VultureLedgerRow => ({
+  id: r.id, kind: "quarantine", node_id: r.node_id, source: "mesh", original_file_name: null,
+  record_count: null, status: "quarantined", error_message: r.reason_code, raw_hash: r.raw_hash,
+  sanitized_hash: null, tx_hash: null, created_at: r.created_at,
+});
+const sortRows = (rows: VultureLedgerRow[]) =>
+  [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100);
+
+/** Live view of the append-only vulture_ledger plus quarantined deliveries. No mock data. */
 export function useVultureLedger() {
   const [rows, setRows] = useState<VultureLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,79 +37,44 @@ export function useVultureLedger() {
 
   useEffect(() => {
     let cancelled = false;
-
-    const fetchRows = async () => {
-      console.info("[BEGIN: VultureUI.MeshLedgerFetch] Initiating REST request for historical mesh provenance ledger.");
+    const load = async () => {
+      console.info("[BEGIN: VultureUI.LedgerFetch]");
       try {
-        const { data, error: fetchError } = await supabase
-          .from("vulture_provenance_ledger" as any)
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(100);
-
-        if (fetchError) {
-          console.error("[ERROR: VultureUI.MeshLedgerFetch] Database query rejected.");
-          throw fetchError;
-        }
-
-        if (!cancelled) {
-          console.info("[BEGIN: VultureUI.MeshLedgerStateUpdate] Hydrating UI state with historical ledger data.");
-          setRows((data as any) ?? []);
-          console.info("[END: VultureUI.MeshLedgerStateUpdate] UI state hydration complete.");
-        }
-
-        console.info(`[END: VultureUI.MeshLedgerFetch] Historical fetch resolved. Row count: ${data?.length ?? 0}`);
+        const [ledger, quarantine] = await Promise.all([
+          (supabase as any).from("vulture_ledger")
+            .select("id,node_id,source,original_file_name,record_count,status,raw_hash,sanitized_hash,tx_hash,created_at")
+            .order("created_at", { ascending: false }).limit(100),
+          (supabase as any).from("vulture_quarantine")
+            .select("id,node_id,raw_hash,reason_code,created_at")
+            .order("created_at", { ascending: false }).limit(50),
+        ]);
+        if (ledger.error) throw ledger.error;
+        if (quarantine.error) throw quarantine.error;
+        if (!cancelled) setRows(sortRows([...(ledger.data ?? []).map(fromLedger), ...(quarantine.data ?? []).map(fromQuarantine)]));
+        console.info("[END: VultureUI.LedgerFetch]");
       } catch (e: any) {
-        console.error(
-          `[BEGIN: VultureUI.MeshLedgerFetch.Stall] Critical failure retrieving ledger history. Exception: ${e.message ?? String(e)}`,
-        );
-        if (!cancelled) setError(e.message ?? String(e));
-        console.info("[END: VultureUI.MeshLedgerFetch.Stall] Error state committed to UI.");
+        console.error(`[ERROR: VultureUI.LedgerFetch] ${e?.stack ?? e?.message ?? String(e)}`);
+        if (!cancelled) setError(e?.message ?? String(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
+    void load();
 
-    fetchRows();
-
-    console.info(
-      "[BEGIN: VultureUI.RealtimeSubscribe] Establishing WebSocket connection for real-time ledger mutations.",
-    );
     const channel = supabase
-      .channel("vulture_provenance_ledger_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "vulture_provenance_ledger" }, (payload) => {
-        console.info(
-          `[BEGIN: VultureUI.RealtimeEvent] Detected ${payload.eventType} operation from mesh network backend.`,
-        );
-
-        if (payload.eventType === "INSERT") {
-          console.info("[PROCESS: VultureUI.RealtimeEvent] Appending new ledger row to active memory.");
-          setRows((prev) => [payload.new as VultureLedgerRow, ...prev].slice(0, 100));
-        } else if (payload.eventType === "UPDATE") {
-          console.info(`[PROCESS: VultureUI.RealtimeEvent] Updating existing ledger row ID: ${payload.new.id}.`);
-          setRows((prev) => prev.map((row) => (row.id === payload.new.id ? (payload.new as VultureLedgerRow) : row)));
-        } else if (payload.eventType === "DELETE") {
-          console.info(`[PROCESS: VultureUI.RealtimeEvent] Removing deleted ledger row ID: ${payload.old.id}.`);
-          setRows((prev) => prev.filter((row) => row.id !== payload.old.id));
-        }
-
-        console.info("[END: VultureUI.RealtimeEvent] Ledger UI state synchronized successfully.");
+      .channel("vulture_ledger_live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "vulture_ledger" }, (p: any) => {
+        if (p.eventType === "INSERT") setRows((prev) => sortRows([fromLedger(p.new), ...prev]));
+        else if (p.eventType === "UPDATE") setRows((prev) => prev.map((r) => (r.id === p.new.id ? fromLedger(p.new) : r)));
       })
-      .subscribe((status, err) => {
-        console.info(`[PROCESS: VultureUI.RealtimeSubscribe] Channel status update: ${status}`);
-        if (err) {
-          console.error(
-            `[ERROR: VultureUI.RealtimeSubscribe] Subscription channel rejected. Exception: ${err.message ?? String(err)}`,
-          );
-        }
-      });
-    console.info("[END: VultureUI.RealtimeSubscribe] WebSocket listener bound.");
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "vulture_quarantine" }, (p: any) => {
+        setRows((prev) => sortRows([fromQuarantine(p.new), ...prev]));
+      })
+      .subscribe();
 
     return () => {
-      console.info("[BEGIN: VultureUI.Cleanup] Teardown triggered. Severing real-time ledger subscription.");
       cancelled = true;
       supabase.removeChannel(channel);
-      console.info("[END: VultureUI.Cleanup] Teardown sequence resolved.");
     };
   }, []);
 

@@ -53,3 +53,6 @@ verify_jwt = false
 # Spotify redirects the browser here (no Supabase JWT); POST actions validate the user in code.
 [functions.music-accounts]
 verify_jwt = false
+
+[functions.mesh-nodes]
+verify_jwt = false
