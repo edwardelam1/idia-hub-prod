@@ -43,19 +43,18 @@ Deno.serve(async (req) => {
   try {
     console.log(`[AUTH_CHECK_START] Verifying caller session.`);
     const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader) {
-      console.error(`[AUTH_CHECK_ERROR] Missing Authorization header.`);
-      return json({ error: "Not authenticated." }, 401);
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token || !token.startsWith("eyJ")) {
+      console.error(`[AUTH_CHECK_ERROR] Missing or non-session bearer token.`);
+      return json({ error: "Not authenticated. Please sign in again." }, 401);
     }
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user) {
-      console.error(`[AUTH_CHECK_ERROR] ${userError?.message ?? "No user for token."}`);
-      return json({ error: "Not authenticated." }, 401);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub as string | undefined;
+    if (claimsError || !userId) {
+      console.error(`[AUTH_CHECK_ERROR] ${claimsError?.message ?? "No user for token."}`);
+      return json({ error: "Not authenticated. Please sign in again." }, 401);
     }
-    const userId = userData.user.id;
     console.log(`[AUTH_CHECK_END] Caller resolved: ${userId}`);
 
     console.log(`[PAYLOAD_PARSE_START] Reading action payload.`);

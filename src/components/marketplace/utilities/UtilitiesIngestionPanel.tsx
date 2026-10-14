@@ -1,3 +1,4 @@
+import { invokeWithSession } from "@/lib/invoke-with-session";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -210,9 +211,7 @@ const UtilitiesIngestionPanel = () => {
   const fetchKeys = useCallback(async () => {
     console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
     try {
-      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "list" },
-      });
+      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "list" });
       if (error) {
         console.error(`[API_KEY_LIST_QUERY_ERROR] ${error.message}`);
         throw error;
@@ -236,9 +235,7 @@ const UtilitiesIngestionPanel = () => {
     console.log(`[API_KEY_${action.toUpperCase()}_START] Key ${keyId}`);
     setBusyKeyId(keyId);
     try {
-      const { error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action, key_id: keyId },
-      });
+      const { error } = await invokeWithSession("issue-extractor-key", { action, key_id: keyId });
       if (error) {
         console.error(`[API_KEY_${action.toUpperCase()}_QUERY_ERROR] ${error.message}`);
         throw error;
@@ -262,9 +259,7 @@ const UtilitiesIngestionPanel = () => {
     setIsGenerating(true);
     try {
       console.log(`[API_KEY_GEN_FETCH_START] Requesting new key from edge function.`);
-      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "create", name: keyName.trim() || "LIDD Franchise Key" },
-      });
+      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "create", name: keyName.trim() || "LIDD Franchise Key" });
       console.log(`[API_KEY_GEN_FETCH_END] Issuer responded.`);
       if (error) {
         console.error(`[API_KEY_GEN_QUERY_ERROR] ${error.message}`);
