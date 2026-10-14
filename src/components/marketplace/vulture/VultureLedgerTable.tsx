@@ -9,12 +9,15 @@ const statusConfig = (status: string) => {
   switch (status) {
     case "success":
     case "committed":
+    case "staged_for_notarization":
+    case "anchored":
       return {
         classes: "bg-emerald-500/10 text-emerald-600 border-emerald-200/50",
         icon: <ShieldCheck className="w-3 h-3 mr-1" />,
       };
     case "failed":
     case "rejected":
+    case "quarantined":
       return {
         classes: "bg-red-500/10 text-red-600 border-red-200/50",
         icon: <AlertTriangle className="w-3 h-3 mr-1" />,
@@ -64,7 +67,7 @@ export default function VultureLedgerTable() {
         ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 opacity-50">
             <Fingerprint className="h-8 w-8 text-[#D2D2D7] mb-2" />
-            <p className="text-[11px] font-bold uppercase tracking-widest text-[#86868B]">No Telemetry Events Logged</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#86868B]">No telemetry recorded yet</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -79,7 +82,7 @@ export default function VultureLedgerTable() {
                     Raw Telemetry Hash
                   </th>
                   <th className="px-6 py-3 text-[10px] font-black text-[#86868B] uppercase tracking-[0.15em]">
-                    On-Chain Hash
+                    Sanitized / On-Chain
                   </th>
                   <th className="px-6 py-3 text-[10px] font-black text-[#86868B] uppercase tracking-[0.15em]">
                     Timestamp
@@ -96,9 +99,9 @@ export default function VultureLedgerTable() {
                         <div className="flex flex-col">
                           <span
                             className="font-mono text-[11px] font-semibold text-[#1D1D1F] truncate max-w-[180px]"
-                            title={r.original_file_name}
+                            title={r.original_file_name ?? r.node_id ?? ""}
                           >
-                            {r.original_file_name.replace(".bin", "").replace(".json", "")}
+                            {r.original_file_name ?? r.node_id ?? r.source}
                           </span>
                           {r.record_count && (
                             <span className="text-[9px] text-[#86868B] uppercase mt-0.5">
@@ -114,7 +117,7 @@ export default function VultureLedgerTable() {
                         >
                           <div className="flex items-center">
                             {status.icon}
-                            {r.status}
+                            {r.status.replace(/_/g, " ")}
                           </div>
                         </Badge>
                         {r.error_message && (
@@ -128,12 +131,12 @@ export default function VultureLedgerTable() {
                       </td>
                       <td className="px-6 py-3">
                         <code className="font-mono text-[11px] text-[#86868B] bg-[#F2F2F7] px-1.5 py-0.5 rounded">
-                          {r.original_hash?.slice(0, 16) ?? "PENDING_HASH...."}
+                          {r.raw_hash?.slice(0, 16) ?? "PENDING_HASH...."}
                         </code>
                       </td>
                       <td className="px-6 py-3">
                         <code className="font-mono text-[11px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded">
-                          {r.sanitized_hash?.slice(0, 16) ?? "PENDING_HASH...."}
+                          {r.tx_hash ? `tx ${r.tx_hash.slice(0, 12)}` : r.sanitized_hash?.slice(0, 16) ?? "—"}
                         </code>
                       </td>
                       <td className="px-6 py-3">
