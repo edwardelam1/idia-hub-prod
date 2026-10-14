@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       .from("lidd_extraction_events")
       .select("id, synapse_credit_cost, aca_hash_key")
       .eq("extractor_id", userId)
-      .eq("payment_status", "unpaid");
+      .in("payment_status", ["consented", "unpaid"]);
 
     if (eventsError) {
       console.error(`[PHASE_END: SettleUtility.LoadDebt] Query failed: ${eventsError.message}`);
@@ -79,13 +79,22 @@ Deno.serve(async (req) => {
       amountDue += Number(row.synapse_credit_cost);
     }
 
-    // Purge the invalid rows so they stop jamming the UI's charge button
+    // Rows without an ACA mandate are kept (never deleted) — they await consent and are not billed yet.
     if (legacyEventIds.length > 0) {
-      console.warn(`[PHASE_WARN: SettleUtility] Dropping ${legacyEventIds.length} legacy events missing ACA hashes.`);
-      await adminClient.from("lidd_extraction_events").delete().in("id", legacyEventIds);
+      console.warn(`[PHASE_WARN: SettleUtility] Skipping ${legacyEventIds.length} events without ACA hashes (not billable yet).`);
     }
 
     amountDue = round4(amountDue);
+
+    console.log("[PHASE_START: SettleUtility.BalanceCheck] Verifying available Synapse Credits.");
+    const { data: bal, error: balErr } = await adminClient.rpc("get_synapse_balance", { uid: userId });
+    if (balErr) console.warn(`[PHASE_END: SettleUtility.BalanceCheck] Balance lookup failed: ${balErr.message}`);
+    const available = Number(bal ?? NaN);
+    if (Number.isFinite(available) && available < amountDue && eventIds.length > 0) {
+      console.warn(`[PHASE_END: SettleUtility.BalanceCheck] Insufficient: available=${available} due=${amountDue}`);
+      return json({ error: "INSUFFICIENT_CREDITS", shortfall: round4(amountDue - available), amount_due: amountDue });
+    }
+    console.log("[PHASE_END: SettleUtility.BalanceCheck] OK");
     console.log(`[PHASE_END: SettleUtility.LoadDebt] valid_events=${eventIds.length} amount_due=${amountDue}`);
 
     if (eventIds.length === 0 || amountDue <= 0) {
@@ -138,7 +147,7 @@ Deno.serve(async (req) => {
       .update({ payment_status: "paid" })
       .in("id", eventIds)
       .eq("extractor_id", userId)
-      .eq("payment_status", "unpaid");
+      .in("payment_status", ["consented", "unpaid"]);
 
     if (markError) {
       console.error(
@@ -153,6 +162,8 @@ Deno.serve(async (req) => {
       status: "settled",
       amount_charged: amountDue,
       events_settled: eventIds.length,
+      reference_id: synapseReceipt?.reference_id ?? synapseReceipt?.receipt?.reference_id ?? null,
+      ledger_entry_id: synapseReceipt?.ledger_entry_id ?? synapseReceipt?.ledger_id ?? null,
       receipt: synapseReceipt,
     });
   } catch (error) {
