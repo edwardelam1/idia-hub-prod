@@ -1,3 +1,4 @@
+import { invokeWithSession } from "@/lib/invoke-with-session";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,9 +72,7 @@ export default function MeshNodeIntegration() {
     console.info("[BEGIN: Mesh.KeyList] Listing mesh node credentials.");
     setIsLoadingKeys(true);
     try {
-      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "list", environment: "mesh" },
-      });
+      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "list", environment: "mesh" });
       if (error) throw error;
       setKeys((data?.keys ?? []) as MeshKey[]);
       console.info(`[END: Mesh.KeyList] ${data?.keys?.length ?? 0} credentials returned.`);
@@ -93,9 +92,7 @@ export default function MeshNodeIntegration() {
     setIsGenerating(true);
     try {
       const name = keyName.trim() || "Mesh Node Key";
-      const { data, error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action: "create", environment: "mesh", name },
-      });
+      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "create", environment: "mesh", name });
       if (error) throw error;
       setIssuedKey(data.key as string);
       setIssuedKeyName(name);
@@ -114,9 +111,7 @@ export default function MeshNodeIntegration() {
     console.info(`[BEGIN: Mesh.Key${action}] Applying ${action} to ${keyId}.`);
     setBusyKeyId(keyId);
     try {
-      const { error } = await supabase.functions.invoke("issue-extractor-key", {
-        body: { action, key_id: keyId, environment: "mesh" },
-      });
+      const { error } = await invokeWithSession("issue-extractor-key", { action, key_id: keyId, environment: "mesh" });
       if (error) throw error;
       await fetchKeys();
       console.info(`[END: Mesh.Key${action}] Complete.`);
