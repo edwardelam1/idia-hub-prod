@@ -87,9 +87,9 @@ Deno.serve(async (req) => {
     amountDue = round4(amountDue);
 
     console.log("[PHASE_START: SettleUtility.BalanceCheck] Verifying available Synapse Credits.");
-    const { data: bal, error: balErr } = await adminClient.rpc("get_synapse_balance", { _user_id: userId } as never);
+    const { data: bal, error: balErr } = await adminClient.rpc("get_synapse_balance", { uid: userId });
     if (balErr) console.warn(`[PHASE_END: SettleUtility.BalanceCheck] Balance lookup failed: ${balErr.message}`);
-    const available = Number((Array.isArray(bal) ? bal[0] : bal)?.available_credits ?? (typeof bal === "number" ? bal : NaN));
+    const available = Number(bal ?? NaN);
     if (Number.isFinite(available) && available < amountDue && eventIds.length > 0) {
       console.warn(`[PHASE_END: SettleUtility.BalanceCheck] Insufficient: available=${available} due=${amountDue}`);
       return json({ error: "INSUFFICIENT_CREDITS", shortfall: round4(amountDue - available), amount_due: amountDue });
