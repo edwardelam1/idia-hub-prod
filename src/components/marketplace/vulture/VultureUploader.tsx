@@ -104,6 +104,10 @@ export default function VultureUploader() {
   };
 
   const processFile = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      toast({ title: "File too large", description: `${file.name} exceeds the 25 MB limit.`, variant: "destructive" });
+      return;
+    }
     const id = crypto.randomUUID();
     const objectPath = `${new Date().toISOString().slice(0, 10)}/${id}-${file.name}`;
     setResults((prev) => [{ id, fileName: file.name, status: "uploading" }, ...prev]);
