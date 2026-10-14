@@ -115,7 +115,8 @@ const UtilitiesIngestionPanel = () => {
         .from("lidd_extraction_events")
         .select("synapse_credit_cost")
         .eq("extractor_id", user.user_id)
-        .eq("payment_status", "unpaid");
+        .in("payment_status", ["consented", "unpaid"])
+        .not("aca_hash_key", "is", null);
 
       if (error) {
         console.error(`[FETCH_LIDD_BALANCE_QUERY_ERROR] Failed to query events. Error: ${error.message}`);
@@ -170,18 +171,20 @@ const UtilitiesIngestionPanel = () => {
         description: `${charged.toFixed(2)} CR deducted for ${data?.events_settled ?? 0} identity matches.`,
       });
 
-      if (data?.reference_id) {
+      const referenceId = data?.reference_id ?? data?.receipt?.reference_id ?? null;
+      if (charged > 0) {
+        const idem = String(referenceId ?? `lidd-settle-${user.user_id}-${Date.now()}`);
         void recordActivity({
           source: "marketplace",
           action: "LIDD_UTILITY_SETTLEMENT",
           title: `Utility balance settled — ${charged.toFixed(2)} CR`,
           input: { events_settled: data?.events_settled ?? 0 },
-          result: { reference_id: data.reference_id, amount_charged: charged },
+          result: { reference_id: referenceId, amount_charged: charged },
           recordsConsumed: Number(data?.events_settled ?? 0),
           synapseCreditCost: charged,
           synapseLedgerEntryId: data?.ledger_entry_id ?? null,
-          referenceId: data.reference_id,
-          idempotencyKey: String(data.reference_id),
+          referenceId: referenceId,
+          idempotencyKey: idem,
         });
       }
 
