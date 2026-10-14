@@ -44,10 +44,12 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const [windowFilter, setWindowFilter] = useState<string>("any");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const requestedTile = searchParams.get("panel");
-  const [activeTile, setActiveTile] = useState<ToolTile>(() => isToolTile(requestedTile) ? requestedTile : "bundles");
   const [expandedBundleIds, setExpandedBundleIds] = useState<Set<string>>(() => new Set());
 
   const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
+  const activeTile: ToolTile = isToolTile(requestedTile) && (requestedTile !== "vulture" || isAdmin)
+    ? requestedTile
+    : "bundles";
 
   // Responsive padding and sizing
   const containerPadding = isMobile ? "p-2" : isTablet ? "p-4" : "p-6";
@@ -210,7 +212,6 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   };
 
   const selectTile = (tile: ToolTile) => {
-    setActiveTile(tile);
     const next = new URLSearchParams(searchParams);
     if (tile === "bundles") next.delete("panel");
     else next.set("panel", tile);
@@ -257,13 +258,16 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
           return (
-            <button
+            <Button
               key={t.id}
+              type="button"
+              variant="ghost"
+              aria-pressed={active}
               onClick={() => selectTile(t.id)}
-              className={`min-w-0 rounded-lg border-2 p-3 text-left transition-all sm:p-4 ${
+              className={`h-auto min-w-0 flex-col items-stretch justify-start whitespace-normal rounded-lg border-2 p-2 text-left transition-all sm:p-3 ${
                 active
-                  ? "border-primary bg-white shadow-md"
-                  : "border-transparent bg-white/60 hover:bg-white hover:border-primary/30"
+                  ? "border-primary bg-card shadow-sm"
+                  : "border-transparent bg-card/60 hover:bg-card hover:border-primary/30"
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -279,7 +283,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 {t.id === "utilities" && "Commercial intake gateway and staged data dividend balances."}
                 {t.id === "trading" && "API keys, endpoints, MCP, monitoring, and feature feeds."}
               </p>
-            </button>
+            </Button>
           );
         })}
       </div>
