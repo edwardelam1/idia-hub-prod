@@ -13040,6 +13040,7 @@ export type Database = {
         }
         Returns: number
       }
+      emit_apple_sync_pulse: { Args: { _label: string }; Returns: undefined }
       generate_business_provisioning_code: { Args: never; Returns: string }
       generate_pseudonym:
         | { Args: { input_id: string }; Returns: string }
