@@ -42,20 +42,9 @@ const INDICATORS = [
   },
 ];
 
-const APPLE_SYNC_RECENT_WINDOW_MS = 15 * 60 * 1000;
-
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
-  // Set only by raw-tier pulses (raw_health_data inserts or filtered re-sends).
-  // Raw rows are purged right after routing, so the live pulse is the signal.
-  const [lastAppleSyncAt, setLastAppleSyncAt] = useState<Date | null>(null);
-  const [, setClockTick] = useState(0);
-
-  useEffect(() => {
-    const clock = setInterval(() => setClockTick((t) => t + 1), 30_000);
-    return () => clearInterval(clock);
-  }, []);
 
   useEffect(() => {
     // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() on a
@@ -86,7 +75,6 @@ export const SystemHealthDashboard = () => {
             setTimeout(() => pulseNode(stage, p.label || "LIABILITY SHIELD MINTED"), 800);
             return;
           }
-          if (stage === "apple-health-sync") setLastAppleSyncAt(new Date());
           pulseNode(stage, p.label || String(stage).toUpperCase());
         })
         .subscribe();
@@ -123,13 +111,7 @@ export const SystemHealthDashboard = () => {
           <div className="relative flex flex-col md:flex-row justify-between items-center min-h-[300px]">
             <div className="hidden md:block absolute top-[64px] left-[10%] right-[10%] h-2 bg-slate-50 rounded-full z-0" />
             {INDICATORS.map((indicator) => {
-              const isPulse = !!nodeStates[indicator.id];
-              const isAppleSync = indicator.id === "apple-health-sync";
-              const appleSyncRecent =
-                isAppleSync &&
-                lastAppleSyncAt !== null &&
-                Date.now() - lastAppleSyncAt.getTime() < APPLE_SYNC_RECENT_WINDOW_MS;
-              const isLit = isPulse || appleSyncRecent;
+              const isLit = !!nodeStates[indicator.id];
               const Icon = indicator.icon;
               return (
                 <div key={indicator.id} className="relative z-10 flex flex-col items-center w-full md:w-[18%] gap-6">
@@ -137,9 +119,7 @@ export const SystemHealthDashboard = () => {
                     className={cn(
                       "w-32 h-32 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 border-[6px]",
                       isLit
-                        ? `${indicator.activeColor} border-white shadow-2xl ${
-                            isPulse ? `scale-125 ring-[18px] ${indicator.ringColor}` : `ring-[6px] ${indicator.ringColor}`
-                          }`
+                        ? `${indicator.activeColor} border-white shadow-2xl scale-125 ring-[18px] ${indicator.ringColor}`
                         : "bg-white border-slate-50 text-slate-100",
                     )}
                   >
