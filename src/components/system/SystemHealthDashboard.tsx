@@ -47,34 +47,14 @@ const APPLE_SYNC_RECENT_WINDOW_MS = 15 * 60 * 1000;
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
+  // Set only by raw-tier pulses (raw_health_data inserts or filtered re-sends).
+  // Raw rows are purged right after routing, so the live pulse is the signal.
   const [lastAppleSyncAt, setLastAppleSyncAt] = useState<Date | null>(null);
   const [, setClockTick] = useState(0);
 
-  // The Apple Health Sync pulse only flashes for 3s per insert, and staged
-  // inserts land a handful of times per hour — easy to miss. Track the latest
-  // staged row so the indicator stays lit while the pipeline is recently active.
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchLastSync = async () => {
-      const { data } = await supabase
-        .from("staged_health_data")
-        .select("created_at")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (cancelled) return;
-      setLastAppleSyncAt(data?.created_at ? new Date(data.created_at) : null);
-    };
-
-    fetchLastSync();
-    const poll = setInterval(fetchLastSync, 60_000);
     const clock = setInterval(() => setClockTick((t) => t + 1), 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-      clearInterval(clock);
-    };
+    return () => clearInterval(clock);
   }, []);
 
   useEffect(() => {
@@ -106,6 +86,7 @@ export const SystemHealthDashboard = () => {
             setTimeout(() => pulseNode(stage, p.label || "LIABILITY SHIELD MINTED"), 800);
             return;
           }
+          if (stage === "apple-health-sync") setLastAppleSyncAt(new Date());
           pulseNode(stage, p.label || String(stage).toUpperCase());
         })
         .subscribe();
@@ -171,13 +152,6 @@ export const SystemHealthDashboard = () => {
                   </div>
                   <div className="text-center">
                     <h3 className="font-black text-slate-900 text-xl tracking-tighter">{indicator.name}</h3>
-                    {isAppleSync && (
-                      <p className="mt-1 font-mono text-[10px] uppercase tracking-tight text-slate-400">
-                        {lastAppleSyncAt
-                          ? `Last sync ${lastAppleSyncAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                          : "No sync recorded"}
-                      </p>
-                    )}
                   </div>
                 </div>
               );
