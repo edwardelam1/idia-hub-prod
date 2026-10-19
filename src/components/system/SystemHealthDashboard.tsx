@@ -42,9 +42,40 @@ const INDICATORS = [
   },
 ];
 
+const APPLE_SYNC_RECENT_WINDOW_MS = 15 * 60 * 1000;
+
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
+  const [lastAppleSyncAt, setLastAppleSyncAt] = useState<Date | null>(null);
+  const [, setClockTick] = useState(0);
+
+  // The Apple Health Sync pulse only flashes for 3s per insert, and staged
+  // inserts land a handful of times per hour — easy to miss. Track the latest
+  // staged row so the indicator stays lit while the pipeline is recently active.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLastSync = async () => {
+      const { data } = await supabase
+        .from("staged_health_data")
+        .select("created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      setLastAppleSyncAt(data?.created_at ? new Date(data.created_at) : null);
+    };
+
+    fetchLastSync();
+    const poll = setInterval(fetchLastSync, 60_000);
+    const clock = setInterval(() => setClockTick((t) => t + 1), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      clearInterval(clock);
+    };
+  }, []);
 
   useEffect(() => {
     // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() on a
@@ -112,26 +143,41 @@ export const SystemHealthDashboard = () => {
             <div className="hidden md:block absolute top-[64px] left-[10%] right-[10%] h-2 bg-slate-50 rounded-full z-0" />
             {INDICATORS.map((indicator) => {
               const isPulse = !!nodeStates[indicator.id];
+              const isAppleSync = indicator.id === "apple-health-sync";
+              const appleSyncRecent =
+                isAppleSync &&
+                lastAppleSyncAt !== null &&
+                Date.now() - lastAppleSyncAt.getTime() < APPLE_SYNC_RECENT_WINDOW_MS;
+              const isLit = isPulse || appleSyncRecent;
               const Icon = indicator.icon;
               return (
                 <div key={indicator.id} className="relative z-10 flex flex-col items-center w-full md:w-[18%] gap-6">
                   <div
                     className={cn(
                       "w-32 h-32 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 border-[6px]",
-                      isPulse
-                        ? `${indicator.activeColor} scale-125 border-white ring-[18px] ${indicator.ringColor} shadow-2xl`
+                      isLit
+                        ? `${indicator.activeColor} border-white shadow-2xl ${
+                            isPulse ? `scale-125 ring-[18px] ${indicator.ringColor}` : `ring-[6px] ${indicator.ringColor}`
+                          }`
                         : "bg-white border-slate-50 text-slate-100",
                     )}
                   >
                     <Icon
                       className={cn(
                         "w-14 h-14 transition-all duration-500",
-                        isPulse ? "text-white scale-110 animate-pulse" : "text-slate-100",
+                        isLit ? "text-white scale-110 animate-pulse" : "text-slate-100",
                       )}
                     />
                   </div>
                   <div className="text-center">
                     <h3 className="font-black text-slate-900 text-xl tracking-tighter">{indicator.name}</h3>
+                    {isAppleSync && (
+                      <p className="mt-1 font-mono text-[10px] uppercase tracking-tight text-slate-400">
+                        {lastAppleSyncAt
+                          ? `Last sync ${lastAppleSyncAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                          : "No sync recorded"}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
