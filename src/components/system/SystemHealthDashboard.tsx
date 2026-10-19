@@ -42,9 +42,40 @@ const INDICATORS = [
   },
 ];
 
+const APPLE_SYNC_RECENT_WINDOW_MS = 15 * 60 * 1000;
+
 export const SystemHealthDashboard = () => {
   const [nodeStates, setNodeStates] = useState<Record<string, boolean>>({});
   const [activeLog, setActiveLog] = useState<string>("PIPELINE STANDBY");
+  const [lastAppleSyncAt, setLastAppleSyncAt] = useState<Date | null>(null);
+  const [, setClockTick] = useState(0);
+
+  // The Apple Health Sync pulse only flashes for 3s per insert, and staged
+  // inserts land a handful of times per hour — easy to miss. Track the latest
+  // staged row so the indicator stays lit while the pipeline is recently active.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLastSync = async () => {
+      const { data } = await supabase
+        .from("staged_health_data")
+        .select("created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      setLastAppleSyncAt(data?.created_at ? new Date(data.created_at) : null);
+    };
+
+    fetchLastSync();
+    const poll = setInterval(fetchLastSync, 60_000);
+    const clock = setInterval(() => setClockTick((t) => t + 1), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      clearInterval(clock);
+    };
+  }, []);
 
   useEffect(() => {
     // Ecosystem-wide pulses. Emitted by DB triggers via realtime.send() on a
