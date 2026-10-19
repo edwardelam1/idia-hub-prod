@@ -143,26 +143,41 @@ export const SystemHealthDashboard = () => {
             <div className="hidden md:block absolute top-[64px] left-[10%] right-[10%] h-2 bg-slate-50 rounded-full z-0" />
             {INDICATORS.map((indicator) => {
               const isPulse = !!nodeStates[indicator.id];
+              const isAppleSync = indicator.id === "apple-health-sync";
+              const appleSyncRecent =
+                isAppleSync &&
+                lastAppleSyncAt !== null &&
+                Date.now() - lastAppleSyncAt.getTime() < APPLE_SYNC_RECENT_WINDOW_MS;
+              const isLit = isPulse || appleSyncRecent;
               const Icon = indicator.icon;
               return (
                 <div key={indicator.id} className="relative z-10 flex flex-col items-center w-full md:w-[18%] gap-6">
                   <div
                     className={cn(
                       "w-32 h-32 rounded-[2.5rem] flex items-center justify-center transition-all duration-500 border-[6px]",
-                      isPulse
-                        ? `${indicator.activeColor} scale-125 border-white ring-[18px] ${indicator.ringColor} shadow-2xl`
+                      isLit
+                        ? `${indicator.activeColor} border-white shadow-2xl ${
+                            isPulse ? `scale-125 ring-[18px] ${indicator.ringColor}` : `ring-[6px] ${indicator.ringColor}`
+                          }`
                         : "bg-white border-slate-50 text-slate-100",
                     )}
                   >
                     <Icon
                       className={cn(
                         "w-14 h-14 transition-all duration-500",
-                        isPulse ? "text-white scale-110 animate-pulse" : "text-slate-100",
+                        isLit ? "text-white scale-110 animate-pulse" : "text-slate-100",
                       )}
                     />
                   </div>
                   <div className="text-center">
                     <h3 className="font-black text-slate-900 text-xl tracking-tighter">{indicator.name}</h3>
+                    {isAppleSync && (
+                      <p className="mt-1 font-mono text-[10px] uppercase tracking-tight text-slate-400">
+                        {lastAppleSyncAt
+                          ? `Last sync ${lastAppleSyncAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                          : "No sync recorded"}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
