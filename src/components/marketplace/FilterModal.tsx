@@ -17,9 +17,12 @@ interface FilterModalProps {
   onApplyFilters: (filters: any) => void;
   currentFilters: any;
   bundleCategory?: string;
+  /** Icon-only trigger for tight mobile rows. */
+  compact?: boolean;
+  activeCount?: number;
 }
 
-const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory }: FilterModalProps) => {
+const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory, compact = false, activeCount = 0 }: FilterModalProps) => {
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState(currentFilters);
   const { bundles } = useMarketplaceBundles();
@@ -105,9 +108,18 @@ const FilterModal = ({ userRole, onApplyFilters, currentFilters, bundleCategory 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
-          <Filter className="mr-2 h-4 w-4" />
-          Advanced Filters
+        <Button
+          variant="outline"
+          aria-label="Advanced filters"
+          className={compact ? "relative h-9 w-9 shrink-0 p-0" : "relative"}
+        >
+          <Filter className={compact ? "h-4 w-4" : "mr-2 h-4 w-4"} />
+          {!compact && "Advanced Filters"}
+          {activeCount > 0 && (
+            <Badge className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[9px]">
+              {activeCount}
+            </Badge>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">

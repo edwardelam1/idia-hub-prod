@@ -1,5 +1,3 @@
-
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -30,75 +28,64 @@ const MarketplaceFilters = ({
 }: MarketplaceFiltersProps) => {
   const activeFilterCount = Object.keys(appliedFilters).filter(key => appliedFilters[key]).length;
 
-  const handleApplyFilters = (filters: any) => {
-    setAppliedFilters(filters);
-  };
-
-  // Responsive sizing
-  const inputSize = isMobile ? 'text-sm' : isTablet ? 'text-sm' : '';
-  const selectWidth = 'w-full sm:w-40';
-  const cardPadding = isMobile ? 'p-3' : isTablet ? 'p-3' : 'p-4';
-
   return (
-    <Card className="border-0 shadow-sm">
-      <CardContent className={cardPadding}>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex-1 relative">
-            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isTablet ? 'h-3.5 w-3.5' : 'h-4 w-4'} text-gray-400`} />
-            <Input
-              placeholder={isTablet ? "Search datasets..." : "Search enterprise datasets..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`pl-9 border-gray-200 min-h-11 ${inputSize}`}
-            />
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-
-            <Select 
-              value={appliedFilters.industry || ''} 
-              onValueChange={(value) => setAppliedFilters({...appliedFilters, industry: value || undefined})}
-            >
-              <SelectTrigger className={`${selectWidth} ${isTablet ? 'text-xs h-9' : ''} border-gray-200`}>
-                <SelectValue placeholder="Industry" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Industries</SelectItem>
-                {industries.map((industry) => (
-                  <SelectItem key={industry} value={industry}>
-                    {industry}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <FilterModal 
-              userRole={userRole}
-              onApplyFilters={handleApplyFilters}
-              currentFilters={appliedFilters}
-              bundleCategory={bundleCategory}
-            />
-          </div>
+    <div className="space-y-1.5">
+      {/* Search, industry and advanced filters share one row on every screen size. */}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground sm:h-4 sm:w-4" />
+          <Input
+            placeholder={isMobile || isTablet ? "Search datasets..." : "Search enterprise datasets..."}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9 pl-8 text-sm sm:h-10"
+          />
         </div>
 
-        {activeFilterCount > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1">
-            {Object.entries(appliedFilters).map(([key, value]) => {
-              if (!value) return null;
-              return (
-                <Badge key={key} variant="secondary" className={`flex items-center ${isMobile ? 'text-xs px-2 py-1' : ''}`}>
-                  {String(value)}
-                  <X 
-                    className="ml-1 h-3 w-3 cursor-pointer" 
-                    onClick={() => setAppliedFilters({...appliedFilters, [key]: undefined})}
-                  />
-                </Badge>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        <Select
+          value={appliedFilters.industry || ''}
+          onValueChange={(value) => setAppliedFilters({ ...appliedFilters, industry: value || undefined })}
+        >
+          <SelectTrigger className="h-9 w-[104px] shrink-0 text-xs sm:h-10 sm:w-40 sm:text-sm">
+            <SelectValue placeholder="Industry" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Industries</SelectItem>
+            {industries.map((industry) => (
+              <SelectItem key={industry} value={industry}>
+                {industry}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <FilterModal
+          userRole={userRole}
+          onApplyFilters={setAppliedFilters}
+          currentFilters={appliedFilters}
+          bundleCategory={bundleCategory}
+          compact={isMobile}
+          activeCount={activeFilterCount}
+        />
+      </div>
+
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(appliedFilters).map(([key, value]) => {
+            if (!value) return null;
+            return (
+              <Badge key={key} variant="secondary" className="flex items-center px-2 py-0.5 text-[11px]">
+                {String(value)}
+                <X
+                  className="ml-1 h-3 w-3 cursor-pointer"
+                  onClick={() => setAppliedFilters({ ...appliedFilters, [key]: undefined })}
+                />
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
 

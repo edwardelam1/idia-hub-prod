@@ -9,7 +9,7 @@ interface ResultsHeaderProps {
 }
 
 const ResultsHeader = ({ filteredBundlesCount, isMobile, isTablet }: ResultsHeaderProps) => {
-  const headingSize = isMobile ? 'text-base' : isTablet ? 'text-lg' : 'text-xl';
+  const headingSize = isMobile ? 'text-sm' : isTablet ? 'text-lg' : 'text-xl';
   const countSize = isMobile ? 'text-xs' : isTablet ? 'text-xs' : 'text-sm';
   
   return (

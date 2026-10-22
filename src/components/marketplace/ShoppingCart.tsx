@@ -114,7 +114,7 @@ const ShoppingCartComponent = ({ cartItems, onUpdateCart, userCredits, onPurchas
     <>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
-          <Button variant="outline" className="relative">
+          <Button variant="outline" aria-label="Open cart" className="relative h-9 w-9 shrink-0 p-0 sm:h-10 sm:w-auto sm:px-4">
             <ShoppingCart className="h-4 w-4" />
             {totalItems > 0 && (
               <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-primary">
