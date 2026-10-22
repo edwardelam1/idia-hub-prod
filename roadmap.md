@@ -47,3 +47,11 @@
 ## Music account linking (Radio console)
 - [x] Spotify sign-in: listening history, top artists/tracks, playlists & saved songs, full-song playback (Premium)
 - [x] Apple Music sign-in with the same data capture where Apple allows it
+
+## Marketplace mobile streamlining (done)
+- [x] One-row header and five-segment tool selector on phones; descriptive cards kept on desktop
+- [x] SQL Terminal: Editor/Results switch, Saved (n) quick list, single cost + actions row, info popover
+- [x] AI Bundles: search, industry and filter in one row; micro time-window pills; icon collapse/expand
+- [x] The Vulture: collapsible airlock specs; Uploader / Mesh Nodes / Ledger sub-tabs below desktop
+- [x] Utilities: one-line balance + Settle card, compact key rows, collapsible integration specs
+- [x] Trading Desk: compact header and swipeable sub-tab strip with active underline
