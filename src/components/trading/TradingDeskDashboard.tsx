@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export const TradingDeskDashboard = () => {
   const { pipelineHealth, activeBundlesCount, stagedDataCount, isLoading } = useDashboardStats();
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const stopAuto = () => setAutoRotate(false);
+
+  // Carousel-style auto rotation of the tab strip when it overflows; any manual input stops it.
+  useEffect(() => {
+    if (!autoRotate) return;
+    const el = stripRef.current;
+    if (!el) return;
+    const id = window.setInterval(() => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 4) return;
+      const step = Math.max(80, el.clientWidth * 0.5);
+      const next = el.scrollLeft + step >= max + 2 ? 0 : Math.min(max, el.scrollLeft + step);
+      el.scrollTo({ left: next, behavior: "smooth" });
+    }, 2200);
+    return () => window.clearInterval(id);
+  }, [autoRotate]);
 
   return (
     <div className="min-w-0 space-y-2 overflow-x-hidden sm:space-y-4">
@@ -74,7 +93,14 @@ export const TradingDeskDashboard = () => {
 
       {/* Main Tabs Interface — swipeable strip on phones/tablets, full row on desktop */}
       <Tabs defaultValue="overview" className="space-y-3 sm:space-y-6">
-        <div className="-mx-2 overflow-x-auto px-2 pb-0.5 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          ref={stripRef}
+          onPointerDown={stopAuto}
+          onTouchStart={stopAuto}
+          onWheel={stopAuto}
+          onKeyDown={stopAuto}
+          className="-mx-2 overflow-x-auto px-2 pb-0.5 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           <TabsList className="inline-flex h-auto w-max snap-x gap-0.5 p-0.5 sm:gap-1 sm:p-1 lg:grid lg:w-full lg:grid-cols-6">
             {[
               { value: "overview", label: "Overview", icon: BarChart3 },
