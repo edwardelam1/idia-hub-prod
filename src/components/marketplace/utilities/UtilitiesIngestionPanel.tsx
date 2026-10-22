@@ -324,75 +324,82 @@ const UtilitiesIngestionPanel = () => {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Utility Intake Gateway</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-2 sm:space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground sm:text-lg">Utility Intake Gateway</h2>
+          <p className="text-[11px] text-muted-foreground sm:text-sm">
             Manage your commercial surveillance franchise connections and balances.
           </p>
         </div>
         <Badge
           variant="outline"
-          className={
+          className={`max-w-[45%] shrink-0 gap-1 truncate px-1.5 text-[10px] sm:max-w-none sm:gap-1.5 sm:px-2.5 sm:text-xs ${
             gatewayStatus.tone === "live"
-              ? "w-fit gap-1.5 border-emerald-500/40 text-emerald-600"
+              ? "border-emerald-500/40 text-emerald-600"
               : gatewayStatus.tone === "warn"
-                ? "w-fit gap-1.5 border-amber-500/40 text-amber-600"
-                : "w-fit gap-1.5 border-border text-muted-foreground"
-          }
+                ? "border-amber-500/40 text-amber-600"
+                : "border-border text-muted-foreground"
+          }`}
         >
-          <Activity className="h-3.5 w-3.5" />
-          {gatewayStatus.label}
+          <Activity className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+          <span className="truncate">{gatewayStatus.label}</span>
         </Badge>
       </div>
 
+      {/* Balance summary — amount, match count and Settle on one line */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Pending Data Dividend Balance</CardTitle>
-          <CardDescription>Total un-settled Synapse Credits from staged API extraction events.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-3xl font-bold tracking-tight text-foreground">
+        <CardContent className="flex items-center justify-between gap-3 p-3 sm:p-5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-muted-foreground sm:text-sm">Pending Data Dividend Balance</p>
+            <div className="text-xl font-bold tracking-tight text-foreground sm:text-3xl">
               {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Across {eventCount} specific identity infractions</p>
+            <p className="text-[10px] text-muted-foreground sm:text-xs">
+              Across {eventCount} specific identity infractions
+              <span className="hidden sm:inline"> · un-settled Synapse Credits from staged API extraction events</span>
+            </p>
           </div>
           <Button
             onClick={() => setIsSettleOpen(true)}
             disabled={isLoading || unpaidBalance === 0}
-            className="w-full gap-2 sm:w-auto"
+            size="sm"
+            className="shrink-0 gap-1.5 sm:h-10 sm:px-4"
           >
             <CreditCard className="h-4 w-4" />
-            Settle Balance
+            Settle<span className="hidden sm:inline"> Balance</span>
           </Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             <Terminal className="h-4 w-4 text-muted-foreground" />
             Commercial Ingestion Integration
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-[11px] sm:text-sm">
             Use these credentials and endpoints to transmit Utility batch data to the clearinghouse.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
+        <CardContent className="space-y-3 p-3 pt-0 sm:space-y-6 sm:p-6 sm:pt-0">
+          <section className="space-y-2 sm:space-y-3">
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">1. Franchise API Keys</h3>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex gap-1.5 sm:gap-2">
               <Input
                 placeholder="Key label (e.g. Louisville Utility fleet)"
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
-                className="sm:flex-1"
+                className="h-9 min-w-0 flex-1 text-sm sm:h-10"
               />
-              <Button onClick={handleGenerateKey} disabled={isGenerating} className="shrink-0">
-                {isGenerating ? "Provisioning..." : "Generate New Key"}
+              <Button onClick={handleGenerateKey} disabled={isGenerating} className="h-9 shrink-0 px-3 sm:h-10">
+                {isGenerating ? "Provisioning..." : (
+                  <>
+                    <span className="sm:hidden">Generate</span>
+                    <span className="hidden sm:inline">Generate New Key</span>
+                  </>
+                )}
               </Button>
             </div>
 
