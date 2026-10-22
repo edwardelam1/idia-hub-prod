@@ -12,7 +12,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban } from "lucide-react";
+import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +49,8 @@ const UtilitiesIngestionPanel = () => {
   const [keys, setKeys] = useState<FranchiseKey[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
+  // Integration specs start expanded on wide screens and collapsed on phones.
+  const [specsOpen, setSpecsOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
 
   
 
@@ -412,45 +415,47 @@ const UtilitiesIngestionPanel = () => {
                 keys.map((k) => (
                   <div
                     key={k.id}
-                    className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 p-2 sm:p-3"
                   >
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">{k.name}</span>
-                        <Badge variant={k.status === "active" ? "outline" : "secondary"} className="text-[10px]">
+                      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                        <span className="truncate text-xs font-medium text-foreground sm:text-sm">{k.name}</span>
+                        <Badge variant={k.status === "active" ? "outline" : "secondary"} className="shrink-0 px-1.5 text-[10px]">
                           {k.status}
                         </Badge>
                       </div>
-                      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      <p className="truncate font-mono text-[10px] text-muted-foreground sm:text-[11px]">
                         {k.key_prefix}••••••••••••••••
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="truncate text-[10px] text-muted-foreground sm:text-[11px]">
                         Created {new Date(k.created_at).toLocaleDateString()} • Last used{" "}
                         {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "never"}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex shrink-0 gap-1 sm:gap-2">
                       {k.status === "active" && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="gap-1.5"
+                          aria-label={`Revoke ${k.name}`}
+                          className="h-8 w-8 gap-1.5 p-0 sm:w-auto sm:px-3"
                           disabled={busyKeyId === k.id}
                           onClick={() => void handleKeyAction(k.id, "revoke")}
                         >
                           <Ban className="h-3.5 w-3.5" />
-                          Revoke
+                          <span className="hidden sm:inline">Revoke</span>
                         </Button>
                       )}
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5 text-destructive hover:text-destructive"
+                        aria-label={`Delete ${k.name}`}
+                        className="h-8 w-8 gap-1.5 p-0 text-destructive hover:text-destructive sm:w-auto sm:px-3"
                         disabled={busyKeyId === k.id}
                         onClick={() => void handleKeyAction(k.id, "delete")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Delete
+                        <span className="hidden sm:inline">Delete</span>
                       </Button>
                     </div>
                   </div>
@@ -459,13 +464,22 @@ const UtilitiesIngestionPanel = () => {
             </div>
           </section>
 
+          {/* Integration specs (endpoint, headers, payload, curl, responses) — collapsible to keep keys up front */}
+          <Collapsible open={specsOpen} onOpenChange={setSpecsOpen} className="space-y-3 sm:space-y-6">
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs sm:h-9 sm:text-sm">
+                <span>{specsOpen ? "Hide" : "View"} integration curl &amp; headers</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${specsOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 sm:space-y-6">
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">2. Ingestion Endpoint</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">2. Ingestion Endpoint</h3>
             <CodeBlock value={`POST ${ingestionEndpoint}`} label="Endpoint URL" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">3. Required Headers</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">3. Required Headers</h3>
             <CodeBlock value={headersSample} label="Headers" />
             <p className="text-[11px] text-muted-foreground">
               The Authorization bearer carries the public gateway key so the request can route through the API
@@ -476,17 +490,17 @@ const UtilitiesIngestionPanel = () => {
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">4. JSON Payload Schema</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">4. JSON Payload Schema</h3>
             <CodeBlock value={payloadSample} label="JSON payload" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">5. Ready-to-run Example</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">5. Ready-to-run Example</h3>
             <CodeBlock value={curlSample} label="curl example" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">6. Response &amp; Errors</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">6. Response &amp; Errors</h3>
             <CodeBlock
               value={`200 OK
 {
@@ -513,6 +527,8 @@ const UtilitiesIngestionPanel = () => {
               </li>
             </ul>
           </section>
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
