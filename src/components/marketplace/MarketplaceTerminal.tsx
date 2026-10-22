@@ -10,9 +10,11 @@ import {
   FileCode,
   Trash2,
   CheckCircle2,
+  Info,
+  Bookmark,
 } from "lucide-react";
-import { fetchApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { recordActivity } from "@/lib/activity-history";
@@ -44,6 +46,9 @@ const MarketplaceTerminalImpl = ({
   const [results, setResults] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
+  // Phones/tablets show either the editor or the results; desktop shows both side by side.
+  const [mobileView, setMobileView] = useState<"editor" | "output">("editor");
+  const [savedOpen, setSavedOpen] = useState(false);
 
   const { balanceData, refreshBalance } = useSynapseCredits();
   // Snapshot balance once at mount so live ledger refreshes don't re-render the terminal mid-edit.
@@ -201,25 +206,81 @@ const MarketplaceTerminalImpl = ({
     persistSaved(savedQueries.filter((q) => q.id !== id));
   };
 
+  const hasOutput = isExecuting || !!errorMsg || !!results;
+
+  const savedQueryList = (
+    <>
+      {savedQueries.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground px-1">Save a query to reuse it later.</p>
+      ) : (
+        <ul className="space-y-1 max-h-80 overflow-auto">
+          {savedQueries.map((q) => (
+            <li
+              key={q.id}
+              className="group flex items-center justify-between gap-1 px-2 py-1.5 rounded-md hover:bg-accent/50 cursor-pointer"
+              onClick={() => {
+                handleLoadSaved(q);
+                setSavedOpen(false);
+                setMobileView("editor");
+              }}
+              title={q.sql}
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium text-foreground truncate">{q.name}</div>
+                <div className="text-[10px] text-muted-foreground font-mono truncate">{q.sql.slice(0, 40)}</div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteSaved(q.id);
+                }}
+                className="p-1 text-muted-foreground hover:text-destructive transition-opacity lg:opacity-0 lg:group-hover:opacity-100"
+                aria-label="Delete saved query"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+
   return (
     <section
       aria-label="Synapse SQL Terminal"
       className="bg-card border border-border rounded-xl overflow-hidden shadow-sm"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+      {/* Header — one compact row; lakehouse note lives behind the info button */}
+      <div className="flex items-center justify-between gap-2 px-2.5 py-2 border-b border-border bg-muted/30 sm:px-4 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-primary/10 sm:w-8 sm:h-8">
             <Terminal className="w-4 h-4 text-primary" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground leading-tight">Synapse SQL Terminal</h3>
-            <p className="text-[11px] text-muted-foreground">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              <h3 className="truncate text-sm font-semibold text-foreground leading-tight">Synapse SQL Terminal</h3>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="About the SQL Terminal"
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground sm:hidden"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 p-3 text-[11px] text-muted-foreground">
+                  Independent tool — queries the Iceberg lakehouse, not the Datasets catalog.
+                </PopoverContent>
+              </Popover>
+            </div>
+            <p className="hidden text-[11px] text-muted-foreground sm:block">
               Independent tool — queries the Iceberg lakehouse, not the Datasets catalog.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-1.5 px-2 py-1 rounded-md bg-muted text-muted-foreground">
           <Database className="w-3 h-3" />
           <span className="text-[11px] font-mono font-medium">
             {liveBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} CRD
@@ -227,12 +288,11 @@ const MarketplaceTerminalImpl = ({
         </div>
       </div>
 
-      {/* Body — two columns: editor + saved queries sidebar */}
+      {/* Body — two columns on desktop: editor + saved queries sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px]">
-        {/* Left: editor + actions + output */}
-        <div className="p-4 space-y-3 border-b lg:border-b-0 lg:border-r border-border">
+        <div className="p-2.5 space-y-2 sm:p-4 sm:space-y-3 lg:border-r border-border">
           {!isBioKeyVerified && (
-            <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg flex items-start gap-2.5">
+            <div className="p-2.5 bg-destructive/10 border border-destructive/30 rounded-lg flex items-start gap-2.5">
               <ShieldAlert className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-destructive">Bio-Sovereign Auth Required</p>
@@ -243,81 +303,146 @@ const MarketplaceTerminalImpl = ({
             </div>
           )}
 
-          {/* SQL editor */}
-          <div className="rounded-lg border border-border overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <FileCode className="w-3 h-3" /> SQL
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono">{sql.length} chars</span>
+          {/* Mobile/tablet: Editor ⇄ Results switch + Saved queries quick access */}
+          <div className="flex items-center gap-1.5 lg:hidden">
+            <div role="tablist" aria-label="Terminal view" className="flex flex-1 rounded-lg bg-muted p-0.5">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileView === "editor"}
+                onClick={() => setMobileView("editor")}
+                className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+                  mobileView === "editor" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                <FileCode className="w-3 h-3" /> Editor
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileView === "output"}
+                onClick={() => setMobileView("output")}
+                className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+                  mobileView === "output" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                Results
+                {hasOutput && (
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${errorMsg ? "bg-destructive" : "bg-primary"}`}
+                    aria-hidden
+                  />
+                )}
+              </button>
             </div>
-            <textarea
-              value={sql}
-              onChange={(e) => {
-                setSql(e.target.value);
-                // editing invalidates the prior estimate so Run Query naturally disables
-                if (estimatedCost !== null && e.target.value !== estimatedFor) {
-                  setEstimatedCost(null);
-                }
-              }}
-              spellCheck={false}
-              placeholder="SELECT * FROM dataset_metadata WHERE region = 'KY' LIMIT 100;"
-              className="w-full h-40 bg-background p-3 text-foreground font-mono text-xs focus:outline-none resize-y placeholder:text-muted-foreground/50"
-            />
+            <Popover open={savedOpen} onOpenChange={setSavedOpen}>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1 px-2 text-[11px]">
+                  <Bookmark className="w-3 h-3" /> Saved ({savedQueries.length})
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 p-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1 pb-2">
+                  Saved Queries
+                </div>
+                {savedQueryList}
+              </PopoverContent>
+            </Popover>
           </div>
 
-          {/* Cost + actions row */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] font-mono">
-              <Calculator className="w-3.5 h-3.5 text-muted-foreground" />
-              {estimateIsCurrent && estimatedCost !== null ? (
-                <span className="flex items-center gap-1 text-emerald-600">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Est. Cost: {estimatedCost.toFixed(2)} CRD
+          <div className={`space-y-2 sm:space-y-3 ${mobileView === "editor" ? "" : "hidden lg:block"}`}>
+            {/* SQL editor */}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1 bg-muted/40 border-b border-border sm:py-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                  <FileCode className="w-3 h-3" /> SQL
                 </span>
-              ) : (
-                <span className="text-muted-foreground">Run "Estimate Cost" to enable execution.</span>
-              )}
+                <span className="text-[10px] text-muted-foreground font-mono">{sql.length} chars</span>
+              </div>
+              <textarea
+                value={sql}
+                onChange={(e) => {
+                  setSql(e.target.value);
+                  // editing invalidates the prior estimate so Run Query naturally disables
+                  if (estimatedCost !== null && e.target.value !== estimatedFor) {
+                    setEstimatedCost(null);
+                  }
+                }}
+                spellCheck={false}
+                placeholder="SELECT * FROM dataset_metadata WHERE region = 'KY' LIMIT 100;"
+                className="w-full h-36 bg-background p-2.5 text-foreground font-mono text-xs focus:outline-none resize-y placeholder:text-muted-foreground/50 sm:h-40 sm:p-3"
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSaveQuery}
-                disabled={!sql.trim()}
-                className="h-8 text-xs gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" /> Save
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleEstimateCost}
-                disabled={!sqlLooksValid || isEstimating || isExecuting}
-                className="h-8 text-xs gap-1.5"
-              >
-                {isEstimating ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+
+            {/* Cost chip + actions — one row */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-mono">
+                <Calculator className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                {estimateIsCurrent && estimatedCost !== null ? (
+                  <span className="flex min-w-0 items-center gap-1 text-emerald-600">
+                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                    <span className="truncate">
+                      <span className="hidden sm:inline">Est. Cost: </span>
+                      {estimatedCost.toFixed(2)} CRD
+                    </span>
+                  </span>
                 ) : (
-                  <Calculator className="w-3.5 h-3.5" />
+                  <span className="truncate text-muted-foreground">
+                    <span className="sm:hidden">Estimate to run</span>
+                    <span className="hidden sm:inline">Run "Estimate Cost" to enable execution.</span>
+                  </span>
                 )}
-                Estimate Cost
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleRunQuery}
-                disabled={!canRunQuery}
-                className="h-8 text-xs font-semibold gap-1.5"
-              >
-                {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                Run Query
-              </Button>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveQuery}
+                  disabled={!sql.trim()}
+                  aria-label="Save query"
+                  className="h-8 w-8 p-0 text-xs gap-1.5 sm:w-auto sm:px-3"
+                >
+                  <Save className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Save</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleEstimateCost}
+                  disabled={!sqlLooksValid || isEstimating || isExecuting}
+                  className="h-8 px-2 text-xs gap-1 sm:px-3 sm:gap-1.5"
+                >
+                  {isEstimating ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Calculator className="w-3.5 h-3.5" />
+                  )}
+                  <span className="sm:hidden">Estimate</span>
+                  <span className="hidden sm:inline">Estimate Cost</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setMobileView("output");
+                    void handleRunQuery();
+                  }}
+                  disabled={!canRunQuery}
+                  className="h-8 px-2 text-xs font-semibold gap-1 sm:px-3 sm:gap-1.5"
+                >
+                  {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                  <span className="sm:hidden">Run</span>
+                  <span className="hidden sm:inline">Run Query</span>
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Output panel — Supabase SQL Editor style */}
-          <div className="rounded-lg border border-border overflow-hidden bg-muted/20">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/40">
+          <div
+            className={`rounded-lg border border-border overflow-hidden bg-muted/20 ${
+              mobileView === "output" ? "" : "hidden lg:block"
+            }`}
+          >
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/40 sm:py-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Output</span>
               {results && (
                 <button
@@ -328,7 +453,7 @@ const MarketplaceTerminalImpl = ({
                 </button>
               )}
             </div>
-            <div className="h-56 overflow-auto">
+            <div className="h-[45dvh] min-h-48 overflow-auto lg:h-56 lg:min-h-0">
               {isExecuting ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground gap-2 text-xs">
                   <Loader2 className="w-4 h-4 animate-spin" /> Executing against Iceberg…
@@ -348,40 +473,12 @@ const MarketplaceTerminalImpl = ({
           </div>
         </div>
 
-        {/* Right: saved queries */}
-        <aside className="p-3 bg-muted/10">
+        {/* Desktop: saved queries sidebar */}
+        <aside className="hidden p-3 bg-muted/10 lg:block">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1 pb-2">
             Saved Queries
           </div>
-          {savedQueries.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground px-1">Save a query to reuse it later.</p>
-          ) : (
-            <ul className="space-y-1 max-h-80 overflow-auto">
-              {savedQueries.map((q) => (
-                <li
-                  key={q.id}
-                  className="group flex items-center justify-between gap-1 px-2 py-1.5 rounded-md hover:bg-accent/50 cursor-pointer"
-                  onClick={() => handleLoadSaved(q)}
-                  title={q.sql}
-                >
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-medium text-foreground truncate">{q.name}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono truncate">{q.sql.slice(0, 40)}</div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteSaved(q.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                    aria-label="Delete saved query"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {savedQueryList}
         </aside>
       </div>
     </section>

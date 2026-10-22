@@ -232,16 +232,17 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
     );
   }
 
-  const tiles: { id: ToolTile; title: string; icon: any; show: boolean }[] = [
-    { id: "sql", title: "SQL Terminal", icon: Terminal, show: true },
-    { id: "bundles", title: "AI Bundles", icon: Boxes, show: true },
-    { id: "vulture", title: "The Vulture", icon: Bird, show: isAdmin },
-    { id: "utilities", title: "Utilities", icon: Radar, show: true },
-    { id: "trading", title: "Trading Desk API", icon: ChartNoAxesCombined, show: true },
+  const tiles: { id: ToolTile; title: string; short: string; icon: any; show: boolean }[] = [
+    { id: "sql", title: "SQL Terminal", short: "SQL", icon: Terminal, show: true },
+    { id: "bundles", title: "AI Bundles", short: "Bundles", icon: Boxes, show: true },
+    { id: "vulture", title: "The Vulture", short: "Vulture", icon: Bird, show: isAdmin },
+    { id: "utilities", title: "Utilities", short: "Utilities", icon: Radar, show: true },
+    { id: "trading", title: "Trading Desk API", short: "Trading", icon: ChartNoAxesCombined, show: true },
   ];
+  const visibleTiles = tiles.filter((t) => t.show);
 
   return (
-    <div className={`space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
+    <div className={`space-y-2 sm:space-y-3 ${containerPadding} bg-gray-50 min-h-screen`}>
       <div className="flex items-center justify-between gap-2">
         <MarketplaceHeader userCredits={currentLedgerBalance} isMobile={isMobile} isTablet={isTablet} userRole={userRole} />
         <ShoppingCartComponent
@@ -252,9 +253,14 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         />
       </div>
 
-      {/* ─── Tool Tile Panel ─── */}
-      <div className={`grid grid-cols-2 gap-2 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
-        {tiles.filter((t) => t.show).map((t) => {
+      {/* ─── Tool Selector: one segmented row on phones/tablets, descriptive cards on desktop ─── */}
+      <nav
+        aria-label="Marketplace tools"
+        className={`grid gap-1 rounded-xl border bg-card p-1 lg:gap-2 lg:border-0 lg:bg-transparent lg:p-0 ${
+          visibleTiles.length === 5 ? "grid-cols-5" : "grid-cols-4"
+        }`}
+      >
+        {visibleTiles.map((t) => {
           const Icon = t.icon;
           const active = activeTile === t.id;
           return (
@@ -263,20 +269,26 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
               type="button"
               variant="ghost"
               aria-pressed={active}
+              aria-label={t.title}
               onClick={() => selectTile(t.id)}
-              className={`h-auto min-w-0 flex-col items-stretch justify-start whitespace-normal rounded-lg border-2 p-2 text-left transition-all sm:p-3 ${
+              className={`h-auto min-w-0 flex-col items-center justify-start gap-0 whitespace-normal rounded-lg px-1 py-1.5 text-center transition-all lg:items-stretch lg:border-2 lg:p-3 lg:text-left ${
                 active
-                  ? "border-primary bg-card shadow-sm"
-                  : "border-transparent bg-card/60 hover:bg-card hover:border-primary/30"
+                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground lg:border-primary lg:bg-card lg:text-foreground lg:shadow-sm lg:hover:bg-card"
+                  : "text-muted-foreground lg:border-transparent lg:bg-card/60 lg:hover:border-primary/30 lg:hover:bg-card"
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Icon className={`h-4 w-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
-                <span className={`min-w-0 break-words text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
-                  {t.title}
+              <div className="flex flex-col items-center gap-0.5 lg:mb-1 lg:flex-row lg:gap-2">
+                <Icon className={`h-4 w-4 shrink-0 ${active ? "text-primary-foreground lg:text-primary" : "text-muted-foreground"}`} />
+                <span
+                  className={`min-w-0 truncate text-[10px] font-semibold leading-tight sm:text-xs lg:whitespace-normal lg:text-sm ${
+                    active ? "lg:text-primary" : "lg:text-foreground"
+                  }`}
+                >
+                  <span className="lg:hidden">{t.short}</span>
+                  <span className="hidden lg:inline">{t.title}</span>
                 </span>
               </div>
-              <p className="hidden text-[11px] text-muted-foreground sm:block">
+              <p className="hidden text-[11px] font-normal text-muted-foreground lg:block">
                 {t.id === "sql" && "Bio-sovereign SQL editor with floating-rate pricing."}
                 {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
                 {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
@@ -286,14 +298,14 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
             </Button>
           );
         })}
-      </div>
+      </nav>
 
       {/* ─── Active Tile Content Frame ─── */}
-      <div className="bg-white rounded-lg border p-3">
+      <div className="bg-white rounded-lg border p-2 sm:p-3">
         {activeTile === "sql" && <MarketplaceTerminal isBioKeyVerified={true} />}
 
         {activeTile === "bundles" && (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             <MarketplaceFilters
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -305,13 +317,13 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
               bundleCategory={bundleCategory}
             />
             {/* Freshness / time-window selector */}
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-              {[{ key: "any", short: "ALL WINDOWS" }, ...WINDOW_OPTIONS].map((w: any) => (
+            <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 sm:gap-1.5">
+              {[{ key: "any", short: "ALL TIME" }, ...WINDOW_OPTIONS].map((w: any) => (
                 <button
                   key={w.key}
                   type="button"
                   onClick={() => setWindowFilter(w.key)}
-                  className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors ${
+                  className={`h-7 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors sm:h-8 sm:px-3 sm:text-xs ${
                     windowFilter === w.key
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background text-muted-foreground hover:bg-accent"
@@ -321,29 +333,35 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 </button>
               ))}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <ResultsHeader filteredBundlesCount={filteredBundles.length} isMobile={isMobile} isTablet={isTablet} />
+              </div>
               {filteredBundles.length > 0 && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    aria-label="Collapse all bundles"
+                    className="h-7 w-7 p-0 sm:h-9 sm:w-auto sm:px-3"
                     onClick={() => setAllVisibleBundlesExpanded(false)}
                     disabled={!visibleBundleIds.some((id) => expandedBundleIds.has(id))}
                   >
-                    <ChevronsUp className="mr-1.5 h-4 w-4" />
-                    Collapse All
+                    <ChevronsUp className="h-4 w-4 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Collapse All</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    aria-label="Expand all bundles"
+                    className="h-7 w-7 p-0 sm:h-9 sm:w-auto sm:px-3"
                     onClick={() => setAllVisibleBundlesExpanded(true)}
                     disabled={allVisibleBundlesExpanded}
                   >
-                    <ChevronsDown className="mr-1.5 h-4 w-4" />
-                    Expand All
+                    <ChevronsDown className="h-4 w-4 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Expand All</span>
                   </Button>
                 </div>
               )}
@@ -354,7 +372,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 <span className="text-gray-600">Loading live bundle catalog…</span>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-2">
 
                 {filteredBundles.map((bundle) => (
                   <BundleCard
@@ -370,20 +388,16 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                   />
                 ))}
                 {filteredBundles.length === 0 && (
-                  <div className="col-span-full py-16 text-center">
-                    <Bot className="h-12 w-12 mx-auto mb-4 text-primary opacity-20" />
-                    <p className="text-muted-foreground">No live bundles available right now.</p>
+                  <div className="col-span-full py-10 text-center sm:py-16">
+                    <Bot className="h-10 w-10 mx-auto mb-3 text-primary opacity-20 sm:h-12 sm:w-12" />
+                    <p className="text-sm text-muted-foreground">No live bundles available right now.</p>
                   </div>
                 )}
               </div>
             )}
-            <Card className="border-primary/20 bg-primary/5 mt-4">
-              <CardContent className={cardPadding}>
-                <p className={`text-foreground ${isMobile || isTablet ? "text-xs" : "text-sm"} text-center`}>
-                  Each access fires a Liability Shield receipt and burns Synapse Credits at the live sector rate.
-                </p>
-              </CardContent>
-            </Card>
+            <p className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1.5 text-center text-[11px] text-foreground sm:p-3 sm:text-sm">
+              Each access fires a Liability Shield receipt and burns Synapse Credits at the live sector rate.
+            </p>
           </div>
         )}
 

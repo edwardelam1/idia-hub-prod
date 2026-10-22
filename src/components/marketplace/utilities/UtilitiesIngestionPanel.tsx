@@ -12,7 +12,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban } from "lucide-react";
+import { Activity, CreditCard, Key, Copy, Terminal, Trash2, Ban, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import SynapsePurchaseModal from "@/components/billing/SynapsePurchaseModal";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +49,8 @@ const UtilitiesIngestionPanel = () => {
   const [keys, setKeys] = useState<FranchiseKey[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
+  // Integration specs start expanded on wide screens and collapsed on phones.
+  const [specsOpen, setSpecsOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 768);
 
   
 
@@ -324,75 +327,82 @@ const UtilitiesIngestionPanel = () => {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Utility Intake Gateway</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-2 sm:space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground sm:text-lg">Utility Intake Gateway</h2>
+          <p className="text-[11px] text-muted-foreground sm:text-sm">
             Manage your commercial surveillance franchise connections and balances.
           </p>
         </div>
         <Badge
           variant="outline"
-          className={
+          className={`max-w-[45%] shrink-0 gap-1 truncate px-1.5 text-[10px] sm:max-w-none sm:gap-1.5 sm:px-2.5 sm:text-xs ${
             gatewayStatus.tone === "live"
-              ? "w-fit gap-1.5 border-emerald-500/40 text-emerald-600"
+              ? "border-emerald-500/40 text-emerald-600"
               : gatewayStatus.tone === "warn"
-                ? "w-fit gap-1.5 border-amber-500/40 text-amber-600"
-                : "w-fit gap-1.5 border-border text-muted-foreground"
-          }
+                ? "border-amber-500/40 text-amber-600"
+                : "border-border text-muted-foreground"
+          }`}
         >
-          <Activity className="h-3.5 w-3.5" />
-          {gatewayStatus.label}
+          <Activity className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+          <span className="truncate">{gatewayStatus.label}</span>
         </Badge>
       </div>
 
+      {/* Balance summary — amount, match count and Settle on one line */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Pending Data Dividend Balance</CardTitle>
-          <CardDescription>Total un-settled Synapse Credits from staged API extraction events.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-3xl font-bold tracking-tight text-foreground">
+        <CardContent className="flex items-center justify-between gap-3 p-3 sm:p-5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-muted-foreground sm:text-sm">Pending Data Dividend Balance</p>
+            <div className="text-xl font-bold tracking-tight text-foreground sm:text-3xl">
               {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Across {eventCount} specific identity infractions</p>
+            <p className="text-[10px] text-muted-foreground sm:text-xs">
+              Across {eventCount} specific identity infractions
+              <span className="hidden sm:inline"> · un-settled Synapse Credits from staged API extraction events</span>
+            </p>
           </div>
           <Button
             onClick={() => setIsSettleOpen(true)}
             disabled={isLoading || unpaidBalance === 0}
-            className="w-full gap-2 sm:w-auto"
+            size="sm"
+            className="shrink-0 gap-1.5 sm:h-10 sm:px-4"
           >
             <CreditCard className="h-4 w-4" />
-            Settle Balance
+            Settle<span className="hidden sm:inline"> Balance</span>
           </Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             <Terminal className="h-4 w-4 text-muted-foreground" />
             Commercial Ingestion Integration
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-[11px] sm:text-sm">
             Use these credentials and endpoints to transmit Utility batch data to the clearinghouse.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">1. Franchise API Keys</h3>
+        <CardContent className="space-y-3 p-3 pt-0 sm:space-y-6 sm:p-6 sm:pt-0">
+          <section className="space-y-2 sm:space-y-3">
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">1. Franchise API Keys</h3>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex gap-1.5 sm:gap-2">
               <Input
                 placeholder="Key label (e.g. Louisville Utility fleet)"
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
-                className="sm:flex-1"
+                className="h-9 min-w-0 flex-1 text-sm sm:h-10"
               />
-              <Button onClick={handleGenerateKey} disabled={isGenerating} className="shrink-0">
-                {isGenerating ? "Provisioning..." : "Generate New Key"}
+              <Button onClick={handleGenerateKey} disabled={isGenerating} className="h-9 shrink-0 px-3 sm:h-10">
+                {isGenerating ? "Provisioning..." : (
+                  <>
+                    <span className="sm:hidden">Generate</span>
+                    <span className="hidden sm:inline">Generate New Key</span>
+                  </>
+                )}
               </Button>
             </div>
 
@@ -405,45 +415,47 @@ const UtilitiesIngestionPanel = () => {
                 keys.map((k) => (
                   <div
                     key={k.id}
-                    className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 p-2 sm:p-3"
                   >
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">{k.name}</span>
-                        <Badge variant={k.status === "active" ? "outline" : "secondary"} className="text-[10px]">
+                      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                        <span className="truncate text-xs font-medium text-foreground sm:text-sm">{k.name}</span>
+                        <Badge variant={k.status === "active" ? "outline" : "secondary"} className="shrink-0 px-1.5 text-[10px]">
                           {k.status}
                         </Badge>
                       </div>
-                      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      <p className="truncate font-mono text-[10px] text-muted-foreground sm:text-[11px]">
                         {k.key_prefix}••••••••••••••••
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="truncate text-[10px] text-muted-foreground sm:text-[11px]">
                         Created {new Date(k.created_at).toLocaleDateString()} • Last used{" "}
                         {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "never"}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex shrink-0 gap-1 sm:gap-2">
                       {k.status === "active" && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="gap-1.5"
+                          aria-label={`Revoke ${k.name}`}
+                          className="h-8 w-8 gap-1.5 p-0 sm:w-auto sm:px-3"
                           disabled={busyKeyId === k.id}
                           onClick={() => void handleKeyAction(k.id, "revoke")}
                         >
                           <Ban className="h-3.5 w-3.5" />
-                          Revoke
+                          <span className="hidden sm:inline">Revoke</span>
                         </Button>
                       )}
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5 text-destructive hover:text-destructive"
+                        aria-label={`Delete ${k.name}`}
+                        className="h-8 w-8 gap-1.5 p-0 text-destructive hover:text-destructive sm:w-auto sm:px-3"
                         disabled={busyKeyId === k.id}
                         onClick={() => void handleKeyAction(k.id, "delete")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Delete
+                        <span className="hidden sm:inline">Delete</span>
                       </Button>
                     </div>
                   </div>
@@ -452,13 +464,22 @@ const UtilitiesIngestionPanel = () => {
             </div>
           </section>
 
+          {/* Integration specs (endpoint, headers, payload, curl, responses) — collapsible to keep keys up front */}
+          <Collapsible open={specsOpen} onOpenChange={setSpecsOpen} className="space-y-3 sm:space-y-6">
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs sm:h-9 sm:text-sm">
+                <span>{specsOpen ? "Hide" : "View"} integration curl &amp; headers</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${specsOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 sm:space-y-6">
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">2. Ingestion Endpoint</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">2. Ingestion Endpoint</h3>
             <CodeBlock value={`POST ${ingestionEndpoint}`} label="Endpoint URL" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">3. Required Headers</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">3. Required Headers</h3>
             <CodeBlock value={headersSample} label="Headers" />
             <p className="text-[11px] text-muted-foreground">
               The Authorization bearer carries the public gateway key so the request can route through the API
@@ -469,17 +490,17 @@ const UtilitiesIngestionPanel = () => {
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">4. JSON Payload Schema</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">4. JSON Payload Schema</h3>
             <CodeBlock value={payloadSample} label="JSON payload" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">5. Ready-to-run Example</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">5. Ready-to-run Example</h3>
             <CodeBlock value={curlSample} label="curl example" />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">6. Response &amp; Errors</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">6. Response &amp; Errors</h3>
             <CodeBlock
               value={`200 OK
 {
@@ -506,6 +527,8 @@ const UtilitiesIngestionPanel = () => {
               </li>
             </ul>
           </section>
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
