@@ -305,7 +305,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
         {activeTile === "sql" && <MarketplaceTerminal isBioKeyVerified={true} />}
 
         {activeTile === "bundles" && (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             <MarketplaceFilters
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
