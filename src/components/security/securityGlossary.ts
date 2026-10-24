@@ -117,7 +117,7 @@ const SIGNAL_LABELS: Record<string, string> = {
   log_severity: 'Log entries by severity', log_event_types: 'Log entries by type', quarantined_payloads: 'Uploads set aside', quarantine_reasons: 'Reasons set aside',
   messages_scanned: 'Messages checked', pattern_hits: 'Tricks matched',
   daily_severity_counts: 'Serious alerts by day', serious_today: 'Serious alerts today', serious_yesterday: 'Serious alerts yesterday',
-  new_open_incidents: 'Open incidents', serious_events: 'Events explained', manual: 'Manual review', data: 'Supplied data',
+  new_open_incidents: 'Open incidents', egress_by_type: 'Exports by type', unlabeled_egress: 'Exports without a type', ledger_entries: 'Ledger entries', ledger_entry_types: 'Ledger entries by type', max_ledger_entries_per_account: 'Most ledger entries by one account', open_settlement_failures: 'Stuck settlements', probes_run: 'Attacks tried', probes_blocked: 'Attacks blocked', failed_probes: 'Attacks that got through', probes: 'Attack results', alerts_by_day: 'Alerts by day', alerts_today: 'Alerts today', alerts_yesterday: 'Alerts yesterday', alerts_today_by_agent: 'Alerts today by agent', serious_events: 'Events explained', manual: 'Manual review', data: 'Supplied data',
 };
 export const signalLabel = (k: string) => SIGNAL_LABELS[k] ?? label(k);
 
