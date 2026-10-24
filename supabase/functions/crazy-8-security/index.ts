@@ -226,7 +226,7 @@ async function hunter(db: any) {
 
 // Mirror: real attack probes against the live system, as an outsider would try them.
 const PROTECTED_TABLES = ["profiles", "user_roles", "security_events", "api_keys", "synapse_credit_ledger", "dao_votes", "liquidity_locks", "mesh_nodes"];
-async function mirror(_db: any) {
+async function mirror(db: any) {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const anon = createClient(url, anonKey, { auth: { persistSession: false } });
@@ -250,10 +250,9 @@ async function mirror(_db: any) {
   await http("forged_node_key", "mesh-telemetry-intake", { "x-api-key": "idia_mirror_invalid_probe_key" }, [400, 401, 403]);
   const failed = probes.filter((p) => !p.blocked);
   const signals = { probes_run: probes.length, probes_blocked: probes.length - failed.length, failed_probes: failed.map((p) => p.probe), probes };
-  if (failed.length) return finding(db_ref!, "crazy_mirror", "red_team_breach", "critical", signals);
-  return record(db_ref!, "crazy_mirror", "red_team_passed", "low", { signals });
+  if (failed.length) return finding(db, "crazy_mirror", "red_team_breach", "critical", signals);
+  return record(db, "crazy_mirror", "red_team_passed", "low", { signals });
 }
-let db_ref: any = null;
 
 async function oracle(db: any) {
   const { data } = await db.from("security_events").select("agent_name,action_type,severity,timestamp")
@@ -285,7 +284,6 @@ async function insight(db: any) {
 }
 
 async function sweep(db: any) {
-  db_ref = db;
   const results: Record<string, string> = {};
   // Detectors and red-team first, then agents that read their output.
   for (const [name, fn] of [["crazy_sentinel", sentinel], ["crazy_guardian", guardian], ["crazy_gatekeeper", gatekeeper], ["crazy_shield", shield], ["crazy_hunter", hunter], ["crazy_mirror", mirror],
