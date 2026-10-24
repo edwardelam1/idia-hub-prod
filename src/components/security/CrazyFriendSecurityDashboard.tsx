@@ -19,7 +19,8 @@ interface Milestone { id: string; title: string; body: string; category: string;
 
 const AGENTS = ['sentinel', 'oracle', 'hunter', 'guardian', 'gatekeeper', 'shield', 'mirror', 'insight'];
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
-const isSerious = (s: string) => s === 'high' || s === 'critical';
+// Medium and above need manual resolution; low alerts auto-resolve in the database.
+const isSerious = (s: string) => s === 'medium' || s === 'high' || s === 'critical';
 
 const CrazyFriendSecurityDashboard = () => {
   const [ticks, setTicks] = useState<Tick[]>([]);
@@ -50,7 +51,7 @@ const CrazyFriendSecurityDashboard = () => {
       try {
         const [t, o, m, u] = await Promise.all([
           db.from('security_ticker').select('*').order('occurred_at', { ascending: false }).limit(200),
-          db.from('security_ticker').select('*').eq('resolved', false).in('severity', ['high', 'critical'])
+          db.from('security_ticker').select('*').eq('resolved', false).in('severity', ['medium', 'high', 'critical'])
             .order('occurred_at', { ascending: false }).limit(500),
           db.from('security_milestones').select('*').order('effective_date', { ascending: false }).limit(100),
           supabase.auth.getUser(),

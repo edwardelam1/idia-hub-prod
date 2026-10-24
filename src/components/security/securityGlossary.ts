@@ -162,7 +162,7 @@ export function narrativeFromSignals(agentRaw: string, s: Record<string, any> | 
 export const STAT_INFO: Record<string, { title: string; body: string }> = {
   Agents: { title: 'Active agents', body: 'How many of the 8 agents reported in the last hour. Every agent checks in every 30 minutes, even when everything is fine, so this should normally read 8/8. A lower number means an agent missed its check.' },
   '24h': { title: 'Events in the last 24 hours', body: 'Every event recorded in the last day, including routine "sweep clear" check-ins. On a quiet day that is about 384 (8 agents, 48 checks each).' },
-  Open: { title: 'Open threats', body: 'Serious alerts (high or critical) that nobody has marked resolved yet. Open the Threats tab to review them.' },
+  Open: { title: 'Open threats', body: 'Medium, high or critical alerts that nobody has marked resolved yet. Low alerts resolve themselves automatically. Open the Threats tab to review them.' },
   Critical: { title: 'Critical threats', body: 'The most urgent open alerts. This should be 0. Anything here needs attention right away.' },
   Live: { title: 'Live connection', body: 'Live (pulsing) means this page is connected and new events appear the moment they happen. Offline means it is reconnecting; refresh if it stays offline.' },
 };
