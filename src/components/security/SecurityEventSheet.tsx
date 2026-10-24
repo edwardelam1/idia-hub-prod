@@ -182,7 +182,7 @@ export const SecurityEventSheet = ({ tick, onOpenChange, onResolvedChange }: {
       title={
         <span className="flex items-center gap-2">
           <Badge className={cn('shrink-0 px-1.5 text-[10px] capitalize', sevClass[sev])}>{sev}</Badge>
-          <span className="line-clamp-2">{eventHeadline(t.event_type, detail?.analysis?.headline, detail?.signals)}</span>
+          <span className="line-clamp-2">{t ? eventHeadline(t.event_type, detail?.analysis?.headline, detail?.signals) : ''}</span>
         </span>
       }
       description={t && <>{agent?.name} · {agent?.title} · {timeAgo(t.occurred_at)} ago{resolved && ' · resolved'}</>}
