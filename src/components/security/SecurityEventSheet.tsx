@@ -253,7 +253,11 @@ export const SecurityEventSheet = ({ tick, onOpenChange, onResolvedChange }: {
 
               <Section icon={Activity} title="Data feed · last 30 minutes">
                 <SignalFeed signals={detail.signals} />
-                {detail.privileged && (
+                {['low', 'info'].includes(String(detail.severity).toLowerCase()) ? (
+                <div className="flex items-center justify-center gap-1.5 rounded-lg border bg-card p-2.5 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4" />Low-risk alert, resolved automatically
+                </div>
+              ) : detail.privileged && (
                   <button onClick={() => setShowRaw((s) => !s)} className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
                     <ChevronDown className={cn('h-3 w-3 transition-transform', showRaw && 'rotate-180')} />Raw record
                   </button>
