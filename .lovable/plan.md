@@ -1,40 +1,42 @@
-# Make each security alert specific and readable
+# Crazy 8: enforce the official agent roles and make every alert specific
 
-## The problem
-When one thing happens (for example, a new admin role), Gatekeeper, Guardian and Insight all react to it. Today they get nearly the same instructions and return the same summary, findings and steps, so the reports look identical. Titles like "Incident explained" or "Incident triage" describe what the agent did, not what happened.
+## 1. Each agent does exactly the job you defined
 
-## What changes for you
+| Agent | Role | What it will actually check (real data only) |
+|---|---|---|
+| Sentinel | Anomaly detection | Request volume, failure rate and slowness across the Hub (unchanged) |
+| Oracle | Predictive threat modeling | 7-day trend of alerts by agent and type, forecasts which area is heating up |
+| Hunter | Active threat hunting | Security logs, the credit ledger and payment records for odd patterns (e.g. bursts of charges, failed settlements, repeated refused calls from one source) |
+| Guardian | Zero-trust access control | New admin/security roles, new API keys, refused sign-ins and permission-denied database calls (moved here from Gatekeeper) |
+| Gatekeeper | Ingress and egress sanitization | Best Friend AI messages for manipulation tricks (moved from Mirror) plus outgoing exports for fields that should never leave |
+| Shield | Data loss prevention | The Vulture quarantine airlock: uploads set aside, why, and unverified/legacy data arriving (moved from Hunter), plus export volume per account |
+| Mirror | Adversarial red-teaming | Every sweep it actually tries a short list of known attacks against the live system (signed-out reads of protected tables, calling admin-only functions without a role, bad API keys) and reports any that got through. These are real tests, not fake events |
+| Insight | Forensic auditability | Writes a dated, plain-English incident record for each serious alert, suitable for a security officer review |
 
-**1. Titles say what happened, not the agent's job**
-Each alert gets a title built from its actual cause. Examples:
+Guardian no longer re-triages other agents' alerts, so the same incident is not reported three times.
 
-| Today | After |
-|---|---|
-| Incident explained | New admin role granted: what it means |
-| Incident triage | 1 open alert needs review: new admin role |
-| Threat forecast | Serious alerts rising: 3 today vs 0 yesterday |
-| Privilege change | Admin role given to an account |
-| Sweep clear | All clear: 412 requests checked, none failed |
-| Error spike | 24% of requests failing on /synapse |
-| Data export surge | One account made 31 exports in 30 min |
-| AI manipulation attempt | 2 messages tried to override Best Friend AI |
+## 2. Titles say what happened
 
-The agent name and its job stay as a small tag under the title.
+Titles are built from the real cause, with the agent and role as a small tag:
+- "Admin role granted to an account" (Guardian)
+- "2 messages tried to override Best Friend AI" (Gatekeeper)
+- "Red-team check: 0 of 6 attacks got through" (Mirror)
+- "Incident record: admin role granted" (Insight)
+- "Access alerts rising: 3 today vs 0 yesterday" (Oracle)
+- "All clear: 412 requests checked" (any quiet sweep)
 
-**2. Each agent writes its own kind of report**
-- **Gatekeeper / Sentinel / Shield / Hunter / Mirror (detectors):** "What we saw" plus the evidence numbers.
-- **Guardian (triage):** a ranked list of the open alerts with "Fix first", "Then", and who should act. No repeated summary.
-- **Insight (explainer):** three short parts: "What happened", "Why it matters", "What to do", written for a non-technical reader.
-- **Oracle (forecast):** the trend, what it expects in the next day, and how sure it is.
+Older alerts are retitled on screen from the numbers they already hold.
 
-Each report also links to the original alert it is reacting to, so you can tap from Insight's explanation straight to Gatekeeper's evidence.
+## 3. Each report reads differently
+- Detectors (Sentinel, Hunter, Guardian, Gatekeeper, Shield): "What we saw" plus evidence.
+- Mirror: list of attacks tried, pass/fail for each.
+- Oracle: trend, what to expect next, confidence.
+- Insight: "What happened / Why it matters / What was done / Record ID", with a link back to the original alert.
 
-**3. Older alerts get better titles too**
-Alerts already recorded are retitled on screen from the numbers they hold, so the whole list reads consistently without changing stored history.
+The agent cards, glossary pop-ups and "what this agent watches" text are updated to the new roles.
 
 ## Technical details
-- `crazy-8-security`: give each agent its own JSON response shape and system prompt (detector / triage / explainer / forecast); have the model return a short `headline`; pass Guardian and Insight the source event ids and types so their output references them; store `headline` and `source_event_ids` in `result_data`. Redeploy.
-- `securityGlossary.ts`: add `eventHeadline(event)` that prefers the stored `headline`, otherwise builds one from the signals per event type (for old rows); keep the current title as the agent tag.
-- `SecurityEventSheet.tsx` and `CrazyFriendSecurityDashboard.tsx`: show headline as the title, render each report type with its own sections, add "Caused by" links to source events.
-- Public ticker keeps showing only sanitized labels (no change to what outsiders see).
-- Run one sweep afterwards to confirm the reports differ.
+- `crazy-8-security`: reassign detectors per table above; add Mirror probe set using an anon client (expect denial; any success = critical); Hunter reads ledger/settlement tables; per-agent prompts and response shapes; model returns a `headline`; store `headline` and `source_event_ids` in `result_data`. Redeploy and run one sweep. Model unchanged.
+- `securityGlossary.ts`: new AGENT_INFO roles, `eventHeadline()` with fallbacks for old rows; `SecurityEventSheet.tsx` / dashboard / `AgentCards.tsx` render headline and per-type sections.
+- Record the role mapping as a project rule so it stays enforced; add the task to roadmap.md.
+- Public ticker still shows only sanitized labels.
