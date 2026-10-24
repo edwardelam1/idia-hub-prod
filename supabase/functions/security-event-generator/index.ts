@@ -2,10 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsFor, resolveCaller, denied, genericError } from "../_shared/edge-guard.ts";
 
 const SECURITY_SCENARIOS = [
   {
@@ -59,9 +56,18 @@ const SECURITY_SCENARIOS = [
 ];
 
 serve(async (req) => {
+  const corsHeaders = corsFor(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  console.log("[SecurityEventGenerator][AUTH][STEP_START]");
+  const caller = await resolveCaller(req, "SecurityEventGenerator");
+  if (!caller) {
+    console.log("[SecurityEventGenerator][AUTH][STEP_END] rejected");
+    return denied(req, 403);
+  }
+  console.log(`[SecurityEventGenerator][AUTH][STEP_END] caller=${caller.kind}`);
 
   try {
     const supabaseClient = createClient(
@@ -130,14 +136,8 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in security event generator:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      timestamp: new Date().toISOString()
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('[SecurityEventGenerator][ERROR]', error);
+    return genericError(req, 500);
   }
 });
 

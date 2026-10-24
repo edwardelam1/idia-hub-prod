@@ -11085,6 +11085,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_subscriptions: {
         Row: {
           created_at: string
@@ -13179,6 +13200,13 @@ export type Database = {
         Args: { _hat_type: string; _user_id: string }
         Returns: boolean
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       increment_community_pool: {
         Args: { p_fiat_amount: number; p_pool_type: string }
         Returns: undefined
@@ -13540,6 +13568,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "super_admin" | "security_operator"
       buyer_jurisdiction_type: "USA" | "SGP" | "IND" | "NGA_ZAF" | "UAE"
       buyer_latency_type: "STREAMING" | "INTRADAY" | "BATCH"
       buyer_role_type:
@@ -13708,6 +13737,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["super_admin", "security_operator"],
       buyer_jurisdiction_type: ["USA", "SGP", "IND", "NGA_ZAF", "UAE"],
       buyer_latency_type: ["STREAMING", "INTRADAY", "BATCH"],
       buyer_role_type: [

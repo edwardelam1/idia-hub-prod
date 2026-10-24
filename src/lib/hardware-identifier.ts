@@ -151,10 +151,18 @@ export async function captureHardwareTag(userId: string, intent: string): Promis
   console.log(`🛡️ [HARDWARE_TAG_LOG] START: intent=${intent}`);
   if (!userId) throw new Error("HARDWARE_HANDSHAKE_FAILED: missing user_id for ACA binding.");
 
-  // 🚨 DEV ENVIRONMENT BYPASS: Detect if running inside Lovable/cross-origin iframe
-  if (typeof window !== "undefined" && window.self !== window.top) {
+  // DEV BYPASS: only inside a framed *preview* host. Never on production domains.
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const isPreviewHost = host.endsWith(".lovable.app") || host.endsWith(".lovableproject.com");
+  const isFramed = typeof window !== "undefined" && window.self !== window.top;
+  console.log(`[HardwareTag][BYPASS_CHECK][STEP_START] host=${host} framed=${isFramed}`);
+  if (isFramed && !isPreviewHost) {
+    console.error("[HardwareTag][ERROR] framed on non-preview host — bypass refused");
+  }
+  console.log(`[HardwareTag][BYPASS_CHECK][STEP_END] bypass=${isFramed && isPreviewHost}`);
+  if (isFramed && isPreviewHost) {
     console.warn(
-      "⚠️ [HARDWARE_TAG_LOG] Running inside an iframe (Lovable Preview). Bypassing strict WebAuthn to prevent cross-origin DOM exceptions.",
+      "⚠️ [HARDWARE_TAG_LOG] Running inside the preview frame. Bypassing strict WebAuthn to prevent cross-origin DOM exceptions.",
     );
 
     const mockTag = "DEV_MOCK_HARDWARE_TAG_" + Date.now();

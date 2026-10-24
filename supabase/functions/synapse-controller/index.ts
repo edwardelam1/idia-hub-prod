@@ -3,10 +3,7 @@ import { getRoute } from "../_shared/payAppRouting.ts";
 import { SECTOR_VALUES } from "../_shared/sectorValues.ts";
 import { calculateDatasetRelevance, resolveCanonicalCategory } from "../_shared/buyer-affinity.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsFor, resolveCaller, denied } from "../_shared/edge-guard.ts";
 
 // NOTE: The previous EdgeRuntime.waitUntil + functions.invoke handoff still
 // succumbed to the TCP RST cascade on parent-isolate teardown. We now use a
@@ -183,7 +180,16 @@ async function calculateDynamicFee(
 // ====================================================================
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsFor(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  console.log("[SynapseController][AUTH][STEP_START]");
+  const caller = await resolveCaller(req, "SynapseController", { allowPlainUsers: true });
+  if (!caller) {
+    console.log("[SynapseController][AUTH][STEP_END] rejected");
+    return denied(req, 401);
+  }
+  console.log(`[SynapseController][AUTH][STEP_END] caller=${caller.kind}`);
 
   // Pre-initialize variables for global scope
   let operatorId: string | undefined;
@@ -227,6 +233,11 @@ Deno.serve(async (req) => {
     // Enforcement of Audit Provenance
     if (!intent_type) throw new Error("Rejected: Missing intent_type");
     if (!user_id || user_id === "00000000-0000-0000-0000-000000000000") throw new Error("Invalid user_id");
+    // Signed-in users without an elevated role may only bill themselves.
+    if (caller.kind === "user" && caller.userId !== user_id) {
+      console.log("[SynapseController][AUTH][STEP_END] user attempted to bill another account — rejected");
+      return denied(req, 403);
+    }
 
     const aca_record_ids = Array.isArray(rawIds) ? rawIds : [rawIds].filter(Boolean);
     if (aca_record_ids.length === 0) throw new Error("No auditable lineage provided");
@@ -435,13 +446,14 @@ Deno.serve(async (req) => {
       },
     );
   } catch (error: any) {
-    console.error("[FATAL STALL: SynapseController Global]", error.message);
+    console.error("[SynapseController][ERROR] global", error?.message, { operatorId, records: consumedReceipt.length });
+    // Only pass through user-actionable messages; mask internals.
+    const raw = String(error?.message ?? "");
+    const safe = /insufficient|Rejected:|Invalid user_id|No auditable lineage/i.test(raw)
+      ? raw.slice(0, 200)
+      : "Request could not be completed.";
     return new Response(
-      JSON.stringify({
-        error: error.message,
-        debug_operator: operatorId,
-        debug_records: consumedReceipt,
-      }),
+      JSON.stringify({ error: safe }),
       {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
