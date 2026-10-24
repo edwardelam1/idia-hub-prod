@@ -446,13 +446,14 @@ Deno.serve(async (req) => {
       },
     );
   } catch (error: any) {
-    console.error("[FATAL STALL: SynapseController Global]", error.message);
+    console.error("[SynapseController][ERROR] global", error?.message, { operatorId, records: consumedReceipt.length });
+    // Only pass through user-actionable messages; mask internals.
+    const raw = String(error?.message ?? "");
+    const safe = /insufficient|Rejected:|Invalid user_id|No auditable lineage/i.test(raw)
+      ? raw.slice(0, 200)
+      : "Request could not be completed.";
     return new Response(
-      JSON.stringify({
-        error: error.message,
-        debug_operator: operatorId,
-        debug_records: consumedReceipt,
-      }),
+      JSON.stringify({ error: safe }),
       {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
