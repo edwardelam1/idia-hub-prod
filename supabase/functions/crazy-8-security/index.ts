@@ -4,10 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsFor, resolveCaller, denied, genericError } from "../_shared/edge-guard.ts";
 
 // The "Crazy 8" Security Agents Personas
 const SECURITY_AGENTS = {
@@ -54,12 +51,22 @@ const SECURITY_AGENTS = {
 };
 
 serve(async (req) => {
+  const corsHeaders = corsFor(req);
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log("[Crazy8][REQUEST][STEP_START]");
+  const caller = await resolveCaller(req, "Crazy8");
+  if (!caller) {
+    console.log("[Crazy8][REQUEST][STEP_END] rejected unauthorized caller");
+    return denied(req, 403);
+  }
+
   try {
+    console.log("[Crazy8][PARSE][STEP_START]");
     const { agent, action, data, context } = await req.json();
+    console.log("[Crazy8][PARSE][STEP_END]", { agent, action, caller: caller.kind });
 
     if (!geminiApiKey) {
       throw new Error('Gemini API key not configured');
@@ -122,15 +129,8 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in Crazy 8 Security System:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      protocol: 'Crazy Friend Security',
-      status: 'error'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('[Crazy8][ERROR]', error);
+    return genericError(req, 500);
   }
 });
 
