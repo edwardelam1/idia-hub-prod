@@ -55,3 +55,7 @@
 - [x] The Vulture: collapsible airlock specs; Uploader / Mesh Nodes / Ledger sub-tabs below desktop
 - [x] Utilities: one-line balance + Settle card, compact key rows, collapsible integration specs
 - [x] Trading Desk: compact header and swipeable sub-tab strip with active underline
+
+## Crazy 8 role enforcement (done)
+- [x] Reassign detectors to the official eight roles; Mirror runs real red-team probes
+- [x] Cause-based alert titles and per-role report layouts in the Security pop-up
