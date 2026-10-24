@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AGENT_INFO, eventInfo, label, sevClass, STAT_INFO, timeAgo } from './securityGlossary';
+import { AGENT_INFO, eventHeadline, label, sevClass, STAT_INFO, timeAgo } from './securityGlossary';
 import { InfoSheet, SecurityEventSheet, TickLike } from './SecurityEventSheet';
 
 // Untyped handle: these tables are newer than the generated types.
@@ -123,7 +123,7 @@ const CrazyFriendSecurityDashboard = () => {
       <button onClick={() => setSelected(t)} className="flex w-full items-center gap-2 px-2.5 py-2 text-left active:bg-muted/60">
         <Badge className={cn('w-16 shrink-0 justify-center px-1 text-[10px] capitalize', sevClass[t.severity])}>{t.severity}</Badge>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm">{eventInfo(t.event_type).title}</div>
+          <div className="truncate text-sm">{eventHeadline(t.event_type)}</div>
           <div className="truncate text-[11px] capitalize text-muted-foreground">{label(t.agent)}{t.resolved && ' · resolved'}</div>
         </div>
         <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{timeAgo(t.occurred_at)}</span>
@@ -174,7 +174,7 @@ const CrazyFriendSecurityDashboard = () => {
               <button key={`${t.id}-${i}`} onClick={() => setSelected(t)} className="flex items-center gap-1.5">
                 <span className={cn('h-1.5 w-1.5 rounded-full', isSerious(t.severity) ? 'bg-destructive' : 'bg-primary')} />
                 <span className="font-medium capitalize">{label(t.agent)}</span>
-                <span className="text-muted-foreground">{eventInfo(t.event_type).title}</span>
+                <span className="text-muted-foreground">{eventHeadline(t.event_type)}</span>
               </button>
             ))}
           </div>
@@ -292,7 +292,7 @@ const CrazyFriendSecurityDashboard = () => {
                 <li key={t.id}>
                   <button onClick={() => { setAgentOpen(null); setSelected(t); }} className="flex w-full items-center gap-2 px-2.5 py-2 text-left active:bg-muted/60">
                     <Badge className={cn('w-16 shrink-0 justify-center px-1 text-[10px] capitalize', sevClass[t.severity])}>{t.severity}</Badge>
-                    <span className="min-w-0 flex-1 truncate text-sm">{eventInfo(t.event_type).title}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm">{eventHeadline(t.event_type)}</span>
                     <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{timeAgo(t.occurred_at)}</span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
                   </button>

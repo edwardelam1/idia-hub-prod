@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  agentInfo, eventInfo, label, narrativeFromSignals, sevClass, SEVERITY_MEANING, signalLabel, timeAgo,
+  agentInfo, eventInfo, eventHeadline, label, probeLabel, narrativeFromSignals, sevClass, SEVERITY_MEANING, signalLabel, timeAgo,
 } from './securityGlossary';
 
 // Untyped handle: these RPCs are newer than the generated types.
@@ -18,7 +18,7 @@ export interface TickLike { id: string; agent: string; event_type: string; sever
 
 interface Detail {
   id: string; agent: string; event_type: string; severity: string; resolved: boolean; occurred_at: string;
-  analysis: { risk_level: string; summary: string; findings: string[]; recommended_actions: string[]; confidence: number } | null;
+  analysis: { kind?: string; headline?: string; risk_level: string; summary: string; findings: string[]; recommended_actions: string[]; confidence: number; trend?: string; outlook?: string; what_happened?: string; why_it_matters?: string; what_was_done?: string } | null;
   ai_unavailable: string | null;
   signals: Record<string, any>;
   privileged: boolean;
@@ -182,7 +182,7 @@ export const SecurityEventSheet = ({ tick, onOpenChange, onResolvedChange }: {
       title={
         <span className="flex items-center gap-2">
           <Badge className={cn('shrink-0 px-1.5 text-[10px] capitalize', sevClass[sev])}>{sev}</Badge>
-          <span className="truncate">{ev?.title}</span>
+          <span className="line-clamp-2">{eventHeadline(t.event_type, detail?.analysis?.headline, detail?.signals)}</span>
         </span>
       }
       description={t && <>{agent?.name} · {agent?.title} · {timeAgo(t.occurred_at)} ago{resolved && ' · resolved'}</>}
@@ -213,8 +213,34 @@ export const SecurityEventSheet = ({ tick, onOpenChange, onResolvedChange }: {
                 )}
               </Section>
 
+              {detail.analysis?.kind === 'record' && (
+                <Section icon={Lightbulb} title={`Incident record · ${new Date(detail.occurred_at).toLocaleString()}`}>
+                  <dl className="space-y-2 text-sm">
+                    {([['What happened', detail.analysis.what_happened], ['Why it matters', detail.analysis.why_it_matters], ['What was done', detail.analysis.what_was_done]] as const).filter(([, v]) => v).map(([k, v]) => (
+                      <div key={k}><dt className="text-[11px] font-semibold uppercase text-muted-foreground">{k}</dt><dd className="leading-relaxed">{v}</dd></div>
+                    ))}
+                    <div><dt className="text-[11px] font-semibold uppercase text-muted-foreground">Record ID</dt><dd className="break-all font-mono text-[11px]">{detail.id}</dd></div>
+                  </dl>
+                </Section>
+              )}
+
+              {detail.analysis?.kind === 'forecast' && (detail.analysis.trend || detail.analysis.outlook) && (
+                <Section icon={Lightbulb} title="Forecast">
+                  {detail.analysis.trend && <p className="text-sm"><span className="font-semibold">Trend: </span>{detail.analysis.trend}</p>}
+                  {detail.analysis.outlook && <p className="mt-1 text-sm"><span className="font-semibold">Next 24 hours: </span>{detail.analysis.outlook}</p>}
+                </Section>
+              )}
+
+              {Array.isArray(detail.signals?.probes) && (
+                <Section icon={ListChecks} title="Attacks tried">
+                  <ul className="space-y-1 text-sm">{detail.signals.probes.map((p: { probe: string; blocked: boolean }) => (
+                    <li key={p.probe} className="flex justify-between gap-2"><span className="truncate">{probeLabel(p.probe)}</span><span className={p.blocked ? 'text-muted-foreground' : 'font-semibold text-destructive'}>{p.blocked ? 'Blocked' : 'Got through'}</span></li>
+                  ))}</ul>
+                </Section>
+              )}
+
               {!!detail.analysis?.findings?.length && (
-                <Section icon={Lightbulb} title="Findings">
+                <Section icon={Lightbulb} title={detail.analysis.kind === 'redteam' ? 'Gaps found' : 'What we saw'}>
                   <ul className="list-disc space-y-1 pl-4 text-sm">{detail.analysis.findings.map((f, i) => <li key={i}>{f}</li>)}</ul>
                 </Section>
               )}
