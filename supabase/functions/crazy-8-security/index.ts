@@ -1,365 +1,269 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-
+// Crazy 8 Security — eight agents that watch real platform activity.
+// Scheduled sweeps gather real signals per agent; OpenAI (via Lovable AI Gateway)
+// is only called when a signal is notable, so quiet periods cost nothing.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createOpenAI } from "npm:@ai-sdk/openai@2";
+import { streamText } from "npm:ai@5";
 import { corsFor, resolveCaller, denied, genericError } from "../_shared/edge-guard.ts";
+import { createLovableAiGatewayRunIdFetch } from "./run-id.ts";
 
-// The "Crazy 8" Security Agents Personas
-const SECURITY_AGENTS = {
-  crazy_sentinel: {
-    name: "Crazy Sentinel",
-    role: "Anomaly Detection",
-    persona: `You are "Crazy Sentinel," the anomaly detection specialist of the Crazy Friend Security Protocol. You continuously monitor system patterns and identify deviations that could indicate security threats or system issues. You analyze data flows, user behaviors, and system metrics to detect anomalies.`
-  },
-  crazy_oracle: {
-    name: "Crazy Oracle", 
-    role: "Predictive Analytics",
-    persona: `You are "Crazy Oracle," the predictive analytics expert. You forecast potential security threats, system vulnerabilities, and performance issues before they occur. You analyze trends and patterns to provide early warning systems.`
-  },
-  crazy_hunter: {
-    name: "Crazy Hunter",
-    role: "Threat Hunting", 
-    persona: `You are "Crazy Hunter," the proactive threat hunting specialist. You actively search for indicators of compromise, advanced persistent threats, and hidden security risks within the IDIA Hub ecosystem.`
-  },
-  crazy_guardian: {
-    name: "Crazy Guardian",
-    role: "Security Orchestration & Automated Response (SOAR)",
-    persona: `You are "Crazy Guardian," the central orchestration hub for security incident response. You coordinate responses between all security agents and execute automated remediation plans.`
-  },
-  crazy_gatekeeper: {
-    name: "Crazy Gatekeeper",
-    role: "Identity & Access Management (IAM)",
-    persona: `You are "Crazy Gatekeeper," the identity and access management specialist. You monitor authentication events, access patterns, and permission changes to ensure proper access control.`
-  },
-  crazy_shield: {
-    name: "Crazy Shield", 
-    role: "Data Loss Prevention (DLP)",
-    persona: `You are "Crazy Shield," the data loss prevention expert. You monitor data egress, detect unauthorized data access, and prevent sensitive information leakage.`
-  },
-  crazy_mirror: {
-    name: "Crazy Mirror",
-    role: "Adversarial AI Defense",
-    persona: `You are "Crazy Mirror," the adversarial AI defense specialist. You detect AI-powered attacks, deepfakes, and automated threats targeting the platform.`
-  },
-  crazy_insight: {
-    name: "Crazy Insight",
-    role: "Explainable AI for Security Events", 
-    persona: `You are "Crazy Insight," the explainable AI specialist. You provide human-understandable explanations for security events, threat assessments, and system recommendations.`
-  }
+const GATEWAY = "https://ai.gateway.lovable.dev/v1";
+const MODEL = "openai/gpt-6-astra";
+const WINDOW_MIN = 30;
+
+type Sev = "low" | "medium" | "high" | "critical";
+const SEV_RANK: Record<Sev, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+const maxSev = (a: Sev, b: Sev): Sev => (SEV_RANK[a] >= SEV_RANK[b] ? a : b);
+const asSev = (v: unknown): Sev => (["low", "medium", "high", "critical"].includes(String(v).toLowerCase()) ? String(v).toLowerCase() as Sev : "low");
+
+const AGENTS: Record<string, { name: string; role: string; persona: string }> = {
+  crazy_sentinel: { name: "Crazy Sentinel", role: "Anomaly Detection", persona: "You detect anomalies in API traffic: error spikes, latency deviations and unusual call volumes." },
+  crazy_oracle: { name: "Crazy Oracle", role: "Predictive Analytics", persona: "You forecast security risk from the trend of recent security events." },
+  crazy_hunter: { name: "Crazy Hunter", role: "Threat Hunting", persona: "You hunt for indicators of compromise in security logs and quarantined ingestion payloads." },
+  crazy_guardian: { name: "Crazy Guardian", role: "Orchestration & Response", persona: "You triage open security incidents, prioritise them and propose concrete response steps." },
+  crazy_gatekeeper: { name: "Crazy Gatekeeper", role: "Identity & Access", persona: "You review privilege grants, API key creation and rejected authentication attempts." },
+  crazy_shield: { name: "Crazy Shield", role: "Data Loss Prevention", persona: "You review data egress volume and per-account egress concentration for possible exfiltration." },
+  crazy_mirror: { name: "Crazy Mirror", role: "Adversarial AI Defense", persona: "You assess prompt-injection and jailbreak attempts against the platform's AI assistant." },
+  crazy_insight: { name: "Crazy Insight", role: "Explainable Security", persona: "You explain serious security events in plain language for non-technical operators." },
 };
 
-serve(async (req) => {
-  const corsHeaders = corsFor(req);
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+const log = (phase: string, edge: "START" | "END", extra?: unknown) =>
+  console.log(`[Crazy8][${phase}][PHASE_${edge}]`, extra ?? "");
+const logErr = (phase: string, err: unknown) =>
+  console.error(`[Crazy8][${phase}][ERROR]`, err instanceof Error ? `${err.message}\n${err.stack}` : err);
 
-  console.log("[Crazy8][REQUEST][STEP_START]");
-  const caller = await resolveCaller(req, "Crazy8");
-  if (!caller) {
-    console.log("[Crazy8][REQUEST][STEP_END] rejected unauthorized caller");
-    return denied(req, 403);
+// ---------------- AI analysis (OpenAI via Lovable AI Gateway) ----------------
+interface Analysis { risk_level: Sev; summary: string; findings: string[]; recommended_actions: string[]; confidence: number; }
+
+async function analyze(agent: string, eventType: string, signals: unknown): Promise<Analysis | { ai_unavailable: string }> {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) return { ai_unavailable: "not_configured" };
+  const a = AGENTS[agent];
+  log(`AI.${agent}`, "START", { eventType });
+  try {
+    const runId = createLovableAiGatewayRunIdFetch();
+    const provider = createOpenAI({
+      baseURL: GATEWAY,
+      apiKey,
+      headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
+      fetch: runId.fetch,
+    });
+    const result = streamText({
+      model: provider.responses(MODEL),
+      system: `You are "${a.name}" (${a.role}) in the IDIA Protocol's Crazy Friend Security system. ${a.persona}
+Base every statement only on the signals provided. Never invent events. Respond with a single JSON object and nothing else:
+{"risk_level":"low|medium|high|critical","summary":"one sentence","findings":["..."],"recommended_actions":["..."],"confidence":0.0}
+Keep findings and actions to at most 4 short items each.`,
+      prompt: `Signal type: ${eventType}\nWindow: last ${WINDOW_MIN} minutes\nSignals (json):\n${JSON.stringify(signals).slice(0, 12000)}`,
+      providerOptions: {
+        openai: {
+          store: false,
+          forceReasoning: true,
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"],
+        },
+      },
+    });
+    const text = await result.text;
+    const match = text.match(/\{[\s\S]*\}/);
+    const parsed = match ? JSON.parse(match[0]) : {};
+    const out: Analysis = {
+      risk_level: asSev(parsed.risk_level),
+      summary: String(parsed.summary ?? "").slice(0, 400),
+      findings: (Array.isArray(parsed.findings) ? parsed.findings : []).slice(0, 4).map((s: unknown) => String(s).slice(0, 240)),
+      recommended_actions: (Array.isArray(parsed.recommended_actions) ? parsed.recommended_actions : []).slice(0, 4).map((s: unknown) => String(s).slice(0, 240)),
+      confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+    };
+    log(`AI.${agent}`, "END", { risk: out.risk_level });
+    return out;
+  } catch (err) {
+    logErr(`AI.${agent}`, err);
+    const status = (err as { statusCode?: number })?.statusCode;
+    return { ai_unavailable: status ? `gateway_${status}` : "analysis_failed" };
   }
+}
+
+// ---------------- Event writing ----------------
+async function record(db: any, agent: string, eventType: string, severity: Sev, data: Record<string, unknown>) {
+  log(`DB.insert.${agent}`, "START", { eventType, severity });
+  const { error } = await db.from("security_events").insert({
+    agent_name: agent, action_type: eventType, severity, result_data: data, timestamp: new Date().toISOString(),
+  });
+  if (error) logErr(`DB.insert.${agent}`, error);
+  log(`DB.insert.${agent}`, "END");
+}
+
+async function finding(db: any, agent: string, eventType: string, floor: Sev, signals: Record<string, unknown>) {
+  const ai = await analyze(agent, eventType, signals);
+  const severity = "risk_level" in ai ? maxSev(floor, ai.risk_level) : floor;
+  await record(db, agent, eventType, severity, { signals, analysis: ai, model: MODEL });
+  return severity;
+}
+
+// ---------------- Per-agent detectors (real data only) ----------------
+const since = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+
+async function sentinel(db: any) {
+  const { data = [] } = await db.from("api_metrics").select("endpoint,status_code,latency_ms").gte("timestamp", since(WINDOW_MIN)).limit(5000);
+  const rows = data ?? [];
+  const errors = rows.filter((r: any) => r.status_code >= 400);
+  const lat = rows.map((r: any) => r.latency_ms ?? 0).sort((a: number, b: number) => a - b);
+  const p95 = lat.length ? lat[Math.floor(lat.length * 0.95)] : 0;
+  const byEndpoint: Record<string, number> = {};
+  errors.forEach((r: any) => { byEndpoint[r.endpoint] = (byEndpoint[r.endpoint] ?? 0) + 1; });
+  const signals = { calls: rows.length, errors: errors.length, error_rate: rows.length ? +(errors.length / rows.length).toFixed(3) : 0, p95_latency_ms: p95, errors_by_endpoint: byEndpoint };
+  if (errors.length >= 10 && signals.error_rate > 0.2) return finding(db, "crazy_sentinel", "api_error_spike", "medium", signals);
+  if (p95 > 5000 && rows.length >= 20) return finding(db, "crazy_sentinel", "latency_anomaly", "low", signals);
+  return record(db, "crazy_sentinel", "sweep_clear", "low", { signals });
+}
+
+async function gatekeeper(db: any) {
+  const [roles, keys, denied] = await Promise.all([
+    db.from("user_roles").select("role,created_at").gte("created_at", since(WINDOW_MIN)),
+    db.from("api_keys").select("environment,created_at").gte("created_at", since(WINDOW_MIN)),
+    db.from("api_metrics").select("endpoint,status_code").in("status_code", [401, 403]).gte("timestamp", since(WINDOW_MIN)).limit(5000),
+  ]);
+  const signals = {
+    privilege_grants: (roles.data ?? []).map((r: any) => r.role),
+    api_keys_created: (keys.data ?? []).length,
+    rejected_auth_attempts: (denied.data ?? []).length,
+  };
+  if (signals.privilege_grants.length > 0) return finding(db, "crazy_gatekeeper", "privilege_change", "medium", signals);
+  if (signals.rejected_auth_attempts >= 15) return finding(db, "crazy_gatekeeper", "auth_rejection_burst", "medium", signals);
+  if (signals.api_keys_created >= 10) return finding(db, "crazy_gatekeeper", "api_key_burst", "low", signals);
+  return record(db, "crazy_gatekeeper", "sweep_clear", "low", { signals });
+}
+
+async function shield(db: any) {
+  const { data } = await db.from("egress_logs").select("user_id,data_points_count,egress_type").gte("created_at", since(WINDOW_MIN)).limit(5000);
+  const rows = data ?? [];
+  const perAccount: Record<string, number> = {};
+  let points = 0;
+  rows.forEach((r: any) => { perAccount[r.user_id] = (perAccount[r.user_id] ?? 0) + 1; points += r.data_points_count ?? 0; });
+  const top = Math.max(0, ...Object.values(perAccount));
+  // Account ids are never sent to the model — only counts.
+  const signals = { egress_events: rows.length, data_points: points, distinct_accounts: Object.keys(perAccount).length, max_egress_per_account: top };
+  if (top >= 20 || points >= 250_000) return finding(db, "crazy_shield", "egress_surge", "medium", signals);
+  return record(db, "crazy_shield", "sweep_clear", "low", { signals });
+}
+
+async function hunter(db: any) {
+  const [logs, quarantine] = await Promise.all([
+    db.from("security_event_logs").select("protocol,event_type,severity").gte("created_at", since(WINDOW_MIN)).limit(2000),
+    db.from("vulture_quarantine").select("reason_code").gte("created_at", since(WINDOW_MIN)).limit(2000),
+  ]);
+  const sevCount: Record<string, number> = {};
+  const types: Record<string, number> = {};
+  (logs.data ?? []).forEach((r: any) => { sevCount[r.severity] = (sevCount[r.severity] ?? 0) + 1; types[r.event_type] = (types[r.event_type] ?? 0) + 1; });
+  const reasons: Record<string, number> = {};
+  (quarantine.data ?? []).forEach((r: any) => { reasons[r.reason_code] = (reasons[r.reason_code] ?? 0) + 1; });
+  const severe = (sevCount.high ?? 0) + (sevCount.critical ?? 0);
+  const quarantined = (quarantine.data ?? []).length;
+  const signals = { log_severity: sevCount, log_event_types: types, quarantined_payloads: quarantined, quarantine_reasons: reasons };
+  if (severe > 0) return finding(db, "crazy_hunter", "threat_indicators", "high", signals);
+  if (quarantined >= 5) return finding(db, "crazy_hunter", "quarantine_surge", "medium", signals);
+  return record(db, "crazy_hunter", "sweep_clear", "low", { signals });
+}
+
+const INJECTION_PATTERNS: [string, RegExp][] = [
+  ["ignore_instructions", /ignore\s+(all\s+|any\s+)?(previous|prior|above)\s+instructions/i],
+  ["reveal_system_prompt", /(reveal|show|print|repeat).{0,20}(system|hidden)\s+prompt/i],
+  ["role_override", /you\s+are\s+now\s+(a|an|in)\b|developer\s+mode|\bDAN\b/i],
+  ["jailbreak", /jailbreak|bypass\s+(your\s+)?(rules|filters|safety)/i],
+  ["data_exfil_request", /(dump|export|list)\s+(all\s+)?(users|wallets|private\s+keys|api\s+keys|secrets)/i],
+];
+
+async function mirror(db: any) {
+  const { data } = await db.from("best_friend_messages").select("content").eq("role", "user").gte("created_at", since(WINDOW_MIN)).limit(2000);
+  const rows = data ?? [];
+  const hits: Record<string, number> = {};
+  rows.forEach((r: any) => INJECTION_PATTERNS.forEach(([name, re]) => { if (re.test(r.content ?? "")) hits[name] = (hits[name] ?? 0) + 1; }));
+  // Message text is never forwarded — only pattern counts.
+  const total = Object.values(hits).reduce((a, b) => a + b, 0);
+  const signals = { messages_scanned: rows.length, pattern_hits: hits };
+  if (total > 0) return finding(db, "crazy_mirror", "prompt_injection_attempt", total >= 5 ? "high" : "medium", signals);
+  return record(db, "crazy_mirror", "sweep_clear", "low", { signals });
+}
+
+async function oracle(db: any) {
+  const { data } = await db.from("security_events").select("severity,timestamp").neq("action_type", "sweep_clear").neq("action_type", "maintenance_pulse")
+    .gte("timestamp", since(7 * 24 * 60)).limit(5000);
+  const days: Record<string, Record<string, number>> = {};
+  (data ?? []).forEach((r: any) => { const d = r.timestamp.slice(0, 10); days[d] ??= {}; days[d][r.severity] = (days[d][r.severity] ?? 0) + 1; });
+  const sev = (d: Record<string, number> | undefined) => (d?.high ?? 0) + (d?.critical ?? 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const signals = { daily_severity_counts: days, serious_today: sev(days[today]), serious_yesterday: sev(days[yesterday]) };
+  if (signals.serious_today > 0 && signals.serious_today > signals.serious_yesterday) return finding(db, "crazy_oracle", "threat_forecast", "medium", signals);
+  return record(db, "crazy_oracle", "sweep_clear", "low", { signals });
+}
+
+async function guardian(db: any) {
+  const { data } = await db.from("security_events").select("agent_name,action_type,severity,timestamp").eq("resolved", false)
+    .in("severity", ["high", "critical"]).gte("timestamp", since(WINDOW_MIN)).limit(200);
+  const open = data ?? [];
+  const signals = { new_open_incidents: open.map((r: any) => ({ agent: r.agent_name, type: r.action_type, severity: r.severity })) };
+  if (open.length > 0) return finding(db, "crazy_guardian", "incident_triage", open.some((r: any) => r.severity === "critical") ? "critical" : "high", signals);
+  return record(db, "crazy_guardian", "sweep_clear", "low", { signals });
+}
+
+async function insight(db: any) {
+  const { data } = await db.from("security_events").select("agent_name,action_type,severity,result_data").neq("agent_name", "crazy_insight")
+    .neq("agent_name", "crazy_guardian").in("severity", ["high", "critical"]).gte("timestamp", since(WINDOW_MIN)).limit(20);
+  const rows = data ?? [];
+  const signals = { serious_events: rows.map((r: any) => ({ agent: r.agent_name, type: r.action_type, severity: r.severity, summary: r.result_data?.analysis?.summary ?? null, signals: r.result_data?.signals ?? null })) };
+  if (rows.length > 0) return finding(db, "crazy_insight", "incident_explained", "medium", signals);
+  return record(db, "crazy_insight", "sweep_clear", "low", { signals: { serious_events: 0 } });
+}
+
+async function sweep(db: any) {
+  const results: Record<string, string> = {};
+  // Detectors first, then agents that read the detectors' output.
+  for (const [name, fn] of [["crazy_sentinel", sentinel], ["crazy_gatekeeper", gatekeeper], ["crazy_shield", shield], ["crazy_hunter", hunter], ["crazy_mirror", mirror],
+    ["crazy_oracle", oracle], ["crazy_guardian", guardian], ["crazy_insight", insight]] as const) {
+    log(`SWEEP.${name}`, "START");
+    try { await fn(db); results[name] = "ok"; } catch (err) { logErr(`SWEEP.${name}`, err); results[name] = "failed"; }
+    log(`SWEEP.${name}`, "END", results[name]);
+  }
+  return results;
+}
+
+// ---------------- HTTP entry ----------------
+Deno.serve(async (req) => {
+  const corsHeaders = corsFor(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  log("REQUEST", "START");
+  const caller = await resolveCaller(req, "Crazy8");
+  if (!caller) { log("REQUEST", "END", "rejected"); return denied(req, 403); }
 
   try {
-    console.log("[Crazy8][PARSE][STEP_START]");
-    const { agent, action, data, context } = await req.json();
-    console.log("[Crazy8][PARSE][STEP_END]", { agent, action, caller: caller.kind });
+    log("PARSE", "START");
+    const body = await req.json().catch(() => ({}));
+    const { agent, action, data } = body ?? {};
+    log("PARSE", "END", { agent, action, caller: caller.kind });
 
-    if (!geminiApiKey) {
-      throw new Error('Gemini API key not configured');
+    const db = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", { auth: { persistSession: false } });
+
+    // The legacy once-a-minute pulse carried no data; it is acknowledged and ignored.
+    if (action === "maintenance_pulse") { log("REQUEST", "END", "pulse ignored"); return json({ success: true, skipped: "maintenance_pulse_retired" }); }
+
+    if (action === "scheduled_sweep") {
+      const results = await sweep(db);
+      log("REQUEST", "END", results);
+      return json({ success: true, results });
     }
 
-    if (!SECURITY_AGENTS[agent as keyof typeof SECURITY_AGENTS]) {
-      throw new Error(`Unknown security agent: ${agent}`);
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    console.log(`${SECURITY_AGENTS[agent as keyof typeof SECURITY_AGENTS].name} activated:`, { action });
-
-    let response;
-
-    switch (agent) {
-      case 'crazy_sentinel':
-        response = await runAnomalyDetection(action, data, context);
-        break;
-      case 'crazy_oracle':
-        response = await runPredictiveAnalytics(action, data, context);
-        break;
-      case 'crazy_hunter':
-        response = await runThreatHunting(action, data, context);
-        break;
-      case 'crazy_guardian':
-        response = await runSecurityOrchestration(action, data, context);
-        break;
-      case 'crazy_gatekeeper':
-        response = await runAccessManagement(action, data, context);
-        break;
-      case 'crazy_shield':
-        response = await runDataProtection(action, data, context);
-        break;
-      case 'crazy_mirror':
-        response = await runAdversarialDefense(action, data, context);
-        break;
-      case 'crazy_insight':
-        response = await runExplainableAnalysis(action, data, context);
-        break;
-      default:
-        throw new Error(`Unhandled agent: ${agent}`);
-    }
-
-    // Log security event
-    await logSecurityEvent(supabaseClient, agent, action, response);
-
-    return new Response(JSON.stringify({ 
-      success: true,
-      agent: SECURITY_AGENTS[agent as keyof typeof SECURITY_AGENTS].name,
-      action,
-      result: response,
-      timestamp: new Date().toISOString(),
-      protocol: 'Crazy Friend Security'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    console.error('[Crazy8][ERROR]', error);
+    // Manual analysis by a super admin / security operator with explicit data.
+    if (!AGENTS[agent]) return json({ error: "Unknown security agent." }, 400);
+    if (typeof action !== "string" || !/^[a-z0-9_]{2,60}$/.test(action)) return json({ error: "Invalid action." }, 400);
+    const severity = await finding(db, agent, action, "low", { manual: true, data: data ?? null });
+    log("REQUEST", "END", { severity });
+    return json({ success: true, agent: AGENTS[agent].name, action, severity });
+  } catch (err) {
+    logErr("REQUEST", err);
     return genericError(req, 500);
   }
 });
-
-async function runAnomalyDetection(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_sentinel.persona}
-
-Analyze this system data for anomalies:
-
-Action: ${action}
-Data: ${JSON.stringify(data, null, 2)}
-Context: ${JSON.stringify(context, null, 2)}
-
-Provide anomaly analysis in this JSON format:
-{
-  "anomalies_detected": true/false,
-  "risk_level": "low|medium|high|critical",
-  "anomaly_details": ["detail1", "detail2"],
-  "recommended_actions": ["action1", "action2"],
-  "confidence_score": 0-1,
-  "patterns_observed": ["pattern1", "pattern2"]
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runPredictiveAnalytics(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_oracle.persona}
-
-Perform predictive security analysis:
-
-Action: ${action}
-Current State: ${JSON.stringify(data, null, 2)}
-Historical Context: ${JSON.stringify(context, null, 2)}
-
-Provide predictive analysis in this JSON format:
-{
-  "threat_predictions": ["threat1", "threat2"],
-  "risk_forecast": "increasing|stable|decreasing",
-  "time_horizon": "immediate|short_term|long_term",
-  "prevention_strategies": ["strategy1", "strategy2"],
-  "confidence_level": 0-1,
-  "monitoring_recommendations": ["metric1", "metric2"]
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runThreatHunting(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_hunter.persona}
-
-Hunt for security threats in this data:
-
-Action: ${action}
-Hunt Data: ${JSON.stringify(data, null, 2)}
-Environment: ${JSON.stringify(context, null, 2)}
-
-Provide threat hunting results in this JSON format:
-{
-  "threats_found": true/false,
-  "threat_types": ["type1", "type2"],
-  "indicators_of_compromise": ["ioc1", "ioc2"],
-  "threat_severity": "low|medium|high|critical",
-  "investigation_leads": ["lead1", "lead2"],
-  "containment_recommendations": ["action1", "action2"]
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runSecurityOrchestration(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_guardian.persona}
-
-Orchestrate security response for this incident:
-
-Action: ${action}
-Incident Data: ${JSON.stringify(data, null, 2)}
-System Context: ${JSON.stringify(context, null, 2)}
-
-Provide orchestration plan in this JSON format:
-{
-  "response_plan": "detailed orchestrated response plan",
-  "priority_level": "low|medium|high|critical",
-  "automated_actions": ["action1", "action2"],
-  "human_approval_required": true/false,
-  "escalation_path": ["step1", "step2"],
-  "estimated_resolution_time": "timeframe",
-  "resource_requirements": ["resource1", "resource2"]
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runAccessManagement(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_gatekeeper.persona}
-
-Analyze access management event:
-
-Action: ${action}
-Access Data: ${JSON.stringify(data, null, 2)}
-User Context: ${JSON.stringify(context, null, 2)}
-
-Provide access analysis in this JSON format:
-{
-  "access_violation": true/false,
-  "risk_assessment": "low|medium|high|critical",
-  "privilege_analysis": "appropriate|excessive|insufficient",
-  "recommended_permissions": ["permission1", "permission2"],
-  "monitoring_flags": ["flag1", "flag2"],
-  "compliance_status": "compliant|violation|review_required"
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runDataProtection(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_shield.persona}
-
-Analyze data protection event:
-
-Action: ${action}
-Data Movement: ${JSON.stringify(data, null, 2)}
-Protection Context: ${JSON.stringify(context, null, 2)}
-
-Provide DLP analysis in this JSON format:
-{
-  "data_leak_risk": "low|medium|high|critical",
-  "sensitive_data_detected": true/false,
-  "data_classification": "public|internal|confidential|restricted",
-  "egress_analysis": "authorized|suspicious|blocked",
-  "protection_measures": ["measure1", "measure2"],
-  "compliance_impact": "none|minor|major|critical"
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runAdversarialDefense(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_mirror.persona}
-
-Analyze for adversarial AI threats:
-
-Action: ${action}
-Request Data: ${JSON.stringify(data, null, 2)}
-AI Context: ${JSON.stringify(context, null, 2)}
-
-Provide adversarial analysis in this JSON format:
-{
-  "ai_threat_detected": true/false,
-  "threat_type": "prompt_injection|model_poisoning|evasion|extraction",
-  "confidence_score": 0-1,
-  "attack_sophistication": "low|medium|high|advanced",
-  "mitigation_strategies": ["strategy1", "strategy2"],
-  "model_integrity": "intact|compromised|uncertain"
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function runExplainableAnalysis(action: string, data: any, context: any) {
-  const prompt = `${SECURITY_AGENTS.crazy_insight.persona}
-
-Provide human-understandable explanation for this security event:
-
-Action: ${action}
-Event Data: ${JSON.stringify(data, null, 2)}
-Technical Context: ${JSON.stringify(context, null, 2)}
-
-Provide explainable analysis in this JSON format:
-{
-  "plain_language_summary": "Clear explanation for non-technical users",
-  "technical_details": "Detailed technical explanation",
-  "business_impact": "Explanation of business implications",
-  "user_actions_required": ["action1", "action2"],
-  "risk_explanation": "Why this matters for security",
-  "next_steps": "Clear guidance on what happens next"
-}`;
-
-  return await callGeminiAPI(prompt);
-}
-
-async function callGeminiAPI(prompt: string): Promise<any> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      generationConfig: {
-        temperature: 0.1, // Low temperature for consistent security analysis
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
-      }
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const responseText = data.candidates[0].content.parts[0].text;
-  
-  try {
-    return JSON.parse(responseText);
-  } catch (parseError) {
-    console.error('Failed to parse Gemini response as JSON:', responseText);
-    return { error: 'Invalid JSON response', raw_response: responseText };
-  }
-}
-
-async function logSecurityEvent(supabaseClient: any, agent: string, action: string, result: any) {
-  try {
-    await supabaseClient
-      .from('security_events')
-      .insert({
-        agent_name: agent,
-        action_type: action,
-        result_data: result,
-        timestamp: new Date().toISOString(),
-        severity: result.risk_level || result.threat_severity || 'medium'
-      });
-  } catch (error) {
-    console.error('Failed to log security event:', error);
-    // Don't throw - logging failure shouldn't break security analysis
-  }
-}
