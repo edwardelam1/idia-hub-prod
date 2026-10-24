@@ -13171,6 +13171,7 @@ export type Database = {
           count: number
         }[]
       }
+      get_security_event_detail: { Args: { _id: string }; Returns: Json }
       get_service_role_key: { Args: never; Returns: string }
       get_staging_aggregates: {
         Args: never
@@ -13451,6 +13452,10 @@ export type Database = {
         Returns: number
       }
       release_relayer_lock: { Args: { run_id: string }; Returns: undefined }
+      resolve_security_event: {
+        Args: { _id: string; _resolved?: boolean }
+        Returns: boolean
+      }
       revoke_employee: {
         Args: { _employee_id: string }
         Returns: {
