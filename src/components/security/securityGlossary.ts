@@ -132,27 +132,27 @@ export function narrativeFromSignals(agentRaw: string, s: Record<string, any> | 
     case 'sentinel':
       if (!n(sig.calls)) return 'No requests reached the Hub in the last 30 minutes, so there was nothing to flag.';
       return `Checked ${fmt(sig.calls)} requests in the last 30 minutes. ${fmt(sig.errors)} failed (${(n(sig.error_rate) * 100).toFixed(1)}%), and the slowest 5% took ${fmt(sig.p95_latency_ms)} ms.`;
-    case 'gatekeeper': {
+    case 'guardian': {
       const roles = Array.isArray(sig.privilege_grants) ? sig.privilege_grants : [];
       return `${roles.length ? `${roles.length} role${roles.length > 1 ? 's' : ''} granted (${roles.join(', ')}).` : 'No new admin or security roles.'} ${fmt(sig.api_keys_created)} API keys created and ${fmt(sig.rejected_auth_attempts)} requests refused.`;
     }
-    case 'shield':
-      return `${fmt(sig.egress_events)} data exports by ${fmt(sig.distinct_accounts)} accounts, ${fmt(sig.data_points)} data points in total. The busiest account made ${fmt(sig.max_egress_per_account)} exports.`;
-    case 'hunter':
-      return `${fmt(sumObj(sig.log_severity))} security log entries and ${fmt(sig.quarantined_payloads)} uploads set aside in the last 30 minutes.`;
-    case 'mirror': {
+    case 'gatekeeper': {
       const hits = sumObj(sig.pattern_hits);
-      return `Checked ${fmt(sig.messages_scanned)} Best Friend AI messages. ${hits ? `${hits} matched a known manipulation trick.` : 'None matched a known manipulation trick.'}`;
+      return `Checked ${fmt(sig.messages_scanned)} incoming Best Friend AI messages: ${hits ? `${hits} matched a manipulation trick` : 'none matched a manipulation trick'}. ${fmt(sig.egress_events)} outgoing exports, ${fmt(sig.unlabeled_egress)} without a recorded type.`;
     }
+    case 'shield':
+      return `${fmt(sig.quarantined_payloads)} uploads held in the quarantine airlock. ${fmt(sig.egress_events)} exports by ${fmt(sig.distinct_accounts)} accounts; the busiest made ${fmt(sig.max_egress_per_account)}.`;
+    case 'hunter':
+      return `Searched ${fmt(sumObj(sig.log_severity))} security log entries and ${fmt(sig.ledger_entries)} credit ledger entries. ${fmt(sig.open_settlement_failures)} settlements are stuck.`;
+    case 'mirror':
+      if (sig.probes_run == null) return 'Older report from before red-team testing started.';
+      return `Tried ${fmt(sig.probes_run)} real attacks against the live protocol. ${fmt(sig.probes_blocked)} were blocked${n(sig.probes_run) > n(sig.probes_blocked) ? ` and ${fmt(n(sig.probes_run) - n(sig.probes_blocked))} got through` : ''}.`;
     case 'oracle':
-      return `Serious alerts today: ${fmt(sig.serious_today)}. Yesterday: ${fmt(sig.serious_yesterday)}. ${n(sig.serious_today) > n(sig.serious_yesterday) ? 'The trend is rising.' : 'No rising trend.'}`;
-    case 'guardian': {
-      const open = Array.isArray(sig.new_open_incidents) ? sig.new_open_incidents.length : 0;
-      return open ? `${open} serious alert${open > 1 ? 's are' : ' is'} still open from the last 30 minutes.` : 'No serious alerts are open from the last 30 minutes.';
-    }
+      if (sig.alerts_today != null) return `Alerts today: ${fmt(sig.alerts_today)}. Yesterday: ${fmt(sig.alerts_yesterday)}. ${n(sig.alerts_today) > n(sig.alerts_yesterday) ? 'Risk is building.' : 'No rising trend.'}`;
+      return `Serious alerts today: ${fmt(sig.serious_today)}. Yesterday: ${fmt(sig.serious_yesterday)}.`;
     case 'insight': {
       const c = Array.isArray(sig.serious_events) ? sig.serious_events.length : n(sig.serious_events);
-      return c ? `${c} serious event${c > 1 ? 's' : ''} explained below.` : 'No serious events to explain in the last 30 minutes.';
+      return c ? `Incident record covering ${c} serious alert${c > 1 ? 's' : ''}.` : 'No serious alerts to record in the last 30 minutes.';
     }
     default:
       return 'This agent recorded the numbers below.';
