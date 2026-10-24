@@ -32,43 +32,43 @@ export interface AgentInfo { name: string; title: string; watches: string; alert
 export const AGENT_INFO: Record<string, AgentInfo> = {
   sentinel: {
     name: 'Sentinel', title: 'Anomaly detection',
-    watches: 'Every request made to the Hub in the last 30 minutes: how many failed and how slow the slowest ones were.',
-    alertsWhen: 'At least 10 requests fail and more than 1 in 5 requests are failing, or the slowest 5% take over 5 seconds.',
+    watches: 'API traffic velocity across the Hub in the last 30 minutes: how many requests failed and how slow the slowest ones were.',
+    alertsWhen: 'At least 10 requests fail and more than 1 in 5 are failing, or the slowest 5% take over 5 seconds.',
   },
   oracle: {
-    name: 'Oracle', title: 'Threat forecasts',
-    watches: 'The last 7 days of serious alerts, counted day by day.',
-    alertsWhen: 'Today already has more serious alerts than all of yesterday, which suggests risk is rising.',
+    name: 'Oracle', title: 'Predictive threat modeling',
+    watches: 'Seven days of alerts from every agent, by day and by area, to forecast which risk is building.',
+    alertsWhen: 'Today already has more alerts than all of yesterday.',
   },
   hunter: {
-    name: 'Hunter', title: 'Threat hunting',
-    watches: 'Protocol security logs and any uploads The Vulture refused and set aside.',
-    alertsWhen: 'Any serious log entry appears, or 5 or more uploads are set aside in 30 minutes.',
+    name: 'Hunter', title: 'Active threat hunting',
+    watches: 'Security logs, the Synapse credit ledger and failed settlements, looking for hidden abuse or internal probing.',
+    alertsWhen: 'A serious log entry appears, 3 or more settlements fail, or one account makes 50 or more ledger entries in 30 minutes.',
   },
   guardian: {
-    name: 'Guardian', title: 'Incident triage',
-    watches: 'Serious alerts from the other agents that nobody has marked resolved yet.',
-    alertsWhen: 'Any serious alert from the last 30 minutes is still open. It ranks them and suggests next steps.',
+    name: 'Guardian', title: 'Zero-trust access control',
+    watches: 'New admin or security roles, new API keys and refused or permission-denied requests.',
+    alertsWhen: 'Anyone is given an admin or security role, 15 or more requests are refused, or 10 or more API keys are created in 30 minutes.',
   },
   gatekeeper: {
-    name: 'Gatekeeper', title: 'Identity and access',
-    watches: 'New admin or security roles, new API keys and refused sign-in attempts.',
-    alertsWhen: 'Anyone is given an admin or security role, 15 or more requests are refused, or 10 or more API keys are created in 30 minutes.',
+    name: 'Gatekeeper', title: 'Ingress and egress sanitization',
+    watches: 'Messages coming into Best Friend AI (checked for manipulation tricks; text never leaves the database) and every data export leaving the protocol.',
+    alertsWhen: 'Any message matches a known trick, or an export leaves without a recorded type.',
   },
   shield: {
     name: 'Shield', title: 'Data loss prevention',
-    watches: 'Data leaving the protocol through the Marketplace, Best Friend AI and the API. Only counts are checked, never account names.',
-    alertsWhen: 'One account makes 20 or more exports, or more than 250,000 data points leave, in 30 minutes.',
+    watches: 'The Vulture quarantine airlock for unverified or legacy data, and how much each account exports. Only counts, never account names.',
+    alertsWhen: '5 or more uploads are quarantined, one account makes 20 or more exports, or more than 250,000 data points leave in 30 minutes.',
   },
   mirror: {
-    name: 'Mirror', title: 'AI manipulation defense',
-    watches: 'Messages people send to Best Friend AI, checked for known tricks to make an AI misbehave. Message text never leaves the database.',
-    alertsWhen: 'Any message matches a known trick. Five or more matches is a high alert.',
+    name: 'Mirror', title: 'Adversarial red-teaming',
+    watches: 'Every sweep it actually attacks the live protocol like an outsider: reading protected tables while signed out, calling admin-only tools without a role, and using a forged device key.',
+    alertsWhen: 'Any attack gets through. That is always a critical alert.',
   },
   insight: {
-    name: 'Insight', title: 'Plain-English explanations',
-    watches: 'Serious alerts from Sentinel, Oracle, Hunter, Gatekeeper, Shield and Mirror.',
-    alertsWhen: 'There is any serious alert to explain. It writes what happened and what to do in plain language.',
+    name: 'Insight', title: 'Forensic auditability',
+    watches: 'Every serious alert from the other agents.',
+    alertsWhen: 'There is a serious alert. It writes a dated incident record in plain language for a security officer review.',
   },
 };
 
@@ -76,21 +76,36 @@ export const agentInfo = (raw: string): AgentInfo =>
   AGENT_INFO[label(raw)] ?? { name: label(raw), title: 'Security agent', watches: 'Platform activity.', alertsWhen: 'Something unusual happens.' };
 
 export const EVENT_INFO: Record<string, { title: string; meaning: string }> = {
-  sweep_clear: { title: 'Sweep clear', meaning: 'The agent finished its 30-minute check and found nothing that needs attention.' },
-  threat_forecast: { title: 'Threat forecast', meaning: 'Oracle sees more serious alerts today than yesterday and expects risk to stay raised in the near term.' },
-  incident_triage: { title: 'Incident triage', meaning: 'Guardian found serious alerts that are still open, ranked them, and listed what to do first.' },
-  incident_explained: { title: 'Incident explained', meaning: 'Insight rewrote the latest serious alerts in plain language so anyone can follow what happened.' },
-  privilege_change: { title: 'Privilege change', meaning: 'Someone was given an admin or security role. Confirm it was intended.' },
-  api_error_spike: { title: 'Error spike', meaning: 'An unusually large share of requests to the Hub failed.' },
-  latency_anomaly: { title: 'Slow responses', meaning: 'The Hub took unusually long to answer some requests.' },
-  auth_rejection_burst: { title: 'Refused sign-ins', meaning: 'Many requests were refused for missing or wrong credentials. This can mean someone is guessing.' },
-  api_key_burst: { title: 'Many new API keys', meaning: 'An unusual number of API keys were created in a short time.' },
-  egress_surge: { title: 'Data export surge', meaning: 'More data than usual left the protocol, or one account exported far more than normal.' },
-  threat_indicators: { title: 'Threat indicators', meaning: 'Hunter found serious entries in the security logs.' },
-  quarantine_surge: { title: 'Quarantine surge', meaning: 'The Vulture refused and set aside an unusual number of uploads.' },
-  prompt_injection_attempt: { title: 'AI manipulation attempt', meaning: 'Someone sent Best Friend AI a message that matches a known trick to make an AI ignore its rules.' },
+  sweep_clear: { title: 'All clear', meaning: 'The agent finished its 30-minute check and found nothing that needs attention.' },
+  red_team_passed: { title: 'Red-team check: all attacks blocked', meaning: 'Mirror attacked the live protocol like an outsider and every attempt was refused.' },
+  red_team_breach: { title: 'Red-team check: an attack got through', meaning: 'Mirror attacked the live protocol and at least one attempt succeeded. A defense has a gap that must be closed now.' },
+  alerts_rising: { title: 'Security alerts rising', meaning: 'Oracle sees more alerts today than yesterday and forecasts where risk is building.' },
+  threat_forecast: { title: 'Security alerts rising', meaning: 'Oracle sees more serious alerts today than yesterday and expects risk to stay raised.' },
+  incident_record: { title: 'Incident record', meaning: 'Insight wrote a dated, plain-English record of a serious alert for audit review.' },
+  incident_explained: { title: 'Incident record', meaning: 'Insight wrote a plain-English record of recent serious alerts.' },
+  incident_triage: { title: 'Open serious alerts', meaning: 'Serious alerts that were still open when this was recorded (older report format).' },
+  admin_role_granted: { title: 'Admin role granted to an account', meaning: 'Someone was given an admin or security role. Confirm it was intended.' },
+  privilege_change: { title: 'Admin role granted to an account', meaning: 'Someone was given an admin or security role. Confirm it was intended.' },
+  api_error_spike: { title: 'Many Hub requests failing', meaning: 'An unusually large share of requests to the Hub failed.' },
+  latency_anomaly: { title: 'Hub responding slowly', meaning: 'The Hub took unusually long to answer some requests.' },
+  auth_rejection_burst: { title: 'Burst of refused sign-ins', meaning: 'Many requests were refused for missing or wrong credentials. This can mean someone is guessing.' },
+  api_key_burst: { title: 'Many new API keys created', meaning: 'An unusual number of API keys were created in a short time.' },
+  egress_surge: { title: 'Unusual amount of data exported', meaning: 'More data than usual left the protocol, or one account exported far more than normal.' },
+  unlabeled_egress: { title: 'Data export without a recorded type', meaning: 'Data left the protocol without being labeled, so it cannot be matched to an approved route.' },
+  threat_indicators: { title: 'Serious entries in security logs', meaning: 'Hunter found serious entries in the protocol security logs.' },
+  settlement_failures: { title: 'Several settlements failed', meaning: 'Hunter found payment settlements stuck in the repair queue.' },
+  ledger_charge_burst: { title: 'One account flooding the ledger', meaning: 'One account made an unusual number of credit ledger entries in a short time.' },
+  quarantine_surge: { title: 'Many uploads quarantined', meaning: 'The Vulture airlock refused and set aside an unusual number of uploads.' },
+  prompt_injection_attempt: { title: 'Attempt to manipulate Best Friend AI', meaning: 'Someone sent Best Friend AI a message matching a known trick to make an AI ignore its rules.' },
   maintenance_pulse: { title: 'Legacy check-in', meaning: 'An old once-a-minute heartbeat that carried no data. It has been retired and is now ignored.' },
 };
+
+const PROBE_LABELS: Record<string, string> = {
+  admin_function_without_role: 'Run admin security tools without a role',
+  forged_node_key: 'Send data with a forged device key',
+};
+export const probeLabel = (p: string) =>
+  PROBE_LABELS[p] ?? (p.startsWith('signed_out_read_') ? `Read ${p.slice(16).replace(/_/g, ' ')} while signed out` : label(p));
 
 export const eventInfo = (raw: string) => EVENT_INFO[raw] ?? { title: label(raw), meaning: 'A security event recorded by this agent.' };
 
@@ -151,3 +166,27 @@ export const STAT_INFO: Record<string, { title: string; body: string }> = {
   Critical: { title: 'Critical threats', body: 'The most urgent open alerts. This should be 0. Anything here needs attention right away.' },
   Live: { title: 'Live connection', body: 'Live (pulsing) means this page is connected and new events appear the moment they happen. Offline means it is reconnecting; refresh if it stays offline.' },
 };
+
+/** Title that says what happened: AI headline first, else built from recorded numbers, else the event title. */
+export function eventHeadline(eventType: string, aiHeadline?: string | null, s?: Record<string, any> | null): string {
+  if (aiHeadline && aiHeadline.trim()) return aiHeadline.trim();
+  const sig = s ?? {};
+  const base = eventInfo(eventType).title;
+  if (!s) return base;
+  switch (eventType) {
+    case 'sweep_clear':
+      if (n(sig.calls)) return `All clear: ${fmt(sig.calls)} requests checked`;
+      if (n(sig.messages_scanned)) return `All clear: ${fmt(sig.messages_scanned)} messages checked`;
+      return base;
+    case 'red_team_passed': case 'red_team_breach':
+      return `Red-team check: ${fmt(n(sig.probes_run) - n(sig.probes_blocked))} of ${fmt(sig.probes_run)} attacks got through`;
+    case 'alerts_rising': return `Security alerts rising: ${fmt(sig.alerts_today)} today vs ${fmt(sig.alerts_yesterday)} yesterday`;
+    case 'threat_forecast': return `Serious alerts rising: ${fmt(sig.serious_today)} today vs ${fmt(sig.serious_yesterday)} yesterday`;
+    case 'api_error_spike': return `${(n(sig.error_rate) * 100).toFixed(0)}% of Hub requests failing`;
+    case 'prompt_injection_attempt': { const h = sumObj(sig.pattern_hits); return `${h} message${h === 1 ? '' : 's'} tried to override Best Friend AI`; }
+    case 'egress_surge': return `One account made ${fmt(sig.max_egress_per_account)} exports in 30 min`;
+    case 'quarantine_surge': return `${fmt(sig.quarantined_payloads)} uploads quarantined in 30 min`;
+    case 'auth_rejection_burst': return `${fmt(sig.rejected_auth_attempts)} refused requests in 30 min`;
+    default: return base;
+  }
+}
