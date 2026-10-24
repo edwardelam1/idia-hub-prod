@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Users, Workflow, GitBranch, PieChart, Lightbulb, ArrowDown, BookOpen } from 'lucide-react';
+import { Users, Workflow, PieChart, Lightbulb, ArrowDown, BookOpen, Info } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { AGENT_INFO, eventHeadline, label } from './securityGlossary';
@@ -12,12 +13,48 @@ const sevBar: Record<string, string> = {
 };
 interface Row { id: string; agent: string; severity: string; event_type: string; occurred_at: string; resolved: boolean; }
 
-const Section = ({ icon: I, title, sub, children }: { icon: any; title: string; sub: string; children: React.ReactNode }) => (
+const FLOW_STEPS = [
+  ['Activity sources', 'API traffic, ledger, roles, keys, intake, quarantine'],
+  ['Crazy 8 sweep', 'Each agent checks its own area every 30 minutes'],
+  ['AI review', 'Only notable signals; no personal data is sent'],
+  ['Severity sort', 'Low closes itself; medium and up open a case'],
+  ['Public feed + detail', 'Sanitized live ticker; full detail for security staff'],
+  ['Resolution', 'Operator resolves; Insight records the case'],
+];
+
+const FlowHelp = () => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <button type="button" aria-label="How the defense flow works" className="rounded-full p-0.5 text-muted-foreground hover:text-primary">
+        <Info className="h-4 w-4" />
+      </button>
+    </PopoverTrigger>
+    <PopoverContent align="end" className="w-72 p-3">
+      <div className="mb-1.5 text-xs font-semibold">The path every signal takes</div>
+      <ol className="space-y-1">
+        {FLOW_STEPS.map(([t, d], i) => (
+          <li key={t}>
+            <div className="rounded-md border bg-muted/40 px-2 py-1">
+              <div className="text-xs font-semibold">{i + 1}. {t}</div>
+              <div className="text-[11px] text-muted-foreground">{d}</div>
+            </div>
+            {i < FLOW_STEPS.length - 1 && <ArrowDown className="mx-auto my-0.5 h-3 w-3 text-muted-foreground" />}
+          </li>
+        ))}
+      </ol>
+    </PopoverContent>
+  </Popover>
+);
+
+const Section = ({ icon: I, title, sub, children, help }: { icon: any; title: string; sub: string; children: React.ReactNode; help?: React.ReactNode }) => (
   <section className="rounded-lg border bg-card p-3">
     <div className="mb-2 flex items-start gap-2">
       <I className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold leading-tight">{title}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-semibold leading-tight">{title}</h2>
+          {help}
+        </div>
         <p className="text-[11px] text-muted-foreground">{sub}</p>
       </div>
     </div>
@@ -116,8 +153,8 @@ const SecurityStatistics = () => {
         </ul>
       </Section>
 
-      {/* Workflow */}
-      <Section icon={Workflow} title="Workflow" sub="How alerts move from detection to closed">
+      {/* Defense Flow */}
+      <Section icon={Workflow} title="Defense Flow" sub="How alerts move from detection to closed" help={<FlowHelp />}>
         <div className="grid grid-cols-2 gap-1.5 text-center">
           {[
             { k: 'Sweep cadence', v: '30 min' },
@@ -149,27 +186,6 @@ const SecurityStatistics = () => {
         </div>
       </Section>
 
-      {/* Flow chart */}
-      <Section icon={GitBranch} title="Defense flow" sub="The path every signal takes">
-        <ol className="space-y-1">
-          {[
-            ['Activity sources', 'API traffic, ledger, roles, keys, intake, quarantine'],
-            ['Crazy 8 sweep', 'Each agent checks its own area every 30 minutes'],
-            ['AI review', 'Only notable signals; no personal data is sent'],
-            ['Severity sort', 'Low closes itself; medium and up open a case'],
-            ['Public feed + detail', 'Sanitized live ticker; full detail for security staff'],
-            ['Resolution', 'Operator resolves; Insight records the case'],
-          ].map(([t, d], i, arr) => (
-            <li key={t}>
-              <div className="rounded-md border bg-muted/40 px-2.5 py-1.5">
-                <div className="text-xs font-semibold">{i + 1}. {t}</div>
-                <div className="text-[11px] text-muted-foreground">{d}</div>
-              </div>
-              {i < arr.length - 1 && <ArrowDown className="mx-auto my-0.5 h-3 w-3 text-muted-foreground" />}
-            </li>
-          ))}
-        </ol>
-      </Section>
 
       {/* Breakdown */}
       <Section icon={PieChart} title="Breakdown" sub="By severity and by type of signal">
