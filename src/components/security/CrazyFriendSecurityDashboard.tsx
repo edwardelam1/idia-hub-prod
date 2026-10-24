@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Shield, Radio, Megaphone, Brain, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Shield, Radio, Megaphone, Brain, AlertTriangle, Plus, Trash2, ChevronRight, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -8,60 +8,81 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { AGENT_INFO, eventInfo, label, sevClass, STAT_INFO, timeAgo } from './securityGlossary';
+import { InfoSheet, SecurityEventSheet, TickLike } from './SecurityEventSheet';
 
 // Untyped handle: these tables are newer than the generated types.
 const db = supabase as any;
 
-interface Tick { id: string; agent: string; event_type: string; severity: string; resolved: boolean; occurred_at: string; }
+type Tick = TickLike;
 interface Milestone { id: string; title: string; body: string; category: string; effective_date: string; published: boolean; }
 
 const AGENTS = ['sentinel', 'oracle', 'hunter', 'guardian', 'gatekeeper', 'shield', 'mirror', 'insight'];
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
-const label = (s: string) => s.replace(/^crazy_/, '').replace(/_/g, ' ');
-const sevClass: Record<string, string> = {
-  low: 'bg-muted text-muted-foreground',
-  medium: 'bg-secondary text-secondary-foreground',
-  high: 'bg-destructive/70 text-destructive-foreground',
-  critical: 'bg-destructive text-destructive-foreground',
-};
-const timeAgo = (iso: string) => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return `${Math.floor(s)}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-};
+const isSerious = (s: string) => s === 'high' || s === 'critical';
 
 const CrazyFriendSecurityDashboard = () => {
   const [ticks, setTicks] = useState<Tick[]>([]);
+  const [openThreats, setOpenThreats] = useState<Tick[]>([]);
+  const [count24h, setCount24h] = useState(0);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [live, setLive] = useState(false);
   const [sevFilter, setSevFilter] = useState<string>('all');
+  const [selected, setSelected] = useState<Tick | null>(null);
+  const [statInfo, setStatInfo] = useState<string | null>(null);
+  const [agentOpen, setAgentOpen] = useState<string | null>(null);
+  const countTimer = useRef<number>();
+
+  const refreshCount = useCallback(async () => {
+    console.log('[SecurityDashboard][COUNT_24H][PHASE_START]');
+    const { count, error } = await db.from('security_ticker').select('id', { count: 'exact', head: true })
+      .gte('occurred_at', new Date(Date.now() - 86400000).toISOString());
+    if (error) console.error('[SecurityDashboard][COUNT_24H][ERROR]', error);
+    else setCount24h(count ?? 0);
+    console.log('[SecurityDashboard][COUNT_24H][PHASE_END]', { count });
+  }, []);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const [t, m, u] = await Promise.all([
-        db.from('security_ticker').select('*').order('occurred_at', { ascending: false }).limit(200),
-        db.from('security_milestones').select('*').order('effective_date', { ascending: false }).limit(100),
-        supabase.auth.getUser(),
-      ]);
-      if (!active) return;
-      setTicks(t.data ?? []);
-      setMilestones(m.data ?? []);
-      const uid = u.data.user?.id;
-      if (uid) {
-        const { data } = await db.rpc('has_role', { _user_id: uid, _role: 'super_admin' });
-        if (active) setIsAdmin(!!data);
+      console.log('[SecurityDashboard][LOAD][PHASE_START]');
+      try {
+        const [t, o, m, u] = await Promise.all([
+          db.from('security_ticker').select('*').order('occurred_at', { ascending: false }).limit(200),
+          db.from('security_ticker').select('*').eq('resolved', false).in('severity', ['high', 'critical'])
+            .order('occurred_at', { ascending: false }).limit(500),
+          db.from('security_milestones').select('*').order('effective_date', { ascending: false }).limit(100),
+          supabase.auth.getUser(),
+        ]);
+        if (!active) return;
+        setTicks(t.data ?? []);
+        setOpenThreats(o.data ?? []);
+        setMilestones(m.data ?? []);
+        const uid = u.data.user?.id;
+        if (uid) {
+          const { data } = await db.rpc('has_role', { _user_id: uid, _role: 'super_admin' });
+          if (active) setIsAdmin(!!data);
+        }
+        console.log('[SecurityDashboard][LOAD][PHASE_END]');
+      } catch (err) {
+        console.error('[SecurityDashboard][LOAD][ERROR]', err instanceof Error ? `${err.message}\n${err.stack}` : err);
       }
     })();
+    refreshCount();
     const ch = supabase
       .channel(`sec-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'security_ticker' }, (p: any) => {
         const row = p.new as Tick;
         if (!row?.id) return;
         setTicks((prev) => [row, ...prev.filter((x) => x.id !== row.id)].slice(0, 200));
+        setOpenThreats((prev) => {
+          const rest = prev.filter((x) => x.id !== row.id);
+          return !row.resolved && isSerious(row.severity) ? [row, ...rest] : rest;
+        });
+        setSelected((cur) => (cur?.id === row.id ? { ...cur, ...row } : cur));
+        window.clearTimeout(countTimer.current);
+        countTimer.current = window.setTimeout(refreshCount, 2000);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'security_milestones' }, (p: any) => {
         if (p.eventType === 'DELETE') return setMilestones((prev) => prev.filter((x) => x.id !== p.old.id));
@@ -70,24 +91,46 @@ const CrazyFriendSecurityDashboard = () => {
           .sort((a, b) => b.effective_date.localeCompare(a.effective_date)));
       })
       .subscribe((s) => setLive(s === 'SUBSCRIBED'));
-    return () => { active = false; supabase.removeChannel(ch); };
-  }, []);
+    return () => { active = false; window.clearTimeout(countTimer.current); supabase.removeChannel(ch); };
+  }, [refreshCount]);
 
-  const day = Date.now() - 86400000;
-  const stats = useMemo(() => {
-    const recent = ticks.filter((t) => new Date(t.occurred_at).getTime() > day);
-    const open = ticks.filter((t) => !t.resolved && ['high', 'critical'].includes(t.severity));
-    return { recent: recent.length, open: open.length, critical: open.filter((t) => t.severity === 'critical').length, openList: open };
-  }, [ticks]);
+  const onResolvedChange = (id: string, resolved: boolean) => {
+    setTicks((prev) => prev.map((x) => (x.id === id ? { ...x, resolved } : x)));
+    setOpenThreats((prev) => {
+      if (resolved) return prev.filter((x) => x.id !== id);
+      const row = ticks.find((x) => x.id === id) ?? (selected?.id === id ? selected : null);
+      return row && isSerious(row.severity) && !prev.some((x) => x.id === id) ? [{ ...row, resolved }, ...prev] : prev;
+    });
+  };
+
+  const stats = useMemo(() => ({
+    open: openThreats.length,
+    critical: openThreats.filter((t) => t.severity === 'critical').length,
+  }), [openThreats]);
 
   const agents = useMemo(() => AGENTS.map((a) => {
     const own = ticks.filter((t) => label(t.agent) === a);
     const lastHour = own.filter((t) => Date.now() - new Date(t.occurred_at).getTime() < 3600000);
-    const status = lastHour.some((t) => ['high', 'critical'].includes(t.severity)) ? 'alert' : lastHour.length ? 'active' : 'idle';
-    return { name: a, total: own.length, last: own[0]?.occurred_at, status };
+    const status = lastHour.some((t) => isSerious(t.severity) && !t.resolved) ? 'alert' : lastHour.length ? 'active' : 'idle';
+    return { name: a, total: own.length, last: own[0]?.occurred_at, status, recent: own.slice(0, 10) };
   }), [ticks]);
 
   const shown = sevFilter === 'all' ? ticks : ticks.filter((t) => t.severity === sevFilter);
+  const agentSel = agents.find((a) => a.name === agentOpen);
+
+  const EventRow = ({ t }: { t: Tick }) => (
+    <li>
+      <button onClick={() => setSelected(t)} className="flex w-full items-center gap-2 px-2.5 py-2 text-left active:bg-muted/60">
+        <Badge className={cn('w-16 shrink-0 justify-center px-1 text-[10px] capitalize', sevClass[t.severity])}>{t.severity}</Badge>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm">{eventInfo(t.event_type).title}</div>
+          <div className="truncate text-[11px] capitalize text-muted-foreground">{label(t.agent)}{t.resolved && ' · resolved'}</div>
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{timeAgo(t.occurred_at)}</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+      </button>
+    </li>
+  );
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-3 px-1 pb-24 sm:space-y-5">
@@ -98,25 +141,28 @@ const CrazyFriendSecurityDashboard = () => {
           <h1 className="truncate text-lg font-bold leading-tight sm:text-2xl">Crazy Friend Security</h1>
           <p className="truncate text-xs text-muted-foreground">IDIA Protocol defense system</p>
         </div>
-        <span className={cn('flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
-          live ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>
+        <button onClick={() => setStatInfo('Live')} aria-label="What does Live mean?"
+          className={cn('flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
+            live ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>
           <span className={cn('h-1.5 w-1.5 rounded-full', live ? 'animate-pulse bg-primary' : 'bg-muted-foreground')} />
           {live ? 'Live' : 'Offline'}
-        </span>
+        </button>
       </header>
 
-      {/* Stats */}
+      {/* Stats — tap for an explanation */}
       <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
         {[
           { k: 'Agents', v: `${agents.filter((a) => a.status !== 'idle').length}/8` },
-          { k: '24h', v: stats.recent },
+          { k: '24h', v: count24h.toLocaleString() },
           { k: 'Open', v: stats.open },
           { k: 'Critical', v: stats.critical, hot: stats.critical > 0 },
         ].map((s) => (
-          <div key={s.k} className="rounded-lg border bg-card px-2 py-1.5 text-center sm:py-3">
+          <button key={s.k} onClick={() => setStatInfo(s.k)} aria-label={`About ${s.k}`}
+            className="relative rounded-lg border bg-card px-2 py-1.5 text-center active:bg-muted/60 sm:py-3">
+            <Info className="absolute right-1 top-1 h-2.5 w-2.5 text-muted-foreground/50" />
             <div className={cn('text-base font-bold tabular-nums sm:text-2xl', s.hot && 'text-destructive')}>{s.v}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">{s.k}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -125,11 +171,11 @@ const CrazyFriendSecurityDashboard = () => {
         <div className="overflow-hidden rounded-md border bg-card py-1.5">
           <div className="flex w-max animate-[marquee_40s_linear_infinite] gap-6 whitespace-nowrap px-3 text-xs">
             {[...ticks.slice(0, 12), ...ticks.slice(0, 12)].map((t, i) => (
-              <span key={`${t.id}-${i}`} className="flex items-center gap-1.5">
-                <span className={cn('h-1.5 w-1.5 rounded-full', t.severity === 'critical' || t.severity === 'high' ? 'bg-destructive' : 'bg-primary')} />
+              <button key={`${t.id}-${i}`} onClick={() => setSelected(t)} className="flex items-center gap-1.5">
+                <span className={cn('h-1.5 w-1.5 rounded-full', isSerious(t.severity) ? 'bg-destructive' : 'bg-primary')} />
                 <span className="font-medium capitalize">{label(t.agent)}</span>
-                <span className="text-muted-foreground">{label(t.event_type)}</span>
-              </span>
+                <span className="text-muted-foreground">{eventInfo(t.event_type).title}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -160,18 +206,10 @@ const CrazyFriendSecurityDashboard = () => {
               </button>
             ))}
           </div>
+          <p className="px-0.5 text-[11px] text-muted-foreground">Tap any event for the full story and the numbers behind it.</p>
           <ul className="divide-y rounded-lg border bg-card">
             {shown.length === 0 && <li className="p-4 text-center text-sm text-muted-foreground">No telemetry yet. Waiting for live events…</li>}
-            {shown.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 px-2.5 py-2">
-                <Badge className={cn('w-16 shrink-0 justify-center px-1 text-[10px] capitalize', sevClass[t.severity])}>{t.severity}</Badge>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm capitalize">{label(t.event_type)}</div>
-                  <div className="truncate text-[11px] capitalize text-muted-foreground">{label(t.agent)}{t.resolved && ' · resolved'}</div>
-                </div>
-                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{timeAgo(t.occurred_at)}</span>
-              </li>
-            ))}
+            {shown.map((t) => <EventRow key={t.id} t={t} />)}
           </ul>
         </TabsContent>
 
@@ -202,18 +240,18 @@ const CrazyFriendSecurityDashboard = () => {
         <TabsContent value="agents" className="mt-2">
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-3">
             {agents.map((a) => (
-              <div key={a.name} className="rounded-lg border bg-card p-2.5">
+              <button key={a.name} onClick={() => setAgentOpen(a.name)} className="rounded-lg border bg-card p-2.5 text-left active:bg-muted/60">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold capitalize">{a.name}</span>
                   <span className={cn('h-2 w-2 rounded-full',
                     a.status === 'alert' ? 'animate-pulse bg-destructive' : a.status === 'active' ? 'bg-primary' : 'bg-muted-foreground/40')} />
                 </div>
-                <div className="mt-1 text-[11px] capitalize text-muted-foreground">{a.status}</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{AGENT_INFO[a.name]?.title}</div>
                 <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                  <span className="tabular-nums">{a.total} events</span>
+                  <span className="capitalize">{a.status}</span>
                   <span>{a.last ? timeAgo(a.last) : '—'}</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </TabsContent>
@@ -221,20 +259,49 @@ const CrazyFriendSecurityDashboard = () => {
         {/* Threats */}
         <TabsContent value="threats" className="mt-2">
           <ul className="divide-y rounded-lg border bg-card">
-            {stats.openList.length === 0 && <li className="p-4 text-center text-sm text-muted-foreground">No open high or critical threats.</li>}
-            {stats.openList.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 px-2.5 py-2">
-                <AlertTriangle className={cn('h-4 w-4 shrink-0', t.severity === 'critical' ? 'text-destructive' : 'text-muted-foreground')} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm capitalize">{label(t.event_type)}</div>
-                  <div className="text-[11px] capitalize text-muted-foreground">{label(t.agent)} · {t.severity}</div>
-                </div>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(t.occurred_at)}</span>
-              </li>
-            ))}
+            {openThreats.length === 0 && <li className="p-4 text-center text-sm text-muted-foreground">No open high or critical threats.</li>}
+            {openThreats.map((t) => <EventRow key={t.id} t={t} />)}
           </ul>
         </TabsContent>
       </Tabs>
+
+      {/* Event detail */}
+      <SecurityEventSheet tick={selected} onOpenChange={(o) => !o && setSelected(null)} onResolvedChange={onResolvedChange} />
+
+      {/* Stat explanation */}
+      <InfoSheet open={!!statInfo} onOpenChange={(o) => !o && setStatInfo(null)} title={statInfo ? STAT_INFO[statInfo]?.title : ''}>
+        {statInfo && <p className="text-sm leading-relaxed">{STAT_INFO[statInfo]?.body}</p>}
+      </InfoSheet>
+
+      {/* Agent profile */}
+      <InfoSheet open={!!agentSel} onOpenChange={(o) => !o && setAgentOpen(null)}
+        title={agentSel && <span className="capitalize">{AGENT_INFO[agentSel.name]?.name} · {AGENT_INFO[agentSel.name]?.title}</span>}
+        description={agentSel && <span className="capitalize">{agentSel.status} · last report {agentSel.last ? `${timeAgo(agentSel.last)} ago` : 'never'}</span>}>
+        {agentSel && (
+          <>
+            <div className="rounded-lg border bg-card p-3 text-sm">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">What it checks</div>
+              <p className="mt-1">{AGENT_INFO[agentSel.name]?.watches}</p>
+              <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">When it raises an alert</div>
+              <p className="mt-1">{AGENT_INFO[agentSel.name]?.alertsWhen}</p>
+            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Recent reports</div>
+            <ul className="divide-y rounded-lg border bg-card">
+              {agentSel.recent.length === 0 && <li className="p-3 text-center text-sm text-muted-foreground">No reports yet.</li>}
+              {agentSel.recent.map((t) => (
+                <li key={t.id}>
+                  <button onClick={() => { setAgentOpen(null); setSelected(t); }} className="flex w-full items-center gap-2 px-2.5 py-2 text-left active:bg-muted/60">
+                    <Badge className={cn('w-16 shrink-0 justify-center px-1 text-[10px] capitalize', sevClass[t.severity])}>{t.severity}</Badge>
+                    <span className="min-w-0 flex-1 truncate text-sm">{eventInfo(t.event_type).title}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{timeAgo(t.occurred_at)}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </InfoSheet>
     </div>
   );
 };
