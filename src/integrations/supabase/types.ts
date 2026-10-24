@@ -9075,6 +9075,39 @@ export type Database = {
         }
         Relationships: []
       }
+      security_milestones: {
+        Row: {
+          author_id: string
+          body: string
+          category: string
+          created_at: string
+          effective_date: string
+          id: string
+          published: boolean
+          title: string
+        }
+        Insert: {
+          author_id?: string
+          body: string
+          category?: string
+          created_at?: string
+          effective_date?: string
+          id?: string
+          published?: boolean
+          title: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          category?: string
+          created_at?: string
+          effective_date?: string
+          id?: string
+          published?: boolean
+          title?: string
+        }
+        Relationships: []
+      }
       security_preferences: {
         Row: {
           aegis_protocol: boolean | null
@@ -9108,6 +9141,33 @@ export type Database = {
           silver_sentinel?: boolean | null
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      security_ticker: {
+        Row: {
+          agent: string
+          event_type: string
+          id: string
+          occurred_at: string
+          resolved: boolean
+          severity: string
+        }
+        Insert: {
+          agent: string
+          event_type: string
+          id: string
+          occurred_at?: string
+          resolved?: boolean
+          severity: string
+        }
+        Update: {
+          agent?: string
+          event_type?: string
+          id?: string
+          occurred_at?: string
+          resolved?: boolean
+          severity?: string
         }
         Relationships: []
       }
