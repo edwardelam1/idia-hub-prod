@@ -1,3 +1,4 @@
+import { SynapseCreditIcon, UsdcIcon, IdiaTokenIcon } from "@/components/brand/TokenIcons";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -133,7 +134,7 @@ const IndividualDashboard = () => {
         {/* RAIL 2: GAS (COMPUTATIONAL) */}
         <Card className="bg-primary/5 border-primary/20 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-primary flex items-center gap-2">
-            <Zap className="h-3 w-3 fill-primary" /> Synapse Credits
+            <SynapseCreditIcon className="h-4 w-4" /> Synapse Credits
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-primary">{rail2_Gas.toLocaleString()}</span>
@@ -145,7 +146,7 @@ const IndividualDashboard = () => {
         {/* RAIL 3: STABLECOIN (LIQUIDITY) */}
         <Card className="bg-amber-500/5 border-amber-500/10 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-amber-500 flex items-center gap-2">
-            <TrendingUp className="h-3 w-3" /> USDC
+            <UsdcIcon className="h-4 w-4" /> USDC
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-amber-500">
@@ -162,7 +163,7 @@ const IndividualDashboard = () => {
         {/* SILO 3: IDIA TOKEN (ON-CHAIN GOVERNANCE) */}
         <Card className="bg-emerald-500/5 border-emerald-500/10 p-2.5 flex flex-col justify-between min-h-[85px] relative overflow-hidden group">
           <h3 className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 flex items-center gap-2">
-            <Sparkles className="h-3 w-3" /> IDIA
+            <IdiaTokenIcon className="h-4 w-4" /> IDIA
           </h3>
           <div className="mt-1 flex items-baseline gap-1">
             <span className="text-xl font-mono font-bold text-emerald-500">

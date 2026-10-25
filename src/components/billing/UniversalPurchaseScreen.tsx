@@ -1,3 +1,4 @@
+import { SynapseCreditIcon, UsdcIcon } from "@/components/brand/TokenIcons";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -344,7 +345,7 @@ const UniversalPurchaseScreen = () => {
           {/* USDC rail panel */}
           <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border">
             <div className="flex items-center gap-2">
-              <CircleDollarSign className="w-4 h-4 text-primary" />
+              <UsdcIcon className="w-4 h-4 text-primary" />
               <span className="text-sm font-semibold text-foreground">On-Chain USDC</span>
             </div>
             <div className="flex items-center justify-between text-sm">

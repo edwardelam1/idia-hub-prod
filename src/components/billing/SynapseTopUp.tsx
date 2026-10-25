@@ -1,4 +1,5 @@
 // src/components/billing/SynapseTopUp.tsx
+import { SynapseCreditIcon, UsdcIcon } from "@/components/brand/TokenIcons";
 import { useState, useEffect } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
@@ -421,7 +422,7 @@ const SynapseTopUp = () => {
                     Settlement Rail
                   </p>
                   <p className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <CircleDollarSign className="h-4 w-4 text-primary" /> On-chain USDC settlement
+                    <UsdcIcon className="h-4 w-4 text-primary" /> On-chain USDC settlement
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-[10px]">
@@ -501,7 +502,7 @@ const SynapseTopUp = () => {
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
                 <Button className="flex-1 gap-2" onClick={handlePurchase}>
-                  <CircleDollarSign className="h-4 w-4" /> Confirm &amp; Spend USDC
+                  <UsdcIcon className="h-4 w-4" /> Confirm &amp; Spend USDC
                 </Button>
               </div>
             </>

@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ChevronDown, Coins, LogOut, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { SynapseCreditIcon } from "@/components/brand/TokenIcons";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
@@ -125,7 +126,7 @@ const TopBar = ({ userRole, onLogout }: TopBarProps) => {
           <SynapsePurchaseModal
             trigger={
               <button className="flex items-center space-x-1 bg-primary/10 hover:bg-primary/20 transition-colors px-2 md:px-3 py-1 rounded-full cursor-pointer">
-                <Coins className="h-3 w-3 md:h-4 md:w-4 text-primary" />
+                <SynapseCreditIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
                 <span className="text-xs md:text-sm font-medium text-primary">
                   {isLoading ? "..." : Math.floor(synapseCredits)}
                 </span>
