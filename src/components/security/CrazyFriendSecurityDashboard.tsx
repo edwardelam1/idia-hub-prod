@@ -21,6 +21,8 @@ const AGENTS = ['sentinel', 'oracle', 'hunter', 'guardian', 'gatekeeper', 'shiel
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
 // Medium and above need manual resolution; low alerts auto-resolve in the database.
 const isSerious = (s: string) => s === 'medium' || s === 'high' || s === 'critical';
+// Sweeps run every 30 minutes; allow one missed run plus slack before an agent counts as idle.
+const ACTIVE_WINDOW_MS = 75 * 60_000;
 
 const CrazyFriendSecurityDashboard = () => {
   const [ticks, setTicks] = useState<Tick[]>([]);
@@ -33,6 +35,7 @@ const CrazyFriendSecurityDashboard = () => {
   const [selected, setSelected] = useState<Tick | null>(null);
   const [statInfo, setStatInfo] = useState<string | null>(null);
   const [agentOpen, setAgentOpen] = useState<string | null>(null);
+  const [agentTicks, setAgentTicks] = useState<Record<string, Tick[]>>({});
   const countTimer = useRef<number>();
 
   const refreshCount = useCallback(async () => {
@@ -43,6 +46,32 @@ const CrazyFriendSecurityDashboard = () => {
     else setCount24h(count ?? 0);
     console.log('[SecurityDashboard][COUNT_24H][PHASE_END]', { count });
   }, []);
+
+  // Latest reports per agent, queried separately so one busy agent can't push the others out of view.
+  const refreshAgents = useCallback(async () => {
+    console.log('[SecurityDashboard][AGENT_STATUS][PHASE_START]');
+    try {
+      const results = await Promise.all(AGENTS.map((a) =>
+        db.from('security_ticker').select('*').in('agent', [a, `crazy_${a}`])
+          .order('occurred_at', { ascending: false }).limit(10)));
+      const next: Record<string, Tick[]> = {};
+      results.forEach((r: any, i: number) => {
+        if (r.error) console.error('[SecurityDashboard][AGENT_STATUS][ERROR]', AGENTS[i], r.error);
+        next[AGENTS[i]] = r.data ?? [];
+      });
+      setAgentTicks(next);
+      console.log('[SecurityDashboard][AGENT_STATUS][PHASE_END]', Object.fromEntries(Object.entries(next).map(([k, v]) => [k, v.length])));
+    } catch (err) {
+      console.error('[SecurityDashboard][AGENT_STATUS][ERROR]', err instanceof Error ? `${err.message}\n${err.stack}` : err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAgents();
+    const id = window.setInterval(refreshAgents, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, [refreshAgents]);
+
 
   useEffect(() => {
     let active = true;
@@ -109,12 +138,15 @@ const CrazyFriendSecurityDashboard = () => {
     critical: openThreats.filter((t) => t.severity === 'critical').length,
   }), [openThreats]);
 
+  // Merge per-agent reports (fetched independently of the global 200-row feed) with live ticks.
   const agents = useMemo(() => AGENTS.map((a) => {
-    const own = ticks.filter((t) => label(t.agent) === a);
-    const lastHour = own.filter((t) => Date.now() - new Date(t.occurred_at).getTime() < 3600000);
-    const status = lastHour.some((t) => isSerious(t.severity) && !t.resolved) ? 'alert' : lastHour.length ? 'active' : 'idle';
+    const merged = new Map<string, Tick>();
+    [...(agentTicks[a] ?? []), ...ticks.filter((t) => label(t.agent) === a)].forEach((t) => merged.set(t.id, t));
+    const own = [...merged.values()].sort((x, y) => y.occurred_at.localeCompare(x.occurred_at));
+    const recentWindow = own.filter((t) => Date.now() - new Date(t.occurred_at).getTime() < ACTIVE_WINDOW_MS);
+    const status = recentWindow.some((t) => isSerious(t.severity) && !t.resolved) ? 'alert' : recentWindow.length ? 'active' : 'idle';
     return { name: a, total: own.length, last: own[0]?.occurred_at, status, recent: own.slice(0, 10) };
-  }), [ticks]);
+  }), [ticks, agentTicks]);
 
   const shown = sevFilter === 'all' ? ticks : ticks.filter((t) => t.severity === sevFilter);
   const agentSel = agents.find((a) => a.name === agentOpen);
