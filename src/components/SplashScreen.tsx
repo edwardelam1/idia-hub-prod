@@ -16,9 +16,35 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
     return () => clearTimeout(timer);
   }, [onComplete]);
 
+  // Paint the page itself purple so the browser's top/bottom bars match the splash.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.backgroundColor;
+    const prevBody = body.style.backgroundColor;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const created = !meta;
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    const prevTheme = meta.content;
+    html.style.backgroundColor = "#581c87";
+    body.style.backgroundColor = "#581c87";
+    meta.content = "#581c87";
+    return () => {
+      html.style.backgroundColor = prevHtml;
+      body.style.backgroundColor = prevBody;
+      if (created) meta?.remove();
+      else if (meta) meta.content = prevTheme;
+    };
+  }, []);
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 transition-opacity duration-500 ${fadeOut ? "opacity-0" : "opacity-100"}`}
+      className={`fixed inset-0 z-50 flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 transition-opacity duration-500 ${fadeOut ? "opacity-0" : "opacity-100"}`}
+      style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="text-center">
         <div className="mb-8 flex justify-center">
