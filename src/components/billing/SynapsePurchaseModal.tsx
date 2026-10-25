@@ -1,3 +1,4 @@
+import { SynapseCreditIcon, UsdcIcon } from "@/components/brand/TokenIcons";
 import { useState, useEffect } from "react";
 import { useWalletBalance } from "@/hooks/useWalletBalance";
 import { unpackEdgeError } from "@/lib/unpack-edge-error";
@@ -358,7 +359,7 @@ const SynapsePurchaseModal = ({
       <DialogTrigger asChild>
         {trigger || (
           <Button size="sm" className="gap-1.5">
-            <Coins className="h-3.5 w-3.5" />
+            <SynapseCreditIcon className="h-3.5 w-3.5" />
             Buy Credits
           </Button>
         )}
@@ -366,7 +367,7 @@ const SynapsePurchaseModal = ({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Coins className="h-5 w-5 text-primary" />
+            <SynapseCreditIcon className="h-5 w-5 text-primary" />
             {step === "payment"
               ? "Authorize Settlement"
               : step === "processing"
@@ -501,7 +502,7 @@ const SynapsePurchaseModal = ({
                 <div>
                   <p className="text-sm text-muted-foreground font-bold uppercase tracking-tighter">Settlement Rail</p>
                   <p className="font-bold text-foreground flex items-center gap-2">
-                    <CircleDollarSign className="h-4 w-4 text-primary" /> Verified dual-rail port
+                    <UsdcIcon className="h-4 w-4 text-primary" /> Verified dual-rail port
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1">
@@ -513,7 +514,7 @@ const SynapsePurchaseModal = ({
                 <>
                   <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-emerald-500 font-semibold">
-                      <CircleDollarSign className="h-4 w-4" />
+                      <UsdcIcon className="h-4 w-4" />
                       Funded from Life by IDIA Wallet
                     </div>
                     <div className="flex justify-between text-sm">
@@ -581,7 +582,7 @@ const SynapsePurchaseModal = ({
                       <ArrowLeft className="w-4 h-4" /> Back
                     </Button>
                     <Button className="flex-1 gap-2" size="lg" onClick={() => handlePurchase()}>
-                      <CircleDollarSign className="h-4 w-4" /> Pay from Wallet
+                      <UsdcIcon className="h-4 w-4" /> Pay from Wallet
                     </Button>
                   </div>
                 </>

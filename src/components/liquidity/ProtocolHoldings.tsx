@@ -1,3 +1,4 @@
+import { IdiaTokenIcon, UsdcIcon } from "@/components/brand/TokenIcons";
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,10 +72,10 @@ const ProtocolHoldings = ({ idiaUsdPrice }: Props) => {
             <span className="truncate">Total: {isLoading ? "—" : usd(totals.value)}</span>
           </Badge>
           <Badge variant="outline" className="min-w-0 justify-center overflow-hidden font-mono text-[10px]" title={`${amt(totals.idia, 2)} IDIA`}>
-            <span className="truncate">{amt(totals.idia, 2)} IDIA</span>
+            <IdiaTokenIcon className="h-3.5 w-3.5 mr-1" /><span className="truncate">{amt(totals.idia, 2)} IDIA</span>
           </Badge>
           <Badge variant="outline" className="min-w-0 justify-center overflow-hidden font-mono text-[10px]" title={`${amt(totals.usdc, 2)} USDC`}>
-            <span className="truncate">{amt(totals.usdc, 2)} USDC</span>
+            <UsdcIcon className="h-3.5 w-3.5 mr-1" /><span className="truncate">{amt(totals.usdc, 2)} USDC</span>
           </Badge>
         </div>
       </div>

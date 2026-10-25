@@ -1,4 +1,5 @@
-import { Database, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { SynapseCreditIcon } from "@/components/brand/TokenIcons";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 
 const SynapseGasGauge = () => {
@@ -8,7 +9,7 @@ const SynapseGasGauge = () => {
     <div className="p-3 bg-black/20 rounded-lg border border-primary/20">
       <div className="flex justify-between items-center text-primary mb-2">
         <div className="flex items-center gap-1.5">
-          <Database className="w-3.5 h-3.5" />
+          <SynapseCreditIcon className="w-4 h-4" />
           <span className="text-[10px] font-bold uppercase tracking-widest">Synapse Gas</span>
         </div>
         <button onClick={refreshBalance}>
