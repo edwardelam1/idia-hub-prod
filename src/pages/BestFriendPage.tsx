@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { useBrowserLocation } from "@/hooks/useBrowserLocation";
 import { recordActivity } from "@/lib/activity-history";
+import ShieldVerifiedBadge from "@/components/best-friend/ShieldVerifiedBadge";
 
 // ERROR BOUNDARY WRAPPER
 const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
@@ -242,12 +243,7 @@ const BestFriendPage = () => {
                         <FileKey size={12} className="text-amber-500" />
                         {msg.liabilityTokenHash ? truncateHash(msg.liabilityTokenHash) : "Liability Token"}
                       </Button>
-                      <Badge
-                        variant="outline"
-                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
-                      >
-                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
-                      </Badge>
+                      <ShieldVerifiedBadge egressLogId={msg.egressLogId} />
                     </div>
                   )}
                 </div>
