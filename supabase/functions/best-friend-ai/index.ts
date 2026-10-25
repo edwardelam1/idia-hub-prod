@@ -1436,6 +1436,7 @@ serve(async (req) => {
       orchestratorPlan: plan,
       consumed_records: consumedReceipt,
       receipt: synapseReceipt,
+      liability_token: synapseReceipt?.digiramp_anchor_id ?? synapseReceipt?.liability_token_hash ?? null,
     };
     console.info("[END: BestFriendAI.ResponseCompilation] Payload ready.");
 

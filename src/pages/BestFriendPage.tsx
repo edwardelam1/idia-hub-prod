@@ -124,9 +124,11 @@ const BestFriendPage = () => {
 
       if (aiError) throw aiError;
 
-      const rawTokenHash = chatResponse?.liability_token || null;
-      let digiRampAnchorId = null;
-      if (rawTokenHash) digiRampAnchorId = await generateDigiRampAnchor(rawTokenHash);
+      const rawTokenHash: string | null = chatResponse?.liability_token || null;
+      let digiRampAnchorId: string | null = null;
+      if (rawTokenHash) {
+        digiRampAnchorId = rawTokenHash.startsWith("0x") ? rawTokenHash : await generateDigiRampAnchor(rawTokenHash);
+      }
 
       const assistantContent = chatResponse?.response || "Analysis complete.";
       const receipt = chatResponse?.receipt ?? null;
