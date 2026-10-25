@@ -202,58 +202,63 @@ const BestFriendPage = () => {
 
         <ScrollArea className="flex-1 py-4 pr-4">
           <div className="space-y-6 max-w-3xl mx-auto">
-            {conversation.map((msg, i) => (
-              <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border shadow-sm text-primary"}`}
-                  >
-                    {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
-                  </div>
-                  <div className="space-y-2">
-                    <div
-                      className={`rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border text-foreground"}`}
-                    >
+            {conversation.map((msg, i) =>
+              msg.role === "user" ? (
+                <div key={i} className="flex justify-end">
+                  <div className="flex gap-3 max-w-[85%] flex-row-reverse">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary text-primary-foreground">
+                      <User size={16} />
+                    </div>
+                    <div className="rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm bg-primary text-primary-foreground whitespace-pre-wrap">
                       {msg.content}
                     </div>
-                    {msg.role === "assistant" && msg.liabilityTokenHash && (
-                      <div className="flex items-center gap-2 flex-wrap mt-2 animate-in fade-in slide-in-from-top-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
-                          onClick={() =>
-                            navigate(
-                              msg.egressLogId
-                                ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
-                                : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`,
-                            )
-                          }
-                        >
-                          <FileKey size={12} className="text-amber-500" />
-                          {truncateHash(msg.liabilityTokenHash)}
-                        </Button>
-                        <Badge
-                          variant="outline"
-                          className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
-                        >
-                          <Shield size={10} className="mr-1" /> SHIELD VERIFIED
-                        </Badge>
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="flex gap-3 max-w-[85%]">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-card border shadow-sm text-primary">
+              ) : (
+                <div key={i} className="w-full animate-in fade-in duration-700">
+                  <div className="flex items-center gap-2 mb-2 text-primary">
                     <Bot size={16} />
+                    <span className="text-xs font-semibold text-muted-foreground">Best Friend AI</span>
                   </div>
-                  <div className="rounded-2xl px-5 py-3 text-sm bg-card border text-muted-foreground italic">
-                    Best Friend AI is querying the data pipeline...
+                  <div className="w-full text-left text-sm md:text-[15px] leading-7 text-foreground whitespace-pre-wrap">
+                    {msg.content}
                   </div>
+                  {msg.liabilityTokenHash && (
+                    <div className="flex items-center gap-2 flex-wrap mt-3 animate-in fade-in slide-in-from-top-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-mono border border-amber-200 bg-amber-50/50 rounded-full"
+                        onClick={() =>
+                          navigate(
+                            msg.egressLogId
+                              ? `/egress-logs?receipt=${encodeURIComponent(msg.egressLogId)}`
+                              : `/egress-logs?search=${encodeURIComponent(msg.liabilityTokenHash ?? "")}`,
+                          )
+                        }
+                      >
+                        <FileKey size={12} className="text-amber-500" />
+                        {truncateHash(msg.liabilityTokenHash)}
+                      </Button>
+                      <Badge
+                        variant="outline"
+                        className="h-5 text-[9px] border-emerald-200 text-emerald-700 bg-emerald-50 font-black tracking-tighter"
+                      >
+                        <Shield size={10} className="mr-1" /> SHIELD VERIFIED
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              ),
+            )}
+            {isLoading && (
+              <div className="w-full animate-in fade-in duration-500">
+                <div className="flex items-center gap-2 mb-2 text-primary">
+                  <Bot size={16} />
+                  <span className="text-xs font-semibold text-muted-foreground">Best Friend AI</span>
+                </div>
+                <div className="text-sm text-muted-foreground italic animate-pulse">
+                  Best Friend AI is querying the data pipeline...
                 </div>
               </div>
             )}
