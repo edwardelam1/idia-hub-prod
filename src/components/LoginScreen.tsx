@@ -9,6 +9,7 @@ import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveOAuthRedirect } from "@/lib/auth-redirect";
+import { usePreAuthCanvas, PRE_AUTH_BG } from "@/hooks/usePreAuthCanvas";
 
 interface LoginScreenProps {
   onLogin: (role: string) => void;
@@ -49,6 +50,7 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [searchParams] = useSearchParams();
+  usePreAuthCanvas();
 
   // Same-origin relative path only — used to bounce OAuth-consent visitors
   // back to /.lovable/oauth/consent after they sign in.
@@ -114,12 +116,15 @@ const LoginScreen = ({ onLogin, onRealLogin }: LoginScreenProps) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div
+      className="fixed inset-0 overflow-y-auto flex min-h-[100dvh] w-full items-center justify-center p-4"
+      style={{ backgroundColor: PRE_AUTH_BG }}
+    >
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/images/hub-logo.png" alt="IDIA Hub Logo" className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-900">The IDIA Hub</h1>
-          <p className="text-gray-600 mt-2">Living Vault & Marketplace</p>
+          <h1 className="text-3xl font-bold text-white">The IDIA Hub</h1>
+          <p className="text-purple-200 mt-2">Living Vault & Marketplace</p>
         </div>
 
         <Card>
