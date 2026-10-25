@@ -1700,7 +1700,7 @@ export const PayAppBlueprint = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0 overflow-x-hidden overscroll-x-none touch-pan-y">
       <style>{`
         @keyframes gravity-fall {
           0% { opacity: 0; transform: translateY(-80px) scale(0.7); }
@@ -1729,19 +1729,19 @@ export const PayAppBlueprint = () => {
         .module-icon:hover { animation: float-settle 1s ease-in-out infinite; }
       `}</style>
 
-      {/* Header + condensed stats bar (joined, touching) */}
-      <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-t-xl border border-b-0 bg-muted/20">
+      {/* Header + condensed stats bar (joined, touching) — stationary */}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 -mx-px">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-t-xl border border-b-0 bg-muted/20 min-w-0">
         <div>
-          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <h2 className="text-lg sm:text-2xl font-bold text-foreground flex items-center gap-2">
             <Package className="h-6 w-6 text-primary" />
             IDIA Pay App Builder
           </h2>
-          <p className="text-muted-foreground mt-1">
+          <p className="hidden sm:block text-muted-foreground mt-1">
             Build and deploy merchant applications mapped to verified business profiles
           </p>
         </div>
-        <div className="flex flex-col gap-3 min-w-[300px]">
+        <div className="flex flex-col gap-3 w-full sm:w-auto sm:min-w-[300px] min-w-0">
           <div className="flex flex-col space-y-1">
             <Label>Assign to Business Profile</Label>
             <Select value={selectedBusiness} onValueChange={setSelectedBusiness}>
@@ -1761,8 +1761,8 @@ export const PayAppBlueprint = () => {
       </div>
 
       {/* Condensed Stats Bar (touching the header above) */}
-      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 rounded-b-xl border bg-muted/30 px-4 py-2 text-sm">
-        <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-b-xl border bg-muted/30 px-3 sm:px-4 py-2 text-xs sm:text-sm min-w-0">
+        <div className="flex items-center gap-3 sm:gap-6">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-primary" />
             <span className="text-muted-foreground">Total</span>
@@ -1779,7 +1779,7 @@ export const PayAppBlueprint = () => {
             <span className="font-semibold">{customModulesCount}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 ml-auto pl-6 border-l border-border/60">
+        <div className="flex items-center gap-2 ml-auto sm:pl-6 sm:border-l border-border/60 min-w-0">
           <span className="text-muted-foreground">Code:</span>
           <code className="font-mono text-sm font-semibold text-primary">{provisioningCode}</code>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopyCode}>
@@ -1790,8 +1790,8 @@ export const PayAppBlueprint = () => {
       </div>
 
       {/* Main Builder Interface */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Left Pane - Available Modules */}
+      <div className="flex flex-col gap-4 sm:gap-6 w-full min-w-0">
+        {/* Top Pane - Available Modules */}
         <div className="space-y-3">
           {commandCenter.hasContext && (
             <Card className="overflow-hidden">
@@ -1840,10 +1840,10 @@ export const PayAppBlueprint = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="h-[520px] overflow-y-auto">
-              <div className="p-4">
+            <div className="max-h-[60dvh] sm:h-[520px] overflow-y-auto overflow-x-hidden">
+              <div className="p-2 sm:p-4">
                 {!expandedVertical ? (
-                  <div className="flex flex-wrap gap-3 content-end min-h-[480px] p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2 sm:gap-3 content-end sm:min-h-[480px] p-2 sm:p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
                     {verticals.map((vertical, index) => {
                       const Icon = vertical.icon;
                       const isExploding = animatingModules.has(vertical.id);
@@ -1857,7 +1857,7 @@ export const PayAppBlueprint = () => {
                             hover:scale-105 hover:shadow-lg hover:z-10
                             ${isExploding ? "explode-out" : "gravity-fall"}
                           `}
-                          style={{ animationDelay: `${index * 0.03}s`, width: "90px" }}
+                          style={{ animationDelay: `${index * 0.03}s` }}
                           onClick={() => handleVerticalClick(vertical.id)}
                           draggable
                           onDragStart={(e) =>
@@ -1905,7 +1905,7 @@ export const PayAppBlueprint = () => {
                       </div>
                     )}
 
-                    <div className="flex flex-wrap gap-3 content-end min-h-[380px] p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2 sm:gap-3 content-end sm:min-h-[380px] p-2 sm:p-4 bg-gradient-to-t from-muted/30 to-transparent rounded-xl">
                       {currentVertical?.subModules.map((sub, index) => {
                         const isSelected = selectedSubModules.has(sub.id);
                         const isAlreadyAdded = selectedModules.some((m) => m.id === sub.id);
@@ -1919,7 +1919,7 @@ export const PayAppBlueprint = () => {
                               ${isAlreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:scale-105 hover:shadow-lg"}
                               ${isSelected && !isAlreadyAdded ? "ring-2 ring-primary ring-offset-2" : ""}
                             `}
-                            style={{ animationDelay: `${index * 0.05}s`, width: "100px" }}
+                            style={{ animationDelay: `${index * 0.05}s` }}
                             onClick={() => !isAlreadyAdded && handleSubModuleToggle(sub.id)}
                             draggable={!isAlreadyAdded}
                             onDragStart={(e) =>
@@ -1972,7 +1972,7 @@ export const PayAppBlueprint = () => {
         </Card>
         </div>
 
-        {/* Right Pane - Blueprint Zone */}
+        {/* Bottom Pane - Blueprint Zone */}
         <div className="space-y-3">
           {commandCenter.hasContext && (
             <Card className="overflow-hidden">
@@ -2006,7 +2006,7 @@ export const PayAppBlueprint = () => {
           <CardContent className="p-4">
             <div
               className={`
-                min-h-[480px] rounded-xl border-2 border-dashed p-4 transition-all duration-200
+                min-h-[240px] sm:min-h-[480px] rounded-xl border-2 border-dashed p-2 sm:p-4 transition-all duration-200
                 ${
                   dragOverZone
                     ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
@@ -2017,7 +2017,7 @@ export const PayAppBlueprint = () => {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <div className="h-[450px] overflow-y-auto pr-2">
+              <div className="max-h-[60dvh] sm:h-[450px] overflow-y-auto overflow-x-hidden pr-1 sm:pr-2">
                 <div className="space-y-4">
                   {/* Default Modules */}
                   <div>
