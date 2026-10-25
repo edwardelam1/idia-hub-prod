@@ -225,8 +225,8 @@ const BestFriendPage = () => {
                   <div className="w-full text-left text-sm md:text-[15px] leading-7 text-foreground whitespace-pre-wrap">
                     {msg.content}
                   </div>
-                  {msg.liabilityTokenHash && (
-                    <div className="flex items-center gap-2 flex-wrap mt-3 animate-in fade-in slide-in-from-top-1">
+                  {(msg.liabilityTokenHash || msg.egressLogId) && (
+                    <div className="relative z-10 flex items-center gap-2 flex-wrap mt-3 animate-in fade-in slide-in-from-top-1">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -240,7 +240,7 @@ const BestFriendPage = () => {
                         }
                       >
                         <FileKey size={12} className="text-amber-500" />
-                        {truncateHash(msg.liabilityTokenHash)}
+                        {msg.liabilityTokenHash ? truncateHash(msg.liabilityTokenHash) : "Liability Token"}
                       </Button>
                       <Badge
                         variant="outline"
