@@ -437,6 +437,8 @@ Deno.serve(async (req) => {
         fee: feeCR,
         reference_id: referenceId,
         egress_log_id: egressResult.data.id,
+        liability_token_hash: liabilityTokenHash,
+        digiramp_anchor_id: digiRampAnchorId,
         synapse_ledger_entry_id: ledgerResult.data.id,
         consumed_records: consumedReceipt,
         settlement_status: "queued",
