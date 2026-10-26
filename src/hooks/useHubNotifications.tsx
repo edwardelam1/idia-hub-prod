@@ -60,22 +60,41 @@ export const useHubNotifications = () => {
 
   const unreadCount = items.filter((n) => !n.read_at).length;
 
+  // hub_notifications is not in the realtime publication, so every mutation
+  // updates local state immediately and reloads from the server on failure.
   const markRead = async (id: string) => {
-    await (supabase.from("hub_notifications" as any) as any)
-      .update({ read_at: new Date().toISOString() })
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: now } : n)));
+    const { error } = await (supabase.from("hub_notifications" as any) as any)
+      .update({ read_at: now })
       .eq("id", id);
+    if (error) {
+      console.error("[hub_notifications] markRead failed", error);
+      load();
+    }
   };
 
   const markAllRead = async () => {
     if (!userId) return;
-    await (supabase.from("hub_notifications" as any) as any)
-      .update({ read_at: new Date().toISOString() })
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: now })));
+    const { error } = await (supabase.from("hub_notifications" as any) as any)
+      .update({ read_at: now })
       .eq("user_id", userId)
       .is("read_at", null);
+    if (error) {
+      console.error("[hub_notifications] markAllRead failed", error);
+      load();
+    }
   };
 
   const remove = async (id: string) => {
-    await supabase.from("hub_notifications" as any).delete().eq("id", id);
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    const { error } = await supabase.from("hub_notifications" as any).delete().eq("id", id);
+    if (error) {
+      console.error("[hub_notifications] remove failed", error);
+      load();
+    }
   };
 
   return { items, loading, unreadCount, markRead, markAllRead, remove, reload: load };
