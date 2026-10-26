@@ -66,9 +66,8 @@ export default function VultureIngestionPanel({ userRole }: Props) {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <p className="px-3 pb-3 text-[12px] text-[#D2D2D7] leading-relaxed sm:px-5 sm:pb-5">
-              Inbound multiplexed streams from autonomous edge nodes are intercepted in-memory, PII-stripped via the
-              Liability Shield. Protocol, and shaped into 40-byte LoRa binaries or high-level JSON event schemas.
-              Payloads are tagged{" "}
+              Inbound multiplexed streams from autonomous edge nodes are intercepted in-memory, PII-stripped, and shaped
+              into 40-byte LoRa binaries or high-level JSON event schemas. Payloads are tagged{" "}
               <code className="bg-white/10 px-1 py-0.5 rounded text-[#F2F2F7] font-mono text-[10px]">
                 ACQUIRED_REHABILITATED
               </code>{" "}
@@ -96,9 +95,15 @@ export default function VultureIngestionPanel({ userRole }: Props) {
       ) : (
         <Tabs defaultValue="upload" className="space-y-2">
           <TabsList className="grid h-auto w-full grid-cols-3 p-0.5">
-            <TabsTrigger value="upload" className="py-1.5 text-xs">Uploader</TabsTrigger>
-            <TabsTrigger value="nodes" className="py-1.5 text-xs">Mesh Nodes</TabsTrigger>
-            <TabsTrigger value="ledger" className="py-1.5 text-xs">Ledger</TabsTrigger>
+            <TabsTrigger value="upload" className="py-1.5 text-xs">
+              Uploader
+            </TabsTrigger>
+            <TabsTrigger value="nodes" className="py-1.5 text-xs">
+              Mesh Nodes
+            </TabsTrigger>
+            <TabsTrigger value="ledger" className="py-1.5 text-xs">
+              Ledger
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="upload" className="mt-0">
             <VultureUploader />
