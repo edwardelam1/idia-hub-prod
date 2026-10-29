@@ -3,7 +3,10 @@
 //   auth (SHA-256 node key → mesh_nodes, IP allowlist) → gateway check → raw SHA-256
 //   → sanitize (PII hash, injection strip, UTC timestamps) → quarantine (422) or
 //   append-only vulture_ledger row with status 'staged_for_notarization'.
+//   CJIS-isolated deliveries (node flag or payload `cjis_isolated: true`) are written to
+//   vulture_ledger only — never to mesh_telemetry_events or Marketplace bundles.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isLegacyKeyExpired, isNodeKeyExpired, isPiiKey } from "../_shared/vulture-cjis.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -16,10 +19,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PII_KEYS = new Set([
-  "ssn", "social_security", "name", "first_name", "last_name", "full_name", "email", "email_address",
-  "issuer_id", "source_id", "target_name_pseudonym", "target_biometric_hash", "license_plate", "phone", "phone_number",
-]);
 const TS_KEYS = new Set(["timestamp", "created_at", "date", "datetime", "event_time", "timestamp_issued", "observed_at"]);
 const INJECTION_RE = /<\s*\/?\s*script\b|javascript:|on\w+\s*=|\$\{|;\s*(drop|delete|truncate|update|insert)\s|--\s|\/\*|\u0000/i;
 
@@ -71,7 +70,7 @@ async function sanitize(v: unknown, salt: string, path: string, issues: Sanitize
     }
     return out;
   }
-  if (PII_KEYS.has(lk) && v != null && v !== "") return sha256Hex(salt + String(v));
+  if (isPiiKey(lk) && v != null && v !== "") return sha256Hex(salt + String(v));
   if (TS_KEYS.has(lk) && v != null) {
     const d = typeof v === "number" ? new Date(v < 1e12 ? v * 1000 : v) : new Date(String(v));
     if (isNaN(d.getTime())) { issues.push({ path, reason: "MALFORMED_TIMESTAMP" }); return null; }
@@ -106,8 +105,9 @@ Deno.serve(async (req) => {
     const presentedHash = await sha256Hex(presented);
 
     let nodeId: string, tenantId: string | null, nodeRowId: string | null = null, legacyKeyId: string | null = null;
+    let nodeCjis = false;
     const { data: node, error: nodeErr } = await supabase
-      .from("mesh_nodes").select("id, node_id, tenant_id, status, ip_allowlist")
+      .from("mesh_nodes").select("id, node_id, tenant_id, status, ip_allowlist, cjis_isolated, expires_at")
       .eq("token_hash", presentedHash).maybeSingle();
     if (nodeErr) {
       console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Node lookup error: ${nodeErr.message}`);
@@ -118,18 +118,27 @@ Deno.serve(async (req) => {
         console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: node ${node.node_id} is ${node.status}`);
         return json({ error: "Node key revoked.", trace_id: traceId }, 401);
       }
+      if (isNodeKeyExpired(node.expires_at)) {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: node ${node.node_id} key expired at ${node.expires_at}`);
+        await supabase.from("mesh_nodes").update({ status: "expired" }).eq("id", node.id);
+        return json({ error: "Node key expired (90-day rotation). Rotate the key in the Hub.", trace_id: traceId }, 401);
+      }
       if (!ipAllowed(sourceIp, node.ip_allowlist ?? [])) {
         console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: IP ${sourceIp} not on allowlist for ${node.node_id}`);
         return json({ error: "Origin IP not permitted for this node.", trace_id: traceId }, 401);
       }
-      nodeId = node.node_id; tenantId = node.tenant_id; nodeRowId = node.id;
+      nodeId = node.node_id; tenantId = node.tenant_id; nodeRowId = node.id; nodeCjis = node.cjis_isolated === true;
     } else {
       // Legacy mesh keys issued before mesh_nodes existed.
-      const { data: legacy } = await supabase.from("api_keys").select("id, user_id")
+      const { data: legacy } = await supabase.from("api_keys").select("id, user_id, created_at")
         .eq("key_hash", presentedHash).eq("environment", "mesh").eq("status", "active").maybeSingle();
       if (!legacy) {
         console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: unknown credential`);
         return json({ error: "Invalid or revoked node key.", trace_id: traceId }, 401);
+      }
+      if (isLegacyKeyExpired(legacy.created_at)) {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Auth failed: legacy key older than 90 days`);
+        return json({ error: "Legacy mesh key expired (90-day rotation). Register a node key in the Hub.", trace_id: traceId }, 401);
       }
       nodeId = `legacy_${legacy.id.slice(0, 8)}`; tenantId = legacy.user_id; legacyKeyId = legacy.id;
     }
@@ -156,10 +165,11 @@ Deno.serve(async (req) => {
     console.log(`[VULTURE_HASHING_COMPLETE][Trace: ${traceId}] Raw Digest: ${rawHash}`);
     const rawText = new TextDecoder("utf-8", { fatal: false }).decode(rawBytes);
 
+    let cjisIsolated = nodeCjis;
     const quarantine = async (reason: string, detail: unknown) => {
       console.warn(`[VULTURE_SANITIZE_QUARANTINE][Trace: ${traceId}] ${reason} — routing to quarantine.`);
       const { error: qErr } = await supabase.from("vulture_quarantine").insert({
-        trace_id: traceId, node_id: nodeId, tenant_id: tenantId, raw_hash: rawHash,
+        trace_id: traceId, node_id: nodeId, tenant_id: tenantId, raw_hash: rawHash, cjis_isolated: cjisIsolated,
         raw_payload: rawText.slice(0, 1_000_000), reason_code: reason,
         reason_detail: { detail }, contractor_metadata: { source_ip: sourceIp, user_agent: req.headers.get("user-agent"), bytes: rawBytes.byteLength },
       });
@@ -171,6 +181,8 @@ Deno.serve(async (req) => {
     console.log(`[VULTURE_SANITIZE_START][Trace: ${traceId}] Initiating sanitization pass...`);
     let body: any;
     try { body = JSON.parse(rawText); } catch (e) { return await quarantine("MALFORMED_JSON", String((e as Error).message)); }
+    if (body && typeof body === "object" && !Array.isArray(body) && body.cjis_isolated === true) cjisIsolated = true;
+    console.log(`[VULTURE_CJIS_ROUTING][Trace: ${traceId}] cjis_isolated=${cjisIsolated}`);
     const events = Array.isArray(body?.events) ? body.events : Array.isArray(body) ? body : null;
     if (!events || events.length === 0) return await quarantine("MISSING_EVENTS", "Payload must include a non-empty 'events' array.");
     if (events.length > MAX_EVENTS) return await quarantine("BATCH_TOO_LARGE", `Maximum ${MAX_EVENTS} events per batch.`);
@@ -192,7 +204,7 @@ Deno.serve(async (req) => {
     console.log(`[VULTURE_DB_STAGING_START][Trace: ${traceId}] Writing to vulture_ledger with status 'staged_for_notarization'...`);
     const { data: ledgerRow, error: dbError } = await supabase.from("vulture_ledger").insert({
       trace_id: traceId, node_id: nodeId, tenant_id: tenantId, source: "mesh",
-      raw_hash: rawHash, sanitized_hash: sanitizedHash, payload: tagged,
+      raw_hash: rawHash, sanitized_hash: sanitizedHash, payload: tagged, cjis_isolated: cjisIsolated,
       record_count: tagged.length, status: "staged_for_notarization",
     }).select("id").single();
     if (dbError) {
@@ -201,16 +213,22 @@ Deno.serve(async (req) => {
     }
     console.log(`[VULTURE_DB_STAGING_END][Trace: ${traceId}] Ledger row ${ledgerRow.id}.`);
 
-    // Analytics fan-out (non-authoritative copy for marketplace aggregates).
-    const pseudoNodeId = (await sha256Hex(salt + nodeId)).slice(0, 32);
-    const { error: fanErr } = await supabase.from("mesh_telemetry_events").insert(tagged.map((e) => ({
-      pseudo_node_id: pseudoNodeId,
-      telemetry_category: String((e as any).event_type ?? "MESH_TELEMETRY"),
-      payload_data: e,
-      data_quality_score: typeof (e as any).hdop === "number" ? 1 / Math.max(Number((e as any).hdop), 1) : 0.99,
-      processed_at: new Date().toISOString(),
-    })));
-    if (fanErr) console.error(`[VULTURE_FANOUT_ERROR][Trace: ${traceId}] ${fanErr.message}`);
+    // Analytics fan-out (non-authoritative copy for marketplace aggregates). Never for CJIS data.
+    if (cjisIsolated) {
+      console.log(`[VULTURE_FANOUT_SKIPPED][Trace: ${traceId}] CJIS-isolated — analytics and marketplace bypassed.`);
+    } else {
+      console.log(`[VULTURE_FANOUT_START][Trace: ${traceId}]`);
+      const pseudoNodeId = (await sha256Hex(salt + nodeId)).slice(0, 32);
+      const { error: fanErr } = await supabase.from("mesh_telemetry_events").insert(tagged.map((e) => ({
+        pseudo_node_id: pseudoNodeId,
+        telemetry_category: String((e as any).event_type ?? "MESH_TELEMETRY"),
+        payload_data: e,
+        data_quality_score: typeof (e as any).hdop === "number" ? 1 / Math.max(Number((e as any).hdop), 1) : 0.99,
+        processed_at: new Date().toISOString(),
+      })));
+      if (fanErr) console.error(`[VULTURE_FANOUT_ERROR][Trace: ${traceId}] ${fanErr.message}`);
+      console.log(`[VULTURE_FANOUT_END][Trace: ${traceId}]`);
+    }
 
     const now = new Date().toISOString();
     if (nodeRowId) await supabase.from("mesh_nodes").update({ last_used_at: now }).eq("id", nodeRowId);
@@ -219,7 +237,7 @@ Deno.serve(async (req) => {
     console.log(`[VULTURE_INTAKE_COMPLETE][Trace: ${traceId}] Ingestion completed in ${Date.now() - startTime}ms. Receipt emitted.`);
     return json({
       status: "staged_for_notarization", ledger_id: ledgerRow.id, trace_id: traceId, node_id: nodeId,
-      events_committed: tagged.length, raw_hash: rawHash, sanitized_hash: sanitizedHash,
+      events_committed: tagged.length, raw_hash: rawHash, sanitized_hash: sanitizedHash, cjis_isolated: cjisIsolated,
     });
   } catch (err) {
     console.error(`[VULTURE_INTAKE_FAULT][Trace: ${traceId}] ${err instanceof Error ? err.stack : String(err)}`);
