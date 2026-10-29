@@ -6757,39 +6757,60 @@ export type Database = {
       }
       mesh_nodes: {
         Row: {
+          cjis_isolated: boolean
           created_at: string
+          expires_at: string
           id: string
           ip_allowlist: string[]
           key_prefix: string
           label: string
           last_used_at: string | null
           node_id: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          revoked_ip: string | null
+          rotated_from: string | null
           status: string
           tenant_id: string
           token_hash: string
           updated_at: string
         }
         Insert: {
+          cjis_isolated?: boolean
           created_at?: string
+          expires_at?: string
           id?: string
           ip_allowlist?: string[]
           key_prefix: string
           label: string
           last_used_at?: string | null
           node_id: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_ip?: string | null
+          rotated_from?: string | null
           status?: string
           tenant_id: string
           token_hash: string
           updated_at?: string
         }
         Update: {
+          cjis_isolated?: boolean
           created_at?: string
+          expires_at?: string
           id?: string
           ip_allowlist?: string[]
           key_prefix?: string
           label?: string
           last_used_at?: string | null
           node_id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_ip?: string | null
+          rotated_from?: string | null
           status?: string
           tenant_id?: string
           token_hash?: string
@@ -11432,11 +11453,14 @@ export type Database = {
         Row: {
           anchored_at: string | null
           batch_id: string | null
+          cjis_isolated: boolean
           created_at: string
           id: string
+          merkle_leaf_index: number | null
           node_id: string
           original_file_name: string | null
-          payload: Json
+          payload: Json | null
+          payload_ciphertext: string | null
           raw_hash: string
           record_count: number
           sanitized_hash: string
@@ -11449,11 +11473,14 @@ export type Database = {
         Insert: {
           anchored_at?: string | null
           batch_id?: string | null
+          cjis_isolated?: boolean
           created_at?: string
           id?: string
+          merkle_leaf_index?: number | null
           node_id: string
           original_file_name?: string | null
-          payload: Json
+          payload?: Json | null
+          payload_ciphertext?: string | null
           raw_hash: string
           record_count?: number
           sanitized_hash: string
@@ -11466,11 +11493,14 @@ export type Database = {
         Update: {
           anchored_at?: string | null
           batch_id?: string | null
+          cjis_isolated?: boolean
           created_at?: string
           id?: string
+          merkle_leaf_index?: number | null
           node_id?: string
           original_file_name?: string | null
-          payload?: Json
+          payload?: Json | null
+          payload_ciphertext?: string | null
           raw_hash?: string
           record_count?: number
           sanitized_hash?: string
@@ -11482,16 +11512,60 @@ export type Database = {
         }
         Relationships: []
       }
+      vulture_notarization_batches: {
+        Row: {
+          block_number: number | null
+          chain_id: number
+          created_at: string
+          error_message: string | null
+          id: string
+          leaf_count: number
+          merkle_root: string
+          relayer_address: string | null
+          status: string
+          tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          leaf_count: number
+          merkle_root: string
+          relayer_address?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          block_number?: number | null
+          chain_id?: number
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          leaf_count?: number
+          merkle_root?: string
+          relayer_address?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vulture_provenance_ledger: {
         Row: {
           action: string
           bucket_path: string | null
+          cjis_isolated: boolean
           created_at: string
           error_message: string | null
           id: string
           manifest_path: string | null
           original_file_name: string
           original_hash: string | null
+          owner: string | null
           record_count: number | null
           sanitized_hash: string | null
           status: string
@@ -11499,12 +11573,14 @@ export type Database = {
         Insert: {
           action?: string
           bucket_path?: string | null
+          cjis_isolated?: boolean
           created_at?: string
           error_message?: string | null
           id?: string
           manifest_path?: string | null
           original_file_name: string
           original_hash?: string | null
+          owner?: string | null
           record_count?: number | null
           sanitized_hash?: string | null
           status?: string
@@ -11512,12 +11588,14 @@ export type Database = {
         Update: {
           action?: string
           bucket_path?: string | null
+          cjis_isolated?: boolean
           created_at?: string
           error_message?: string | null
           id?: string
           manifest_path?: string | null
           original_file_name?: string
           original_hash?: string | null
+          owner?: string | null
           record_count?: number | null
           sanitized_hash?: string | null
           status?: string
@@ -11526,36 +11604,42 @@ export type Database = {
       }
       vulture_quarantine: {
         Row: {
+          cjis_isolated: boolean
           contractor_metadata: Json
           created_at: string
           id: string
           node_id: string | null
           raw_hash: string
           raw_payload: string | null
+          raw_payload_ciphertext: string | null
           reason_code: string
           reason_detail: Json
           tenant_id: string | null
           trace_id: string
         }
         Insert: {
+          cjis_isolated?: boolean
           contractor_metadata?: Json
           created_at?: string
           id?: string
           node_id?: string | null
           raw_hash: string
           raw_payload?: string | null
+          raw_payload_ciphertext?: string | null
           reason_code: string
           reason_detail?: Json
           tenant_id?: string | null
           trace_id: string
         }
         Update: {
+          cjis_isolated?: boolean
           contractor_metadata?: Json
           created_at?: string
           id?: string
           node_id?: string | null
           raw_hash?: string
           raw_payload?: string | null
+          raw_payload_ciphertext?: string | null
           reason_code?: string
           reason_detail?: Json
           tenant_id?: string | null
@@ -13311,6 +13395,7 @@ export type Database = {
         Returns: Json
       }
       invoke_refiner_secure: { Args: { payload: Json }; Returns: undefined }
+      is_aal2: { Args: never; Returns: boolean }
       is_business_leadership: {
         Args: { _business_id: string }
         Returns: boolean
@@ -13319,6 +13404,7 @@ export type Database = {
       is_business_member: { Args: { _business_id: string }; Returns: boolean }
       is_csuite: { Args: { _user_id: string }; Returns: boolean }
       is_org_admin: { Args: { _business_id: string }; Returns: boolean }
+      is_vulture_tenant: { Args: { _user_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {
           p_aca_hash: string
@@ -13629,6 +13715,10 @@ export type Database = {
           aca_hash_key: string
           vault: string
         }[]
+      }
+      vulture_read_payload: {
+        Args: { _id: string; _kind: string }
+        Returns: Json
       }
     }
     Enums: {
