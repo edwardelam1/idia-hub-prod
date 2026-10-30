@@ -1,33 +1,26 @@
-// Vulture Sanitization Agent — DELT Protocol enforcement
-// Triggered by Postgres trigger on storage.objects INSERT into idia-data-quarantine-prod.
+// Vulture Sanitization Agent — Liability Shield enforcement for quarantine uploads.
+// Callers: the storage trigger on idia-data-quarantine-prod (service-role bearer) or the
+// uploading tenant (user JWT whose id owns the object's first folder).
+// Objects under `<owner>/cjis/...` are CJIS-isolated: ledger only, never mesh_telemetry_events
+// or Marketplace bundles. The ledger row is claimed before any fan-out so trigger + client
+// dispatch of the same object can never double-ingest.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { isCjisUploadPath, isPiiKey } from "../_shared/vulture-cjis.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BUCKET = "idia-data-quarantine-prod";
 const MANIFEST_BUCKET = "rehabilitated-manifests";
-const PII_KEYS = new Set([
-  "ssn",
-  "social_security",
-  "name",
-  "first_name",
-  "last_name",
-  "full_name",
-  "email",
-  "email_address",
-  "issuer_id",
-  "source_id",
-  "target_name_pseudonym",
-  "target_biometric_hash",
-]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const respond = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 async function sha256Hex(input: Uint8Array | string): Promise<string> {
   const data = typeof input === "string" ? new TextEncoder().encode(input) : input;
   const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function parseCSV(text: string): Record<string, string>[] {
@@ -37,14 +30,11 @@ function parseCSV(text: string): Record<string, string>[] {
   return lines.slice(1).map((line) => {
     const cells = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
     const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = cells[i] ?? "";
-    });
+    headers.forEach((h, i) => { row[h] = cells[i] ?? ""; });
     return row;
   });
 }
 
-// --- LOW-LEVEL TELEMETRY DATA SHAPING ---
 function decodeLoRaPayload(buffer: ArrayBuffer): Record<string, any> {
   if (buffer.byteLength !== 40) throw new Error("Invalid LoRa payload size. Expected 40 bytes.");
   const view = new DataView(buffer);
@@ -64,48 +54,35 @@ function decodeLoRaPayload(buffer: ArrayBuffer): Record<string, any> {
   };
 }
 
-async function stripPII(row: Record<string, any>, salt: string): Promise<Record<string, any>> {
-  const out: Record<string, any> = {};
-  for (const [k, v] of Object.entries(row)) {
-    const lk = k.toLowerCase();
-
-    // Recursive PII stripping for nested JSON objects (e.g., model metadata)
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-      out[k] = await stripPII(v, salt);
-      continue;
-    }
-
-    if (PII_KEYS.has(lk) && v != null && v !== "") {
-      out[k] = await sha256Hex(salt + String(v));
-    } else {
-      out[k] = v;
-    }
+// Recursive PII stripping through nested objects AND arrays of objects.
+async function stripPII(v: unknown, salt: string, key = ""): Promise<unknown> {
+  if (Array.isArray(v)) return Promise.all(v.map((x) => stripPII(x, salt, key)));
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = await stripPII(val, salt, k);
+    return out;
   }
-  return out;
+  if (key && isPiiKey(key) && v != null && v !== "") return sha256Hex(salt + String(v));
+  return v;
 }
 
 function reconstructTimestamp(row: Record<string, any>, index: number, fileCreated: string): string {
-  const candidates = ["timestamp", "created_at", "date", "datetime", "event_time", "timestamp_issued"];
-  for (const c of candidates) {
+  for (const c of ["timestamp", "created_at", "date", "datetime", "event_time", "timestamp_issued"]) {
     if (row[c]) {
       const d = new Date(row[c]);
       if (!isNaN(d.getTime())) return d.toISOString();
     }
   }
-  const base = new Date(fileCreated).getTime();
-  return new Date(base + index * 1000).toISOString();
+  return new Date(new Date(fileCreated).getTime() + index * 1000).toISOString();
 }
 
 function mapToMeshRow(row: Record<string, any>, pseudoId: string): Record<string, any> {
-  // Identify payload structure to determine category
-  const category =
-    row.event_type || (row.confidence_score ? "JSON_PIN" : row.priority ? "NETWORK_ALERT" : "UNKNOWN_TELEMETRY");
-
+  const category = row.event_type || (row.confidence_score ? "JSON_PIN" : row.priority ? "NETWORK_ALERT" : "UNKNOWN_TELEMETRY");
   return {
     pseudo_node_id: pseudoId,
     telemetry_category: category,
     payload_data: row,
-    data_quality_score: row.hdop ? 1.0 / (row.hdop || 1) : 0.99, // Dynamic quality based on HDOP if available
+    data_quality_score: row.hdop ? 1.0 / (row.hdop || 1) : 0.99,
     processed_at: new Date().toISOString(),
   };
 }
@@ -116,77 +93,75 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
   let fileName = "unknown";
-  let ledgerId: string | null = null;
+  let owner: string | null = null;
+  let cjis = false;
 
   try {
+    // ---- Caller authorization ----
     console.info("[BEGIN: Vulture.WebhookAuth]");
-    const source = req.headers.get("x-vulture-source");
-    if (source !== "pg_trigger" && !req.headers.get("authorization")) {
-      console.error("[BEGIN: Vulture.WebhookAuth.Stall] missing source/auth");
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      console.error("[END: Vulture.WebhookAuth] rejected: no bearer");
+      return respond({ error: "Not authenticated." }, 401);
     }
-    console.info("[END: Vulture.WebhookAuth]");
-
-    const body = await req.json();
-    const bucket = body.bucket;
-    fileName = body.name;
+    const body = await req.json().catch(() => ({}));
+    fileName = typeof body.name === "string" ? body.name : "";
     const fileCreated = body.created_at || new Date().toISOString();
-    if (bucket !== BUCKET || !fileName) {
-      return new Response(JSON.stringify({ error: "bad payload" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (body.bucket !== BUCKET || !fileName) {
+      console.error("[END: Vulture.WebhookAuth] rejected: bad payload");
+      return respond({ error: "bad payload" }, 400);
     }
+    const folderOwner = fileName.split("/")[0];
 
-    // Open ledger row in 'processing'
-    console.info("[BEGIN: Vulture.LedgerOpen]", { fileName });
-    const { data: opened, error: openErr } = await supabase
-      .from("vulture_provenance_ledger")
-      .insert({
-        original_file_name: fileName,
-        bucket_path: `${bucket}/${fileName}`,
-        status: "processing",
-        action: "sanitize",
-      })
-      .select("id")
-      .single();
-    if (openErr) {
-      console.error("[BEGIN: Vulture.LedgerOpen.Stall]", openErr);
-      throw openErr;
+    if (token === SERVICE_KEY) {
+      owner = typeof body.owner === "string" && UUID_RE.test(body.owner) ? body.owner
+        : UUID_RE.test(folderOwner) ? folderOwner : null;
+      console.info("[END: Vulture.WebhookAuth] caller=service");
+    } else {
+      const { data: u, error: uErr } = await supabase.auth.getUser(token);
+      if (uErr || !u?.user) {
+        console.error(`[END: Vulture.WebhookAuth] rejected: ${uErr?.message ?? "no user"}`);
+        return respond({ error: "Not authenticated." }, 401);
+      }
+      if (folderOwner !== u.user.id) {
+        console.error("[END: Vulture.WebhookAuth] rejected: object not in caller's folder");
+        return respond({ error: "Not authorized for this object." }, 403);
+      }
+      owner = u.user.id;
+      console.info("[END: Vulture.WebhookAuth] caller=owner");
     }
-    ledgerId = opened.id;
-    console.info("[END: Vulture.LedgerOpen]", { ledgerId });
+    cjis = isCjisUploadPath(fileName);
+    console.info(`[Vulture.CjisRouting] cjis_isolated=${cjis}`);
+
+    // ---- Idempotency: already ingested? ----
+    console.info("[BEGIN: Vulture.IdempotencyCheck]");
+    const { data: existing, error: exErr } = await supabase.from("vulture_ledger")
+      .select("id, record_count, sanitized_hash, raw_hash").eq("source", "upload").eq("original_file_name", fileName).maybeSingle();
+    if (exErr) throw exErr;
+    console.info(`[END: Vulture.IdempotencyCheck] existing=${!!existing}`);
+    if (existing) {
+      return respond({ ok: true, duplicate: true, records: existing.record_count, originalHash: existing.raw_hash, sanitizedHash: existing.sanitized_hash, cjis_isolated: cjis });
+    }
 
     console.info("[BEGIN: Vulture.VaultAccess]");
     const { data: saltData, error: saltErr } = await supabase.rpc("get_vulture_salt");
-    if (saltErr) {
-      console.error("[BEGIN: Vulture.VaultAccess.Stall]", saltErr);
-      throw saltErr;
-    }
-    const salt = saltData as string;
-    console.info("[END: Vulture.VaultAccess]", { saltLen: salt?.length });
+    if (saltErr) throw saltErr;
+    const salt = String(saltData ?? "");
+    console.info("[END: Vulture.VaultAccess]");
 
-    console.info("[BEGIN: Vulture.StorageDownload]", { fileName });
+    console.info("[BEGIN: Vulture.StorageDownload]");
     const { data: blob, error: dlErr } = await supabase.storage.from(BUCKET).download(fileName);
-    if (dlErr || !blob) {
-      console.error("[BEGIN: Vulture.StorageDownload.Stall]", dlErr);
-      throw dlErr ?? new Error("download failed");
-    }
+    if (dlErr || !blob) throw dlErr ?? new Error("download failed");
     const bytes = new Uint8Array(await blob.arrayBuffer());
     console.info("[END: Vulture.StorageDownload]", { bytes: bytes.length });
 
     console.info("[BEGIN: Vulture.HashOriginal]");
     const originalHash = await sha256Hex(bytes);
-    console.info("[END: Vulture.HashOriginal]", { originalHash });
+    console.info("[END: Vulture.HashOriginal]");
 
     console.info("[BEGIN: Vulture.StreamParse]");
     const lower = fileName.toLowerCase();
     let rows: Record<string, any>[] = [];
-
-    // Dynamic stream parser for multiplexed formats
     if (lower.endsWith(".bin") || lower.endsWith(".lora")) {
       rows = [decodeLoRaPayload(bytes.buffer)];
     } else {
@@ -197,73 +172,81 @@ Deno.serve(async (req) => {
       } else if (lower.endsWith(".csv")) {
         rows = parseCSV(text);
       } else {
-        console.error("[BEGIN: Vulture.StreamParse.Stall] unsupported format");
         throw new Error(`Unsupported format: ${fileName}`);
       }
     }
     console.info("[END: Vulture.StreamParse]", { rows: rows.length });
 
     console.info("[BEGIN: Vulture.PIIStrip]");
-    const stripped = await Promise.all(rows.map((r) => stripPII(r, salt)));
+    const stripped = (await Promise.all(rows.map((r) => stripPII(r, salt)))) as Record<string, any>[];
     console.info("[END: Vulture.PIIStrip]");
 
-    console.info("[BEGIN: Vulture.TemporalReconstruct]");
-    const dated = stripped.map((r, i) => ({ ...r, _ts: reconstructTimestamp(r, i, fileCreated) }));
-    console.info("[END: Vulture.TemporalReconstruct]");
-
-    console.info("[BEGIN: Vulture.StatusTag]");
-    const tagged = dated.map((r) => ({ ...r, origin_status: "ACQUIRED_REHABILITATED" }));
-    console.info("[END: Vulture.StatusTag]");
-
-    console.info("[BEGIN: Vulture.BatchInsert]", { total: tagged.length });
-    const batchPseudo = await sha256Hex(`vulture:mesh:${fileName}:${originalHash}`);
-    const meshRows = tagged.map((r) => mapToMeshRow(r, batchPseudo.slice(0, 32)));
-    const BATCH = 500;
-    for (let i = 0; i < meshRows.length; i += BATCH) {
-      const chunk = meshRows.slice(i, i + BATCH);
-      const { error: insErr } = await supabase.from("mesh_telemetry_events").insert(chunk);
-      if (insErr) {
-        console.error("[BEGIN: Vulture.BatchInsert.Stall]", { offset: i, insErr });
-        throw insErr;
-      }
-      console.info("[BEGIN: Vulture.BatchInsert.Chunk]", { offset: i, size: chunk.length });
-    }
-    console.info("[END: Vulture.BatchInsert]");
-
-    console.info("[BEGIN: Vulture.HashSanitized]");
+    const tagged = stripped.map((r, i) => ({ ...r, _ts: reconstructTimestamp(r, i, fileCreated), origin_status: "ACQUIRED_REHABILITATED" }));
     const sanitizedHash = await sha256Hex(JSON.stringify(tagged));
-    console.info("[END: Vulture.HashSanitized]", { sanitizedHash });
+
+    // ---- Claim the object in the ledger (unique per upload; payload encrypted by DB trigger) ----
+    console.info("[BEGIN: Vulture.StagingLedgerCommit]");
+    const { error: stageErr } = await supabase.from("vulture_ledger").insert({
+      trace_id: crypto.randomUUID(),
+      node_id: "upload",
+      tenant_id: owner,
+      source: "upload",
+      original_file_name: fileName,
+      raw_hash: originalHash,
+      sanitized_hash: sanitizedHash,
+      payload: tagged,
+      record_count: tagged.length,
+      cjis_isolated: cjis,
+      status: "staged_for_notarization",
+    });
+    if (stageErr) {
+      if ((stageErr as any).code === "23505") {
+        console.info("[END: Vulture.StagingLedgerCommit] concurrent dispatch already claimed this object");
+        return respond({ ok: true, duplicate: true, records: tagged.length, originalHash, sanitizedHash, cjis_isolated: cjis });
+      }
+      throw stageErr;
+    }
+    console.info("[END: Vulture.StagingLedgerCommit]");
+
+    // ---- Analytics fan-out (never for CJIS data) ----
+    if (cjis) {
+      console.info("[Vulture.BatchInsert] skipped — CJIS-isolated");
+    } else {
+      console.info("[BEGIN: Vulture.BatchInsert]", { total: tagged.length });
+      const batchPseudo = await sha256Hex(`vulture:mesh:${fileName}:${originalHash}`);
+      const meshRows = tagged.map((r) => mapToMeshRow(r, batchPseudo.slice(0, 32)));
+      for (let i = 0; i < meshRows.length; i += 500) {
+        const { error: insErr } = await supabase.from("mesh_telemetry_events").insert(meshRows.slice(i, i + 500));
+        if (insErr) {
+          console.error("[Vulture.BatchInsert.Stall]", { offset: i, insErr });
+          throw insErr;
+        }
+      }
+      console.info("[END: Vulture.BatchInsert]");
+    }
 
     console.info("[BEGIN: Vulture.ManifestUpload]");
     const manifest = {
-      claim_generator: "IDIA-Vulture/2.0-Mesh",
+      claim_generator: "IDIA-Vulture/2.1-Mesh",
       created_at: new Date().toISOString(),
       original_file: fileName,
       original_hash: originalHash,
       sanitized_hash: sanitizedHash,
       record_count: tagged.length,
+      cjis_isolated: cjis,
       assertions: [
         { label: "c2pa.training_mining", data: { entries: { "c2pa.data_mining": { use: "notAllowed" } } } },
-        {
-          label: "idia.liability_shield",
-          data: { status: "ACQUIRED_REHABILITATED", pii_stripped: true, temporal_reconstructed: true },
-        },
-        { label: "idia.mesh_provenance", data: { protocol: "DELT", anonymized_identifiers: true } },
+        { label: "idia.liability_shield", data: { status: "ACQUIRED_REHABILITATED", pii_stripped: true, temporal_reconstructed: true } },
+        { label: "idia.mesh_provenance", data: { protocol: "Liability Shield", anonymized_identifiers: true, cjis_isolated: cjis } },
       ],
     };
     const manifestPath = `${fileName}.manifest.json`;
-    const { error: mErr } = await supabase.storage
-      .from(MANIFEST_BUCKET)
-      .upload(manifestPath, new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }), {
-        upsert: true,
-      });
-    if (mErr) {
-      console.error("[BEGIN: Vulture.ManifestUpload.Stall]", mErr);
-      throw mErr;
-    }
-    console.info("[END: Vulture.ManifestUpload]", { manifestPath });
+    const { error: mErr } = await supabase.storage.from(MANIFEST_BUCKET)
+      .upload(manifestPath, new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }), { upsert: true });
+    if (mErr) throw mErr;
+    console.info("[END: Vulture.ManifestUpload]");
 
-    console.info("[BEGIN: Vulture.LedgerFinalize]");
+    console.info("[BEGIN: Vulture.ProvenanceRecord]");
     await supabase.from("vulture_provenance_ledger").insert({
       original_file_name: fileName,
       bucket_path: `${BUCKET}/${fileName}`,
@@ -273,48 +256,27 @@ Deno.serve(async (req) => {
       original_hash: originalHash,
       sanitized_hash: sanitizedHash,
       manifest_path: `${MANIFEST_BUCKET}/${manifestPath}`,
+      owner,
+      cjis_isolated: cjis,
     });
-    console.info("[END: Vulture.LedgerFinalize]");
-
-    console.info("[BEGIN: Vulture.StagingLedgerCommit] status=staged_for_notarization");
-    const { error: stageErr } = await supabase.from("vulture_ledger").insert({
-      trace_id: crypto.randomUUID(),
-      node_id: "upload",
-      tenant_id: body.owner ?? null,
-      source: "upload",
-      original_file_name: fileName,
-      raw_hash: originalHash,
-      sanitized_hash: sanitizedHash,
-      payload: tagged,
-      record_count: tagged.length,
-      status: "staged_for_notarization",
-    });
-    if (stageErr) {
-      console.error("[BEGIN: Vulture.StagingLedgerCommit.Stall]", stageErr);
-      throw stageErr;
-    }
-    console.info("[END: Vulture.StagingLedgerCommit]");
+    console.info("[END: Vulture.ProvenanceRecord]");
 
     console.info("[END: Vulture.Handler]");
-    return new Response(JSON.stringify({ ok: true, records: tagged.length, originalHash, sanitizedHash }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ ok: true, records: tagged.length, originalHash, sanitizedHash, cjis_isolated: cjis });
   } catch (err) {
-    console.error("[BEGIN: Vulture.Handler.Stall]", err);
+    console.error("[Vulture.Handler.Stall]", err instanceof Error ? err.stack : String(err));
     try {
       await supabase.from("vulture_provenance_ledger").insert({
         original_file_name: fileName,
         action: "sanitize",
         status: "failed",
-        error_message: String((err as Error)?.message ?? err),
+        error_message: String((err as Error)?.message ?? err).slice(0, 500),
+        owner,
+        cjis_isolated: cjis,
       });
     } catch (logErr) {
-      console.error("[BEGIN: Vulture.LedgerFinalize.Stall]", logErr);
+      console.error("[Vulture.ProvenanceRecord.Stall]", logErr);
     }
-    return new Response(JSON.stringify({ error: String((err as Error)?.message ?? err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ error: "Sanitization failed." }, 500);
   }
 });
