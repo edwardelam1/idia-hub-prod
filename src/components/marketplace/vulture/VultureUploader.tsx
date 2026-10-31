@@ -6,6 +6,9 @@ import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { invokeWithSession } from "@/lib/invoke-with-session";
 
 const QUARANTINE_BUCKET = "idia-data-quarantine-prod";
 const ACCEPTED = ".json,.csv,.bin,.lora";
@@ -29,6 +32,8 @@ export default function VultureUploader() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [isBusy, setIsBusy] = useState(false);
+  // CJIS-isolated uploads stay in the encrypted ledger only (no analytics copy, no Marketplace bundles).
+  const [cjisIsolated, setCjisIsolated] = useState(true);
 
   const loadGatewayState = useCallback(async () => {
     console.info("[BEGIN: Vulture.GatewayState] Reading persisted mesh gateway authorization state.");
@@ -108,8 +113,13 @@ export default function VultureUploader() {
       toast({ title: "File too large", description: `${file.name} exceeds the 25 MB limit.`, variant: "destructive" });
       return;
     }
+    if (!user?.user_id) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
     const id = crypto.randomUUID();
-    const objectPath = `${new Date().toISOString().slice(0, 10)}/${id}-${file.name}`;
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const objectPath = `${user.user_id}/${cjisIsolated ? "cjis" : "standard"}/${new Date().toISOString().slice(0, 10)}/${id}-${safeName}`;
     setResults((prev) => [{ id, fileName: file.name, status: "uploading" }, ...prev]);
 
     console.info(`[BEGIN: Vulture.QuarantineUpload] Uploading ${file.name} (${file.size} bytes).`);
@@ -126,8 +136,8 @@ export default function VultureUploader() {
       setResults((prev) => prev.map((r) => (r.id === id ? { ...r, status: "sanitizing" } : r)));
 
       console.info(`[BEGIN: Vulture.SanitizationInvoke] Dispatching sanitization agent for ${objectPath}.`);
-      const { data, error } = await supabase.functions.invoke("vulture-sanitization-agent", {
-        body: { bucket: QUARANTINE_BUCKET, name: objectPath, created_at: new Date().toISOString() },
+      const { data, error } = await invokeWithSession("vulture-sanitization-agent", {
+        bucket: QUARANTINE_BUCKET, name: objectPath, created_at: new Date().toISOString(),
       });
       if (error) {
         console.error(`[ERROR: Vulture.SanitizationInvoke] ${error.message}`);
@@ -207,6 +217,20 @@ export default function VultureUploader() {
           Upload a capture file (.json, .csv, .bin, .lora). It is quarantined, stripped of identifying fields,
           timestamp-reconstructed, ledgered and published with a provenance manifest.
         </p>
+
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-[14px] border border-[#E5E5EA] bg-white px-4 py-3">
+          <div className="min-w-0">
+            <Label htmlFor="vulture-cjis" className="text-[12px] font-semibold text-[#1D1D1F]">
+              CJIS isolated
+            </Label>
+            <p className="text-[11px] text-[#86868B]">
+              {cjisIsolated
+                ? "Encrypted ledger only. Never copied to analytics or Marketplace bundles."
+                : "Also feeds anonymized analytics and Marketplace bundles."}
+            </p>
+          </div>
+          <Switch id="vulture-cjis" checked={cjisIsolated} onCheckedChange={setCjisIsolated} disabled={isBusy} />
+        </div>
 
         <input
           ref={fileInputRef}

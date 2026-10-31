@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.mesh-nodes]
 verify_jwt = false
+
+[functions.vulture-notarization-relayer]
+verify_jwt = false

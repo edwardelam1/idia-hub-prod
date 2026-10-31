@@ -12,7 +12,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Copy, Key, Terminal, Ban, Trash2, Loader2 } from "lucide-react";
+import { Copy, Key, Terminal, Ban, RefreshCw, Loader2, Pencil } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,7 +27,12 @@ interface MeshKey {
   status: string;
   created_at: string;
   last_used_at: string | null;
+  expires_at: string;
+  cjis_isolated: boolean;
+  revoked_at: string | null;
 }
+
+const daysLeft = (iso: string) => Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
 
 export default function MeshNodeIntegration() {
   const { toast } = useToast();
@@ -37,6 +44,9 @@ export default function MeshNodeIntegration() {
   const [ipList, setIpList] = useState("");
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
   const [issuedKeyName, setIssuedKeyName] = useState("");
+  const [cjisNode, setCjisNode] = useState(true);
+  const [editing, setEditing] = useState<MeshKey | null>(null);
+  const [editIps, setEditIps] = useState("");
 
   const endpoint = useMemo(() => {
     const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
@@ -78,7 +88,7 @@ export default function MeshNodeIntegration() {
     try {
       const { data, error } = await (supabase as any)
         .from("mesh_nodes")
-        .select("id,node_id,label,ip_allowlist,key_prefix,status,created_at,last_used_at")
+        .select("id,node_id,label,ip_allowlist,key_prefix,status,created_at,last_used_at,expires_at,cjis_isolated,revoked_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       setKeys((data ?? []) as MeshKey[]);
@@ -100,7 +110,7 @@ export default function MeshNodeIntegration() {
     try {
       const name = keyName.trim() || "Mesh Node Key";
       const ip_allowlist = ipList.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean);
-      const { data, error } = await invokeWithSession("mesh-nodes", { action: "create", label: name, ip_allowlist });
+      const { data, error } = await invokeWithSession("mesh-nodes", { action: "create", label: name, ip_allowlist, cjis_isolated: cjisNode });
       if (error) throw error;
       setIssuedKey(data.key as string);
       setIssuedKeyName(name);
@@ -116,19 +126,26 @@ export default function MeshNodeIntegration() {
     }
   };
 
-  const mutateKey = async (action: "revoke" | "delete", keyId: string) => {
-    console.info(`[BEGIN: Mesh.Key${action}] Applying ${action} to ${keyId}.`);
-    setBusyKeyId(keyId);
+  // All lifecycle changes go through the mesh-nodes function, which audits operator + IP.
+  // Keys are never deleted so historical ledger attribution stays intact.
+  const mutateKey = async (action: "revoke" | "rotate" | "update_allowlist", key: MeshKey, ips?: string[]) => {
+    console.info(`[BEGIN: Mesh.Key.${action}] ${key.node_id}`);
+    setBusyKeyId(key.id);
     try {
-      const { error } = action === "revoke"
-        ? await (supabase as any).from("mesh_nodes").update({ status: "revoked" }).eq("id", keyId)
-        : await (supabase as any).from("mesh_nodes").delete().eq("id", keyId);
+      const body: Record<string, unknown> = { action, id: key.id };
+      if (action === "update_allowlist") body.ip_allowlist = ips ?? [];
+      const { data, error } = await invokeWithSession("mesh-nodes", body);
       if (error) throw error;
+      if (action === "rotate" && data?.key) {
+        setIssuedKey(data.key as string);
+        setIssuedKeyName(key.label);
+      }
+      if (action === "update_allowlist") setEditing(null);
       await fetchKeys();
-      console.info(`[END: Mesh.Key${action}] Complete.`);
+      console.info(`[END: Mesh.Key.${action}] Complete.`);
     } catch (err) {
-      console.error(`[ERROR: Mesh.Key${action}.Stall] ${err instanceof Error ? err.stack : String(err)}`);
-      toast({ title: "Action failed", variant: "destructive" });
+      console.error(`[ERROR: Mesh.Key.${action}.Stall] ${err instanceof Error ? err.stack : String(err)}`);
+      toast({ title: "Action failed", description: "Please try again.", variant: "destructive" });
     } finally {
       setBusyKeyId(null);
     }
@@ -176,6 +193,10 @@ export default function MeshNodeIntegration() {
               onChange={(e) => setIpList(e.target.value)}
               placeholder="Allowed IPs (optional, comma separated)"
             />
+            <div className="flex items-center gap-2 rounded-md border px-3 sm:shrink-0">
+              <Switch id="mesh-cjis" checked={cjisNode} onCheckedChange={setCjisNode} />
+              <Label htmlFor="mesh-cjis" className="whitespace-nowrap text-xs">CJIS isolated</Label>
+            </div>
             <Button onClick={generateKey} disabled={isGenerating} className="gap-2 sm:w-auto">
               {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
               Generate Node Key
@@ -188,43 +209,49 @@ export default function MeshNodeIntegration() {
             ) : keys.length === 0 ? (
               <p className="text-xs text-muted-foreground">No mesh node keys issued yet.</p>
             ) : (
-              keys.map((k) => (
+              keys.map((k) => {
+                const left = daysLeft(k.expires_at);
+                const live = k.status === "active" && left > 0;
+                return (
                 <div key={k.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-xs font-medium">{k.label} <span className="font-mono text-[10px] text-muted-foreground">{k.node_id}</span></p>
                     <p className="truncate font-mono text-[10px] text-muted-foreground">
                       {k.key_prefix}… · {k.ip_allowlist?.length ? `IPs ${k.ip_allowlist.join(", ")} · ` : ""}{k.last_used_at ? `last call ${new Date(k.last_used_at).toLocaleString()}` : "never used"}
                     </p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {k.status === "revoked"
+                        ? `Revoked ${k.revoked_at ? new Date(k.revoked_at).toLocaleDateString() : ""}`
+                        : left > 0 ? `Expires in ${left} day${left === 1 ? "" : "s"}` : "Expired — rotate to continue"}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1">
+                    {k.cjis_isolated && <Badge variant="secondary" className="text-[10px]">CJIS</Badge>}
                     <Badge variant="outline" className="text-[10px]">
-                      {k.status}
+                      {live ? "active" : k.status === "active" ? "expired" : k.status}
                     </Badge>
+                    {k.status !== "revoked" && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Rotate key"
+                        disabled={busyKeyId === k.id} onClick={() => mutateKey("rotate", k)}>
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {live && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit allowed IPs"
+                        disabled={busyKeyId === k.id} onClick={() => { setEditing(k); setEditIps((k.ip_allowlist ?? []).join(", ")); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     {k.status === "active" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        aria-label="Revoke key"
-                        disabled={busyKeyId === k.id}
-                        onClick={() => mutateKey("revoke", k.id)}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label="Revoke key"
+                        disabled={busyKeyId === k.id} onClick={() => mutateKey("revoke", k)}>
                         <Ban className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      aria-label="Delete key"
-                      disabled={busyKeyId === k.id}
-                      onClick={() => mutateKey("delete", k.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -243,7 +270,9 @@ export default function MeshNodeIntegration() {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">4 · Payload Schema</p>
           <SpecBlock label="Payload" value={payloadSample} />
           <p className="text-[11px] text-muted-foreground">
-            Up to 500 events per batch. Identifying fields are hashed before storage and never persisted in the clear.
+            Up to 500 events per batch. Identifying fields (including officer, badge, ORI, case, incident, VIN, driver's licence,
+            date of birth and subject name) are hashed before storage. Add <code className="font-mono">"cjis_isolated": true</code> to keep a
+            batch out of analytics and Marketplace bundles; CJIS nodes do this automatically.
           </p>
         </div>
 
@@ -257,7 +286,7 @@ export default function MeshNodeIntegration() {
           <SpecBlock
             label="Responses"
             value={`200 { "status": "staged_for_notarization", "ledger_id": "…", "trace_id": "…", "events_committed": 1, "raw_hash": "…", "sanitized_hash": "…" }
-401 Missing, invalid or revoked node key, or origin IP not on the node allowlist
+401 Missing, invalid, revoked or expired (90-day) node key, or origin IP not on the node allowlist
 413 Payload over 5 MB
 422 { "status": "quarantined", "reason_code": "MALFORMED_JSON", "raw_hash": "…" }
 503 Mesh gateway is sealed — ingest refused
@@ -265,6 +294,24 @@ export default function MeshNodeIntegration() {
           />
         </div>
       </CardContent>
+
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
+          <DialogHeader>
+            <DialogTitle>Allowed IPs</DialogTitle>
+            <DialogDescription>Comma-separated addresses or CIDR ranges. Leave empty to allow any origin.</DialogDescription>
+          </DialogHeader>
+          <Input value={editIps} onChange={(e) => setEditIps(e.target.value)} placeholder="203.0.113.10, 198.51.100.0/24" />
+          <DialogFooter>
+            <Button
+              disabled={!editing || busyKeyId === editing?.id}
+              onClick={() => editing && mutateKey("update_allowlist", editing, editIps.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean))}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!issuedKey} onOpenChange={(open) => !open && setIssuedKey(null)}>
         <DialogContent onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>

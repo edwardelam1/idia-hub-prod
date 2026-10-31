@@ -4,6 +4,7 @@ import VultureUploader from "./VultureUploader";
 import VultureLedgerTable from "./VultureLedgerTable";
 import MeshNodeIntegration from "./MeshNodeIntegration";
 import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
+import MfaGate from "@/components/security/MfaGate";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -13,7 +14,8 @@ interface Props {
 }
 
 export default function VultureIngestionPanel({ userRole }: Props) {
-  const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
+  const isAdmin =
+    userRole === "admin" || userRole === "csuite" || userRole === "enterprise" || userRole === "organization-admin";
   const { isDesktop } = useResponsive();
   const [specsOpen, setSpecsOpen] = useState(false);
 
@@ -82,6 +84,7 @@ export default function VultureIngestionPanel({ userRole }: Props) {
         </div>
       </Collapsible>
 
+      <MfaGate resource="The Vulture console">
       {isDesktop ? (
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-5 space-y-6">
@@ -116,6 +119,7 @@ export default function VultureIngestionPanel({ userRole }: Props) {
           </TabsContent>
         </Tabs>
       )}
+      </MfaGate>
     </div>
   );
 }
