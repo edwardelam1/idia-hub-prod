@@ -13,21 +13,34 @@ export interface VultureLedgerRow {
   raw_hash: string | null;
   sanitized_hash: string | null;
   tx_hash: string | null;
+  cjis_isolated: boolean;
   created_at: string;
 }
 
 const fromLedger = (r: any): VultureLedgerRow => ({
   id: r.id, kind: "ledger", node_id: r.node_id, source: r.source, original_file_name: r.original_file_name,
   record_count: r.record_count, status: r.status, error_message: null, raw_hash: r.raw_hash,
-  sanitized_hash: r.sanitized_hash, tx_hash: r.tx_hash, created_at: r.created_at,
+  sanitized_hash: r.sanitized_hash, tx_hash: r.tx_hash, cjis_isolated: !!r.cjis_isolated, created_at: r.created_at,
 });
 const fromQuarantine = (r: any): VultureLedgerRow => ({
   id: r.id, kind: "quarantine", node_id: r.node_id, source: "mesh", original_file_name: null,
   record_count: null, status: "quarantined", error_message: r.reason_code, raw_hash: r.raw_hash,
-  sanitized_hash: null, tx_hash: null, created_at: r.created_at,
+  sanitized_hash: null, tx_hash: null, cjis_isolated: !!r.cjis_isolated, created_at: r.created_at,
 });
 const sortRows = (rows: VultureLedgerRow[]) =>
   [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100);
+
+/** Decrypts one record server-side (owner/C-suite + authenticator session; every read is audited). */
+export async function readVulturePayload(kind: "ledger" | "quarantine", id: string) {
+  console.info(`[BEGIN: VultureUI.PayloadRead] ${kind}`);
+  const { data, error } = await (supabase as any).rpc("vulture_read_payload", { _kind: kind, _id: id });
+  if (error) {
+    console.error(`[ERROR: VultureUI.PayloadRead] ${error.message}`);
+    throw error;
+  }
+  console.info("[END: VultureUI.PayloadRead]");
+  return data as unknown;
+}
 
 /** Live view of the append-only vulture_ledger plus quarantined deliveries. No mock data. */
 export function useVultureLedger() {
@@ -42,10 +55,10 @@ export function useVultureLedger() {
       try {
         const [ledger, quarantine] = await Promise.all([
           (supabase as any).from("vulture_ledger")
-            .select("id,node_id,source,original_file_name,record_count,status,raw_hash,sanitized_hash,tx_hash,created_at")
+            .select("id,node_id,source,original_file_name,record_count,status,raw_hash,sanitized_hash,tx_hash,cjis_isolated,created_at")
             .order("created_at", { ascending: false }).limit(100),
           (supabase as any).from("vulture_quarantine")
-            .select("id,node_id,raw_hash,reason_code,created_at")
+            .select("id,node_id,raw_hash,reason_code,cjis_isolated,created_at")
             .order("created_at", { ascending: false }).limit(50),
         ]);
         if (ledger.error) throw ledger.error;

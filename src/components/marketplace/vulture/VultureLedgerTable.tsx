@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Fingerprint, ShieldCheck, AlertTriangle, Activity } from "lucide-react";
-import { useVultureLedger } from "@/hooks/useVultureLedger";
+import { Loader2, Fingerprint, ShieldCheck, AlertTriangle, Activity, Eye } from "lucide-react";
+import { readVulturePayload, useVultureLedger, type VultureLedgerRow } from "@/hooks/useVultureLedger";
 import { SovereignWrapper } from "@/components/sovereign/SovereignWrapper";
 
 const statusConfig = (status: string) => {
@@ -34,6 +36,21 @@ const statusConfig = (status: string) => {
 export default function VultureLedgerTable() {
   console.info("[BEGIN: VultureUI.LedgerTableRender] Initializing Provenance Ledger Table.");
   const { rows, loading, error } = useVultureLedger();
+  const [inspecting, setInspecting] = useState<VultureLedgerRow | null>(null);
+  const [payload, setPayload] = useState<string | null>(null);
+  const [payloadError, setPayloadError] = useState<string | null>(null);
+
+  const inspect = async (r: VultureLedgerRow) => {
+    setInspecting(r);
+    setPayload(null);
+    setPayloadError(null);
+    try {
+      const data = await readVulturePayload(r.kind, r.id);
+      setPayload(data == null ? "No payload stored." : typeof data === "string" ? data : JSON.stringify(data, null, 2));
+    } catch (e: any) {
+      setPayloadError(e?.message ?? "Could not decrypt this record.");
+    }
+  };
 
   useEffect(() => {
     console.info(
@@ -108,6 +125,20 @@ export default function VultureLedgerTable() {
                               VOL: {r.record_count} events
                             </span>
                           )}
+                          <div className="mt-1 flex items-center gap-1">
+                            {r.cjis_isolated && (
+                              <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">CJIS</Badge>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 gap-1 px-1.5 text-[10px]"
+                              aria-label="View decrypted payload"
+                              onClick={() => void inspect(r)}
+                            >
+                              <Eye className="h-3 w-3" /> View
+                            </Button>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-3">
@@ -158,6 +189,26 @@ export default function VultureLedgerTable() {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={!!inspecting} onOpenChange={(open) => !open && setInspecting(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Decrypted payload</DialogTitle>
+            <DialogDescription>
+              Stored encrypted (AES-256). This view is recorded in the security audit log.
+            </DialogDescription>
+          </DialogHeader>
+          {payloadError ? (
+            <p className="text-sm text-destructive">{payloadError}</p>
+          ) : payload === null ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : (
+            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 font-mono text-[11px]">
+              {payload}
+            </pre>
+          )}
+        </DialogContent>
+      </Dialog>
     </SovereignWrapper>
   );
 }
