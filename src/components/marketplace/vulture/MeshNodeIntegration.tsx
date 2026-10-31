@@ -48,10 +48,8 @@ export default function MeshNodeIntegration() {
   const [editing, setEditing] = useState<MeshKey | null>(null);
   const [editIps, setEditIps] = useState("");
 
-  const endpoint = useMemo(() => {
-    const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
-    return `${base}/functions/v1/mesh-telemetry-intake`;
-  }, []);
+  // All node traffic goes through the FIPS 140-3 AWS API Gateway proxy.
+  const endpoint = useMemo(() => MESH_INTAKE_URL, []);
 
   const payloadSample = `{
   "node_id": "edge-node-0421",
