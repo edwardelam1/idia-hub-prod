@@ -60,12 +60,16 @@ export default function MfaGate({ children, resource }: Props) {
     }
   }, []);
 
-  useEffect(() => { void assess(); }, [assess]);
+  useEffect(() => {
+    void assess();
+  }, [assess]);
 
   // Idle lock while unlocked.
   useEffect(() => {
     if (phase !== "ready") return;
-    const touch = () => { lastActivity.current = Date.now(); };
+    const touch = () => {
+      lastActivity.current = Date.now();
+    };
     const events = ["pointerdown", "keydown", "scroll", "touchstart", "mousemove"] as const;
     events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
     const timer = window.setInterval(() => {
@@ -93,6 +97,7 @@ export default function MfaGate({ children, resource }: Props) {
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
         friendlyName: `IDIA Hub ${new Date().toISOString().slice(0, 10)}`,
+        issuer: "IDIA Data Inc.",
       });
       if (error) throw error;
       setFactorId(data.id);
@@ -139,25 +144,39 @@ export default function MfaGate({ children, resource }: Props) {
   }
 
   const enrolling = phase === "enroll";
-  const title = phase === "locked" ? `${resource} locked` : enrolling ? "Set up your authenticator app" : "Enter your authenticator code";
-  const description = phase === "locked"
-    ? "Locked after 30 minutes without activity. Enter a code from your authenticator app to continue."
-    : enrolling
-      ? `${resource} holds criminal-justice data and requires a second sign-in step. Scan the code with Google Authenticator, 1Password, Authy or a similar app.`
-      : `${resource} requires a code from your authenticator app.`;
+  const title =
+    phase === "locked"
+      ? `${resource} locked`
+      : enrolling
+        ? "Set up your authenticator app"
+        : "Enter your authenticator code";
+  const description =
+    phase === "locked"
+      ? "Locked after 30 minutes without activity. Enter a code from your authenticator app to continue."
+      : enrolling
+        ? `${resource} holds criminal-justice data and requires a second sign-in step. Scan the code with Google Authenticator, 1Password, Authy or a similar app.`
+        : `${resource} requires a code from your authenticator app.`;
 
   return (
     <Card className="mx-auto mt-4 max-w-md">
       <CardHeader className="pb-3 text-center">
         <div className="mx-auto mb-2 rounded-full bg-primary/10 p-3">
-          {phase === "locked" ? <Lock className="h-5 w-5 text-primary" /> : enrolling ? <Smartphone className="h-5 w-5 text-primary" /> : <ShieldCheck className="h-5 w-5 text-primary" />}
+          {phase === "locked" ? (
+            <Lock className="h-5 w-5 text-primary" />
+          ) : enrolling ? (
+            <Smartphone className="h-5 w-5 text-primary" />
+          ) : (
+            <ShieldCheck className="h-5 w-5 text-primary" />
+          )}
         </div>
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
         {phase === "error" ? (
-          <Button variant="outline" onClick={() => void assess()}>Try again</Button>
+          <Button variant="outline" onClick={() => void assess()}>
+            Try again
+          </Button>
         ) : enrolling && !qr ? (
           <Button onClick={startEnrollment} disabled={busy} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -167,7 +186,11 @@ export default function MfaGate({ children, resource }: Props) {
           <>
             {enrolling && qr && (
               <div className="flex flex-col items-center gap-2">
-                <img src={qr} alt="Authenticator setup code" className="h-44 w-44 rounded-md border bg-background p-2" />
+                <img
+                  src={qr}
+                  alt="Authenticator setup code"
+                  className="h-44 w-44 rounded-md border bg-background p-2"
+                />
                 {secret && (
                   <p className="break-all text-center font-mono text-[11px] text-muted-foreground">
                     Can't scan? Enter: {secret}
@@ -177,7 +200,9 @@ export default function MfaGate({ children, resource }: Props) {
             )}
             <InputOTP maxLength={6} value={code} onChange={setCode} onComplete={() => void verify()}>
               <InputOTPGroup>
-                {[0, 1, 2, 3, 4, 5].map((i) => <InputOTPSlot key={i} index={i} />)}
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <InputOTPSlot key={i} index={i} />
+                ))}
               </InputOTPGroup>
             </InputOTP>
             <Button onClick={verify} disabled={busy || code.length !== 6} className="w-full gap-2">
