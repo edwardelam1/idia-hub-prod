@@ -60,11 +60,11 @@
 - [x] Reassign detectors to the official eight roles; Mirror runs real red-team probes
 - [x] Cause-based alert titles and per-role report layouts in the Security pop-up
 
-## CJIS hardening for The Vulture (in progress)
-- [ ] CJIS-isolated intake: ledger only, no analytics copy or marketplace bundles (mesh + uploads)
-- [ ] Notarization relayer: Merkle root of sanitized hashes anchored on Base, CJIS data stays off-chain
-- [ ] Law-enforcement identifiers added to the PII filter (shared by both intake paths)
-- [ ] AES-256 column encryption of ledger payloads and quarantine raw payloads (key in Vault)
-- [ ] Authenticator-app (TOTP) MFA gate + 30-minute idle lock on the Vulture console and mesh-nodes
-- [ ] Owner-scoped access to the provenance ledger and quarantine bucket for enterprise tenants
-- [ ] Mesh key lifecycle: no hard deletes, revoke/rotate/allowlist via mesh-nodes, audit to security_events, 90-day expiry
+## CJIS hardening for The Vulture (done)
+- [x] CJIS-isolated intake: ledger only, no analytics copy or marketplace bundles (mesh + uploads)
+- [x] Notarization relayer: Merkle root of sanitized hashes anchored on Base, CJIS data stays off-chain
+- [x] Law-enforcement identifiers added to the PII filter (shared by both intake paths)
+- [x] AES-256 column encryption of ledger payloads and quarantine raw payloads (key in Vault)
+- [x] Authenticator-app (TOTP) MFA gate + 30-minute idle lock on the Vulture console and mesh-nodes
+- [x] Owner-scoped access to the provenance ledger and quarantine bucket for enterprise tenants
+- [x] Mesh key lifecycle: no hard deletes, revoke/rotate/allowlist via mesh-nodes, audit to security_events, 90-day expiry
