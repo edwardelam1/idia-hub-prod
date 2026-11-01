@@ -13537,6 +13537,7 @@ export type Database = {
         Returns: number
       }
       release_relayer_lock: { Args: { run_id: string }; Returns: undefined }
+      reset_my_mfa_factors: { Args: never; Returns: undefined }
       resolve_security_event: {
         Args: { _id: string; _resolved?: boolean }
         Returns: boolean
