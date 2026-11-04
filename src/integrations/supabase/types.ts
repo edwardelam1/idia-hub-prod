@@ -1208,6 +1208,47 @@ export type Database = {
         }
         Relationships: []
       }
+      business_service_provisioning_log: {
+        Row: {
+          business_id: string
+          changed_by: string | null
+          created_at: string
+          id: string
+          utility_provisioned: boolean
+          utility_rate: number
+          vulture_provisioned: boolean
+          vulture_rate: number
+        }
+        Insert: {
+          business_id: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          utility_provisioned: boolean
+          utility_rate: number
+          vulture_provisioned: boolean
+          vulture_rate: number
+        }
+        Update: {
+          business_id?: string
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          utility_provisioned?: boolean
+          utility_rate?: number
+          vulture_provisioned?: boolean
+          vulture_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_service_provisioning_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_user_permissions: {
         Row: {
           business_user_id: string
@@ -1354,6 +1395,8 @@ export type Database = {
           phone: string | null
           postal_code: string | null
           provisioning_code: string
+          services_updated_at: string | null
+          services_updated_by: string | null
           state: string | null
           street_address_1: string | null
           street_address_2: string | null
@@ -1361,6 +1404,10 @@ export type Database = {
           subscription_tier: string | null
           tax_id: string | null
           updated_at: string | null
+          utility_provisioned: boolean
+          utility_rate: number
+          vulture_provisioned: boolean
+          vulture_rate: number
         }
         Insert: {
           business_health_score?: number | null
@@ -1378,6 +1425,8 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           provisioning_code?: string
+          services_updated_at?: string | null
+          services_updated_by?: string | null
           state?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
@@ -1385,6 +1434,10 @@ export type Database = {
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
+          utility_provisioned?: boolean
+          utility_rate?: number
+          vulture_provisioned?: boolean
+          vulture_rate?: number
         }
         Update: {
           business_health_score?: number | null
@@ -1402,6 +1455,8 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           provisioning_code?: string
+          services_updated_at?: string | null
+          services_updated_by?: string | null
           state?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
@@ -1409,6 +1464,10 @@ export type Database = {
           subscription_tier?: string | null
           tax_id?: string | null
           updated_at?: string | null
+          utility_provisioned?: boolean
+          utility_rate?: number
+          vulture_provisioned?: boolean
+          vulture_rate?: number
         }
         Relationships: [
           {
@@ -13176,6 +13235,16 @@ export type Database = {
         }
         Returns: number
       }
+      charge_service_usage: {
+        Args: {
+          _description?: string
+          _reference: string
+          _service: string
+          _units: number
+          _user_id: string
+        }
+        Returns: Json
+      }
       check_raw_health_data_duplicate: {
         Args: { p_recorded_at: string; p_step_count: number; p_user_id: string }
         Returns: boolean
@@ -13231,6 +13300,7 @@ export type Database = {
       }
       get_average_rating: { Args: { p_ratee_id: string }; Returns: number }
       get_hub_balance: { Args: { uid: string }; Returns: number }
+      get_my_service_access: { Args: never; Returns: Json }
       get_nft_radio_tracks: {
         Args: { _limit?: number }
         Returns: {
@@ -13404,6 +13474,7 @@ export type Database = {
       is_business_member: { Args: { _business_id: string }; Returns: boolean }
       is_csuite: { Args: { _user_id: string }; Returns: boolean }
       is_org_admin: { Args: { _business_id: string }; Returns: boolean }
+      is_service_operator: { Args: { _user_id: string }; Returns: boolean }
       is_vulture_tenant: { Args: { _user_id: string }; Returns: boolean }
       log_delt_egress: {
         Args: {
@@ -13542,6 +13613,16 @@ export type Database = {
         Args: { _id: string; _resolved?: boolean }
         Returns: boolean
       }
+      resolve_service_access: {
+        Args: { _service: string; _user_id: string }
+        Returns: {
+          allowed: boolean
+          business_id: string
+          business_name: string
+          is_operator: boolean
+          rate: number
+        }[]
+      }
       revoke_employee: {
         Args: { _employee_id: string }
         Returns: {
@@ -13584,6 +13665,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      set_business_service_provisioning: {
+        Args: {
+          _business_id: string
+          _utility_provisioned: boolean
+          _utility_rate: number
+          _vulture_provisioned: boolean
+          _vulture_rate: number
+        }
+        Returns: Json
       }
       set_usdc_balance: {
         Args: {
