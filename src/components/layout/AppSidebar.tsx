@@ -76,7 +76,7 @@ const getRoleItems = (userRole: string): NavItem[] => {
       // C-Suite has the union of Super Admin + Organization Admin surfaces.
       base.push(
         { title: "System Health", url: "/system-health", icon: Activity },
-        { title: "Business Accounts", url: "/organizations", icon: Building2 },
+        { title: "Client Organizations", url: "/organizations", icon: Building2 },
         { title: "AI Management", url: "/ai-management", icon: Zap },
         { title: "Security", url: "/security", icon: ShieldCheck },
         { title: "Pay App Builder", url: "/pay-blueprint", icon: Smartphone },
