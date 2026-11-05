@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PAY_APP_VERTICAL_OPTIONS, getPayAppVerticalLabel } from "@/taxonomy/payAppVerticals";
+import { useQueryClient } from "@tanstack/react-query";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 import {
   Building2,
   Search,
@@ -29,6 +31,8 @@ import {
   Mail,
   Phone,
   User as UserIcon,
+  Bird,
+  ScanFace,
 } from "lucide-react";
 
 const BLUEPRINT_CATEGORIES = PAY_APP_VERTICAL_OPTIONS;
@@ -51,6 +55,16 @@ const ClientOrganizations = () => {
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [serviceForm, setServiceForm] = useState({
+    utility_provisioned: false,
+    utility_rate: "2.5",
+    vulture_provisioned: false,
+    vulture_rate: "50",
+  });
+  const [isSavingServices, setIsSavingServices] = useState(false);
+  const { data: serviceAccess } = useServiceAccess();
+  const canProvisionServices = serviceAccess?.isOperator === true;
+  const queryClient = useQueryClient();
 
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
@@ -390,10 +404,70 @@ const ClientOrganizations = () => {
     }
   };
 
+  const toServiceForm = (org: any) => ({
+    utility_provisioned: org?.utility_provisioned === true,
+    utility_rate: String(Number(org?.utility_rate ?? 2.5)),
+    vulture_provisioned: org?.vulture_provisioned === true,
+    vulture_rate: String(Number(org?.vulture_rate ?? 50)),
+  });
+
   const handleSelectBusiness = (org: any) => {
     setSelectedBusiness(org);
     setIsEditingCard(false);
     setEditForm({ ...org });
+    setServiceForm(toServiceForm(org));
+  };
+
+  const serviceFormDirty =
+    !!selectedBusiness &&
+    JSON.stringify(serviceForm) !== JSON.stringify(toServiceForm(selectedBusiness));
+
+  const handleSaveServices = async () => {
+    console.log("[ClientOrganizations] >>> START: handleSaveServices()");
+    if (!selectedBusiness) return;
+    const utilityRate = Number(serviceForm.utility_rate);
+    const vultureRate = Number(serviceForm.vulture_rate);
+    const valid = (v: number) => Number.isFinite(v) && v >= 0 && v <= 100000;
+    if (!valid(utilityRate) || !valid(vultureRate)) {
+      toast({
+        title: "Invalid rate",
+        description: "Rates must be numbers between 0 and 100,000 Synapse Credits.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSavingServices(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)("set_business_service_provisioning", {
+        _business_id: selectedBusiness.id,
+        _utility_provisioned: serviceForm.utility_provisioned,
+        _utility_rate: utilityRate,
+        _vulture_provisioned: serviceForm.vulture_provisioned,
+        _vulture_rate: vultureRate,
+      });
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: set_business_service_provisioning failed", error);
+        throw error;
+      }
+      const patch = {
+        utility_provisioned: data?.utility_provisioned,
+        utility_rate: data?.utility_rate,
+        vulture_provisioned: data?.vulture_provisioned,
+        vulture_rate: data?.vulture_rate,
+        services_updated_at: data?.services_updated_at,
+      };
+      const updated = { ...selectedBusiness, ...patch };
+      setSelectedBusiness(updated);
+      setServiceForm(toServiceForm(updated));
+      setBusinesses((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...patch } : b)));
+      void queryClient.invalidateQueries({ queryKey: ["service-access"] });
+      toast({ title: "Services updated", description: `${selectedBusiness.name} provisioning and rates saved.` });
+    } catch (err: any) {
+      toast({ title: "Could not save services", description: err?.message ?? String(err), variant: "destructive" });
+    } finally {
+      setIsSavingServices(false);
+      console.log("[ClientOrganizations] <<< END: handleSaveServices()");
+    }
   };
 
   const openReviewModal = (request: any) => {
