@@ -1,4 +1,5 @@
 import { invokeWithSession } from "@/lib/invoke-with-session";
+import { getGatewayKey } from "@/lib/gateway-key";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { recordActivity } from "@/lib/activity-history";
 
-interface FranchiseKey {
+interface VerificationKey {
   id: string;
   name: string;
   key_prefix: string;
@@ -30,7 +31,15 @@ interface FranchiseKey {
   last_used_at: string | null;
 }
 
-const UtilitiesIngestionPanel = () => {
+interface UtilitiesIngestionPanelProps {
+  /** Organization rate in Synapse Credits per verified identity record (set by C-suite). */
+  rate: number | null;
+  businessName: string | null;
+}
+
+const DEFAULT_KEY_NAME = "Identity Verification Key";
+
+const UtilitiesIngestionPanel = ({ rate, businessName }: UtilitiesIngestionPanelProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { balanceData, refreshBalance } = useSynapseCredits();
@@ -46,7 +55,7 @@ const UtilitiesIngestionPanel = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyName, setKeyName] = useState("");
   const [issuedKeyName, setIssuedKeyName] = useState("");
-  const [keys, setKeys] = useState<FranchiseKey[]>([]);
+  const [keys, setKeys] = useState<VerificationKey[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
   // Integration specs start expanded on wide screens and collapsed on phones.
@@ -69,23 +78,18 @@ const UtilitiesIngestionPanel = () => {
 
   const ingestionEndpoint = useMemo(() => {
     const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
-    return `${base}/functions/v1/surveillance-api-intake`;
+    return `${base}/functions/v1/identity-verification-intake`;
   }, []);
 
-  const gatewayKey = useMemo(
-    () =>
-      ((import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ??
-        (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ??
-        "<your_supabase_anon_key>"),
-    [],
-  );
+  const gatewayKey = useMemo(() => getGatewayKey(), []);
 
   const payloadSample = useMemo(
     () =>
       `{
-  "infractions": [
+  "records": [
     {
-      "license_plate": "ABC1234",
+      "identifier": "<identifier value>",
+      "identifier_type": "credential_id",
       "timestamp": "2026-09-15T14:30:00Z"
     }
   ]
@@ -95,7 +99,7 @@ const UtilitiesIngestionPanel = () => {
 
   const headersSample = useMemo(
     () =>
-      `Authorization: Bearer ${gatewayKey}\nx-api-key: ${apiKey ?? "<your franchise key>"}\nContent-Type: application/json`,
+      `Authorization: Bearer ${gatewayKey}\nx-api-key: ${apiKey ?? "<your verification key>"}\nContent-Type: application/json`,
     [apiKey, gatewayKey],
   );
 
@@ -103,7 +107,7 @@ const UtilitiesIngestionPanel = () => {
     () =>
       `curl -X POST "${ingestionEndpoint}" \\
   -H "Authorization: Bearer ${gatewayKey}" \\
-  -H "x-api-key: ${apiKey ?? "<your franchise key>"}" \\
+  -H "x-api-key: ${apiKey ?? "<your verification key>"}" \\
   -H "Content-Type: application/json" \\
   -d '${payloadSample.replace(/\n\s*/g, " ")}'`,
     [ingestionEndpoint, apiKey, gatewayKey, payloadSample],
@@ -112,7 +116,7 @@ const UtilitiesIngestionPanel = () => {
 
   const fetchBalance = useCallback(async () => {
     if (!user?.user_id) return;
-    console.log(`[FETCH_LIDD_BALANCE_START] Retrieving unpaid extraction events for ${user.user_id}`);
+    console.log(`[FETCH_VERIFICATION_BALANCE_START] Retrieving unpaid verification events for ${user.user_id}`);
     try {
       const { data, error } = await supabase
         .from("lidd_extraction_events")
@@ -122,7 +126,7 @@ const UtilitiesIngestionPanel = () => {
         .not("aca_hash_key", "is", null);
 
       if (error) {
-        console.error(`[FETCH_LIDD_BALANCE_QUERY_ERROR] Failed to query events. Error: ${error.message}`);
+        console.error(`[FETCH_VERIFICATION_BALANCE_QUERY_ERROR] Failed to query events. Error: ${error.message}`);
         throw error;
       }
 
@@ -133,12 +137,12 @@ const UtilitiesIngestionPanel = () => {
       );
       setUnpaidBalance(total);
       setEventCount(rows.length);
-      console.log(`[FETCH_LIDD_BALANCE_SUCCESS] Found ${rows.length} events totaling ${total} credits.`);
+      console.log(`[FETCH_VERIFICATION_BALANCE_SUCCESS] Found ${rows.length} events totaling ${total} credits.`);
     } catch (err) {
-      console.error(`[FETCH_LIDD_BALANCE_FAULT] Caught exception: ${err instanceof Error ? err.stack : String(err)}`);
+      console.error(`[FETCH_VERIFICATION_BALANCE_FAULT] Caught exception: ${err instanceof Error ? err.stack : String(err)}`);
     } finally {
       setIsLoading(false);
-      console.log(`[FETCH_LIDD_BALANCE_END] Process terminated.`);
+      console.log(`[FETCH_VERIFICATION_BALANCE_END] Process terminated.`);
     }
   }, [user?.user_id]);
 
@@ -148,16 +152,16 @@ const UtilitiesIngestionPanel = () => {
 
   const settleWithCredits = useCallback(async () => {
     if (!user?.user_id) return;
-    console.log(`[PHASE_START: LIDD_SETTLE] Settling utility balance with Synapse Credits.`);
+    console.log(`[PHASE_START: VERIFICATION_SETTLE] Settling identity verification balance with Synapse Credits.`);
     setIsSettling(true);
     try {
       const { data, error } = await supabase.functions.invoke("settle-utility-balance", { body: {} });
       if (error) {
-        console.error(`[LIDD_SETTLE_INVOKE_ERROR] ${error.message}`);
+        console.error(`[VERIFICATION_SETTLE_INVOKE_ERROR] ${error.message}`);
         throw error;
       }
       if (data?.error === "INSUFFICIENT_CREDITS") {
-        console.warn(`[LIDD_SETTLE_INSUFFICIENT] shortfall=${data.shortfall}`);
+        console.warn(`[VERIFICATION_SETTLE_INSUFFICIENT] shortfall=${data.shortfall}`);
         toast({
           title: "Not enough credits",
           description: `You need ${Number(data.shortfall ?? 0).toFixed(2)} more CR to settle this balance.`,
@@ -168,19 +172,19 @@ const UtilitiesIngestionPanel = () => {
       if (data?.error) throw new Error(String(data.error));
 
       const charged = Number(data?.amount_charged ?? 0);
-      console.log(`[LIDD_SETTLE_SUCCESS] charged=${charged} reference=${data?.reference_id}`);
+      console.log(`[VERIFICATION_SETTLE_SUCCESS] charged=${charged} reference=${data?.reference_id}`);
       toast({
         title: "Balance settled",
-        description: `${charged.toFixed(2)} CR deducted for ${data?.events_settled ?? 0} identity matches.`,
+        description: `${charged.toFixed(2)} CR deducted for ${data?.events_settled ?? 0} verified identity records.`,
       });
 
       const referenceId = data?.reference_id ?? data?.receipt?.reference_id ?? null;
       if (charged > 0) {
-        const idem = String(referenceId ?? `lidd-settle-${user.user_id}-${Date.now()}`);
+        const idem = String(referenceId ?? `verification-settle-${user.user_id}-${Date.now()}`);
         void recordActivity({
           source: "marketplace",
-          action: "LIDD_UTILITY_SETTLEMENT",
-          title: `Utility balance settled — ${charged.toFixed(2)} CR`,
+          action: "IDENTITY_VERIFICATION_SETTLEMENT",
+          title: `Identity verification balance settled — ${charged.toFixed(2)} CR`,
           input: { events_settled: data?.events_settled ?? 0 },
           result: { reference_id: referenceId, amount_charged: charged },
           recordsConsumed: Number(data?.events_settled ?? 0),
@@ -194,7 +198,7 @@ const UtilitiesIngestionPanel = () => {
       setIsSettleOpen(false);
       await Promise.all([fetchBalance(), refreshBalance()]);
     } catch (err) {
-      console.error(`[LIDD_SETTLE_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
+      console.error(`[VERIFICATION_SETTLE_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
       toast({
         title: "Settlement failed",
         description: "The balance could not be settled. Please try again.",
@@ -202,27 +206,27 @@ const UtilitiesIngestionPanel = () => {
       });
     } finally {
       setIsSettling(false);
-      console.log(`[PHASE_END: LIDD_SETTLE] Process terminated.`);
+      console.log(`[PHASE_END: VERIFICATION_SETTLE] Process terminated.`);
     }
   }, [user?.user_id, fetchBalance, refreshBalance, toast]);
 
   const handleSettlementComplete = useCallback(async () => {
-    console.log(`[PHASE_START: LIDD_TOPUP_COMPLETE] Credits purchased — returning to settlement step.`);
+    console.log(`[PHASE_START: VERIFICATION_TOPUP_COMPLETE] Credits purchased — returning to settlement step.`);
     await refreshBalance();
     setIsCheckoutOpen(false);
     setIsSettleOpen(true);
-    console.log(`[PHASE_END: LIDD_TOPUP_COMPLETE] Settlement dialog reopened.`);
+    console.log(`[PHASE_END: VERIFICATION_TOPUP_COMPLETE] Settlement dialog reopened.`);
   }, [refreshBalance]);
 
   const fetchKeys = useCallback(async () => {
-    console.log(`[API_KEY_LIST_START] Retrieving franchise key history.`);
+    console.log(`[API_KEY_LIST_START] Retrieving verification key history.`);
     try {
       const { data, error } = await invokeWithSession("issue-extractor-key", { action: "list" });
       if (error) {
         console.error(`[API_KEY_LIST_QUERY_ERROR] ${error.message}`);
         throw error;
       }
-      setKeys((data?.keys ?? []) as FranchiseKey[]);
+      setKeys((data?.keys ?? []) as VerificationKey[]);
       console.log(`[API_KEY_LIST_SUCCESS] ${data?.keys?.length ?? 0} keys retrieved.`);
     } catch (err) {
       console.error(`[API_KEY_LIST_FAULT] ${err instanceof Error ? err.stack : String(err)}`);
@@ -261,23 +265,23 @@ const UtilitiesIngestionPanel = () => {
   };
 
   const handleGenerateKey = async () => {
-    console.log(`[API_KEY_GEN_START] Initiating commercial franchise API key generation.`);
+    console.log(`[API_KEY_GEN_START] Initiating identity verification API key generation.`);
     setIsGenerating(true);
     try {
       console.log(`[API_KEY_GEN_FETCH_START] Requesting new key from edge function.`);
-      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "create", name: keyName.trim() || "LIDD Franchise Key" });
+      const { data, error } = await invokeWithSession("issue-extractor-key", { action: "create", name: keyName.trim() || DEFAULT_KEY_NAME });
       console.log(`[API_KEY_GEN_FETCH_END] Issuer responded.`);
       if (error) {
         console.error(`[API_KEY_GEN_QUERY_ERROR] ${error.message}`);
         throw error;
       }
       if (!data?.key) throw new Error("No key returned by the issuer.");
-      setIssuedKeyName(keyName.trim() || "LIDD Franchise Key");
+      setIssuedKeyName(keyName.trim() || DEFAULT_KEY_NAME);
       setApiKey(data.key as string);
       setKeyName("");
       console.log(`[API_KEY_GEN_SUCCESS] Key generated successfully.`);
       toast({
-        title: "Franchise Key Issued",
+        title: "Verification Key Issued",
         description: "Store this securely. It will not be shown again.",
       });
       await fetchKeys();
@@ -330,9 +334,9 @@ const UtilitiesIngestionPanel = () => {
     <div className="space-y-2 sm:space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground sm:text-lg">Utility Intake Gateway</h2>
+          <h2 className="text-base font-semibold text-foreground sm:text-lg">Identity Verification Utility</h2>
           <p className="text-[11px] text-muted-foreground sm:text-sm">
-            Manage your commercial surveillance franchise connections and balances.
+            Identity resolution and consent verification: credentials, endpoints and staged verification balances.
           </p>
         </div>
         <Badge
@@ -354,14 +358,19 @@ const UtilitiesIngestionPanel = () => {
       <Card>
         <CardContent className="flex items-center justify-between gap-3 p-3 sm:p-5">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-muted-foreground sm:text-sm">Pending Data Dividend Balance</p>
+            <p className="text-[11px] font-medium text-muted-foreground sm:text-sm">Pending Verification Balance</p>
             <div className="text-xl font-bold tracking-tight text-foreground sm:text-3xl">
               {isLoading ? "..." : unpaidBalance.toFixed(2)} Credits
             </div>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Across {eventCount} specific identity infractions
-              <span className="hidden sm:inline"> · un-settled Synapse Credits from staged API extraction events</span>
+              Across {eventCount} verified identity records
+              <span className="hidden sm:inline"> · un-settled Synapse Credits from staged verification events</span>
             </p>
+            {rate != null && (
+              <p className="text-[10px] font-medium text-foreground sm:text-xs">
+                {businessName ? `${businessName} rate` : "Platform rate"}: {rate.toFixed(2)} CR per verified record
+              </p>
+            )}
           </div>
           <Button
             onClick={() => setIsSettleOpen(true)}
@@ -379,19 +388,19 @@ const UtilitiesIngestionPanel = () => {
         <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             <Terminal className="h-4 w-4 text-muted-foreground" />
-            Commercial Ingestion Integration
+            Verification API Integration
           </CardTitle>
           <CardDescription className="text-[11px] sm:text-sm">
-            Use these credentials and endpoints to transmit Utility batch data to the clearinghouse.
+            Use these credentials and endpoints to submit identity verification batches.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 p-3 pt-0 sm:space-y-6 sm:p-6 sm:pt-0">
           <section className="space-y-2 sm:space-y-3">
-            <h3 className="text-xs font-semibold text-foreground sm:text-sm">1. Franchise API Keys</h3>
+            <h3 className="text-xs font-semibold text-foreground sm:text-sm">1. Verification API Keys</h3>
 
             <div className="flex gap-1.5 sm:gap-2">
               <Input
-                placeholder="Key label (e.g. Louisville Utility fleet)"
+                placeholder="Key label (e.g. Enterprise verification gateway)"
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
                 className="h-9 min-w-0 flex-1 text-sm sm:h-10"
@@ -410,7 +419,7 @@ const UtilitiesIngestionPanel = () => {
               {isLoadingKeys ? (
                 <p className="text-xs text-muted-foreground">Loading key history...</p>
               ) : keys.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No franchise keys issued yet.</p>
+                <p className="text-xs text-muted-foreground">No verification keys issued yet.</p>
               ) : (
                 keys.map((k) => (
                   <div
@@ -483,7 +492,7 @@ const UtilitiesIngestionPanel = () => {
             <CodeBlock value={headersSample} label="Headers" />
             <p className="text-[11px] text-muted-foreground">
               The Authorization bearer carries the public gateway key so the request can route through the API
-              gateway. Your private franchise key travels in its own x-api-key header, and your identity is resolved
+              gateway. Your private verification key travels in its own x-api-key header, and your identity is resolved
               from its cryptographic hash — never send identifying values in the body.
             </p>
 
@@ -507,20 +516,21 @@ const UtilitiesIngestionPanel = () => {
   "status": "success",
   "records_processed": 120,
   "matches_found": 14,
-  "debt_staged": 35.00
+  "rate_cr": 2.50,
+  "credits_staged": 35.00
 }`}
               label="Success response"
             />
             <ul className="space-y-1 text-xs text-muted-foreground">
               <li>
-                <span className="font-mono text-foreground">401</span> — missing, unknown or revoked franchise key.
+                <span className="font-mono text-foreground">401</span> — missing, unknown or revoked verification key.
               </li>
               <li>
-                <span className="font-mono text-foreground">403</span> — extractor_id in the body does not match the key
-                owner.
+                <span className="font-mono text-foreground">403</span> — the utility is not provisioned for your organization, or extractor_id in
+                the body does not match the key owner.
               </li>
               <li>
-                <span className="font-mono text-foreground">400</span> — empty or malformed infractions array.
+                <span className="font-mono text-foreground">400</span> — empty or malformed records array (maximum 1,000 per batch).
               </li>
               <li>
                 <span className="font-mono text-foreground">500</span> — clearinghouse fault; retry the batch.
@@ -540,7 +550,7 @@ const UtilitiesIngestionPanel = () => {
           className="left-4 right-4 w-auto max-w-none translate-x-0 overflow-hidden p-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:p-6"
         >
           <DialogHeader className="items-center text-center sm:items-start sm:text-left">
-            <DialogTitle>Franchise Key Issued</DialogTitle>
+            <DialogTitle>Verification Key Issued</DialogTitle>
             <DialogDescription>Copy this key now — it will not be shown again once dismissed.</DialogDescription>
           </DialogHeader>
           <div className="w-full min-w-0 space-y-3">
@@ -575,9 +585,9 @@ const UtilitiesIngestionPanel = () => {
       <Dialog open={isSettleOpen} onOpenChange={(open) => !isSettling && setIsSettleOpen(open)}>
         <DialogContent className="left-4 right-4 w-auto max-w-none translate-x-0 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
           <DialogHeader>
-            <DialogTitle>Settle Utility Balance</DialogTitle>
+            <DialogTitle>Settle Verification Balance</DialogTitle>
             <DialogDescription>
-              Pay the outstanding extraction balance with your Synapse Credits.
+              Pay the outstanding verification balance with your Synapse Credits.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">

@@ -7,6 +7,7 @@
 //   vulture_ledger only — never to mesh_telemetry_events or Marketplace bundles.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { isLegacyKeyExpired, isNodeKeyExpired, isPiiKey } from "../_shared/vulture-cjis.ts";
+import { availableCredits, chargeServiceUsage, resolveServiceAccess, round4 } from "../_shared/service-provisioning.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -144,6 +145,26 @@ Deno.serve(async (req) => {
     }
     console.log(`[VULTURE_AUTH_SUCCESS][Trace: ${traceId}] Authenticated Node: ${nodeId}`);
 
+    // ---- Organization provisioning + rate (set by C-suite per business) ----
+    if (!tenantId) {
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Node ${nodeId} has no tenant owner.`);
+      return json({ error: "Node is not attached to an organization.", trace_id: traceId }, 403);
+    }
+    const access = await resolveServiceAccess(supabase, tenantId, "vulture", `Vulture.Mesh.${traceId}`);
+    if (!access.allowed) {
+      console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] The Vulture is not provisioned for tenant ${tenantId}.`);
+      return json({ error: "The Vulture is not provisioned for this organization.", trace_id: traceId }, 403);
+    }
+    if (access.rate > 0) {
+      const balance = await availableCredits(supabase, tenantId, `Vulture.Mesh.${traceId}`);
+      if (balance < access.rate) {
+        console.error(`[VULTURE_INTAKE_ABORTED][Trace: ${traceId}] Insufficient credits: ${balance} < ${access.rate}`);
+        return json({
+          error: "INSUFFICIENT_CREDITS", rate_cr: access.rate, shortfall: round4(access.rate - balance), trace_id: traceId,
+        }, 402);
+      }
+    }
+
     // ---- Gateway ----
     console.log(`[VULTURE_GATEWAY_START][Trace: ${traceId}] Checking gateway state.`);
     const { data: gateway, error: gwErr } = await supabase.from("mesh_gateway_state").select("is_open").eq("id", "singleton").maybeSingle();
@@ -213,6 +234,12 @@ Deno.serve(async (req) => {
     }
     console.log(`[VULTURE_DB_STAGING_END][Trace: ${traceId}] Ledger row ${ledgerRow.id}.`);
 
+    // One charge per committed batch at the organization's rate; keyed to the ledger row so retries never double-bill.
+    const billing = await chargeServiceUsage(supabase, {
+      userId: tenantId, service: "vulture", units: 1, reference: `vulture:${ledgerRow.id}`,
+      description: `The Vulture intake batch (${tagged.length} events) [${access.rate} CR]`,
+    }, `Vulture.Mesh.${traceId}`);
+
     // Analytics fan-out (non-authoritative copy for marketplace aggregates). Never for CJIS data.
     if (cjisIsolated) {
       console.log(`[VULTURE_FANOUT_SKIPPED][Trace: ${traceId}] CJIS-isolated — analytics and marketplace bypassed.`);
@@ -238,6 +265,7 @@ Deno.serve(async (req) => {
     return json({
       status: "staged_for_notarization", ledger_id: ledgerRow.id, trace_id: traceId, node_id: nodeId,
       events_committed: tagged.length, raw_hash: rawHash, sanitized_hash: sanitizedHash, cjis_isolated: cjisIsolated,
+      billing: { status: billing.status, amount_cr: billing.amount ?? 0, rate_cr: access.rate },
     });
   } catch (err) {
     console.error(`[VULTURE_INTAKE_FAULT][Trace: ${traceId}] ${err instanceof Error ? err.stack : String(err)}`);

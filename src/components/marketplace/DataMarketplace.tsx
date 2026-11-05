@@ -3,7 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMarketplaceBundles } from "@/hooks/useMarketplaceBundles";
-import { Loader2, Bot, Terminal, Boxes, Bird, Radar, ChevronsDown, ChevronsUp, ChartNoAxesCombined } from "lucide-react";
+import { Loader2, Bot, Terminal, Boxes, Bird, ScanFace, ChevronsDown, ChevronsUp, ChartNoAxesCombined } from "lucide-react";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 import MarketplaceHeader from "./MarketplaceHeader";
 import MarketplaceFilters from "./MarketplaceFilters";
 import ResultsHeader from "./ResultsHeader";
@@ -46,10 +47,16 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const requestedTile = searchParams.get("panel");
   const [expandedBundleIds, setExpandedBundleIds] = useState<Set<string>>(() => new Set());
 
-  const isAdmin = userRole === "admin" || userRole === "csuite" || userRole === "enterprise";
-  const activeTile: ToolTile = isToolTile(requestedTile) && (requestedTile !== "vulture" || isAdmin)
-    ? requestedTile
-    : "bundles";
+  // Vulture and Identity Verification are provisioned per organization by C-suite.
+  const { data: serviceAccess } = useServiceAccess();
+  const canSeeVulture = serviceAccess?.vulture.visible === true;
+  const canSeeUtility = serviceAccess?.utility.visible === true;
+  const activeTile: ToolTile =
+    isToolTile(requestedTile) &&
+    (requestedTile !== "vulture" || canSeeVulture) &&
+    (requestedTile !== "utilities" || canSeeUtility)
+      ? requestedTile
+      : "bundles";
 
   // Responsive padding and sizing
   const containerPadding = isMobile ? "p-2" : isTablet ? "p-4" : "p-6";
@@ -235,8 +242,8 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
   const tiles: { id: ToolTile; title: string; short: string; icon: any; show: boolean }[] = [
     { id: "sql", title: "SQL Terminal", short: "SQL", icon: Terminal, show: true },
     { id: "bundles", title: "AI Bundles", short: "Bundles", icon: Boxes, show: true },
-    { id: "vulture", title: "The Vulture", short: "Vulture", icon: Bird, show: isAdmin },
-    { id: "utilities", title: "Utilities", short: "Utilities", icon: Radar, show: true },
+    { id: "vulture", title: "The Vulture", short: "Vulture", icon: Bird, show: canSeeVulture },
+    { id: "utilities", title: "Identity Verification", short: "Identity", icon: ScanFace, show: canSeeUtility },
     { id: "trading", title: "Trading Desk API", short: "Trading", icon: ChartNoAxesCombined, show: true },
   ];
   const visibleTiles = tiles.filter((t) => t.show);
@@ -257,7 +264,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
       <nav
         aria-label="Marketplace tools"
         className={`grid gap-1 rounded-xl border bg-card p-1 lg:gap-2 lg:border-0 lg:bg-transparent lg:p-0 ${
-          visibleTiles.length === 5 ? "grid-cols-5" : "grid-cols-4"
+          visibleTiles.length === 5 ? "grid-cols-5" : visibleTiles.length === 4 ? "grid-cols-4" : "grid-cols-3"
         }`}
       >
         {visibleTiles.map((t) => {
@@ -292,7 +299,7 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
                 {t.id === "sql" && "Bio-sovereign SQL editor with floating-rate pricing."}
                 {t.id === "bundles" && "AI-curated datasets across health, lifestyle, business."}
                 {t.id === "vulture" && "Quarantine, sanitize, and rehabilitate distressed datasets."}
-                {t.id === "utilities" && "Commercial intake gateway and staged data dividend balances."}
+                {t.id === "utilities" && "Identity resolution, consent verification, and staged verification balances."}
                 {t.id === "trading" && "API keys, endpoints, MCP, monitoring, and feature feeds."}
               </p>
             </Button>
@@ -401,9 +408,19 @@ const DataMarketplace = ({ userRole }: DataMarketplaceProps) => {
           </div>
         )}
 
-        {activeTile === "vulture" && <VultureIngestionPanel userRole={userRole} />}
+        {activeTile === "vulture" && (
+          <VultureIngestionPanel
+            rate={serviceAccess?.vulture.rate ?? null}
+            businessName={serviceAccess?.vulture.businessName ?? null}
+          />
+        )}
 
-        {activeTile === "utilities" && <UtilitiesIngestionPanel />}
+        {activeTile === "utilities" && (
+          <UtilitiesIngestionPanel
+            rate={serviceAccess?.utility.rate ?? null}
+            businessName={serviceAccess?.utility.businessName ?? null}
+          />
+        )}
 
         {activeTile === "trading" && <TradingDeskDashboard />}
       </div>

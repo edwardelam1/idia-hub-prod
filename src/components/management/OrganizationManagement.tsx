@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PAY_APP_VERTICAL_OPTIONS, getPayAppVerticalLabel } from "@/taxonomy/payAppVerticals";
+import { useQueryClient } from "@tanstack/react-query";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 import {
   Building2,
   Search,
@@ -29,6 +31,8 @@ import {
   Mail,
   Phone,
   User as UserIcon,
+  Bird,
+  ScanFace,
 } from "lucide-react";
 
 const BLUEPRINT_CATEGORIES = PAY_APP_VERTICAL_OPTIONS;
@@ -51,6 +55,16 @@ const ClientOrganizations = () => {
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [isEditingCard, setIsEditingCard] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [serviceForm, setServiceForm] = useState({
+    utility_provisioned: false,
+    utility_rate: "2.5",
+    vulture_provisioned: false,
+    vulture_rate: "50",
+  });
+  const [isSavingServices, setIsSavingServices] = useState(false);
+  const { data: serviceAccess } = useServiceAccess();
+  const canProvisionServices = serviceAccess?.isOperator === true;
+  const queryClient = useQueryClient();
 
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
@@ -390,10 +404,70 @@ const ClientOrganizations = () => {
     }
   };
 
+  const toServiceForm = (org: any) => ({
+    utility_provisioned: org?.utility_provisioned === true,
+    utility_rate: String(Number(org?.utility_rate ?? 2.5)),
+    vulture_provisioned: org?.vulture_provisioned === true,
+    vulture_rate: String(Number(org?.vulture_rate ?? 50)),
+  });
+
   const handleSelectBusiness = (org: any) => {
     setSelectedBusiness(org);
     setIsEditingCard(false);
     setEditForm({ ...org });
+    setServiceForm(toServiceForm(org));
+  };
+
+  const serviceFormDirty =
+    !!selectedBusiness &&
+    JSON.stringify(serviceForm) !== JSON.stringify(toServiceForm(selectedBusiness));
+
+  const handleSaveServices = async () => {
+    console.log("[ClientOrganizations] >>> START: handleSaveServices()");
+    if (!selectedBusiness) return;
+    const utilityRate = Number(serviceForm.utility_rate);
+    const vultureRate = Number(serviceForm.vulture_rate);
+    const valid = (v: number) => Number.isFinite(v) && v >= 0 && v <= 100000;
+    if (!valid(utilityRate) || !valid(vultureRate)) {
+      toast({
+        title: "Invalid rate",
+        description: "Rates must be numbers between 0 and 100,000 Synapse Credits.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSavingServices(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)("set_business_service_provisioning", {
+        _business_id: selectedBusiness.id,
+        _utility_provisioned: serviceForm.utility_provisioned,
+        _utility_rate: utilityRate,
+        _vulture_provisioned: serviceForm.vulture_provisioned,
+        _vulture_rate: vultureRate,
+      });
+      if (error) {
+        console.error("[ClientOrganizations] !!! ERROR: set_business_service_provisioning failed", error);
+        throw error;
+      }
+      const patch = {
+        utility_provisioned: data?.utility_provisioned,
+        utility_rate: data?.utility_rate,
+        vulture_provisioned: data?.vulture_provisioned,
+        vulture_rate: data?.vulture_rate,
+        services_updated_at: data?.services_updated_at,
+      };
+      const updated = { ...selectedBusiness, ...patch };
+      setSelectedBusiness(updated);
+      setServiceForm(toServiceForm(updated));
+      setBusinesses((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...patch } : b)));
+      void queryClient.invalidateQueries({ queryKey: ["service-access"] });
+      toast({ title: "Services updated", description: `${selectedBusiness.name} provisioning and rates saved.` });
+    } catch (err: any) {
+      toast({ title: "Could not save services", description: err?.message ?? String(err), variant: "destructive" });
+    } finally {
+      setIsSavingServices(false);
+      console.log("[ClientOrganizations] <<< END: handleSaveServices()");
+    }
   };
 
   const openReviewModal = (request: any) => {
@@ -1182,7 +1256,7 @@ const ClientOrganizations = () => {
                 </div>
 
                 {/* CARD BODY — dense two-column, no scroll */}
-                <div className="p-4 grid grid-cols-2 gap-x-5 gap-y-3 flex-1">
+                <div className="p-4 grid grid-cols-2 content-start gap-x-5 gap-y-3 flex-1 min-h-0 overflow-y-auto">
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Operational Profile
@@ -1384,6 +1458,90 @@ const ClientOrganizations = () => {
                           )}
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* SERVICE PROVISIONING — each service toggled and priced independently by C-suite */}
+                  <div className="col-span-2 pt-1">
+                    <div className="mb-2 flex items-center justify-between gap-2 border-b pb-1">
+                      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Service Provisioning
+                      </h3>
+                      {!canProvisionServices && (
+                        <span className="text-[10px] text-muted-foreground">C-suite only</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          {
+                            key: "utility",
+                            label: "Identity Verification Utility",
+                            unit: "CR per verified record",
+                            icon: ScanFace,
+                          },
+                          { key: "vulture", label: "The Vulture", unit: "CR per intake batch", icon: Bird },
+                        ] as const
+                      ).map((svc) => {
+                        const Icon = svc.icon;
+                        const enabledKey = `${svc.key}_provisioned` as const;
+                        const rateKey = `${svc.key}_rate` as const;
+                        const enabled = serviceForm[enabledKey];
+                        return (
+                          <div
+                            key={svc.key}
+                            className={`space-y-2 rounded-md border px-2.5 py-2 ${enabled ? "border-primary/40 bg-primary/5" : "bg-muted/40"}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <Label
+                                htmlFor={`svc-${svc.key}`}
+                                className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground"
+                              >
+                                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                <span className="truncate">{svc.label}</span>
+                              </Label>
+                              <Switch
+                                id={`svc-${svc.key}`}
+                                checked={enabled}
+                                disabled={!canProvisionServices || isSavingServices}
+                                onCheckedChange={(v) => setServiceForm((f) => ({ ...f, [enabledKey]: v }))}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                max={100000}
+                                step="0.01"
+                                aria-label={`${svc.label} rate`}
+                                value={serviceForm[rateKey]}
+                                disabled={!canProvisionServices || isSavingServices}
+                                onChange={(e) => setServiceForm((f) => ({ ...f, [rateKey]: e.target.value }))}
+                                className="h-8 w-24 text-xs"
+                              />
+                              <span className="text-[10px] text-muted-foreground">{svc.unit}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {selectedBusiness.services_updated_at
+                          ? `Last changed ${new Date(selectedBusiness.services_updated_at).toLocaleString()}`
+                          : "Members see a service only when it is switched on."}
+                      </p>
+                      {canProvisionServices && (
+                        <Button
+                          size="sm"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          disabled={!serviceFormDirty || isSavingServices}
+                          onClick={() => void handleSaveServices()}
+                        >
+                          {isSavingServices ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save services"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -68,3 +68,9 @@
 - [x] Authenticator-app (TOTP) MFA gate + 30-minute idle lock on the Vulture console and mesh-nodes
 - [x] Owner-scoped access to the provenance ledger and quarantine bucket for enterprise tenants
 - [x] Mesh key lifecycle: no hard deletes, revoke/rotate/allowlist via mesh-nodes, audit to security_events, 90-day expiry
+
+## Per-organization service provisioning (done)
+- [x] C-suite toggles and prices Identity Verification Utility and The Vulture per business on Client Organizations
+- [x] Marketplace shows each panel only to members of a provisioned business (C-suite/super admins always)
+- [x] Intake enforces provisioning; utility matches staged at the org rate, Vulture batches billed at the org rate
+- [x] Neutral "Identity Verification" wording replaces LIDD/surveillance language; new identity-verification-intake endpoint (old URL still works)
