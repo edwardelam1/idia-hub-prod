@@ -7,6 +7,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { isCjisUploadPath, isPiiKey } from "../_shared/vulture-cjis.ts";
+import { availableCredits, chargeServiceUsage, resolveServiceAccess, round4 } from "../_shared/service-provisioning.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -143,6 +144,34 @@ Deno.serve(async (req) => {
       return respond({ ok: true, duplicate: true, records: existing.record_count, originalHash: existing.raw_hash, sanitizedHash: existing.sanitized_hash, cjis_isolated: cjis });
     }
 
+    // ---- Organization provisioning + rate (set by C-suite per business) ----
+    if (!owner) {
+      console.error("[Vulture.Provisioning] rejected: object has no owner");
+      return respond({ error: "Upload is not attached to an account." }, 403);
+    }
+    const access = await resolveServiceAccess(supabase, owner, "vulture", "Vulture.Upload");
+    if (!access.allowed) {
+      await supabase.from("vulture_provenance_ledger").insert({
+        original_file_name: fileName, action: "sanitize", status: "failed",
+        error_message: "The Vulture is not provisioned for this organization.", owner, cjis_isolated: cjis,
+      });
+      return respond({ error: "The Vulture is not provisioned for your organization." }, 403);
+    }
+    if (access.rate > 0) {
+      const balance = await availableCredits(supabase, owner, "Vulture.Upload");
+      if (balance < access.rate) {
+        const shortfall = round4(access.rate - balance);
+        await supabase.from("vulture_provenance_ledger").insert({
+          original_file_name: fileName, action: "sanitize", status: "failed",
+          error_message: `Insufficient Synapse Credits (needs ${access.rate} CR, short ${shortfall} CR).`, owner, cjis_isolated: cjis,
+        });
+        return respond({
+          error: `Not enough Synapse Credits: this batch costs ${access.rate.toFixed(2)} CR (short ${shortfall.toFixed(2)} CR).`,
+          code: "INSUFFICIENT_CREDITS", rate_cr: access.rate, shortfall,
+        }, 402);
+      }
+    }
+
     console.info("[BEGIN: Vulture.VaultAccess]");
     const { data: saltData, error: saltErr } = await supabase.rpc("get_vulture_salt");
     if (saltErr) throw saltErr;
@@ -186,7 +215,7 @@ Deno.serve(async (req) => {
 
     // ---- Claim the object in the ledger (unique per upload; payload encrypted by DB trigger) ----
     console.info("[BEGIN: Vulture.StagingLedgerCommit]");
-    const { error: stageErr } = await supabase.from("vulture_ledger").insert({
+    const { data: ledgerRow, error: stageErr } = await supabase.from("vulture_ledger").insert({
       trace_id: crypto.randomUUID(),
       node_id: "upload",
       tenant_id: owner,
@@ -198,7 +227,7 @@ Deno.serve(async (req) => {
       record_count: tagged.length,
       cjis_isolated: cjis,
       status: "staged_for_notarization",
-    });
+    }).select("id").single();
     if (stageErr) {
       if ((stageErr as any).code === "23505") {
         console.info("[END: Vulture.StagingLedgerCommit] concurrent dispatch already claimed this object");
@@ -207,6 +236,12 @@ Deno.serve(async (req) => {
       throw stageErr;
     }
     console.info("[END: Vulture.StagingLedgerCommit]");
+
+    // One charge per committed batch at the organization's rate; keyed to the ledger row so retries never double-bill.
+    const billing = await chargeServiceUsage(supabase, {
+      userId: owner, service: "vulture", units: 1, reference: `vulture:${ledgerRow.id}`,
+      description: `The Vulture upload batch (${tagged.length} records) [${access.rate} CR]`,
+    }, "Vulture.Upload");
 
     // ---- Analytics fan-out (never for CJIS data) ----
     if (cjis) {
@@ -262,7 +297,10 @@ Deno.serve(async (req) => {
     console.info("[END: Vulture.ProvenanceRecord]");
 
     console.info("[END: Vulture.Handler]");
-    return respond({ ok: true, records: tagged.length, originalHash, sanitizedHash, cjis_isolated: cjis });
+    return respond({
+      ok: true, records: tagged.length, originalHash, sanitizedHash, cjis_isolated: cjis,
+      billing: { status: billing.status, amount_cr: billing.amount ?? 0, rate_cr: access.rate },
+    });
   } catch (err) {
     console.error("[Vulture.Handler.Stall]", err instanceof Error ? err.stack : String(err));
     try {
