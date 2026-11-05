@@ -1256,7 +1256,7 @@ const ClientOrganizations = () => {
                 </div>
 
                 {/* CARD BODY — dense two-column, no scroll */}
-                <div className="p-4 grid grid-cols-2 gap-x-5 gap-y-3 flex-1">
+                <div className="p-4 grid grid-cols-2 content-start gap-x-5 gap-y-3 flex-1 min-h-0 overflow-y-auto">
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1">
                       Operational Profile
@@ -1458,6 +1458,90 @@ const ClientOrganizations = () => {
                           )}
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* SERVICE PROVISIONING — each service toggled and priced independently by C-suite */}
+                  <div className="col-span-2 pt-1">
+                    <div className="mb-2 flex items-center justify-between gap-2 border-b pb-1">
+                      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Service Provisioning
+                      </h3>
+                      {!canProvisionServices && (
+                        <span className="text-[10px] text-muted-foreground">C-suite only</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          {
+                            key: "utility",
+                            label: "Identity Verification Utility",
+                            unit: "CR per verified record",
+                            icon: ScanFace,
+                          },
+                          { key: "vulture", label: "The Vulture", unit: "CR per intake batch", icon: Bird },
+                        ] as const
+                      ).map((svc) => {
+                        const Icon = svc.icon;
+                        const enabledKey = `${svc.key}_provisioned` as const;
+                        const rateKey = `${svc.key}_rate` as const;
+                        const enabled = serviceForm[enabledKey];
+                        return (
+                          <div
+                            key={svc.key}
+                            className={`space-y-2 rounded-md border px-2.5 py-2 ${enabled ? "border-primary/40 bg-primary/5" : "bg-muted/40"}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <Label
+                                htmlFor={`svc-${svc.key}`}
+                                className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground"
+                              >
+                                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                <span className="truncate">{svc.label}</span>
+                              </Label>
+                              <Switch
+                                id={`svc-${svc.key}`}
+                                checked={enabled}
+                                disabled={!canProvisionServices || isSavingServices}
+                                onCheckedChange={(v) => setServiceForm((f) => ({ ...f, [enabledKey]: v }))}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                max={100000}
+                                step="0.01"
+                                aria-label={`${svc.label} rate`}
+                                value={serviceForm[rateKey]}
+                                disabled={!canProvisionServices || isSavingServices}
+                                onChange={(e) => setServiceForm((f) => ({ ...f, [rateKey]: e.target.value }))}
+                                className="h-8 w-24 text-xs"
+                              />
+                              <span className="text-[10px] text-muted-foreground">{svc.unit}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {selectedBusiness.services_updated_at
+                          ? `Last changed ${new Date(selectedBusiness.services_updated_at).toLocaleString()}`
+                          : "Members see a service only when it is switched on."}
+                      </p>
+                      {canProvisionServices && (
+                        <Button
+                          size="sm"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          disabled={!serviceFormDirty || isSavingServices}
+                          onClick={() => void handleSaveServices()}
+                        >
+                          {isSavingServices ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save services"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
