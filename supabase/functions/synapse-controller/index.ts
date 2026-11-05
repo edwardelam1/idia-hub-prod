@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
     const { contributingUsers, verifiedHashes } = await resolveAcaLineage(adminClient, aca_record_ids);
 
     // 2. DYNAMIC PRICING CALL
-    const { feeCR, sectorLabel, buyerWeight, recordFactor } = await calculateDynamicFee(
+    const dynamicFee = await calculateDynamicFee(
       adminClient,
       user_id,
       sub_module_id,
@@ -255,6 +255,13 @@ Deno.serve(async (req) => {
       verifiedHashes.length,
       intent_type,
     );
+    const { sectorLabel, buyerWeight, recordFactor } = dynamicFee;
+    // Contract-priced services (organization rates set by C-suite) send an exact fee.
+    // Only trusted server callers may override; signed-in users always get the dynamic fee.
+    const fixedFee = Number(body?.fixed_fee_cr);
+    const useFixedFee = (caller.kind === "service" || caller.kind === "internal") && Number.isFinite(fixedFee) && fixedFee > 0;
+    const feeCR = useFixedFee ? round4(fixedFee) : dynamicFee.feeCR;
+    if (useFixedFee) console.log(`[SYNAPSE_CONTROLLER:FIXED_FEE] intent=${intent_type} fee=${feeCR} CR`);
     console.log(
       `[SYNAPSE_CONTROLLER:FEE_RESOLVED] ${feeCR} CR @ weight ${buyerWeight} × records ${verifiedHashes.length} (factor ${recordFactor})`,
     );

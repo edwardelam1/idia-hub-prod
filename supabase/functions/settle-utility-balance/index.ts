@@ -118,7 +118,9 @@ Deno.serve(async (req) => {
         user_id: userId,
         client_id: reqBody.client_id || "IDIA_HUB_APP",
         aca_record_ids: consumedReceipt,
-        intent_type: "VULTURE_ALPR_EXTRACTION",
+        intent_type: "IDENTITY_VERIFICATION_SETTLEMENT",
+        // Charge exactly the staged amount (organization rate × matches), not the dynamic data fee.
+        fixed_fee_cr: amountDue,
         location_string: reqBody.location_string || undefined,
         granularity: 1.0,
         relevance: 1.0,
