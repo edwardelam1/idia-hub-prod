@@ -121,7 +121,7 @@ const UtilitiesIngestionPanel = ({ rate, businessName }: UtilitiesIngestionPanel
 
   const fetchBalance = useCallback(async () => {
     if (!user?.user_id) return;
-    console.log(`[FETCH_VERIFICATION_BALANCE_START] Retrieving unpaid extraction events for ${user.user_id}`);
+    console.log(`[FETCH_VERIFICATION_BALANCE_START] Retrieving unpaid verification events for ${user.user_id}`);
     try {
       const { data, error } = await supabase
         .from("lidd_extraction_events")
@@ -371,6 +371,11 @@ const UtilitiesIngestionPanel = ({ rate, businessName }: UtilitiesIngestionPanel
               Across {eventCount} verified identity records
               <span className="hidden sm:inline"> · un-settled Synapse Credits from staged verification events</span>
             </p>
+            {rate != null && (
+              <p className="text-[10px] font-medium text-foreground sm:text-xs">
+                {businessName ? `${businessName} rate` : "Platform rate"}: {rate.toFixed(2)} CR per verified record
+              </p>
+            )}
           </div>
           <Button
             onClick={() => setIsSettleOpen(true)}
