@@ -141,7 +141,15 @@ export default function VultureUploader() {
       });
       if (error) {
         console.error(`[ERROR: Vulture.SanitizationInvoke] ${error.message}`);
-        throw error;
+        // Surface the server's reason (e.g. not provisioned, not enough credits) instead of a generic status.
+        let reason = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) reason = String(body.error);
+        } catch {
+          /* response body was not JSON */
+        }
+        throw new Error(reason);
       }
       console.info(`[END: Vulture.SanitizationInvoke] Agent responded with ${data?.records ?? 0} records.`);
 
