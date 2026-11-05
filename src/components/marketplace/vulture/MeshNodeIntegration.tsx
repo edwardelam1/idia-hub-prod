@@ -67,7 +67,7 @@ export default function MeshNodeIntegration() {
 }`;
 
   const curlSample = `curl -X POST "${endpoint}" \\
-  -H "Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "<anon key>"}" \\
+  -H "Authorization: Bearer ${getGatewayKey()}" \\
   -H "x-api-key: <your mesh node key>" \\
   -H "Content-Type: application/json" \\
   -d '${payloadSample.replace(/\n\s*/g, " ")}'`;
@@ -262,7 +262,7 @@ export default function MeshNodeIntegration() {
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">3 · Required Headers</p>
-          <SpecBlock label="Headers" value={`Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "<anon key>"}\nx-api-key: <your mesh node key>\nContent-Type: application/json`} />
+          <SpecBlock label="Headers" value={`Authorization: Bearer ${getGatewayKey()}\nx-api-key: <your mesh node key>\nContent-Type: application/json`} />
         </div>
 
         <div className="space-y-2">

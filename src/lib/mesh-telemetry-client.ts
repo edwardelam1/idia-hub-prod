@@ -1,6 +1,7 @@
 // Mesh telemetry client: all node ingestion goes through the FIPS 140-3
 // AWS API Gateway proxy, which forwards to the Supabase mesh-telemetry-intake function.
 import { supabase } from "@/integrations/supabase/client";
+import { getGatewayKey } from "@/lib/gateway-key";
 
 export const MESH_INTAKE_URL = "https://mesh.thebigidia.com/intake";
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -35,7 +36,7 @@ export async function sendMeshTelemetry(
     console.info(`[END: Mesh.TelemetryTransmission] run=${runId} aborted=missing_key`);
     return { ok: false, status: 0, latencyMs: 0, data: null, traceId: null, error: "Mesh node API key is required." };
   }
-  let bearer = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  let bearer: string | undefined = getGatewayKey();
   let bearerSource = "anon";
   if (opts.useSession !== false) {
     try {

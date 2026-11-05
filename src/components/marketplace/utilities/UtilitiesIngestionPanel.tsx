@@ -1,4 +1,5 @@
 import { invokeWithSession } from "@/lib/invoke-with-session";
+import { getGatewayKey } from "@/lib/gateway-key";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,13 +81,7 @@ const UtilitiesIngestionPanel = ({ rate, businessName }: UtilitiesIngestionPanel
     return `${base}/functions/v1/identity-verification-intake`;
   }, []);
 
-  const gatewayKey = useMemo(
-    () =>
-      ((import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ??
-        (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ??
-        "<your_supabase_anon_key>"),
-    [],
-  );
+  const gatewayKey = useMemo(() => getGatewayKey(), []);
 
   const payloadSample = useMemo(
     () =>
