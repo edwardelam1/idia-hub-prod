@@ -91,6 +91,41 @@ export async function merkleRoot(sanitizedHashes: string[]): Promise<string> {
   return bytesToHex(level[0]);
 }
 
+export interface MerkleProofStep { position: "left" | "right"; hash: string }
+export interface MerkleProof { leaf_hash: string; leaf_index: number; siblings: MerkleProofStep[]; root: string }
+
+/**
+ * Inclusion proof for leaf `index`, using the same tree rules as merkleRoot.
+ * Verify by starting from leaf_hash and, for each step, hashing 0x01 || left || right.
+ */
+export async function merkleProof(sanitizedHashes: string[], index: number): Promise<MerkleProof> {
+  if (!Number.isInteger(index) || index < 0 || index >= sanitizedHashes.length) throw new Error("Leaf index out of range.");
+  let level = await Promise.all(sanitizedHashes.map((h) => sha(0x00, hexToBytes(h))));
+  const leafHash = bytesToHex(level[index]);
+  const siblings: MerkleProofStep[] = [];
+  let i = index;
+  while (level.length > 1) {
+    const isRight = i % 2 === 1;
+    const sibling = isRight ? level[i - 1] : (level[i + 1] ?? level[i]);
+    siblings.push({ position: isRight ? "left" : "right", hash: bytesToHex(sibling) });
+    const next: Uint8Array[] = [];
+    for (let j = 0; j < level.length; j += 2) next.push(await sha(0x01, level[j], level[j + 1] ?? level[j]));
+    level = next;
+    i = Math.floor(i / 2);
+  }
+  return { leaf_hash: leafHash, leaf_index: index, siblings, root: bytesToHex(level[0]) };
+}
+
+/** Recomputes the root from a proof (what an auditor does offline). */
+export async function verifyMerkleProof(leafHashHex: string, siblings: MerkleProofStep[]): Promise<string> {
+  let cur = hexToBytes(leafHashHex);
+  for (const s of siblings) {
+    const sib = hexToBytes(s.hash);
+    cur = s.position === "left" ? await sha(0x01, sib, cur) : await sha(0x01, cur, sib);
+  }
+  return bytesToHex(cur);
+}
+
 /** 4-byte magic ("IDVL") + 32-byte root, sent as calldata of a zero-value self-transaction. */
 export const ANCHOR_MAGIC = "4944564c";
 export function anchorCalldata(rootHex: string): `0x${string}` {
