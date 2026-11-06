@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.vulture-notarization-relayer]
 verify_jwt = false
+
+[functions.protocol-api]
+verify_jwt = false
