@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 interface MarketplaceBundle {
@@ -28,6 +29,20 @@ interface MarketplaceBundle {
 }
 
 export const useMarketplaceBundles = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`marketplace-bundles-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_bundles' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['marketplace-bundles'] });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const { data: bundles, isLoading, error, refetch } = useQuery({
     queryKey: ['marketplace-bundles'],
     queryFn: async () => {
