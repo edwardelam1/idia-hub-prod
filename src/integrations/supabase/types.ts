@@ -1386,10 +1386,13 @@ export type Database = {
           country: string | null
           created_at: string | null
           data_coop_enabled: boolean | null
+          dba_name: string | null
           email: string | null
           entity_type: string | null
           franchise_parent_id: string | null
           id: string
+          irs_tax_classification: string | null
+          legal_name: string | null
           logo_url: string | null
           name: string
           phone: string | null
@@ -1398,11 +1401,13 @@ export type Database = {
           services_updated_at: string | null
           services_updated_by: string | null
           state: string | null
+          state_of_formation: string | null
           street_address_1: string | null
           street_address_2: string | null
           submodule_id: string | null
           subscription_tier: string | null
           tax_id: string | null
+          tax_id_type: string | null
           updated_at: string | null
           utility_provisioned: boolean
           utility_rate: number
@@ -1416,10 +1421,13 @@ export type Database = {
           country?: string | null
           created_at?: string | null
           data_coop_enabled?: boolean | null
+          dba_name?: string | null
           email?: string | null
           entity_type?: string | null
           franchise_parent_id?: string | null
           id?: string
+          irs_tax_classification?: string | null
+          legal_name?: string | null
           logo_url?: string | null
           name: string
           phone?: string | null
@@ -1428,11 +1436,13 @@ export type Database = {
           services_updated_at?: string | null
           services_updated_by?: string | null
           state?: string | null
+          state_of_formation?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
           submodule_id?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
+          tax_id_type?: string | null
           updated_at?: string | null
           utility_provisioned?: boolean
           utility_rate?: number
@@ -1446,10 +1456,13 @@ export type Database = {
           country?: string | null
           created_at?: string | null
           data_coop_enabled?: boolean | null
+          dba_name?: string | null
           email?: string | null
           entity_type?: string | null
           franchise_parent_id?: string | null
           id?: string
+          irs_tax_classification?: string | null
+          legal_name?: string | null
           logo_url?: string | null
           name?: string
           phone?: string | null
@@ -1458,11 +1471,13 @@ export type Database = {
           services_updated_at?: string | null
           services_updated_by?: string | null
           state?: string | null
+          state_of_formation?: string | null
           street_address_1?: string | null
           street_address_2?: string | null
           submodule_id?: string | null
           subscription_tier?: string | null
           tax_id?: string | null
+          tax_id_type?: string | null
           updated_at?: string | null
           utility_provisioned?: boolean
           utility_rate?: number
