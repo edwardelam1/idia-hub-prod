@@ -707,7 +707,7 @@ const ClientOrganizations = () => {
                 <Plus className="w-4 h-4 text-indigo-600" /> Manual Organization Entry
               </DialogTitle>
             </DialogHeader>
-            <div className="px-6 py-4 space-y-3">
+            <div className="px-6 py-4 space-y-3 max-h-[70dvh] overflow-y-auto">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
                   Legal Entity Name <span className="text-red-500">*</span>
