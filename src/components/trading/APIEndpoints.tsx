@@ -12,6 +12,7 @@ import { useSynapseCredits } from "@/contexts/SynapseCreditsContext";
 import { fetchApi } from "@/lib/api";
 import { authorizeRelayerViaLife } from "@/lib/relayer-authorization";
 import { supabase } from "@/integrations/supabase/client";
+import { ProtocolApiReference } from "./ProtocolApiReference";
 
 // --- Type Definitions ---
 type Tier = "Analyst" | "Professional" | "Enterprise";
@@ -429,6 +430,8 @@ axios.get('${origin}/v1/features/market-data', config)
           {credits.toLocaleString(undefined, { maximumFractionDigits: 2 })} CR
         </Badge>
       </div>
+
+      <ProtocolApiReference />
 
       <Card className="border-primary/50 bg-primary/5">
         <CardHeader>

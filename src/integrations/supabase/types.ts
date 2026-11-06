@@ -8268,6 +8268,36 @@ export type Database = {
           },
         ]
       }
+      protocol_api_requests: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          idempotency_key: string
+          owner_id: string
+          response: Json
+          status_code: number
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          idempotency_key: string
+          owner_id: string
+          response: Json
+          status_code: number
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          idempotency_key?: string
+          owner_id?: string
+          response?: Json
+          status_code?: number
+        }
+        Relationships: []
+      }
       protocol_events: {
         Row: {
           block_number: number
