@@ -74,6 +74,13 @@ const ClientOrganizations = () => {
 
   const [formData, setFormData] = useState({
     legalName: "",
+    dbaName: "",
+    taxIdType: "EIN",
+    taxId: "",
+    irsClassification: "",
+    stateOfFormation: "",
+    email: "",
+    phone: "",
     businessType: "",
     streetAddress1: "",
     streetAddress2: "",
@@ -209,6 +216,20 @@ const ClientOrganizations = () => {
       return;
     }
 
+    const taxDigits = formData.taxId.replace(/\D/g, "");
+    if (!formData.irsClassification || taxDigits.length !== 9) {
+      toast({
+        title: "Validation Error",
+        description: "A 9-digit Tax ID and IRS tax classification are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const formattedTaxId =
+      formData.taxIdType === "EIN"
+        ? `${taxDigits.slice(0, 2)}-${taxDigits.slice(2)}`
+        : `${taxDigits.slice(0, 3)}-${taxDigits.slice(3, 5)}-${taxDigits.slice(5)}`;
+
     const composedAddress = [
       formData.streetAddress1,
       formData.streetAddress2,
@@ -225,7 +246,15 @@ const ClientOrganizations = () => {
         .from("businesses")
         .insert([
           {
-            name: formData.legalName,
+            name: formData.dbaName || formData.legalName,
+            legal_name: formData.legalName,
+            dba_name: formData.dbaName || null,
+            tax_id: formattedTaxId,
+            tax_id_type: formData.taxIdType,
+            irs_tax_classification: formData.irsClassification,
+            state_of_formation: formData.stateOfFormation || null,
+            email: formData.email || null,
+            phone: formData.phone || null,
             business_type: formData.businessType,
             address: composedAddress,
             street_address_1: formData.streetAddress1,
@@ -290,6 +319,13 @@ const ClientOrganizations = () => {
       setShowNewOrgModal(false);
       setFormData({
         legalName: "",
+        dbaName: "",
+        taxIdType: "EIN",
+        taxId: "",
+        irsClassification: "",
+        stateOfFormation: "",
+        email: "",
+        phone: "",
         businessType: "",
         streetAddress1: "",
         streetAddress2: "",
@@ -680,8 +716,98 @@ const ClientOrganizations = () => {
                   value={formData.legalName}
                   onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
                   className="text-sm"
-                  placeholder="Enter business name"
+                  placeholder="Exactly as registered with the IRS"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">
+                  DBA / Trade Name <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  value={formData.dbaName}
+                  onChange={(e) => setFormData({ ...formData, dbaName: e.target.value })}
+                  className="text-sm"
+                  placeholder="Doing business as"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">Tax ID Type</Label>
+                  <Select value={formData.taxIdType} onValueChange={(v) => setFormData({ ...formData, taxIdType: v })}>
+                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EIN">EIN</SelectItem>
+                      <SelectItem value="SSN">SSN (sole prop.)</SelectItem>
+                      <SelectItem value="ITIN">ITIN</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs font-medium text-slate-700">
+                    Tax ID <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={formData.taxId}
+                    onChange={(e) => setFormData({ ...formData, taxId: e.target.value.replace(/[^\d-]/g, "").slice(0, 11) })}
+                    className="text-sm font-mono"
+                    inputMode="numeric"
+                    placeholder={formData.taxIdType === "EIN" ? "XX-XXXXXXX" : "XXX-XX-XXXX"}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs font-medium text-slate-700">
+                    IRS Tax Classification <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={formData.irsClassification} onValueChange={(v) => setFormData({ ...formData, irsClassification: v })}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select classification..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="c_corp">C Corporation</SelectItem>
+                      <SelectItem value="s_corp">S Corporation</SelectItem>
+                      <SelectItem value="partnership">Partnership</SelectItem>
+                      <SelectItem value="llc_single">LLC – Single member (disregarded)</SelectItem>
+                      <SelectItem value="llc_c">LLC – taxed as C Corp</SelectItem>
+                      <SelectItem value="llc_s">LLC – taxed as S Corp</SelectItem>
+                      <SelectItem value="llc_partnership">LLC – taxed as Partnership</SelectItem>
+                      <SelectItem value="sole_proprietor">Sole Proprietor</SelectItem>
+                      <SelectItem value="nonprofit">Non-Profit / Tax-Exempt</SelectItem>
+                      <SelectItem value="trust_estate">Trust / Estate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">State of Formation</Label>
+                  <Input
+                    value={formData.stateOfFormation}
+                    onChange={(e) => setFormData({ ...formData, stateOfFormation: e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2) })}
+                    className="text-sm uppercase"
+                    placeholder="DE"
+                    maxLength={2}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">Tax Contact Email</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="text-sm"
+                    placeholder="finance@company.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700">Tax Contact Phone</Label>
+                  <Input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="text-sm"
+                    placeholder="(555) 555-5555"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
