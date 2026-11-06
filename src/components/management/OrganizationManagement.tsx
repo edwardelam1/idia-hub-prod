@@ -296,7 +296,7 @@ const ClientOrganizations = () => {
         {
           business_id: businessData.id,
           user_id: formData.ownerUserId,
-          role: "csuite",
+          role: "leadership",
           is_active: true,
           accepted_at: new Date().toISOString(),
         },
@@ -629,12 +629,12 @@ const ClientOrganizations = () => {
 
         if (businessError) throw businessError;
 
-        // 3. Link C-Suite/Org Admin (GUID-rooted)
+        // 3. Link client leadership (never internal C-suite) (GUID-rooted)
         await supabase.from("business_users").insert([
           {
             business_id: businessData.id,
             user_id: selectedRequest.user_id,
-            role: "csuite",
+            role: "leadership",
             is_active: true,
           },
         ]);
