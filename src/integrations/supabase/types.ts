@@ -3800,6 +3800,57 @@ export type Database = {
           },
         ]
       }
+      feature_feed_packets: {
+        Row: {
+          created_at: string
+          id: number
+          owner_id: string | null
+          payload: Json
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          owner_id?: string | null
+          payload: Json
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          owner_id?: string | null
+          payload?: Json
+          topic?: string
+        }
+        Relationships: []
+      }
+      feature_feed_sessions: {
+        Row: {
+          created_at: string
+          credits_charged: number
+          expires_at: string
+          id: string
+          owner_id: string
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          credits_charged: number
+          expires_at: string
+          id?: string
+          owner_id: string
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          credits_charged?: number
+          expires_at?: string
+          id?: string
+          owner_id?: string
+          topic?: string
+        }
+        Relationships: []
+      }
       feature_feeds: {
         Row: {
           description: string | null
@@ -13760,6 +13811,16 @@ export type Database = {
         Returns: string
       }
       prune_infra_logs: { Args: never; Returns: undefined }
+      publish_feature_feeds: { Args: never; Returns: Json }
+      publish_feature_packet: {
+        Args: {
+          _metrics: Json
+          _owner: string
+          _source: string
+          _topic: string
+        }
+        Returns: undefined
+      }
       refresh_application_sponsor_count: {
         Args: { _application_id: string }
         Returns: number
@@ -13883,6 +13944,10 @@ export type Database = {
       }
       staged_marketplace_aggregates: { Args: never; Returns: Json }
       staged_user_aggregates: { Args: { _pseudo_id: string }; Returns: Json }
+      start_feature_feed_session: {
+        Args: { _owner: string; _topic: string }
+        Returns: Json
+      }
       submit_variance_correction: {
         Args: {
           _corrective_action: string

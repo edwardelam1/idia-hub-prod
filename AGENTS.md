@@ -1,5 +1,7 @@
 # Architecture decisions
 
+- Feature feeds publish durable metric-only packets on source statement changes, with paid per-topic hourly sessions shared by Realtime and resumable Protocol API SSE; financial/receipt packets remain owner-scoped, shared health counts require latest explicit feed consent and cohort suppression, and no CJIS source or raw identifier is queried.
+
 - Keep the BIG IDIA Radio console mounted inside the authenticated layout and hide it with a native dialog; provider playback must survive console closure and in-app navigation, but stop on sign-out.
 - Use official provider playlist embeds for the two radio decks; keep provider credentials server-side for catalog sync because embedded playback manages its own authorization and must not expose secrets.
 - Per-user Spotify/Apple Music linking goes through the music-accounts edge function; provider tokens live only in service-role tables because users' credentials must never reach other clients (MusicKit's developer token is served at runtime since MusicKit JS requires it in the browser).
