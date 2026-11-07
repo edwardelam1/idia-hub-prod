@@ -2,6 +2,7 @@
 // Public IDIA Protocol API (v1). Routes:
 //   GET  /v1/auth/provision-status
 //   POST /v1/utility/validate               (Identity Verification Utility, atomic charge, Idempotency-Key)
+//   GET  /v1/utility/receipts                (cursor-paginated history: limit, starting_after, ending_before, since, until, status)
 //   GET  /v1/utility/receipts/{receipt_id}
 //   POST /v1/vulture/ingest                 (forwards to mesh-telemetry-intake — same sanitize/ledger path)
 //   GET  /v1/vulture/verify/{batch_id}      (offline-verifiable Merkle inclusion proof)
@@ -16,6 +17,7 @@ import { availableCredits, chargeServiceUsage, resolveServiceAccess, round4, usa
 import { merkleProof } from "../_shared/vulture-cjis.ts";
 import { WEBHOOK_EVENTS, buildEvent, emitEvent, newWebhookSecret, sendSigned } from "../_shared/protocol-webhooks.ts";
 import { featureRoute } from "../_shared/feature-feeds.ts";
+import { RECEIPT_PAGE_MAX, decodeCursor, encodeCursor, keysetFilter, parseLimit } from "../_shared/receipt-cursor.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -245,6 +247,75 @@ async function utilityReceipt(db: Db, key: string, receiptId: string, t: string)
     masked_guid: maskGuid(String(row.citizen_guid)),
     synapse_credits_charged: round4(Number(row.synapse_credit_cost ?? 0)),
     blockchain_proof: row.aca_hash_key ? { network: "base_mainnet", aca_hash: hex0x(row.aca_hash_key) } : null,
+  });
+}
+
+async function utilityReceiptList(req: Request, db: Db, key: string, t: string) {
+  const owner = await ownerFromUtilityKey(db, key, t);
+  if (!owner) return apiError(401, "invalid_api_key", "Invalid or revoked Identity Verification key.", t);
+  const q = new URL(req.url).searchParams;
+  const limit = parseLimit(q.get("limit"));
+  if (limit === null) return apiError(400, "invalid_limit", `limit must be an integer from 1 to ${RECEIPT_PAGE_MAX}.`, t);
+  const after = q.get("starting_after"), before = q.get("ending_before");
+  if (after && before) return apiError(400, "invalid_cursor", "Send starting_after or ending_before, not both.", t);
+  const cur = after ? decodeCursor(after) : before ? decodeCursor(before) : null;
+  if ((after || before) && !cur) return apiError(400, "invalid_cursor", "Cursor is malformed or was not issued by this API.", t);
+  const since = q.get("since"), until = q.get("until"), status = q.get("status");
+  for (const [n, v] of [["since", since], ["until", until]] as const) {
+    if (v && Number.isNaN(Date.parse(v))) return apiError(400, "invalid_date", `${n} must be an ISO-8601 timestamp.`, t);
+  }
+  if (status && status !== "anchored_l2" && status !== "ledger_recorded") return apiError(400, "invalid_status", "status must be anchored_l2 or ledger_recorded.", t);
+
+  console.log(`[PHASE_START: ${t}.ReceiptList.Query] limit=${limit} dir=${before ? "newer" : "older"}`);
+  const newer = !!before;
+  let query = db.from("lidd_extraction_events")
+    .select("id, citizen_guid, aca_hash_key, payment_status, created_at, synapse_credit_cost")
+    .eq("extractor_id", owner)
+    .order("created_at", { ascending: newer }).order("id", { ascending: newer })
+    .limit(limit + 1);
+  if (since) query = query.gte("created_at", new Date(since).toISOString());
+  if (until) query = query.lt("created_at", new Date(until).toISOString());
+  if (status === "anchored_l2") query = query.not("aca_hash_key", "is", null);
+  if (status === "ledger_recorded") query = query.is("aca_hash_key", null);
+  if (cur) query = query.or(keysetFilter(cur, newer ? "newer" : "older"));
+  const { data, error } = await query;
+  if (error) throw new Error(`receipt list: ${error.message}`);
+  console.log(`[PHASE_END: ${t}.ReceiptList.Query] rows=${data?.length ?? 0}`);
+
+  const more = (data?.length ?? 0) > limit;
+  const page = (data ?? []).slice(0, limit);
+  if (newer) page.reverse();
+  const access = await resolveServiceAccess(db, owner, "utility", t);
+  // deno-lint-ignore no-explicit-any
+  const items = page.map((row: any) => ({
+    liability_receipt_id: row.id,
+    status: row.aca_hash_key ? "anchored_l2" : "ledger_recorded",
+    payment_status: row.payment_status,
+    timestamp: row.created_at,
+    enterprise_tenant_id: access.businessId,
+    masked_guid: maskGuid(String(row.citizen_guid)),
+    synapse_credits_charged: round4(Number(row.synapse_credit_cost ?? 0)),
+    blockchain_proof: row.aca_hash_key ? { network: "base_mainnet", aca_hash: hex0x(row.aca_hash_key) } : null,
+  }));
+  const first = page[0], last = page[page.length - 1];
+  // Older pages exist if we fetched extra going older, or if we arrived here by paging newer.
+  const hasOlder = newer ? !!cur : more;
+  const hasNewer = newer ? more : !!cur;
+  return json({
+    object: "list",
+    data: items,
+    pagination: {
+      limit,
+      returned_count: items.length,
+      has_more: hasOlder,
+      next_cursor: hasOlder && last ? encodeCursor(last.created_at, last.id) : null,
+      prev_cursor: hasNewer && first ? encodeCursor(first.created_at, first.id) : null,
+    },
+    order: "timestamp_desc",
+    bulk_audit: {
+      hub_export: "https://hub.thebigidia.com/saved-activity",
+      on_chain: "Anchored receipts carry an ACA hash recorded on Base mainnet; reconcile via Base event logs.",
+    },
   });
 }
 
@@ -517,6 +588,7 @@ Deno.serve(async (req) => {
       if (req.method === "GET" && path === "/v1/auth/provision-status") return await provisionStatus(db, key, t);
       if (req.method === "GET" && path === "/v1/billing/balance") return await billingBalance(db, key, t);
       if (req.method === "POST" && path === "/v1/utility/validate") return await utilityValidate(req, db, key, t);
+      if (req.method === "GET" && path === "/v1/utility/receipts") return await utilityReceiptList(req, db, key, t);
       if (req.method === "GET" && (m = path.match(/^\/v1\/utility\/receipts\/([^/]+)$/))) return await utilityReceipt(db, key, m[1], t);
       if (req.method === "POST" && path === "/v1/vulture/ingest") return await vultureIngest(req, db, key, t);
       if (req.method === "GET" && (m = path.match(/^\/v1\/vulture\/verify\/([^/]+)$/))) return await vultureVerify(db, key, m[1], t);
