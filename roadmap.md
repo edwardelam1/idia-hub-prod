@@ -1,5 +1,10 @@
 # Roadmap
 
+## Feature feeds
+- [ ] Activate durable, privacy-safe live feed publishing and in-app viewing.
+- [ ] Add authenticated, resumable developer streaming and latest-packet endpoints.
+- [ ] Document exact verified metrics, privacy suppression, billing and provenance; test live delivery.
+
 ## Done
 - Replaced the MetaMask relayer-approval path with an IDIA Life deep-link handoff (`src/lib/relayer-authorization.ts`).
 - Wired the handoff into UniversalPurchaseScreen, SynapseTopUp, SynapsePurchaseModal and APIEndpoints.
