@@ -7,6 +7,10 @@
 - [ ] Verify paid Realtime/SSE delivery and session reuse with a real account/API key — blocked by external unmanaged authentication; no signed-in test session is available.
 - [ ] Release shared health counts — blocked until at least ten contributors explicitly grant feature_feed_health consent; currently zero.
 
+## Protocol API history & monitoring
+- [ ] Cursor-paginated GET /v1/utility/receipts (date range, status, forward/back cursors) + docs on Base event logs / Hub export.
+- [ ] Live, robust Trading Desk Monitoring tab (time windows, endpoint/status breakdowns, 429s, live request log, webhook deliveries).
+
 ## Done
 - Replaced the MetaMask relayer-approval path with an IDIA Life deep-link handoff (`src/lib/relayer-authorization.ts`).
 - Wired the handoff into UniversalPurchaseScreen, SynapseTopUp, SynapsePurchaseModal and APIEndpoints.
