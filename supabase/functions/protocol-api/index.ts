@@ -15,6 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { availableCredits, chargeServiceUsage, resolveServiceAccess, round4, usageCost } from "../_shared/service-provisioning.ts";
 import { merkleProof } from "../_shared/vulture-cjis.ts";
 import { WEBHOOK_EVENTS, buildEvent, emitEvent, newWebhookSecret, sendSigned } from "../_shared/protocol-webhooks.ts";
+import { featureRoute } from "../_shared/feature-feeds.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -29,8 +30,8 @@ const TARGET_TYPES = new Set(["hashed_ip", "hashed_maid", "hashed_email", "hashe
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-api-key, authorization, apikey, x-client-info, idempotency-key, x-idia-environment",
-  "Access-Control-Expose-Headers": "x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, retry-after, idempotent-replayed",
+  "Access-Control-Allow-Headers": "content-type, x-api-key, authorization, apikey, x-client-info, idempotency-key, x-idia-environment, last-event-id",
+  "Access-Control-Expose-Headers": "x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, retry-after, idempotent-replayed, x-idia-session-expires",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
@@ -474,9 +475,24 @@ Deno.serve(async (req) => {
   console.log(`[PHASE_START: ${t}.Request] ${req.method} ${path}`);
   try {
     const key = presentedKey(req);
-    if (!key) return apiError(401, "missing_api_key", "Send your IDIA key in the x-api-key header.", t);
     const db = createClient(SUPABASE_URL, SERVICE_KEY);
-    const rl = await applyRateLimit(db, key, t);
+    const isFeaturePath = ["/v1/features/sessions", "/v1/features/latest", "/v1/features/stream"].includes(path);
+    let featureOwner: string | null = null;
+    const sessionToken = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const authorizeFeature = async () => {
+      if (key) return await ownerFromAnyKey(db, key, t);
+      console.log(`[PHASE_START: ${t}.FeedUserAuth]`);
+      try {
+        const { data, error } = await db.auth.getUser(sessionToken);
+        if (error) return null;
+        return data.user?.id ?? null;
+      } finally { console.log(`[PHASE_END: ${t}.FeedUserAuth]`); }
+    };
+    if (isFeaturePath) {
+      featureOwner = await authorizeFeature();
+      if (!featureOwner) return apiError(401, "invalid_api_key", "Send an active IDIA API key or signed-in Hub session.", t);
+    } else if (!key) return apiError(401, "missing_api_key", "Send your IDIA key in the x-api-key header.", t);
+    const rl = await applyRateLimit(db, key || `feature-user:${featureOwner}`, t);
     const withRl = (res: Response) => {
       if (rl) {
         res.headers.set("X-RateLimit-Limit", String(RATE_LIMIT_PER_MIN));
@@ -494,6 +510,10 @@ Deno.serve(async (req) => {
     }
     let m: RegExpMatchArray | null;
     const route = async (): Promise<Response> => {
+      if (isFeaturePath && featureOwner) {
+        if ((path === "/v1/features/sessions" && req.method !== "POST") || (path !== "/v1/features/sessions" && req.method !== "GET")) return apiError(405, "method_not_allowed", "Use POST for sessions and GET for latest / stream.", t);
+        return await featureRoute(req, db, featureOwner, path, t, cors, apiError, async () => (await authorizeFeature()) === featureOwner);
+      }
       if (req.method === "GET" && path === "/v1/auth/provision-status") return await provisionStatus(db, key, t);
       if (req.method === "GET" && path === "/v1/billing/balance") return await billingBalance(db, key, t);
       if (req.method === "POST" && path === "/v1/utility/validate") return await utilityValidate(req, db, key, t);
