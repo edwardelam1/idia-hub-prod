@@ -539,7 +539,7 @@ async function applyRateLimit(db: Db, key: string, t: string) {
   return { allowed: !!row.allowed, remaining: Number(row.remaining), reset };
 }
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const t = `ProtocolAPI.${crypto.randomUUID().slice(0, 8)}`;
   const path = new URL(req.url).pathname.replace(/^.*?\/protocol-api/, "").replace(/\/+$/, "") || "/";
@@ -605,4 +605,49 @@ Deno.serve(async (req) => {
   } finally {
     console.log(`[PHASE_END: ${t}.Request]`);
   }
+}
+
+// Every call (including 401/429s) is recorded to api_metrics for the Hub Monitoring tab.
+// Only the endpoint template, status, latency and owner are stored — never bodies or keys.
+async function recordMetric(req: Request, status: number, latency: number, errText: string | null) {
+  try {
+    const key = presentedKey(req);
+    const db = createClient(SUPABASE_URL, SERVICE_KEY);
+    let owner: string | null = null, keyId: string | null = null;
+    if (key) {
+      const hash = await sha256Hex(key);
+      const { data: k } = await db.from("api_keys").select("id, user_id").eq("key_hash", hash).maybeSingle();
+      if (k) { owner = k.user_id; keyId = k.id; }
+      else {
+        const { data: n } = await db.from("mesh_nodes").select("tenant_id").eq("token_hash", hash).maybeSingle();
+        owner = n?.tenant_id ?? null;
+      }
+    } else {
+      const tok = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      if (tok) owner = (await db.auth.getUser(tok)).data.user?.id ?? null;
+    }
+    if (!owner) return;
+    const path = new URL(req.url).pathname.replace(/^.*?\/protocol-api/, "").replace(/\/+$/, "") || "/";
+    const endpoint = `${req.method} ${path.replace(/\/[0-9a-f-]{36}$/i, "/{id}")}`;
+    const { error } = await db.from("api_metrics").insert({ endpoint, status_code: status, latency_ms: latency, user_id: owner, key_id: keyId, error_details: errText });
+    if (error) console.error(`[ProtocolAPI.Metric] ${error.message}`);
+  } catch (e) {
+    console.error(`[ProtocolAPI.Metric.Fault] ${e instanceof Error ? e.stack : String(e)}`);
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const t0 = performance.now();
+  const res = await handle(req);
+  const latency = Math.round(performance.now() - t0);
+  let errText: string | null = null;
+  if (res.status >= 400) {
+    try { errText = ((await res.clone().json())?.error?.code as string) ?? null; } catch { errText = null; }
+  }
+  const task = recordMetric(req, res.status, latency, errText);
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(task); else await task;
+  return res;
 });
