@@ -13474,6 +13474,7 @@ export type Database = {
         }
         Returns: number
       }
+      feature_feed_rate: { Args: { _tier: string }; Returns: number }
       generate_business_provisioning_code: { Args: never; Returns: string }
       generate_pseudonym:
         | { Args: { input_id: string }; Returns: string }
