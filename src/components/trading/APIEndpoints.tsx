@@ -164,45 +164,22 @@ axios.get('https://api.idiahub.com/v1/features/market-data', config)
       console.info("[APIEndpoints][Hydrate][resolve_origin] END");
 
       console.info("[APIEndpoints][Hydrate][template_examples] BEGIN");
-      setCurlExample(
-        `curl -X GET "${origin}/v1/features/market-data" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json"`,
-      );
-      setPythonExample(
-        `import requests
+      const api = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/protocol-api/v1/auth/provision-status`;
+      setCurlExample(`curl "${api}" \\
+  -H "x-api-key: $IDIA_API_KEY"`);
+      setPythonExample(`import os, requests
 
-headers = {
-    "Authorization": "Bearer YOUR_API_KEY",
-    "Content-Type": "application/json"
-}
-
-response = requests.get(
-    "${origin}/v1/features/market-data",
-    headers=headers
+r = requests.get(
+    "${api}",
+    headers={"x-api-key": os.environ["IDIA_API_KEY"]},
 )
-
-data = response.json()
-print(data)`,
-      );
-      setNodejsExample(
-        `const axios = require('axios');
-
-const config = {
-  headers: {
-    'Authorization': 'Bearer YOUR_API_KEY',
-    'Content-Type': 'application/json'
-  }
-};
-
-axios.get('${origin}/v1/features/market-data', config)
-  .then(response => {
-    console.log(response.data);
-  })
-  .catch(error => {
-    console.error('Error:', error);
-  });`,
-      );
+print(r.status_code, r.headers.get("X-RateLimit-Remaining"))
+print(r.json())`);
+      setNodejsExample(`const res = await fetch("${api}", {
+  headers: { "x-api-key": process.env.IDIA_API_KEY },
+});
+console.log(res.status, res.headers.get("x-ratelimit-remaining"));
+console.log(await res.json());`);
       console.info("[APIEndpoints][Hydrate][template_examples] END");
     } catch (error) {
       console.error("[APIEndpoints][Hydrate] CATCH: hydration failed", error);
@@ -565,7 +542,7 @@ axios.get('${origin}/v1/features/market-data', config)
       <Card>
         <CardHeader>
           <CardTitle>REST Code Examples</CardTitle>
-          <CardDescription>Integration examples for popular programming languages</CardDescription>
+          <CardDescription>First request against the live Protocol API (provision-status). Keep your key server-side.</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="curl">
