@@ -3,7 +3,9 @@
 ## Feature feeds
 - [x] Activate durable, privacy-safe live feed publishing and in-app viewing.
 - [x] Add authenticated, resumable developer streaming and latest-packet endpoints.
-- [ ] Document exact verified metrics, privacy suppression, billing and provenance; test live delivery.
+- [x] Document exact verified metrics, privacy suppression, billing and provenance; unit tests, deployed auth-denial checks and database price assertions passed.
+- [ ] Verify paid Realtime/SSE delivery and session reuse with a real account/API key — blocked by external unmanaged authentication; no signed-in test session is available.
+- [ ] Release shared health counts — blocked until at least ten contributors explicitly grant feature_feed_health consent; currently zero.
 
 ## Done
 - Replaced the MetaMask relayer-approval path with an IDIA Life deep-link handoff (`src/lib/relayer-authorization.ts`).
