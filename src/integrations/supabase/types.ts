@@ -469,6 +469,92 @@ export type Database = {
           },
         ]
       }
+      api_webhook_deliveries: {
+        Row: {
+          attempts: number
+          created_at: string
+          delivered_at: string | null
+          event_key: string
+          event_type: string
+          id: string
+          last_status_code: number | null
+          next_attempt_at: string
+          payload: Json
+          status: string
+          webhook_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_key: string
+          event_type: string
+          id?: string
+          last_status_code?: number | null
+          next_attempt_at?: string
+          payload: Json
+          status?: string
+          webhook_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_key?: string
+          event_type?: string
+          id?: string
+          last_status_code?: number | null
+          next_attempt_at?: string
+          payload?: Json
+          status?: string
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_webhook_deliveries_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "api_webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_webhooks: {
+        Row: {
+          created_at: string
+          credit_threshold: number | null
+          events: string[]
+          id: string
+          owner_id: string
+          secret: string
+          status: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          credit_threshold?: number | null
+          events: string[]
+          id?: string
+          owner_id: string
+          secret: string
+          status?: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          credit_threshold?: number | null
+          events?: string[]
+          id?: string
+          owner_id?: string
+          secret?: string
+          status?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       ar_campaign_performance: {
         Row: {
           business_id: string
@@ -8268,6 +8354,24 @@ export type Database = {
           },
         ]
       }
+      protocol_api_rate_windows: {
+        Row: {
+          hits: number
+          key_hash: string
+          window_start: string
+        }
+        Insert: {
+          hits?: number
+          key_hash: string
+          window_start: string
+        }
+        Update: {
+          hits?: number
+          key_hash?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       protocol_api_requests: {
         Row: {
           created_at: string
@@ -13547,6 +13651,14 @@ export type Database = {
         Returns: {
           error_count: number
           processed_count: number
+        }[]
+      }
+      protocol_api_rate_hit: {
+        Args: { _key_hash: string; _limit: number; _window_seconds?: number }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_at: string
         }[]
       }
       provision_business_from_request: {
