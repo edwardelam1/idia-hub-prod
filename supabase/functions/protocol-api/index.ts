@@ -122,7 +122,7 @@ async function utilityValidate(req: Request, db: Db, key: string, t: string) {
   const { data: prior } = await db.from("protocol_api_requests").select("status_code, response")
     .eq("owner_id", owner).eq("endpoint", "utility.validate").eq("idempotency_key", idem).maybeSingle();
   console.log(`[PHASE_END: ${t}.IdempotencyReplay] replay=${!!prior}`);
-  if (prior) return json(prior.response, prior.status_code, { "Idempotent-Replayed": "true" });
+  if (prior && !isSandbox(req)) return json(prior.response, prior.status_code, { "Idempotent-Replayed": "true" });
 
   const access = await resolveServiceAccess(db, owner, "utility", t);
   if (!access.allowed) return apiError(403, "not_provisioned", "The Identity Verification Utility is not provisioned for your organization.", t);
