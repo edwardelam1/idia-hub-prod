@@ -8,7 +8,8 @@ import { toast } from "sonner";
 
 // Live IDIA Protocol API v1 (edge function `protocol-api`). Schemas show field types, not sample data.
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/protocol-api`;
-const ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+export const DOCS_URL = "https://thebigidia.com/hub/developers";
+export const OPENAPI_URL = "https://thebigidia.com/openapi.json";
 
 interface Route {
   method: "GET" | "POST";
@@ -23,7 +24,7 @@ interface Route {
 }
 
 const H = (extra = "") =>
-  `  -H "Authorization: Bearer ${ANON}" \\\n  -H "x-api-key: <YOUR_IDIA_KEY>" \\\n  -H "Content-Type: application/json"${extra}`;
+  `  -H "x-api-key: $IDIA_API_KEY" \\\n  -H "Content-Type: application/json"${extra}`;
 
 const ROUTES: Route[] = [
   {
@@ -42,6 +43,25 @@ const ROUTES: Route[] = [
 }`,
     errors: "401 invalid_api_key",
     curl: `curl -X GET "${BASE}/v1/auth/provision-status" \\\n${H()}`,
+  },
+  {
+    method: "GET",
+    path: "/v1/billing/balance",
+    title: "Synapse Credit balance & rate cards",
+    keyType: "Any IDIA key",
+    notes: ["Live wallet balance (4 decimals, CRD) plus your organization's provisioned rate for each service."],
+    response: `{
+  "status": "success",
+  "wallet": { "synapse_credits_available": number(4dp), "currency": "CRD" },
+  "organization": { "organization_id": uuid|null, "organization_name": string|null },
+  "rate_cards": {
+    "identity_verification": { "provisioned": boolean, "rate_cr": number(4dp), "unit": "authorized_target" },
+    "vulture":               { "provisioned": boolean, "rate_cr": number(4dp), "unit": "batch" }
+  },
+  "as_of": ISO-8601
+}`,
+    errors: "401 invalid_api_key · 429 rate_limit_exceeded",
+    curl: `curl -X GET "${BASE}/v1/billing/balance" \\\n${H()}`,
   },
   {
     method: "POST",
@@ -142,6 +162,63 @@ const ROUTES: Route[] = [
     errors: "400 invalid_batch_id · 401 invalid_api_key · 404 batch_not_found",
     curl: `curl -X GET "${BASE}/v1/vulture/verify/<batch_id>" \\\n${H()}`,
   },
+  {
+    method: "POST",
+    path: "/v1/webhooks",
+    title: "Register a webhook",
+    keyType: "Any IDIA key",
+    notes: [
+      "Events: receipt.anchored_l2, wallet.credit_depleted (needs credit_threshold), telemetry.spatial_event (Vulture batch anchored).",
+      "https only, max 10 active per account. signing_secret is shown once.",
+      "Deliveries: anchored events are sent hourly after the Base anchor run; low-credit alerts right after the charge (once per day). Failed sends retry 5 times over ~24 h.",
+    ],
+    request: `{ "url": "https://…", "events": string[], "credit_threshold": number (optional) }`,
+    response: `201 { "status": "success", "webhook": { "id", "url", "events", "credit_threshold", "status", "created_at" }, "signing_secret": "whsec_…" }`,
+    errors: "400 invalid_request · 401 invalid_api_key",
+    curl: `curl -X POST "${BASE}/v1/webhooks" \\\n${H()} \\\n  -d '{"url":"https://example.com/idia","events":["receipt.anchored_l2"]}'`,
+  },
+  {
+    method: "GET",
+    path: "/v1/webhooks",
+    title: "List webhooks · DELETE /v1/webhooks/{id} · POST /v1/webhooks/test",
+    keyType: "Any IDIA key",
+    notes: ["DELETE disables a webhook. POST /v1/webhooks/test sends a signed webhook.test event to all (or { webhook_id }) and reports the response status."],
+    response: `{ "status": "success", "webhooks": [ { "id", "url", "events", "credit_threshold", "status", "created_at" } ] }`,
+    errors: "401 invalid_api_key · 404 webhook_not_found",
+    curl: `curl -X GET "${BASE}/v1/webhooks" \\\n${H()}`,
+  },
+];
+
+const PLATFORM_NOTES: { title: string; body: string; code?: string }[] = [
+  {
+    title: "Sandbox",
+    body: "Send X-IDIA-Environment: sandbox on validate or ingest. Requests are validated exactly like production, but nothing is billed, stored or anchored (sandbox_mode: true, synapse_credits_deducted: 0). Sandbox validate does not query the Identity Vault, so every target returns denied.",
+    code: `curl -X POST "${BASE}/v1/utility/validate" \\\n${H(` \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -H "X-IDIA-Environment: sandbox"`)} \\\n  -d '{"target_type":"hashed_email","hash_algorithm":"sha256","targets":["<sha256-hex>"]}'`,
+  },
+  {
+    title: "Rate limits",
+    body: "120 requests per minute per key (fixed 60-second window). Every response carries X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset (unix seconds). Over the limit: 429 rate_limit_exceeded with Retry-After and details.retry_after / reset_at.",
+  },
+  {
+    title: "Webhook signatures",
+    body: "Each delivery has X-IDIA-Signature: t=<unix>,v1=<hex>, an HMAC-SHA256 of `${t}.${rawBody}` with your signing secret. Reject mismatches or anything older than 5 minutes; dedupe on event id.",
+    code: `import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyIdiaSignature(rawBody: string, header: string, secret: string) {
+  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300) return false;
+  const expected = createHmac("sha256", secret).update(\`\${parts.t}.\${rawBody}\`).digest("hex");
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1 ?? ""));
+}`,
+  },
+  {
+    title: "Verify Vulture proofs offline",
+    body: "SHA-256 (not Keccak). leaf = sha256(0x00 || sanitized_hash); node = sha256(0x01 || left || right); odd nodes pair with themselves. Fold sibling_hashes from the leaf up, compare to merkle_root, then confirm the root in the Base transaction input on BaseScan.",
+  },
+  {
+    title: "Errors",
+    body: "Every error is { error: { code, message, details?, resolution_url?, trace_id } }. Quote the trace_id to support. Retry 500s with the same Idempotency-Key.",
+  },
 ];
 
 const copy = (text: string, label: string) => {
@@ -174,7 +251,11 @@ export const ProtocolApiReference = () => {
           <ShieldCheck className="h-5 w-5 text-primary" /> IDIA Protocol API v1
         </CardTitle>
         <CardDescription className="space-y-1">
-          <span className="block">Live endpoints for Identity Verification and The Vulture. Amounts use 4 decimal places.</span>
+          <span className="block">Live endpoints for Identity Verification, The Vulture, billing and webhooks. Amounts use 4 decimal places.</span>
+          <span className="flex flex-wrap gap-3 text-xs">
+            <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-4 hover:underline">Developer docs</a>
+            <a href={OPENAPI_URL} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-4 hover:underline">openapi.json</a>
+          </span>
           <span className="flex items-center gap-1 min-w-0">
             <code className="text-[11px] truncate">{BASE}</code>
             <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Copy base URL" onClick={() => copy(BASE, "Base URL")}>
@@ -209,6 +290,20 @@ export const ProtocolApiReference = () => {
             </Collapsible>
           );
         })}
+        <div className="pt-2 space-y-2">
+          {PLATFORM_NOTES.map((n) => (
+            <Collapsible key={n.title} open={open === n.title} onOpenChange={(o) => setOpen(o ? n.title : null)}>
+              <CollapsibleTrigger className="w-full flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-left hover:bg-muted/50">
+                <span className="min-w-0 flex-1 text-xs font-medium">{n.title}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open === n.title ? "rotate-180" : ""}`} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 px-1 pt-2">
+                <p className="text-xs text-muted-foreground">{n.body}</p>
+                {n.code && <Block label="Example" code={n.code} />}
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
