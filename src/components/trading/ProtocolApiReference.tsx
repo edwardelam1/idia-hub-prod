@@ -115,6 +115,30 @@ const ROUTES: Route[] = [
   },
   {
     method: "GET",
+    path: "/v1/utility/receipts",
+    title: "Receipt history (cursor-paginated)",
+    keyType: "Identity Verification key",
+    notes: [
+      "Newest first, ordered by (timestamp, id) so pages never shift while new receipts are written.",
+      "Query: limit (1–100, default 50), starting_after=<next_cursor> for older pages, ending_before=<prev_cursor> for newer pages, since / until (ISO-8601), status (anchored_l2 | ledger_recorded).",
+      "Cursors are opaque — pass them back unchanged. For bulk audits, export from Hub Saved Activity or reconcile anchored ACA hashes against Base event logs.",
+    ],
+    response: `{
+  "object": "list",
+  "data": [ <same shape as the single receipt> ],
+  "pagination": {
+    "limit": number, "returned_count": number, "has_more": boolean,
+    "next_cursor": string|null,   // older page
+    "prev_cursor": string|null    // newer page
+  },
+  "order": "timestamp_desc",
+  "bulk_audit": { "hub_export": url, "on_chain": string }
+}`,
+    errors: "400 invalid_limit | invalid_cursor | invalid_date | invalid_status · 401 invalid_api_key",
+    curl: `curl -G "${BASE}/v1/utility/receipts" \\\n${H()} \\\n  --data-urlencode "limit=50" \\\n  --data-urlencode "since=2026-11-01T00:00:00Z"`,
+  },
+  {
+    method: "GET",
     path: "/v1/utility/receipts/{liability_receipt_id}",
     title: "Liability Shield receipt",
     keyType: "Identity Verification key",
