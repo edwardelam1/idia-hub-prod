@@ -1,8 +1,8 @@
 # Roadmap
 
 ## Feature feeds
-- [ ] Activate durable, privacy-safe live feed publishing and in-app viewing.
-- [ ] Add authenticated, resumable developer streaming and latest-packet endpoints.
+- [x] Activate durable, privacy-safe live feed publishing and in-app viewing.
+- [x] Add authenticated, resumable developer streaming and latest-packet endpoints.
 - [ ] Document exact verified metrics, privacy suppression, billing and provenance; test live delivery.
 
 ## Done

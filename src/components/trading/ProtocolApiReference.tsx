@@ -28,6 +28,27 @@ const H = (extra = "") =>
 
 const ROUTES: Route[] = [
   {
+    method: "POST", path: "/v1/features/sessions?topic={topic}", title: "Start or reuse an hourly feature-feed session", keyType: "Any active IDIA API key",
+    notes: ["Analyst 5 CR, Professional 15 CR, Enterprise / pure_alpha 50 CR per topic per hour. Requires an active subscription; charges are atomic and reconnects reuse the same unexpired session. No automatic renewal.", "Topics: vault_health_sync (consented aggregate availability), vault_financial_ledger (your settled ledger), vault_identity_stream (your receipt / confirmed mint counts).", "Sandbox returns no production packets, creates no session, and deducts zero credits."],
+    response: `{ "status": "active", "session_id": uuid, "topic": string, "expires_at": ISO-8601, "credits_charged": number, "reused": boolean, "currency": "CRD", "billing_unit": "topic_hour", "auto_renew": false }`,
+    errors: "400 invalid_topic · 401 invalid_api_key · 402 insufficient_funds · 403 tier_required",
+    curl: `curl -X POST "${BASE}/v1/features/sessions?topic=vault_health_sync" \\\n${H()}`,
+  },
+  {
+    method: "GET", path: "/v1/features/latest?topic={topic}", title: "Latest verified aggregate packet", keyType: "API key with a paid, unexpired topic session",
+    notes: ["Health availability includes only staged rows backed by raw_data_id and a valid ACA hash, with latest feature_feed_health consent explicitly granted. Counts are null unless at least ten contributors qualify. No biometric values, identities or individual hashes are exposed.", "Financial metrics: settled_entries, net_credits = sum(amount), usage_credits = sum(-amount) for negative USAGE entries; status settled/completed only. Identity metrics: recorded_receipts and confirmed_liability_nfts, requiring mint flag, token id and mint transaction.", "Packets are published on source changes, deduplicated by metrics, retained seven days, and labeled source_aggregate. They are not Merkle proofs or proof of on-chain consent. CJIS sources are never queried."],
+    response: `{ "topic": string, "session_id": uuid, "expires_at": ISO-8601, "packets": [{ "id": integer, "created_at": ISO-8601, "payload": { "schema_version": "1.0", "observed_at": ISO-8601, "metrics": object, "provenance": { "source": string, "status": "source_aggregate", "on_chain_proof": null, "contains_personal_identifiers": false } } }] }`,
+    errors: "400 invalid_topic · 401 invalid_api_key · 403 feed_session_required",
+    curl: `curl "${BASE}/v1/features/latest?topic=vault_health_sync" \\\n${H()}`,
+  },
+  {
+    method: "GET", path: "/v1/features/stream?topic={topic}", title: "Resumable server-sent events", keyType: "API key with a paid, unexpired topic session",
+    notes: ["Use fetch / an SSE client supporting x-api-key; browser EventSource cannot attach this header. Each connection lasts up to 45 seconds; reconnect with Last-Event-ID (or cursor query parameter). Reconnecting never starts or renews a paid session.", "Event feature.batch_ready carries durable packet id and JSON payload. Heartbeats are comments, not billable data. Without a cursor, the latest packet is delivered first. With a cursor, retained newer packets are replayed in ascending id order.", "Key revocation and paid-session expiry are checked every ten seconds. session.expired stops the stream. Delivery checks occur only while connected; rate limits apply to every reconnect. No packet means no source change, not fabricated activity."],
+    response: `Content-Type: text/event-stream\nid: <durable-packet-id>\nevent: feature.batch_ready\ndata: <packet-payload-json>`,
+    errors: "400 invalid_topic | invalid_cursor · 401 invalid_api_key · 403 feed_session_required · 429 rate_limit_exceeded",
+    curl: `curl -N "${BASE}/v1/features/stream?topic=vault_health_sync" \\\n  -H "x-api-key: $IDIA_API_KEY" \\\n  -H "Last-Event-ID: $LAST_PACKET_ID"`,
+  },
+  {
     method: "GET",
     path: "/v1/auth/provision-status",
     title: "Provisioning & wallet pre-flight",
